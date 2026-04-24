@@ -1,0 +1,14 @@
+# backend
+backend/.gradle/
+backend/build/
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# editors and logs
+.idea/
+.vscode/
+*.log

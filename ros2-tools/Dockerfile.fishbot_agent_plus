@@ -1,0 +1,28 @@
+FROM microros/micro-ros-agent:humble
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 为了在国内网络环境下更稳定（避免 502 / TLS EOF / 镜像同步），这里默认切到常见镜像源。
+# 说明：
+# - micro-ros-agent 镜像本身用于跑 agent（ENTRYPOINT 已配置好）
+# - 该 Dockerfile 同时补上 teleop 和 rosbridge，方便上位机直接连到真机所在的 ROS 图
+# - 为避免 apt 拉 deb-src 的 Sources.gz（镜像同步期间经常 size/hash 不一致），强制 Types 只保留 deb
+RUN set -eux; \
+  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY; \
+  sed -i \
+    -e 's|http://archive.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' \
+    -e 's|http://security.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' \
+    /etc/apt/sources.list; \
+  for f in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources /usr/share/ros-apt-source/*.sources; do \
+    [ -f "$f" ] || continue; \
+    sed -i \
+      -e 's|http://packages.ros.org/ros2/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu|g' \
+      -e 's|https://packages.ros.org/ros2/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu|g' \
+      -e 's/^Types: deb deb-src/Types: deb/' \
+      "$f" || true; \
+  done; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends \
+    ros-humble-rosbridge-server \
+    ros-humble-teleop-twist-keyboard; \
+  rm -rf /var/lib/apt/lists/*

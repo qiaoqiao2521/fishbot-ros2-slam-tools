@@ -1,0 +1,29 @@
+FROM microros/micro-ros-agent:humble
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 为了在国内网络环境下更稳定（避免 502 / TLS EOF / 镜像同步），这里默认切到常见镜像源。
+# 注意：ROS2 的 .sources 文件如果包含 deb-src，apt 可能会拉 Sources.gz，
+# 在镜像同步期间容易出现 "File has unexpected size"；因此强制把 Types 改成只要 deb。
+RUN set -eux; \
+  sed -i \
+    -e 's|http://archive.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' \
+    -e 's|http://security.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' \
+    /etc/apt/sources.list; \
+  for f in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources /usr/share/ros-apt-source/*.sources; do \
+    [ -f "$f" ] || continue; \
+    sed -i \
+      -e 's|http://packages.ros.org/ros2/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu|g' \
+      -e 's|https://packages.ros.org/ros2/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu|g' \
+      -e 's/^Types: deb deb-src/Types: deb/' \
+      "$f" || true; \
+  done; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends \
+    ros-humble-teleop-twist-keyboard; \
+  rm -rf /var/lib/apt/lists/*
+
+COPY tools/fishbot_arrow_teleop.py /usr/local/bin/fishbot-arrow-teleop
+RUN chmod +x /usr/local/bin/fishbot-arrow-teleop
+
+CMD ["bash"]

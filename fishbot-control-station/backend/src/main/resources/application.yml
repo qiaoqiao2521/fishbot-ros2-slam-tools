@@ -1,0 +1,28 @@
+server:
+  port: 8080
+
+rosbridge:
+  reconnect-delay-ms: 5000
+
+safety:
+  max-linear-speed: 1.0
+  max-angular-speed: 1.0
+  stop-command-delay-ms: 500
+
+spring:
+  main:
+    allow-bean-definition-overriding: true
+
+station:
+  runtime:
+    telemetry-mode: ${STATION_TELEMETRY_MODE:rosbridge}
+    offline-tick-ms: ${STATION_OFFLINE_TICK_MS:100}
+  rosbridge:
+    control:
+      host: ${CONTROL_ROSBRIDGE_HOST:127.0.0.1}
+      port: ${CONTROL_ROSBRIDGE_PORT:9090}
+      path: ${CONTROL_ROSBRIDGE_PATH:/}
+    laser:
+      host: ${LASER_ROSBRIDGE_HOST:127.0.0.1}
+      port: ${LASER_ROSBRIDGE_PORT:9091}
+      path: ${LASER_ROSBRIDGE_PATH:/}
