@@ -1,17 +1,14 @@
 server:
+  address: 127.0.0.1
   port: 8080
 
 rosbridge:
   reconnect-delay-ms: 5000
 
 safety:
-  max-linear-speed: 1.0
+  max-linear-speed: 0.3
   max-angular-speed: 1.0
   stop-command-delay-ms: 500
-
-spring:
-  main:
-    allow-bean-definition-overriding: true
 
 station:
   runtime:

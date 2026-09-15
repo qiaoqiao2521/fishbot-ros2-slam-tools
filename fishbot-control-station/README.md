@@ -12,7 +12,7 @@ FishBot Control Station is a web-first robot control console for FishBot. It rep
 ## Phase 1 Scope
 
 - Connection status panel
-- Motion control panel with hold-to-run and dedicated emergency stop
+- Motion control panel with hold-to-run and a latched station software stop
 - Odom and IMU observation panels
 - Logs and diagnostics
 - Expandable layout for map, navigation goals, patrol tasks, and parameter configuration
@@ -57,7 +57,10 @@ fishbot-control-station/
 - ROS bridge runs in WSL and is treated as an upstream dependency.
 - Spring Boot owns rosbridge connection lifecycle, timeout detection, reconnects, and publish safety.
 - Frontend never talks to rosbridge directly in phase 1.
-- Emergency stop remains a dedicated backend action and publishes a zeroed `cmd_vel` immediately.
+- Software stop latches this station, rejects further velocity commands and repeats zero at 10 Hz until restart. It cannot exclude external Nav2 publishers; use a downstream command arbiter and physical stop before hardware operation.
+- Default startup is loopback-only, including the Vite proxy. There is no remote-user authentication: do not expose these services to a LAN/public network.
+- Native FishBot startup defaults to Jazzy. Laser-only startup maps both backend rosbridge endpoint variables to the requested laser port.
+- `/station/odom` and `/station/imu` from the HTTP diagnostic bridge must never be remapped into authoritative SLAM/EKF sensor topics.
 
 ## Expected Local Ports
 
@@ -70,43 +73,43 @@ fishbot-control-station/
 Install frontend dependencies once:
 
 ```bash
-cd /home/muqiao/dev/fishbot-control-station/frontend
+cd /home/muqiao/dev/ros2/apps/fishbot-control-station/frontend
 npm install
 ```
 
 Offline development mode:
 
 ```bash
-cd /home/muqiao/dev/fishbot-control-station
+cd /home/muqiao/dev/ros2/apps/fishbot-control-station
 ./scripts/dev-offline.sh
 ```
 
 Online mode with rosbridge in WSL:
 
 ```bash
-cd /home/muqiao/dev/fishbot-control-station
+cd /home/muqiao/dev/ros2/apps/fishbot-control-station
 ./scripts/dev-online.sh
 ```
 
 Direct backend-only startup:
 
 ```bash
-cd /home/muqiao/dev/fishbot-control-station/backend
+cd /home/muqiao/dev/ros2/apps/fishbot-control-station/backend
 ./gradlew bootRun
 ```
 
 Direct frontend-only startup:
 
 ```bash
-cd /home/muqiao/dev/fishbot-control-station/frontend
-npm run dev -- --host 0.0.0.0
+cd /home/muqiao/dev/ros2/apps/fishbot-control-station/frontend
+npm run dev -- --host 127.0.0.1
 ```
 
 Offline mode is driven by `STATION_TELEMETRY_MODE=offline`. In that mode the backend publishes synthetic `/odom` and `/imu`-like state, and control commands move the simulated robot state without requiring rosbridge or a powered robot.
 
 ## Verification
 
-- Backend tests: `cd backend && .\gradlew.bat test`
+- Backend tests: `cd backend && ./gradlew test`
 - Frontend production build: `cd frontend && npm run build`
 
-See [architecture.md](E:\web\fishbot-control-station\docs\architecture.md) for the detailed phase 1 design and API contract.
+See [architecture.md](docs/architecture.md) for the detailed phase 1 design and API contract.

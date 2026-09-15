@@ -28,7 +28,7 @@ export function RobotStatePanel() {
             </Badge>
           ) : null}
           <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Stream cadence</div>
-          <div className="station-readout text-2xl font-semibold text-accent">{robotState.messageRateHz.toFixed(1)} Hz</div>
+          <div className="station-readout text-2xl font-semibold text-accent">{robotState.messageRateHz == null ? '未测量' : `${robotState.messageRateHz.toFixed(1)} Hz`}</div>
         </div>
       </div>
 

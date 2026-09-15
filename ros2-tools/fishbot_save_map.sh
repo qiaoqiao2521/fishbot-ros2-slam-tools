@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/home/muqiao/dev/ros2"
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 BRINGUP_WS="${BRINGUP_WS:-$ROOT/fishbot_nav}"
 MAPS_DIR="${MAPS_DIR:-$BRINGUP_WS/src/fishbot_navigation2/maps}"
 MAP_NAME="${1:-current_map}"
+# shellcheck source=fishbot_ros_env.sh
+source "$ROOT/tools/fishbot_ros_env.sh"
 
 usage() {
   cat <<EOF
@@ -27,7 +29,7 @@ fi
 mkdir -p "$MAPS_DIR"
 
 set +u
-source /opt/ros/humble/setup.bash
+fishbot_source_ros
 [[ -f "$BRINGUP_WS/install/setup.bash" ]] && source "$BRINGUP_WS/install/setup.bash"
 set -u
 

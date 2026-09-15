@@ -12,7 +12,7 @@ def generate_launch_description():
     
     #=====================运行节点需要的配置=======================================================================
     # 是否使用仿真时间，我们用gazebo，这里设置成true
-    use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+    use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     # 地图的分辨率
     resolution = LaunchConfiguration('resolution', default='0.05')
     # 地图的发布周期

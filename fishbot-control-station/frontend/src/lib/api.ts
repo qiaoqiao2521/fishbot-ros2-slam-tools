@@ -124,7 +124,7 @@ function mapBridgeSnapshot(
 }
 
 export function mapRobotStateSnapshot(raw: RawRobotStateSnapshot): RobotStateSnapshot {
-  const messageRateHz = Math.max(1, Number((1000 / 120).toFixed(1)))
+  const messageRateHz = null // Backend does not provide a measured topic rate.
 
   return {
     odom: {

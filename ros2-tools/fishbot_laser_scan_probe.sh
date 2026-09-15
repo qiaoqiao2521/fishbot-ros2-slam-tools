@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WS="/home/muqiao/dev/ros2/fishbot_laser_ws"
+WORKBENCH_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+
+WS="${WORKBENCH_ROOT}/fishbot_laser_ws"
+TOOLS_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=fishbot_ros_env.sh
+source "$TOOLS_DIR/fishbot_ros_env.sh"
 
 cd "$WS"
 set +u
-source /opt/ros/humble/setup.bash
+fishbot_source_ros
 source "$WS/install/setup.bash"
 set -u
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp

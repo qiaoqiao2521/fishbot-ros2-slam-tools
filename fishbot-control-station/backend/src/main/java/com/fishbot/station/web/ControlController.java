@@ -27,7 +27,9 @@ public class ControlController {
     public Mono<ResponseEntity<Object>> cmdVel(@Valid @RequestBody ControlCommandRequest request) {
         return controlService.sendVelocity(request)
                 .thenReturn(ResponseEntity.ok().build())
-                .onErrorResume(ex -> Mono.just(ResponseEntity.status(503).build()));
+                .onErrorResume(IllegalArgumentException.class, ex -> Mono.just(ResponseEntity.badRequest().body(java.util.Map.of("error", "invalid_velocity"))))
+                .onErrorResume(IllegalStateException.class, ex -> Mono.just(ResponseEntity.status(409).body(java.util.Map.of("error", "station_stop_latched"))))
+                .onErrorResume(ex -> Mono.just(ResponseEntity.status(503).body(java.util.Map.of("error", "rosbridge_unavailable"))));
     }
 
     @PostMapping("/stop")

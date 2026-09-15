@@ -6,6 +6,7 @@ import termios
 import threading
 import time
 import tty
+import math
 
 import rclpy
 from geometry_msgs.msg import Twist
@@ -16,6 +17,8 @@ LINEAR_STEP = float(os.environ.get("FISHBOT_ARROW_LINEAR", "0.05"))
 ANGULAR_STEP = float(os.environ.get("FISHBOT_ARROW_ANGULAR", "0.35"))
 PUBLISH_HZ = float(os.environ.get("FISHBOT_ARROW_HZ", "8.0"))
 IDLE_TIMEOUT = float(os.environ.get("FISHBOT_ARROW_IDLE_TIMEOUT", "0.25"))
+if not all(math.isfinite(v) for v in (LINEAR_STEP, ANGULAR_STEP, PUBLISH_HZ, IDLE_TIMEOUT)) or not (0 <= LINEAR_STEP <= 0.3 and 0 <= ANGULAR_STEP <= 1.0 and 5 <= PUBLISH_HZ <= 50 and 0 < IDLE_TIMEOUT <= 0.5):
+    raise ValueError('Invalid teleop limits: linear 0..0.3, angular 0..1, hz 5..50, idle (0,0.5]')
 
 
 HELP = f"""FishBot arrow teleop
@@ -67,8 +70,7 @@ class ArrowTeleop(Node):
 
     def publish(self, force: bool = False) -> None:
         current = (self.linear_x, self.angular_z)
-        if not force and current == self.last_sent:
-            return
+        # Repeat commands: packet loss and the motor watchdog require a heartbeat.
         msg = Twist()
         msg.linear.x = self.linear_x
         msg.angular.z = self.angular_z

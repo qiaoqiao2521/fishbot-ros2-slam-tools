@@ -41,6 +41,13 @@ class RobotStateServiceTest {
         RobotStateService service = new RobotStateService();
         Instant now = Instant.parse("2026-03-17T15:01:00Z");
 
+        service.updateFromOdom(objectMapper.readTree("""
+                {
+                  "pose": { "pose": { "position": { "x": 0.0, "y": 0.0 }, "orientation": { "x": 0.0, "y": 0.0, "z": 0.5769585, "w": 0.8167734 } } },
+                  "twist": { "twist": { "linear": { "x": 0.0 }, "angular": { "z": 0.0 } } }
+                }
+                """), now.minusSeconds(1));
+
         String json = """
                 {
                   "orientation": { "x": 0.0, "y": 0.0, "z": 0.3826834, "w": 0.9238795 },
@@ -58,7 +65,7 @@ class RobotStateServiceTest {
         assertEquals(0.01, state.getAngularVelX(), 1e-6);
         assertEquals(0.02, state.getAngularVelY(), 1e-6);
         assertEquals(0.03, state.getAngularVelZ(), 1e-6);
-        assertTrue(Math.abs(state.getYaw() - (Math.PI / 4.0)) < 1e-3);
+        assertTrue(Math.abs(state.getYaw() - 1.23) < 1e-3);
         assertEquals(now, state.getTimestamp());
     }
 }

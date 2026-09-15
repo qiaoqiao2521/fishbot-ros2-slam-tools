@@ -1,5 +1,7 @@
 # FishBot 第 9 章（9.0.3）UDP 联通两种方案（WSL Relay / Docker Desktop 端口映射）
 
+> 历史记录，非当前启动指引。2026-09-06 起本工作台使用 Ubuntu/Jazzy 原生链路；下文“当前/推荐/稳定”均指 2026 年 3 月当时的 WSL 环境。不要照此执行 Docker 重建或 fishbot.sh start；当前入口见 FISHBOT_STACK_RUNBOOK.md 与 fishbot_stack.sh help。保留本文用于历史故障追溯。
+
 目标：FishBot（udp_client）通过 WiFi 向 micro-ROS agent（udp4/8888）通信。
 
 ## 2026-03-22 当前稳定方案（已实机跑通）
@@ -27,8 +29,8 @@
 当前推荐启动方式：
 
 ```bash
-FISHBOT_DOCKER_BIN=docker.exe /home/muqiao/dev/ros2/tools/fishbot.sh start
-FISHBOT_DOCKER_BIN=docker.exe /home/muqiao/dev/ros2/tools/fishbot.sh status
+FISHBOT_DOCKER_BIN=docker.exe /home/muqiao/桌面/dev/ros2/tools/fishbot.sh start
+FISHBOT_DOCKER_BIN=docker.exe /home/muqiao/桌面/dev/ros2/tools/fishbot.sh status
 ```
 
 当前脚本行为已经更新为：
@@ -166,7 +168,7 @@ New-NetFirewallRule -DisplayName "FishBot UDP 8888 (Docker)" -Direction Inbound 
 
 #### 推荐：用一键脚本（避免“终端残留/命令换行/名字冲突”）
 
-仓库已提供脚本：`tools/fishbot.sh`（在 `/home/muqiao/dev/ros2` 下执行）：
+仓库已提供脚本：`tools/fishbot.sh`（在 `/home/muqiao/桌面/dev/ros2` 下执行）：
 
 ```bash
 ./tools/fishbot.sh start   # 启动/创建 fishbot_agent（长期运行）
@@ -343,7 +345,7 @@ docker exec -it fishbot_agent bash -lc 'apt-get update && apt-get install -y ros
 
 你也可以把键盘控制做成一个单独镜像（避免反复在 `fishbot_agent` 里 `apt-get install`，也避免你一旦 `rm` 容器就丢包）：
 
-1) 构建（在 `/home/muqiao/dev/ros2` 下执行）：
+1) 构建（在 `/home/muqiao/桌面/dev/ros2` 下执行）：
 
 ```bash
 docker build -f tools/Dockerfile.fishbot_tools -t fishbot_tools:humble .
@@ -539,7 +541,7 @@ wsl.exe hostname -I
 在 WSL：
 
 ```bash
-cd /home/muqiao/dev/ros2
+cd /home/muqiao/桌面/dev/ros2
 source ./.ros2_env
 
 docker run --rm -it --net=host \

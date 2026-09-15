@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
-LASER_WS="${LASER_WS:-/home/muqiao/dev/ros2/fishbot_laser_ws}"
+WORKBENCH_ROOT="$(cd "$ROOT_DIR/../.." && pwd -P)"
+LASER_WS="${LASER_WS:-$WORKBENCH_ROOT/fishbot_laser_ws}"
 ROSBRIDGE_PORT="${ROSBRIDGE_PORT:-9091}"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
@@ -24,13 +25,19 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-# Clear stale dev servers so this script always owns the expected ports.
-fuser -k "${BACKEND_PORT}/tcp" 2>/dev/null || true
-fuser -k "${FRONTEND_PORT}/tcp" 2>/dev/null || true
-sleep 1
+source "$WORKBENCH_ROOT/.ros2_env" "${FISHBOT_ROS_DISTRO:-jazzy}"
+if [[ ! -f "$LASER_WS/install/setup.bash" ]]; then
+  echo "Missing laser overlay: $LASER_WS/install/setup.bash" >&2
+  exit 1
+fi
+for station_port in "$BACKEND_PORT" "$FRONTEND_PORT"; do
+  if ss -H -ltn "sport = :$station_port" | grep -q .; then
+    echo "Port $station_port is occupied; stop its owner before starting this station." >&2
+    exit 1
+  fi
+done
 
 set +u
-source /opt/ros/humble/setup.bash
 source "$LASER_WS/install/setup.bash"
 set -u
 export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
@@ -49,7 +56,7 @@ for _ in $(seq 1 20); do
 done
 
 echo "probing /scan ..."
-if timeout 8 /home/muqiao/dev/ros2/tools/fishbot_laser_scan_probe.sh >/tmp/fishbot-laser-probe.out 2>&1; then
+if timeout 8 "$WORKBENCH_ROOT/tools/fishbot_laser_scan_probe.sh" >/tmp/fishbot-laser-probe.out 2>&1; then
   cat /tmp/fishbot-laser-probe.out
 elif grep -q 'RECV count=' /tmp/fishbot-laser-probe.out 2>/dev/null; then
   cat /tmp/fishbot-laser-probe.out
@@ -60,7 +67,7 @@ else
 fi
 
 cd "$BACKEND_DIR"
-ROSBRIDGE_HOST=127.0.0.1 ROSBRIDGE_PORT="${ROSBRIDGE_PORT}" ./gradlew --no-daemon bootRun >"$BACKEND_LOG" 2>&1 &
+CONTROL_ROSBRIDGE_HOST=127.0.0.1 CONTROL_ROSBRIDGE_PORT="${ROSBRIDGE_PORT}" LASER_ROSBRIDGE_HOST=127.0.0.1 LASER_ROSBRIDGE_PORT="${ROSBRIDGE_PORT}" SERVER_PORT="${BACKEND_PORT}" ./gradlew --no-daemon bootRun >"$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
 
 for _ in $(seq 1 60); do
@@ -77,4 +84,4 @@ echo "frontend:       http://127.0.0.1:${FRONTEND_PORT}"
 echo "backend:        http://127.0.0.1:${BACKEND_PORT}"
 
 cd "$FRONTEND_DIR"
-npm run dev -- --host 0.0.0.0
+BACKEND_PORT="$BACKEND_PORT" npm run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT" --strictPort

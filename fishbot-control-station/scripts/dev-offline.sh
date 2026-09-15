@@ -31,4 +31,4 @@ echo "frontend: http://127.0.0.1:5173"
 echo "backend:  http://127.0.0.1:8080"
 
 cd "$FRONTEND_DIR"
-npm run dev -- --host 0.0.0.0
+npm run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT:-5173}" --strictPort

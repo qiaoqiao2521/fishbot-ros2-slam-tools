@@ -49,7 +49,7 @@ export type ImuSnapshot = {
 export type RobotStateSnapshot = {
   odom: OdomSnapshot
   imu: ImuSnapshot
-  messageRateHz: number
+  messageRateHz: number | null
   lastUpdatedAt: string
 }
 

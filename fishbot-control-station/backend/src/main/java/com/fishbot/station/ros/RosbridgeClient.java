@@ -18,7 +18,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 
 import com.fishbot.station.config.RosbridgeEndpointProperties;
 import com.fishbot.station.config.StationRuntimeProperties;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import reactor.core.publisher.Flux;
@@ -32,7 +31,6 @@ public class RosbridgeClient {
     private final String name;
     private final RosbridgeEndpointProperties properties;
     private final StationRuntimeProperties runtimeProperties;
-    private final ObjectMapper objectMapper;
     private final List<RosTopicSubscription> subscriptions;
     private final HttpClient httpClient;
     private final AtomicBoolean connected = new AtomicBoolean(false);
@@ -48,7 +46,6 @@ public class RosbridgeClient {
         this.name = name;
         this.properties = properties;
         this.runtimeProperties = runtimeProperties;
-        this.objectMapper = objectMapper;
         this.subscriptions = List.copyOf(subscriptions);
         this.httpClient = HttpClient.newHttpClient();
     }
@@ -156,7 +153,6 @@ public class RosbridgeClient {
                 buffer.setLength(0);
                 lastMessage.set(Instant.now());
                 incoming.tryEmitNext(payload);
-                inspectMessage(payload);
             }
             webSocket.request(1);
             return CompletableFuture.completedFuture(null);
@@ -177,19 +173,5 @@ public class RosbridgeClient {
             log.warn("Rosbridge [{}] error: {}", name, error.getMessage());
         }
 
-        private void inspectMessage(String payload) {
-            try {
-                JsonNode root = objectMapper.readTree(payload);
-                if (!"publish".equals(root.path("op").asText())) {
-                    return;
-                }
-                JsonNode topic = root.path("topic");
-                if (!topic.isTextual()) {
-                    return;
-                }
-            } catch (Exception ex) {
-                log.debug("Ignoring non-JSON rosbridge payload: {}", ex.getMessage());
-            }
-        }
     }
 }

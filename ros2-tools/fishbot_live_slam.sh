@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LASER_WS="${LASER_WS:-/home/muqiao/dev/ros2/fishbot_laser_ws}"
-BRINGUP_WS="${BRINGUP_WS:-/home/muqiao/dev/ros2/fishbot_nav}"
+WORKBENCH_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+
+LASER_WS="${LASER_WS:-${WORKBENCH_ROOT}/fishbot_laser_ws}"
+BRINGUP_WS="${BRINGUP_WS:-${WORKBENCH_ROOT}/fishbot_nav}"
 LASER_Z="${LASER_Z:-0.02}"
 SLAM_LOG="${TMPDIR:-/tmp}/fishbot-live-slam.log"
+TOOLS_DIR="${WORKBENCH_ROOT}/tools"
+# shellcheck source=fishbot_ros_env.sh
+source "$TOOLS_DIR/fishbot_ros_env.sh"
 
 cleanup() {
   for pid_var in ODOM2TF_PID STATIC_TF_PID; do
@@ -19,7 +24,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 set +u
-source /opt/ros/humble/setup.bash
+fishbot_source_ros
 source "$LASER_WS/install/setup.bash"
 source "$BRINGUP_WS/install/setup.bash"
 set -u
@@ -28,7 +33,7 @@ export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 
 echo "checking /scan ..."
-if ! timeout 8 /home/muqiao/dev/ros2/tools/fishbot_laser_scan_probe.sh >/tmp/fishbot-live-scan-probe.out 2>&1; then
+if ! timeout 8 "${WORKBENCH_ROOT}/tools/fishbot_laser_scan_probe.sh" >/tmp/fishbot-live-scan-probe.out 2>&1; then
   cat /tmp/fishbot-live-scan-probe.out >&2 || true
   echo "error: /scan not available; keep ydlidar_node running in ${LASER_WS}" >&2
   exit 1

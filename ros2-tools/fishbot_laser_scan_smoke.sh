@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WS="/home/muqiao/dev/ros2/fishbot_laser_ws"
+WORKBENCH_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+
+WS="${WORKBENCH_ROOT}/fishbot_laser_ws"
 LOG="/tmp/fishbot_laser_driver.log"
+TOOLS_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=fishbot_ros_env.sh
+source "$TOOLS_DIR/fishbot_ros_env.sh"
 
 cleanup() {
   if [[ -n "${DRIVER_PID:-}" ]]; then
@@ -17,7 +22,7 @@ fuser -k 8889/udp 2>/dev/null || true
 
 cd "$WS"
 set +u
-source /opt/ros/humble/setup.bash
+fishbot_source_ros
 source "$WS/install/setup.bash"
 set -u
 export RMW_IMPLEMENTATION=rmw_fastrtps_cpp

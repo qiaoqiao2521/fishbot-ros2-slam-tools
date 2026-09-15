@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 BACKEND_LOG="${TMPDIR:-/tmp}/fishbot-station-backend-online.log"
@@ -20,7 +20,8 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-source /home/muqiao/dev/ros2/.ros2_env >/dev/null 2>&1
+WORKBENCH_ROOT="$(cd "$ROOT_DIR/../.." && pwd -P)"
+source "$WORKBENCH_ROOT/.ros2_env" "${FISHBOT_ROS_DISTRO:-jazzy}"
 
 if ! ss -ltn | grep -q ':9090'; then
   ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=9090 >"$ROSBRIDGE_LOG" 2>&1 &
@@ -51,4 +52,4 @@ echo "frontend:      http://127.0.0.1:5173"
 echo "backend:       http://127.0.0.1:8080"
 
 cd "$FRONTEND_DIR"
-npm run dev -- --host 0.0.0.0
+npm run dev -- --host 127.0.0.1 --port "${FRONTEND_PORT:-5173}" --strictPort

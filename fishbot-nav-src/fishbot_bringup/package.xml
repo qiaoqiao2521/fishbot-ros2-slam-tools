@@ -3,11 +3,20 @@
 <package format="3">
   <name>fishbot_bringup</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>FishBot model, odometry TF and optional hardware bringup launch files.</description>
   <maintainer email="87068644+fishros@users.noreply.github.com">fishros</maintainer>
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>fishbot_description</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>micro_ros_agent</exec_depend>
+  <exec_depend>ros_serail2wifi</exec_depend>
+  <exec_depend>ydlidar</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

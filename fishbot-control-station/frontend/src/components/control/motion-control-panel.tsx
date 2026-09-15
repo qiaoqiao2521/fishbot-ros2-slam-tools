@@ -40,7 +40,7 @@ export function MotionControlPanel() {
           <Badge variant={activeDirection ? 'success' : 'neutral'}>{activeDirection ? `keyboard: ${activeDirection}` : 'keyboard armed'}</Badge>
           <Button size="lg" variant="emergency" onClick={() => void emergencyStop()} className="gap-2">
             <TriangleAlert className="h-5 w-5" />
-            急停
+            软件停止锁定
           </Button>
         </div>
       </div>
@@ -130,7 +130,7 @@ export function MotionControlPanel() {
             />
             <TelemetryHint
               title="Safety first"
-              description="急停是独立接口，不走普通控制路径。"
+              description="锁定本控制台并重复发零速；无法排除 Nav2 等发布源，不替代硬件急停。检查后重启控制台解锁。"
             />
             <TelemetryHint
               title="Keyboard backup"

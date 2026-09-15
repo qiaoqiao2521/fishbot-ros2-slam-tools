@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/home/muqiao/dev/ros2"
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
+MICRO_ROS_AGENT_PORT="${MICRO_ROS_AGENT_PORT:-8888}"
+CONTROL_ROSBRIDGE_PORT="${CONTROL_ROSBRIDGE_PORT:-9090}"
 LASER_SOCKET_PORT="${LASER_SOCKET_PORT:-8889}"
 ROS_LOG_DIR="${ROS_LOG_DIR:-/tmp/fishbot_ros_logs}"
 
@@ -29,19 +31,24 @@ print_control_chain_recovery() {
 
 Control-chain recovery commands:
 1. Inspect micro-ROS agent logs:
-   docker.exe logs --tail 160 fishbot_agent
+   cd /home/muqiao/dev/ros2
+   ./tools/fishbot_stack.sh logs agent
 
-2. Inspect robot topics inside the agent container:
-   docker.exe exec -it fishbot_agent bash -lc 'source /opt/ros/humble/setup.bash; ros2 topic list'
+2. Inspect robot topics in native WSL ROS graph:
+   source /opt/ros/humble/setup.bash
+   ros2 topic list
+   ros2 topic info -v /odom
+   ros2 topic info -v /imu
 
 3. Check fresh odom and imu:
-   docker.exe exec -it fishbot_agent bash -lc 'source /opt/ros/humble/setup.bash; timeout 8 ros2 topic echo /odom --once'
-   docker.exe exec -it fishbot_agent bash -lc 'source /opt/ros/humble/setup.bash; timeout 8 ros2 topic echo /imu --once'
+   source /opt/ros/humble/setup.bash
+   timeout 8 ros2 topic echo /odom --once
+   timeout 8 ros2 topic echo /imu --once
 
-4. If /odom is still missing, power-cycle the FishBot main control board or reconnect WiFi, then restart the agent:
+4. If /odom is still missing, power-cycle the FishBot main control board or reconnect WiFi, then restart the native stack:
    cd /home/muqiao/dev/ros2
-   ./tools/fishbot.sh stop
-   ./tools/fishbot.sh start
+   ./tools/fishbot_stack.sh slam-reset
+   ./tools/fishbot_stack.sh slam-base
    ./tools/fishbot_stack.sh preflight-slam
 
 Do not run slam-core or arrows until /odom is fresh.
@@ -76,28 +83,42 @@ EOF
   fi
 }
 
-check_agent_container() {
-  if ! command -v docker.exe >/dev/null 2>&1; then
-    fail "docker.exe not available from WSL"
-    return
-  fi
+check_native_agent() {
+  local udp_sockets tcp_sockets nodes
 
-  if docker.exe ps --format '{{.Names}}' | grep -Fxq fishbot_agent; then
-    ok "fishbot_agent container is running"
+  if ! udp_sockets="$(ss -lunp 2>/tmp/fishbot_ss_udp.err)"; then
+    warn "cannot inspect UDP sockets with ss; skip micro-ROS port check"
+    sed -n '1,20p' /tmp/fishbot_ss_udp.err || true
+  elif grep -q ":${MICRO_ROS_AGENT_PORT}" <<<"$udp_sockets"; then
+    ok "native micro-ROS agent is listening on UDP ${MICRO_ROS_AGENT_PORT}"
   else
-    fail "fishbot_agent container is not running"
-    printf 'Run: cd %s && ./tools/fishbot.sh start\n' "$ROOT"
-    return
+    fail "native micro-ROS agent is not listening on UDP ${MICRO_ROS_AGENT_PORT}"
+    printf 'Run: cd %s && ./tools/fishbot_stack.sh slam-base\n' "$ROOT"
   fi
 
-  local ports
-  ports="$(docker.exe port fishbot_agent 2>/dev/null || true)"
-  grep -Fq "8888/udp -> 0.0.0.0:8888" <<<"$ports" \
-    && ok "fishbot_agent exposes UDP 8888" \
-    || fail "fishbot_agent does not expose UDP 8888"
-  grep -Fq "9090/tcp -> 0.0.0.0:9090" <<<"$ports" \
-    && ok "fishbot_agent exposes TCP 9090" \
-    || fail "fishbot_agent does not expose TCP 9090"
+  if ! tcp_sockets="$(ss -ltnp 2>/tmp/fishbot_ss_tcp.err)"; then
+    warn "cannot inspect TCP sockets with ss; skip control rosbridge port check"
+    sed -n '1,20p' /tmp/fishbot_ss_tcp.err || true
+  elif grep -q ":${CONTROL_ROSBRIDGE_PORT}" <<<"$tcp_sockets"; then
+    ok "native control rosbridge is listening on TCP ${CONTROL_ROSBRIDGE_PORT}"
+  else
+    fail "native control rosbridge is not listening on TCP ${CONTROL_ROSBRIDGE_PORT}"
+  fi
+
+  set +u
+  source "$ROOT/tools/fishbot_ros_env.sh"
+  fishbot_source_ros
+  [[ -f "$ROOT/fishbot_nav/install/setup.bash" ]] && source "$ROOT/fishbot_nav/install/setup.bash"
+  [[ -f "$ROOT/fishbot_laser_ws/install/setup.bash" ]] && source "$ROOT/fishbot_laser_ws/install/setup.bash"
+  [[ -f "$ROOT/workspaces/micro_ros_agent_ws/install/setup.bash" ]] && source "$ROOT/workspaces/micro_ros_agent_ws/install/setup.bash"
+  set -u
+  nodes="$(timeout 5 ros2 node list 2>/tmp/fishbot_node_list.err || true)"
+  if grep -Eq '/micro_ros_agent|/micro_ros_agent_node' <<<"$nodes"; then
+    ok "native micro_ros_agent node is visible"
+  else
+    warn "native micro_ros_agent node is not visible yet"
+    sed -n '1,40p' /tmp/fishbot_node_list.err || true
+  fi
 }
 
 check_lidar_socket() {
@@ -147,10 +168,15 @@ check_backend_and_odom() {
     warn "backend does not report robotOnline=true"
   fi
 
-  if command -v docker.exe >/dev/null 2>&1 &&
-     docker.exe exec fishbot_agent bash -lc \
-       'source /opt/ros/humble/setup.bash && timeout 8 ros2 topic echo /odom --once' \
-       >/tmp/fishbot_odom_probe.log 2>&1; then
+  set +u
+  source "$ROOT/tools/fishbot_ros_env.sh"
+  fishbot_source_ros
+  [[ -f "$ROOT/fishbot_nav/install/setup.bash" ]] && source "$ROOT/fishbot_nav/install/setup.bash"
+  [[ -f "$ROOT/fishbot_laser_ws/install/setup.bash" ]] && source "$ROOT/fishbot_laser_ws/install/setup.bash"
+  [[ -f "$ROOT/workspaces/micro_ros_agent_ws/install/setup.bash" ]] && source "$ROOT/workspaces/micro_ros_agent_ws/install/setup.bash"
+  set -u
+
+  if timeout 8 ros2 topic echo /odom --once >/tmp/fishbot_odom_probe.log 2>&1; then
     ok "/odom has fresh data"
   else
     fail "/odom probe did not receive fresh data"
@@ -163,7 +189,7 @@ main() {
   printf 'FishBot SLAM preflight\n'
   printf '======================\n'
   check_windows_firewall
-  check_agent_container
+  check_native_agent
   check_lidar_socket
   check_scan
   check_backend_and_odom

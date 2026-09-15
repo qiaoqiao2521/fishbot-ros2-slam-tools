@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/home/muqiao/dev/ros2"
-CONTROL_STATION="/home/muqiao/dev/fishbot-control-station"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=fishbot_ros_env.sh
+source "$SCRIPT_DIR/fishbot_ros_env.sh"
+ROS_DISTRO_RESOLVED="$(fishbot_ros_distro)" || exit 127
+echo "FishBot stack: using ROS 2 ${ROS_DISTRO_RESOLVED}"
+
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
+CONTROL_STATION="$ROOT/apps/fishbot-control-station"
 LASER_WS="${LASER_WS:-$ROOT/fishbot_laser_ws}"
 BRINGUP_WS="${BRINGUP_WS:-$ROOT/fishbot_nav}"
+MICRO_ROS_AGENT_WS="${MICRO_ROS_AGENT_WS:-$ROOT/workspaces/micro_ros_agent_ws}"
 RVIZ_CONFIG="${RVIZ_CONFIG:-$BRINGUP_WS/src/fishbot_cartographer/config/cartographer.rviz}"
 NAV_MAP="${NAV_MAP:-$BRINGUP_WS/src/fishbot_navigation2/maps/current_map.yaml}"
 NAV_LIVE_MAP="${NAV_LIVE_MAP:-$BRINGUP_WS/src/fishbot_navigation2/maps/live_map.yaml}"
 NAV_FALLBACK_MAP="${NAV_FALLBACK_MAP:-$BRINGUP_WS/src/fishbot_navigation2/maps/room.yaml}"
-NAV_RVIZ_CONFIG="${NAV_RVIZ_CONFIG:-/opt/ros/humble/share/nav2_bringup/rviz/nav2_default_view.rviz}"
+NAV_RVIZ_CONFIG="${NAV_RVIZ_CONFIG:-/opt/ros/${ROS_DISTRO_RESOLVED}/share/nav2_bringup/rviz/nav2_default_view.rviz}"
 
 SESSION="${FISHBOT_STACK_SESSION:-fishbot}"
+SLAM_PARAMS_FILE="${SLAM_PARAMS_FILE:-$ROOT/tools/config/fishbot_slam.yaml}"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+CONTROL_ROSBRIDGE_PORT="${CONTROL_ROSBRIDGE_PORT:-9090}"
+MICRO_ROS_AGENT_PORT="${MICRO_ROS_AGENT_PORT:-8888}"
 LASER_ROSBRIDGE_PORT="${LASER_ROSBRIDGE_PORT:-9091}"
 LASER_SOCKET_PORT="${LASER_SOCKET_PORT:-8889}"
 LASER_Z="${LASER_Z:-0.02}"
@@ -51,7 +61,7 @@ tmux session:
   ${SESSION}
 
 Windows:
-  lidar | rosbridge | backend | frontend | control_bridge | odom2tf | static_tf | slam | nav | rviz
+  agent | control_rosbridge | lidar | rosbridge | backend | frontend | control_bridge | odom2tf | static_tf | slam | nav | rviz
 
 Native SLAM staged flow:
   1. $(basename "$0") slam-reset
@@ -63,7 +73,7 @@ Native SLAM staged flow:
 URLs:
   frontend http://127.0.0.1:${FRONTEND_PORT}
   backend  http://127.0.0.1:${BACKEND_PORT}
-  control ws ws://127.0.0.1:9090/
+  control ws ws://127.0.0.1:${CONTROL_ROSBRIDGE_PORT}/
   laser ws ws://127.0.0.1:${LASER_ROSBRIDGE_PORT}/
 EOF
 }
@@ -87,9 +97,10 @@ tmux_has_window() {
 ros_prefix() {
   cat <<EOF
 set +u
-source /opt/ros/humble/setup.bash
+source /opt/ros/${ROS_DISTRO_RESOLVED}/setup.bash
 [[ -f '$BRINGUP_WS/install/setup.bash' ]] && source '$BRINGUP_WS/install/setup.bash'
 [[ -f '$LASER_WS/install/setup.bash' ]] && source '$LASER_WS/install/setup.bash'
+[[ -f '$MICRO_ROS_AGENT_WS/install/setup.bash' ]] && source '$MICRO_ROS_AGENT_WS/install/setup.bash'
 set -u
 export RMW_IMPLEMENTATION='$RMW_IMPL'
 export ROS_DOMAIN_ID='$ROS_DOMAIN'
@@ -97,11 +108,10 @@ EOF
 }
 
 source_ros_here() {
-  set +u
-  source /opt/ros/humble/setup.bash
+  fishbot_source_ros
   [[ -f "$BRINGUP_WS/install/setup.bash" ]] && source "$BRINGUP_WS/install/setup.bash"
   [[ -f "$LASER_WS/install/setup.bash" ]] && source "$LASER_WS/install/setup.bash"
-  set -u
+  [[ -f "$MICRO_ROS_AGENT_WS/install/setup.bash" ]] && source "$MICRO_ROS_AGENT_WS/install/setup.bash"
   export RMW_IMPLEMENTATION="$RMW_IMPL"
   export ROS_DOMAIN_ID="$ROS_DOMAIN"
 }
@@ -136,16 +146,33 @@ tmux_replace_window() {
 kill_stale_ports() {
   fuser -k "${BACKEND_PORT}/tcp" 2>/dev/null || true
   fuser -k "${FRONTEND_PORT}/tcp" 2>/dev/null || true
+  fuser -k "${CONTROL_ROSBRIDGE_PORT}/tcp" 2>/dev/null || true
   fuser -k "${LASER_ROSBRIDGE_PORT}/tcp" 2>/dev/null || true
+  fuser -k "${MICRO_ROS_AGENT_PORT}/udp" 2>/dev/null || true
 }
 
 start_agent() {
-  if command -v docker.exe >/dev/null 2>&1; then
-    FISHBOT_DOCKER_BIN=docker.exe "$ROOT/tools/fishbot.sh" start >/dev/null
-    echo "agent: ready"
-  else
-    echo "agent: skipped (docker.exe not found)"
-  fi
+  tmux_replace_window "agent" "$(ros_prefix)
+if ss -lun 2>/dev/null | grep -q ':${MICRO_ROS_AGENT_PORT} '; then
+  echo 'error: UDP ${MICRO_ROS_AGENT_PORT} is already in use before starting native micro_ros_agent.'
+  echo 'Check stale Docker Desktop port mappings or old native agents, then free the port.'
+  echo 'Diagnostics: ss -lunp | grep :${MICRO_ROS_AGENT_PORT}'
+  exit 98
+fi
+if ! ros2 pkg prefix micro_ros_agent >/dev/null 2>&1; then
+  echo 'error: ROS2 package micro_ros_agent not found.'
+  echo 'Build/source $MICRO_ROS_AGENT_WS first (see workspaces/micro_ros_agent_ws).'
+  exit 127
+fi
+ros2 run micro_ros_agent micro_ros_agent udp4 --port ${MICRO_ROS_AGENT_PORT} -v6
+echo 'micro_ros_agent exited; this is not expected during live operation.'
+exit 1"
+
+  tmux_replace_window "control_rosbridge" "$(ros_prefix)
+exec ros2 launch rosbridge_server rosbridge_websocket_launch.xml port:=${CONTROL_ROSBRIDGE_PORT}"
+
+  echo "agent: native micro-ROS on udp/${MICRO_ROS_AGENT_PORT}"
+  echo "control_rosbridge: ws://127.0.0.1:${CONTROL_ROSBRIDGE_PORT}/"
 }
 
 start_laser_windows() {
@@ -167,7 +194,7 @@ exec ros2 run ydlidar ydlidar_node --ros-args -p protocol:=net -p socket_port:=$
 start_backend_window() {
   tmux_replace_window "backend" "cd '$CONTROL_STATION/backend'
 export CONTROL_ROSBRIDGE_HOST=127.0.0.1
-export CONTROL_ROSBRIDGE_PORT=9090
+export CONTROL_ROSBRIDGE_PORT=${CONTROL_ROSBRIDGE_PORT}
 export LASER_ROSBRIDGE_HOST=127.0.0.1
 export LASER_ROSBRIDGE_PORT=${LASER_ROSBRIDGE_PORT}
 export SERVER_PORT=${BACKEND_PORT}
@@ -209,7 +236,7 @@ exec ros2 run fishbot_bringup odom2tf"
 exec ros2 run tf2_ros static_transform_publisher 0 0 ${LASER_Z} 0 0 0 1 base_footprint laser_frame"
 
   tmux_replace_window "slam" "$(ros_prefix)
-exec ros2 launch slam_toolbox online_async_launch.py use_sim_time:=False"
+exec ros2 launch slam_toolbox online_async_launch.py use_sim_time:=False slam_params_file:='$SLAM_PARAMS_FILE'"
 
   tmux_replace_window "rviz" "$(ros_prefix)
 if [[ -f '$RVIZ_CONFIG' ]]; then
@@ -232,7 +259,7 @@ exec ros2 run fishbot_bringup odom2tf"
 exec ros2 run tf2_ros static_transform_publisher 0 0 ${LASER_Z} 0 0 0 1 base_footprint laser_frame"
 
   tmux_replace_window "slam" "$(ros_prefix)
-exec ros2 launch slam_toolbox online_async_launch.py use_sim_time:=False"
+exec ros2 launch slam_toolbox online_async_launch.py use_sim_time:=False slam_params_file:='$SLAM_PARAMS_FILE'"
 
   tmux select-window -t "$SESSION:slam"
 }
@@ -416,7 +443,7 @@ print_urls() {
   echo
   echo "frontend: ${frontend_url}"
   echo "backend:  http://127.0.0.1:${BACKEND_PORT}"
-  echo "control:  ws://127.0.0.1:9090/"
+  echo "control:  ws://127.0.0.1:${CONTROL_ROSBRIDGE_PORT}/"
   echo "laser ws: ws://127.0.0.1:${LASER_ROSBRIDGE_PORT}/"
   echo "tmux:     tmux attach -t ${SESSION}"
 }
@@ -442,8 +469,8 @@ ensure_session() {
 
 start_stack() {
   kill_stale_ports
-  start_agent
   reset_session
+  start_agent
   start_base_windows
   sleep 3
   wait_for_mode_windows laser || true
@@ -455,8 +482,8 @@ start_stack() {
 
 start_control_stack() {
   kill_stale_ports
-  start_agent
   reset_session
+  start_agent
   start_control_windows
   sleep 2
   wait_for_mode_windows control || true
@@ -478,8 +505,8 @@ start_laser_stack() {
 
 start_stack_with_slam() {
   kill_stale_ports
-  start_agent
   reset_session
+  start_agent
   start_base_windows
   start_slam_windows
   sleep 3
@@ -493,8 +520,8 @@ start_stack_with_slam() {
 
 start_stack_with_nav() {
   kill_stale_ports
-  start_agent
   reset_session
+  start_agent
   start_base_windows
   start_nav_windows
   sleep 3
@@ -514,8 +541,8 @@ slam_reset_stack() {
 
 slam_base_stack() {
   kill_stale_ports
-  start_agent
   ensure_session
+  start_agent
   start_backend_window
   start_lidar_window
   sleep 3
@@ -555,16 +582,13 @@ stop_stack() {
     echo "tmux: session ${SESSION} not running"
   fi
 
-  if command -v docker.exe >/dev/null 2>&1; then
-    FISHBOT_DOCKER_BIN=docker.exe "$ROOT/tools/fishbot.sh" stop >/dev/null || true
-    echo "agent: stopped"
-  fi
+  echo "agent: stopped"
 }
 
 show_status() {
   echo "Ports:"
-  ss -ltnp | egrep ":${BACKEND_PORT}|:${FRONTEND_PORT}|:${LASER_ROSBRIDGE_PORT}|:9090" || true
-  ss -lunp | egrep ":8888|:${LASER_SOCKET_PORT}" || true
+  ss -ltnp | egrep ":${BACKEND_PORT}|:${FRONTEND_PORT}|:${LASER_ROSBRIDGE_PORT}|:${CONTROL_ROSBRIDGE_PORT}" || true
+  ss -lunp | egrep ":${MICRO_ROS_AGENT_PORT}|:${LASER_SOCKET_PORT}" || true
   echo
 
   if tmux_has_session; then
@@ -575,9 +599,9 @@ show_status() {
   fi
 
   echo
-  if command -v docker.exe >/dev/null 2>&1; then
-    FISHBOT_DOCKER_BIN=docker.exe "$ROOT/tools/fishbot.sh" status || true
-  fi
+  source_ros_here
+  echo "ROS nodes:"
+  timeout 5 ros2 node list 2>/dev/null | sort || true
 
   echo
   curl -m 2 -s "http://127.0.0.1:${BACKEND_PORT}/api/v1/connection" || true

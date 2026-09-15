@@ -46,7 +46,7 @@ public class RobotStateService {
         currentState.updateAndGet(current -> new RobotStateSnapshot(
                 current.getX(),
                 current.getY(),
-                rpy[2],
+                current.getYaw(),
                 current.getLinearVelocity(),
                 current.getAngularVelocity(),
                 read(msg, "linear_acceleration", "x", current.getAccelX()),

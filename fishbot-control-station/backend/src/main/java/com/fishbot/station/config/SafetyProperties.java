@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "safety")
 public class SafetyProperties {
 
-    private double maxLinearSpeed = 1.0;
+    private double maxLinearSpeed = 0.3;
     private double maxAngularSpeed = 1.0;
     private long stopCommandDelayMs = 500;
 

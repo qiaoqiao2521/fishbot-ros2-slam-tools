@@ -42,7 +42,7 @@ export function getNavigationTaskPresentation(
   actionPreview: NavigationActionPreview = 'idle',
 ): NavigationTaskPresentation {
   const mode = getModePresentation(connection, usingFallbackData)
-  const rateLabel = `${robotState.messageRateHz.toFixed(1)} Hz`
+  const rateLabel = robotState.messageRateHz == null ? '未测量' : `${robotState.messageRateHz.toFixed(1)} Hz`
   const updatedAtLabel = new Date(robotState.lastUpdatedAt).toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',

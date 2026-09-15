@@ -2,6 +2,7 @@
 import json
 import math
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -32,8 +33,10 @@ class ControlStateBridge(Node):
         self.backend_base = backend_base.rstrip("/")
         self.state_url = f"{self.backend_base}/api/v1/state"
         self.connection_url = f"{self.backend_base}/api/v1/connection"
-        self.odom_pub = self.create_publisher(Odometry, "/odom", 10)
-        self.imu_pub = self.create_publisher(Imu, "/imu", 10)
+        # UI-derived diagnostics are not an authoritative SLAM/EKF sensor source.
+        self.odom_pub = self.create_publisher(Odometry, "/station/odom", 10)
+        self.imu_pub = self.create_publisher(Imu, "/station/imu", 10)
+        self.last_state_received = 0.0
         self.latest_state: dict | None = None
         self.control_connected = False
         self.state_tick = self.create_timer(0.1, self.refresh_state)
@@ -53,9 +56,12 @@ class ControlStateBridge(Node):
         payload = self.fetch_json(self.state_url)
         if payload:
             self.latest_state = payload
+            self.last_state_received = time.monotonic()
+        else:
+            self.latest_state = None
 
     def publish_latest(self) -> None:
-        if not self.control_connected or not self.latest_state:
+        if not self.control_connected or not self.latest_state or time.monotonic() - self.last_state_received > 0.5:
             return
 
         now = self.get_clock().now().to_msg()
