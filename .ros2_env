@@ -1,0 +1,6 @@
+# Source this file; no hardware side effects.
+_fishbot_env_root="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")"
+export FISHBOT_ROS_DISTRO="${1:-${FISHBOT_ROS_DISTRO:-jazzy}}"
+source "$_fishbot_env_root/tools/fishbot_ros_env.sh"
+fishbot_source_ros
+unset _fishbot_env_root

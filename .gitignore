@@ -28,3 +28,9 @@ TASKMEMORY.md
 *.tar.gz
 __pycache__/
 *.pyc
+*.posegraph
+*.data
+*.bin
+.pio/
+.venv*/
+*.bak*

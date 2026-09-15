@@ -1,31 +1,42 @@
-# FishBot ROS2 SLAM Tools
+# FishBot
 
-FishBot ROS2 SLAM Tools is a public snapshot of the WSL2/ROS2 helper scripts and control-station UI used to bring up a FishBot mobile robot for native ROS2 laser scan, odometry, SLAM, and map-saving experiments.
+One robot, one project: controller UI, ROS2 navigation, network LiDAR driver,
+micro-ROS Agent sources, firmware source and staged runtime tools.
 
-## What Is Included
+## Start here
 
-- `ros2-tools/`: staged FishBot startup, preflight, teleop, laser probe, map probe, and map-save scripts.
-- `fishbot-control-station/`: backend/frontend control station source.
-- `fishbot-nav-src/`: FishBot ROS2 navigation, description, bringup, Cartographer, and YDLiDAR source snapshot.
-
-## Current Boundary
-
-The recommended workflow is native ROS2 mapping first. Do not treat frontend map rendering or one-click stack startup as proof that mapping is stable. A valid mapping session requires fresh `/scan`, fresh `/odom`, valid TF, and a real `/map` in RViz.
-
-## Typical Flow
+From this checkout (no personal workspace path required):
 
 ```bash
-cd /home/muqiao/dev/ros2
-./tools/fishbot_stack.sh slam-reset
-./tools/fishbot_stack.sh slam-base
-./tools/fishbot_stack.sh preflight-slam
-./tools/fishbot_stack.sh slam-core
-./tools/fishbot_stack.sh slam-rviz
-./tools/fishbot.sh arrows
+./fishbot.sh check
+./fishbot.sh stack help
+./fishbot.sh teleop help
+python3 tools/test_layout.py
 ```
 
-If `preflight-slam` reports missing `/odom`, fix the micro-ROS control chain before moving the robot.
+check is offline only. It does not establish that ROS is built, sensors are fresh
+or motion is safe. Read FISHBOT_STATUS.md before operating hardware.
 
-## License
+## Layout
 
-This is a learning and integration snapshot. Verify licenses of upstream FishBot/FishROS components before redistribution in a product.
+- tools/: staged startup, preflight, teleop and map saving.
+- apps/fishbot-control-station/: Gradle/Spring Boot backend and React frontend.
+- fishbot_nav/src/: navigation, description and bringup packages.
+- fishbot_laser_ws/src/: actual Python network LiDAR driver.
+- workspaces/micro_ros_agent_ws/src/: Agent and message dependencies.
+- fishbot_motion_control_microros/: firmware source, not a flashed update.
+
+Build workspaces separately; never run a whole-repository colcon build.
+Dependency origins/revisions are in docs/DEPENDENCIES.md.
+This update excludes private maps, posegraphs, flash backups and runtime data.
+Historical already-published maps remain in Git history.
+
+Former ros2-tools, fishbot-control-station and fishbot-nav-src have moved to the
+paths above. This repository is published from the canonical local project.
+
+## Acceptance boundary
+
+Offline layout and dispatch tests pass. A clean build and hardware revalidation
+were not performed for this publication. Historical mapping and serialization
+succeeded; delayed motion, posegraph restore/localization and Nav2 remain
+unresolved. Never bypass fresh-odometry motion gates.
