@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#15384d" />
+    <title>ROS2 Mobile Panel Offline</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: #eef3f7;
+        color: #16212b;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at top left, rgba(30, 136, 229, 0.14), transparent 30%),
+          linear-gradient(180deg, #f8fbfd 0%, #eef3f7 100%);
+      }
+
+      main {
+        width: min(520px, calc(100% - 32px));
+        padding: 24px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 12px 32px rgba(39, 71, 92, 0.08);
+      }
+
+      p {
+        margin: 0 0 12px;
+        line-height: 1.6;
+      }
+
+      .eyebrow {
+        color: #2b658f;
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 0 0 14px;
+        font-size: 28px;
+      }
+
+      .hint {
+        color: #56707f;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Offline Shell</p>
+      <h1>当前没有连接到服务</h1>
+      <p>离线基础壳已经加载成功，说明前端安装入口仍然可用。</p>
+      <p>请检查 Wi‑Fi、树莓派电源、Nginx 和后端服务是否已经启动。网络恢复后，再回到桌面图标重新打开即可。</p>
+      <p class="hint">Day 6 目标是让入口可安装、可恢复、可复现；不是在离线时继续控制小车。</p>
+    </main>
+  </body>
+</html>

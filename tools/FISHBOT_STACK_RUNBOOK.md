@@ -205,6 +205,7 @@ ROS2 原生层:
 9091/tcp  -> WSL 本地 rosbridge（雷达桥）
 8080/tcp  -> fishbot-control-station backend
 5173/tcp  -> fishbot-control-station frontend
+8010/tcp  -> fishbot-web-panel（手机 PWA 遥控/诊断，absorbed ros2-mobile-panel）
 ```
 
 一句话记忆：
@@ -212,6 +213,7 @@ ROS2 原生层:
 - `9090` = 控制桥
 - `9091` = 雷达桥
 - 浏览器只看 `8080/5173`
+- 手机看 `8010`（同一局域网，`http://<主机IP>:8010`，可加桌面安装成 PWA）
 - 建图还是看 `rviz`
 
 ### 3.1 Windows 防火墙前置条件
@@ -318,12 +320,19 @@ lidar
 rosbridge
 backend
 frontend
+web_panel
 odom2tf
 static_tf
 slam
 nav
 rviz
 ```
+
+`web_panel` 是 absorbed 自 ros2-mobile-panel-day1 的手机面板（FastAPI + PWA 单进程，8010）。
+`start` / `start-slam` / `start-nav` 会默认拉起；单独控制用 `fishbot_stack.sh start-web`，
+重启用 `restart-web`。手机连同一局域网访问 `http://<主机IP>:8010`；
+遥控带死人开关（300ms TTL，松手/锁屏/断连即停），只能替代 RViz 级别的观察与
+低速点动，不替代物理急停。详见 `fishbot-web-panel/README.md`。
 
 进入：
 

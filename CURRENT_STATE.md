@@ -132,3 +132,22 @@ SLAM 两套并行：slam_toolbox(ros2-tools/fishbot_stack.sh:213) 或 cartograph
 3. `fishbot-nav-src/` ← `dev/ros2/fishbot_nav/src/`（六包全量刷新；新增 `ydlidar/params/ydlidar.yaml`、`fishbot_navigation2/config/nav2_params.yaml` 与 `maps/{room,live_map,current_map}` —— **第 7.2 节"快照缺文件"缺陷就此消除**，两处 CMake 的 `OPTIONAL` 补丁也随之不再需要，已还原为主线原版）。
 4. 第 7 节其余失效点状态：Humble 硬编码已在主线脚本中清理（Jazzy 可用）；`ros_serail2wifi`、Cartographer 依赖、ydlidar launch 生命周期问题仍存在；`micro_ros_agent` 仍需实车链路验证。
 5. 原 GitHub 私有仓 `muqiao215/fishbot_nav`（2026-05-08 快照）内容已确认为本仓库子集，同日归档。
+
+## 11. 2026-09-15 晚：吸收 ros2-mobile-panel 为 fishbot-web-panel
+
+按"把已验证的 PWA 面板嵌进 FishBot"任务执行。`fishbot-web-panel/` 为上游
+ros2-mobile-panel-day1（Day 6，v0.1.0-soft-validated，含 09-14 防重放修复）
+的原样吸收：backend/ 原样、frontend-dist/ 预构建 PWA、deploy/ 模板改路径；
+仅新增 `fishbot_app.py`（把 frontend-dist 挂载到 "/"，单进程同时服务 UI 与
+API/WS）和 `run_web_panel.sh`（`--system-site-packages` venv：web 依赖装
+venv，rclpy/numpy 继承系统；默认 `SERIAL_ENABLED=false`——FishBot 控制链路
+是 micro-ROS UDP，非 USB 串口，树莓派等有串口的宿主手动开启）。
+
+话题名与栈原生一致（/odom /scan /map /cmd_vel）。端口 8010（8080 已被
+control-station backend 占用）；`fishbot_stack.sh start-web` 单独启动，
+start/start-slam/start-nav 经 start_base_windows 默认拉起，restart-web 重启。
+
+实测（本机 Jazzy）：上游 20 个契约/网关/桥接测试通过；`start-web` 全链路
+冒烟通过（tmux web_panel 窗口 → healthz ok → PWA 首页 200 → WS 收到
+system_state/serial_stats 事件，单 worker 常驻）。雷达/里程计真数据视图与
+触屏遥控未实测——需要实车在线，与既有验收边界一致。

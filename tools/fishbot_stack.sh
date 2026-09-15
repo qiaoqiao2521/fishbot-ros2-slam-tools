@@ -27,6 +27,8 @@ MICRO_ROS_AGENT_PORT="${MICRO_ROS_AGENT_PORT:-8888}"
 LASER_ROSBRIDGE_PORT="${LASER_ROSBRIDGE_PORT:-9091}"
 LASER_SOCKET_PORT="${LASER_SOCKET_PORT:-8889}"
 LASER_Z="${LASER_Z:-0.02}"
+WEB_PANEL_DIR="${WEB_PANEL_DIR:-$ROOT/fishbot-web-panel}"
+WEB_PANEL_PORT="${WEB_PANEL_PORT:-8010}"
 RMW_IMPL="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
 ROS_DOMAIN="${ROS_DOMAIN_ID:-0}"
 
@@ -45,6 +47,7 @@ Usage:
   $(basename "$0") start-all
   $(basename "$0") start-slam
   $(basename "$0") start-nav
+  $(basename "$0") start-web
   $(basename "$0") restart-control
   $(basename "$0") restart-laser
   $(basename "$0") restart
@@ -61,7 +64,7 @@ tmux session:
   ${SESSION}
 
 Windows:
-  agent | control_rosbridge | lidar | rosbridge | backend | frontend | control_bridge | odom2tf | static_tf | slam | nav | rviz
+  agent | control_rosbridge | lidar | rosbridge | backend | frontend | web_panel | control_bridge | odom2tf | static_tf | slam | nav | rviz
 
 Native SLAM staged flow:
   1. $(basename "$0") slam-reset
@@ -73,6 +76,7 @@ Native SLAM staged flow:
 URLs:
   frontend http://127.0.0.1:${FRONTEND_PORT}
   backend  http://127.0.0.1:${BACKEND_PORT}
+  panel    http://127.0.0.1:${WEB_PANEL_PORT}
   control ws ws://127.0.0.1:${CONTROL_ROSBRIDGE_PORT}/
   laser ws ws://127.0.0.1:${LASER_ROSBRIDGE_PORT}/
 EOF
@@ -148,6 +152,7 @@ kill_stale_ports() {
   fuser -k "${FRONTEND_PORT}/tcp" 2>/dev/null || true
   fuser -k "${CONTROL_ROSBRIDGE_PORT}/tcp" 2>/dev/null || true
   fuser -k "${LASER_ROSBRIDGE_PORT}/tcp" 2>/dev/null || true
+  fuser -k "${WEB_PANEL_PORT}/tcp" 2>/dev/null || true
   fuser -k "${MICRO_ROS_AGENT_PORT}/udp" 2>/dev/null || true
 }
 
@@ -201,6 +206,19 @@ export SERVER_PORT=${BACKEND_PORT}
 exec ./gradlew --no-daemon bootRun"
 }
 
+start_web_panel_window() {
+  if [[ ! -d "$WEB_PANEL_DIR" ]]; then
+    echo "web_panel: skip - $WEB_PANEL_DIR not found"
+    return 0
+  fi
+  tmux_replace_window "web_panel" "$(ros_prefix)
+cd '$WEB_PANEL_DIR'
+export ROS_DOMAIN_ID=${ROS_DOMAIN}
+export APP_PORT=${WEB_PANEL_PORT}
+exec ./run_web_panel.sh"
+  echo "web_panel: http://127.0.0.1:${WEB_PANEL_PORT}"
+}
+
 start_ui_windows() {
   start_backend_window
 
@@ -214,6 +232,7 @@ exec npm run dev -- --host 0.0.0.0 --port ${FRONTEND_PORT}"
 start_base_windows() {
   start_laser_windows
   start_ui_windows
+  start_web_panel_window
 }
 
 start_control_windows() {
@@ -443,6 +462,7 @@ print_urls() {
   echo
   echo "frontend: ${frontend_url}"
   echo "backend:  http://127.0.0.1:${BACKEND_PORT}"
+  echo "panel:    http://127.0.0.1:${WEB_PANEL_PORT}"
   echo "control:  ws://127.0.0.1:${CONTROL_ROSBRIDGE_PORT}/"
   echo "laser ws: ws://127.0.0.1:${LASER_ROSBRIDGE_PORT}/"
   echo "tmux:     tmux attach -t ${SESSION}"
@@ -659,6 +679,20 @@ case "${1:-}" in
     ;;
   start-nav)
     start_stack_with_nav
+    ;;
+  start-web)
+    tmux_has_session || tmux_new_session
+    start_web_panel_window
+    cleanup_bootstrap
+    ;;
+  restart-web)
+    if tmux_has_window "web_panel"; then
+      tmux kill-window -t "$SESSION:web_panel"
+    fi
+    fuser -k "${WEB_PANEL_PORT}/tcp" 2>/dev/null || true
+    tmux_has_session || tmux_new_session
+    start_web_panel_window
+    cleanup_bootstrap
     ;;
   restart-control)
     stop_stack

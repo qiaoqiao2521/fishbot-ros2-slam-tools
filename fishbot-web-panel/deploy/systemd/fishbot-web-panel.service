@@ -1,0 +1,20 @@
+[Unit]
+Description=FishBot Web Panel (absorbed ros2-mobile-panel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Update this to the actual deploy user on the Raspberry Pi.
+User=pi
+WorkingDirectory=/opt/fishbot/fishbot-web-panel
+Environment=ROS_SETUP_BASH=/opt/ros/jazzy/setup.bash
+Environment=APP_PORT=8010
+Environment=SERIAL_ENABLED=false
+Environment=ROS_DOMAIN_ID=0
+ExecStart=/opt/fishbot/fishbot-web-panel/run_web_panel.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
