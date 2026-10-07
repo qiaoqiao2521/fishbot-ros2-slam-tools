@@ -1,16 +1,22 @@
 # Progress
 
 ## Current
-Preparing a reviewed fast-forward integration onto the existing public main branch.
+The candidate is committed on the existing remote history. Binding and publication are pending.
 
 ## Done
-Verified GitHub identity and target; compared source trees; preserved the published dependency layout; integrated recent source into a separate candidate checkout.
+Verified the GitHub account and target repository. Reconciled the published tree with current source and preserved independent histories.
+
+Validation passed: 146 tool tests, 31 MuJoCo tests, 21 frontend tests, 8 legacy simulator tests, 4 layout tests, frontend build, MuJoCo build and 12 offline layout checks.
+
+The ROS-free replay test now checks imports in a fresh process. This removes test-order interference without changing runtime behavior.
+
+Public documents use placeholders for local provisioning. The old network guide contained a Wi-Fi password in already published history. The current file is redacted; history remains intact. The owner should rotate that password.
 
 ## Remaining
-Complete checks, publish, attach Git metadata to the canonical project directory and verify remote readback.
+Bind the canonical checkout, verify preserved local files, push main and compare remote/local heads.
 
 ## Issues
-Outer-workbench migration changes remain a separate preserved history. Private runtime evidence is not included in publication.
+No hardware or new end-to-end simulation run was performed for this repository connection. Earlier simulation evidence remains local.
 
 ## Next
-Root Codex owns serial integration. Current acceptance entries: `tools/test_layout.py`, `tools/tests/`, frontend tests/build, and the selected MuJoCo workspace build. Existing complete physical simulation evidence remains at the local inspection and passage run directories; connecting Git does not add hardware acceptance.
+Root Codex owns serial integration and final readback. Original operational files and the application manifest will remain under ignored `.local/`.

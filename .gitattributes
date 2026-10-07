@@ -1,0 +1,2 @@
+# Unified patches retain a space on blank context lines.
+plans/fishbot-mujoco-20261003/bcr-compat.patch whitespace=-blank-at-eol
