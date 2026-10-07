@@ -11,4 +11,4 @@ Connect the actual development directory to the existing public `qiaoqiao2521/fi
 5. Verify matching remote/local heads and retained local evidence.
 
 ## Status
-Preparing the reviewed candidate from remote base `27dca79` and local source `0292138`.
+Complete. The canonical checkout directly tracks `origin/main`. The integration was pushed normally from remote base `27dca79`; GitHub readback confirmed `3fd5bf4`. Local source provenance remains `0292138` in the preserved outer repository.

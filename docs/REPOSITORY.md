@@ -15,3 +15,5 @@ The October 2026 simulation, continuous passage control, radar fixes and visual 
 Maps, posegraphs, firmware images/backups, machine provisioning, runtime logs, extracted dependencies and generated reports stay local. The local `.local/` directory holds original operational notes and the connection manifest. These files are ignored and must not be staged for publication. Public status is in [PROJECT.md](../PROJECT.md) and [FISHBOT_STATUS.md](../FISHBOT_STATUS.md).
 
 The historical `_public_release` snapshot remains unchanged. It is not the development or delivery entrypoint. Hardware has not been operated by connecting this repository.
+
+The connection preserved nine nested Git metadata directories and 316 existing outer-workbench tracked changes. The local inventory records 28 upstream reference files that exactly match their nested commits. Root `.git/info/exclude` keeps those unchanged references local; their nested repositories still own them. No source was deleted.
