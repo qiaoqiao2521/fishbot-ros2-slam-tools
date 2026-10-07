@@ -1,0 +1,74 @@
+# Domain-98 simulation only. Full-footprint local prediction for narrow turns.
+# Nav2 1.3.13 MPPI plus Rotation Shim handles terminal yaw explicitly.
+plugin: nav2_rotation_shim_controller::RotationShimController
+primary_controller: nav2_mppi_controller::MPPIController
+angular_dist_threshold: 0.6
+angular_disengage_threshold: 0.2
+forward_sampling_distance: 0.25
+rotate_to_heading_angular_vel: 0.6
+max_angular_accel: 2.0
+simulate_ahead_time: 1.0
+rotate_to_goal_heading: true
+rotate_to_heading_once: true
+closed_loop: true
+time_steps: 40
+model_dt: 0.05
+batch_size: 1000
+iteration_count: 1
+motion_model: DiffDrive
+vx_max: 0.2
+vx_min: -0.05
+vy_max: 0.0
+wz_max: 0.8
+ax_max: 0.5
+ax_min: -0.8
+az_max: 2.0
+vx_std: 0.12
+vy_std: 0.0
+wz_std: 0.4
+prune_distance: 0.8
+transform_tolerance: 0.2
+# The slow platform's acceleration-limited samples need stronger cost selection;
+# excessive averaging canceled forward progress in the wide-room diagnostic.
+temperature: 0.1
+gamma: 0.015
+visualize: false
+regenerate_noises: false
+# Rotation Shim owns terminal yaw; MPPI first reaches the positional tolerance.
+critics: [ConstraintCritic, CostCritic, GoalCritic, PathAlignCritic, PathFollowCritic, PathAngleCritic, PreferForwardCritic]
+ConstraintCritic:
+  cost_weight: 4.0
+CostCritic:
+  consider_footprint: true
+  # At 0.2 m/s the 2 s horizon advances only 0.4 m. Scale the preference for
+  # low inflation cost accordingly, while keeping collision rejection dominant.
+  cost_weight: 1.0
+  critical_cost: 300.0
+  # CostCritic multiplies every term by cost_weight; compensate so changing
+  # the inflation preference does not reduce the baseline collision penalty.
+  collision_cost: 3810000.0
+  near_goal_distance: 0.4
+  trajectory_point_step: 1
+GoalCritic:
+  cost_weight: 15.0
+  threshold_to_consider: 0.4
+PathAlignCritic:
+  cost_weight: 10.0
+  max_path_occupancy_ratio: 0.05
+  offset_from_furthest: 5
+  threshold_to_consider: 0.4
+  use_path_orientations: false
+PathFollowCritic:
+  cost_weight: 8.0
+  offset_from_furthest: 5
+  threshold_to_consider: 0.4
+PathAngleCritic:
+  cost_weight: 2.0
+  offset_from_furthest: 4
+  # Keep steering toward the path until Rotation Shim takes terminal yaw.
+  # Disabling this at 0.4 m left a dead zone outside the 0.05 m XY tolerance.
+  threshold_to_consider: 0.05
+  mode: 0
+PreferForwardCritic:
+  cost_weight: 5.0
+  threshold_to_consider: 0.4

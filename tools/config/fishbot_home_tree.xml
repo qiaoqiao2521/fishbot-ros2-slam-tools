@@ -1,0 +1,31 @@
+<!-- Domain-98 home goals: RPP first, then one MPPI attempt for a control failure.
+     MPPI owns the remaining goal, not just the corner. The next goal starts RPP.
+     The outer recovery permits one costmap refresh. Mission/staging deadlines
+     bound slow progress; cancellation and stationary feedback remain external. -->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="1" name="BoundedHomeGoal">
+      <PipelineSequence name="PlanAndFollow">
+        <RateController hz="1.0">
+          <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased" error_code_id="{compute_path_error_code}"/>
+        </RateController>
+        <Fallback name="BoundedControllerFallback">
+          <Sequence name="TryRPP">
+            <!-- A rejected goal or late ACK must not reuse an earlier error. -->
+            <SetBlackboard value="0" output_key="follow_path_error_code"/>
+            <FollowPath path="{path}" controller_id="FollowPath" goal_checker_id="general_goal_checker" progress_checker_id="progress_checker" error_code_id="{follow_path_error_code}"/>
+          </Sequence>
+          <Sequence name="TryMPPIAfterControlFailure">
+            <!-- PATIENCE_EXCEEDED, FAILED_TO_MAKE_PROGRESS, NO_VALID_CONTROL. -->
+            <AreErrorCodesPresent error_code="{follow_path_error_code}" error_codes_to_check="104;105;106"/>
+            <FollowPath path="{path}" controller_id="NarrowPassage" goal_checker_id="general_goal_checker" progress_checker_id="progress_checker" error_code_id="{follow_path_error_code}"/>
+          </Sequence>
+        </Fallback>
+      </PipelineSequence>
+      <Sequence name="RefreshCostmapsOnce">
+        <ClearEntireCostmap service_name="local_costmap/clear_entirely_local_costmap"/>
+        <ClearEntireCostmap service_name="global_costmap/clear_entirely_global_costmap"/>
+      </Sequence>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

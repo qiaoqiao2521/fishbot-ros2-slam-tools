@@ -1,0 +1,76 @@
+# Schema example for semantic.json's dock object, not a complete launch config.
+# Scene generation must supply actual safe poses and an explicit world -> map
+# transform. This example's dock pose is the final ROBOT footprint, not the
+# physical marker center. Confirm floor height before changing contact limits.
+dock:
+  id: home_dock
+  type: home_charging_dock
+  frame: map
+  pose: {x: 0.0, y: 0.0, yaw: 3.141592653589793}
+  staging_pose: {x: 0.55, y: 0.0, yaw: 3.141592653589793}
+  truth_to_dock_frame: {x: 0.0, y: 0.0, yaw: 0.0}
+  contact:
+    center: {x: 0.0, y: 0.0}
+    half_length: 0.12
+    half_width: 0.12
+    yaw_tolerance_rad: 0.12
+    max_linear_mps: 0.015
+    max_angular_rps: 0.03
+    max_height_m: 0.04
+    dwell_s: 1.0
+  charge_model:
+    initial_soc: 0.36
+    low_soc: 0.28
+    resume_soc: 0.80
+    capacity_ah: 2.0
+    idle_discharge_a: 0.1
+    linear_discharge_a_per_mps: 3.0
+    angular_discharge_a_per_rps: 0.3
+    charging_current_a: 2.0
+    discharge_time_scale: 45.0
+    charge_time_scale: 288.0
+    truth_timeout_s: 0.5
+    wall_timeout_s: 0.5
+    max_sample_gap_s: 0.25
+    future_tolerance_s: 0.05
+
+# Offline integration:
+#   configure_docking(params, semantic) adds docking_server.ros__parameters.
+#   Lifecycle-manage docking_server and remap its cmd_vel to the existing
+#   velocity_smoother -> collision_monitor -> /cmd_vel chain. Keep only that
+#   final collision_monitor publisher on /cmd_vel. Use smoother timeout 0.2 s:
+#   Nav2 1.3.13 waitForCharge does not itself publish a stop before waiting.
+#
+# Isolated runtime (root task owns starts/stops):
+#   export FISHBOT_MUJOCO_DOMAIN_ID=98 ROS_DOMAIN_ID=98
+#   export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST ROS_LOCALHOST_ONLY=1 ROS_STATIC_PEERS=
+#   source tools/fishbot_mujoco_env.sh
+#   /usr/bin/python3 tools/fishbot_sim_power.py --scene /absolute/semantic.json
+#   Optional negative test: --disable-charging keeps contact sensing but forbids SOC gain.
+#
+# Topics: /battery_state (sensor_msgs/BatteryState, reliable depth 1),
+# /detected_dock_pose (geometry_msgs/PoseStamped, base_footprint, reliable depth 1),
+# /sim_power/status (std_msgs/String JSON, reliable depth 1).
+# The beacon is truth-derived simulated relative localization, not RGB vision.
+# Truth is /ground_truth/free_joint_states, base_footprint, best effort depth 1.
+# Simulated charge current is positive. SOC uses current * simulated_seconds /
+# (3600 * capacity_ah), with the explicitly published acceleration multipliers.
+# The node freezes integration across missing/old/duplicate samples and resets
+# contact dwell. A wall timer withdraws charging during a paused simulation.
+# A regressed simulation clock latches invalid until this process is restarted.
+#
+# Installed Jazzy 1.3.13 interfaces: nav2_msgs/action/DockRobot and UndockRobot.
+# Dock goal: use_dock_id=true, dock_id=home_dock,
+#            navigate_to_staging_pose=true, max_staging_time=<bounded sim seconds>.
+# Undock goal: dock_type=home_charging_dock, max_undocking_time=<bounded sim seconds>.
+# Action success alone is insufficient: SimpleChargingDock caches only
+# battery.current > 0.5; it does not check the battery stamp or status enum.
+# Require fresh advancing truth_stamp plus clock_fresh/truth_fresh, contact,
+# continuous charging, positive current, and measured SOC gain in the mission.
+# Stop/cancel when battery/status feedback stops; use a wall deadline for actions.
+#
+# Official version-pinned implementation:
+# https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_docking/opennav_docking/src/simple_charging_dock.cpp
+# https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_docking/opennav_docking/src/docking_server.cpp
+# Validation scope: pure offline boundary tests only. Root task performs MuJoCo
+# docking/undocking and mission acceptance. This is not hardware charging.

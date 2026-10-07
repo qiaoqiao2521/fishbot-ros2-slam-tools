@@ -13,3 +13,5 @@
 连续过窄口入口使用 `Nav2 → 速度平滑 → Collision Monitor → 最终命令守卫 → 底盘`，统一官方模型外廓，区分限速余量和硬碰撞范围，并记录可回放的停车数据。配置、仿真和实车接入边界见 [PASSAGE_CONTROL.md](PASSAGE_CONTROL.md)。原短段控制脚本保留；两套入口不可同时控制最终速度。
 
 虚拟视觉巡检使用独立 domain 97：AMCL/Nav2 到点、停稳、三帧新鲜车载 RGB、像素判断、图文报告、返航。相机与三工位场景位于 `workspaces/fishbot_mujoco_ws`；入口和验收边界见 [VISUAL_INSPECTION.md](VISUAL_INSPECTION.md)。物理真值只核验拍摄位姿和到点误差，不输入图像识别。
+
+家庭场景闭环使用独立 domain 98，串联具名地点、视觉巡检、换位重观测和低电回充。生成器保留本地地图的已知格，只补全未知区域，并从同一栅格生成 MuJoCo 墙体和 Nav2 地图。图像判断只读取 RGB；模拟电池、接触条件和对接信标使用明确标注的仿真模型。导航优先使用 RPP，指定控制失败可串行回退至 MPPI；速度平滑与 Collision Monitor 保留。七项同轮验收和两种失败退出已通过，入口、证据与能力边界见 [README_FISHBOT_HOME.md](../tools/README_FISHBOT_HOME.md)。

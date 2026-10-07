@@ -43,6 +43,8 @@ On a ROS 2 Jazzy workstation, prepare the extracted runtime and selected workspa
 
 The inspection command runs three observation goals and returns home in isolated domain 97. Its HTML report contains actual onboard RGB images, pixel observations and physical pose/stop evidence. See [visual inspection](docs/VISUAL_INSPECTION.md) for scope and validation. The existing [web patrol](workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/README.md) uses domain 93; [passage control](docs/PASSAGE_CONTROL.md) has its own isolated acceptance.
 
+The [home autonomy simulation](tools/README_FISHBOT_HOME.md) uses a private local map in isolated domain 98. One complete mission verified named-place inspection, active observation, charging, task resumption and return home. Unknown map regions are explicit assumptions; visual targets and charging feedback are simulated.
+
 ## Mobile panel
 
 ```bash
