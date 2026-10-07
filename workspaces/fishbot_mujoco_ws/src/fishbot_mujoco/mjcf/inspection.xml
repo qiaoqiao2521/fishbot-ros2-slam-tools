@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mujoco model="fishbot_visual_inspection_fixture">
+  <include file="fishbot_inspection.xml"/>
+  <!-- Synthetic fixture, not a captured room or real inspection result.
+       Goals (x,y,yaw): (0.5,0.3,pi/2), (1.5,0.3,pi/2), (2.5,0.3,pi/2).
+       The robot-mounted camera renders physical blue frames and lamp surfaces.
+       World geometry is never used as the inspection classifier's input. -->
+  <visual>
+    <global azimuth="110" elevation="-35" offwidth="640" offheight="480"/>
+    <rgba rangefinder="1 1 0.1 0"/>
+    <headlight ambient="0.35 0.35 0.35" diffuse="0.6 0.6 0.6"/>
+  </visual>
+  <asset>
+    <texture name="inspection_floor_grid" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.68 0.70 0.73" rgb2="0.80 0.82 0.85"/>
+    <material name="inspection_floor" texture="inspection_floor_grid" texrepeat="8 8" texuniform="true"/>
+    <material name="inspection_blue" rgba="0.015 0.10 0.95 1" emission="0.35" specular="0"/>
+    <material name="inspection_black" rgba="0.015 0.015 0.015 1" specular="0"/>
+    <material name="inspection_green" rgba="0.015 0.95 0.035 1" emission="0.55" specular="0"/>
+    <material name="inspection_red" rgba="0.95 0.025 0.015 1" emission="0.55" specular="0"/>
+  </asset>
+  <worldbody>
+    <light name="inspection_light" pos="1 0 5" dir="0 0 -1" diffuse="0.7 0.7 0.7"/>
+    <geom name="floor" type="plane" size="5 5 0.1" material="inspection_floor"/>
+    <!-- Keep the arena's public 8 m square boundary and map origin. -->
+    <geom name="wall_north" type="box" pos="0 4 0.30" size="4.10 0.10 0.30" rgba="0.75 0.75 0.80 1"/>
+    <geom name="wall_south" type="box" pos="0 -4 0.30" size="4.10 0.10 0.30" rgba="0.75 0.75 0.80 1"/>
+    <geom name="wall_east" type="box" pos="4 0 0.30" size="0.10 4.10 0.30" rgba="0.75 0.75 0.80 1"/>
+    <geom name="wall_west" type="box" pos="-4 0 0.30" size="0.10 4.10 0.30" rgba="0.75 0.75 0.80 1"/>
+
+    <!-- Three matching south-facing frames, centered at camera height 0.262 m.
+         All boxes are worldbody children, so make_fixture_map sees them. -->
+    <geom name="station_1_support" type="box" pos="0.5 1.10 0.066" size="0.05 0.05 0.066" rgba="0.45 0.45 0.45 1"/>
+    <geom name="station_1_blue_frame" type="box" pos="0.5 1.10 0.262" size="0.16 0.020 0.13" material="inspection_blue"/>
+    <geom name="station_1_panel" type="box" pos="0.5 1.075 0.262" size="0.135 0.008 0.105" material="inspection_black"/>
+    <geom name="station_1_lamp" type="cylinder" pos="0.5 1.060 0.262" size="0.065 0.006"
+          euler="1.5707963267948966 0 0" material="inspection_green"/>
+
+    <geom name="station_2_support" type="box" pos="1.5 1.10 0.066" size="0.05 0.05 0.066" rgba="0.45 0.45 0.45 1"/>
+    <geom name="station_2_blue_frame" type="box" pos="1.5 1.10 0.262" size="0.16 0.020 0.13" material="inspection_blue"/>
+    <geom name="station_2_panel" type="box" pos="1.5 1.075 0.262" size="0.135 0.008 0.105" material="inspection_black"/>
+    <geom name="station_2_lamp" type="cylinder" pos="1.5 1.060 0.262" size="0.065 0.006"
+          euler="1.5707963267948966 0 0" material="inspection_red"/>
+
+    <geom name="station_3_support" type="box" pos="2.5 1.10 0.066" size="0.05 0.05 0.066" rgba="0.45 0.45 0.45 1"/>
+    <geom name="station_3_blue_frame" type="box" pos="2.5 1.10 0.262" size="0.16 0.020 0.13" material="inspection_blue"/>
+    <geom name="station_3_panel" type="box" pos="2.5 1.075 0.262" size="0.135 0.008 0.105" material="inspection_black"/>
+
+    <!-- Preserve the optional diagnostics plugin's named external body, far from route.
+         The inspection launch leaves its obstacle controller disabled. -->
+    <body name="moving_obstacle" pos="-2.8 -2.8 0.222">
+      <freejoint name="moving_obstacle_free_joint"/>
+      <geom name="moving_obstacle_collision" type="box" size="0.18 0.18 0.22"
+            mass="2.0" friction="0.8 0.005 0.0001" rgba="0.45 0.45 0.45 1"/>
+    </body>
+  </worldbody>
+</mujoco>

@@ -1,3 +1,13 @@
+# FishBot control station frontend
+
+The existing console and radar routes use the Java station API. The `/simulation` route connects to the isolated MuJoCo mission bridge and does not start real-car telemetry.
+
+From the FishBot project root, `./tools/fishbot_mujoco.sh web` starts both the frontend and the simulation bridge. Open `http://127.0.0.1:5173/simulation`, select map points or load the three-point route, and start patrol. The optional return-home point is handled by Nav2. Physical obstacle controls, real action cancellation and readiness are included.
+
+Development prerequisites: install this frontend's locked dependencies with `npm ci`; use `npm run build`, `npm test` and `npm run lint` to verify source. Vite proxies `/sim-api` to loopback port 9070 and keeps `/api` on the existing Java backend port.
+
+The simulation page reads actual ROS map/path/localization and independent MuJoCo body state. Mission/cancellation status follows Nav2 feedback and terminal results. Stale or paused simulation disables new missions. This route exposes no direct speed-command interface.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

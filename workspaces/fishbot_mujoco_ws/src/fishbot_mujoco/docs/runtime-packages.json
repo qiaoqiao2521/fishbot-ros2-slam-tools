@@ -1,0 +1,58 @@
+[
+  {
+    "package": "libglfw3-dev",
+    "version": "3.3.10-1build1"
+  },
+  {
+    "package": "libglfw3",
+    "version": "3.3.10-1build1"
+  },
+  {
+    "package": "python3-filelock",
+    "version": "3.13.1-1"
+  },
+  {
+    "package": "ros-jazzy-controller-manager-msgs",
+    "version": "4.48.0-1noble.20260902.194724"
+  },
+  {
+    "package": "ros-jazzy-controller-manager",
+    "version": "4.48.0-1noble.20260905.073118"
+  },
+  {
+    "package": "ros-jazzy-imu-sensor-broadcaster",
+    "version": "4.42.1-1noble.20260905.073612"
+  },
+  {
+    "package": "ros-jazzy-mujoco-ros2-control-msgs",
+    "version": "0.1.1-1noble.20260902.042919"
+  },
+  {
+    "package": "ros-jazzy-mujoco-ros2-control-plugins",
+    "version": "0.1.1-1noble.20260905.032008"
+  },
+  {
+    "package": "ros-jazzy-mujoco-ros2-control",
+    "version": "0.1.1-1noble.20260905.073749"
+  },
+  {
+    "package": "ros-jazzy-mujoco-vendor",
+    "version": "0.1.0-1noble.20260826.114141"
+  },
+  {
+    "package": "ros-jazzy-ros2-control-cmake",
+    "version": "0.4.0-1noble.20260429.101922"
+  },
+  {
+    "package": "ros-jazzy-transmission-interface",
+    "version": "4.48.0-1noble.20260905.072703"
+  },
+  {
+    "package": "ros-jazzy-twist-stamper",
+    "version": "0.0.5-1noble.20260902.054804"
+  },
+  {
+    "package": "ros-jazzy-urdfdom-py",
+    "version": "1.2.1-3noble.20260902.082036"
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "scope": "MuJoCo native model smoke, independent of ROS and hardware",
+  "engine_version": "3.12.0",
+  "model": "mjcf/arena.xml",
+  "timestep_seconds": 0.002,
+  "rangefinder_count": 360,
+  "generalized_position_count": 9,
+  "phases": [
+    {"seconds": 2.0, "left_rad_per_sec": 0.0, "right_rad_per_sec": 0.0},
+    {"seconds": 2.0, "left_rad_per_sec": 3.0, "right_rad_per_sec": 3.0},
+    {"seconds": 2.0, "left_rad_per_sec": 0.0, "right_rad_per_sec": 0.0}
+  ],
+  "measured": {
+    "settled_footprint_z_m": -0.000028,
+    "forward_travel_m": 0.191661,
+    "lateral_travel_m": 0.0,
+    "wheel_position_prediction_m": 0.191766,
+    "additional_stopping_travel_m": 0.001073,
+    "finite_generalized_coordinates": true
+  },
+  "interpretation": "A baseline measurement for model regression, not calibrated motor, Nav2, transport or real-robot acceptance"
+}

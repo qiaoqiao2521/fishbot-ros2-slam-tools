@@ -10,9 +10,9 @@
 
 - 网络：WSL2 **镜像模式**
 - FishBot 板子参数：
-  - `wifi_ssid=MuqiaoBot`
-  - `wifi_pswd=muqiao123`
-  - `udpserver_ip=192.168.50.182`
+  - `wifi_ssid=<WIFI_SSID>`
+  - `wifi_pswd=<WIFI_PASSWORD>`
+  - `udpserver_ip=<LAN_IP_1>`
   - `udpserver_port=8888`
 - Agent：`fishbot_agent_plus:humble`
 - 容器对外端口：
@@ -29,8 +29,8 @@
 当前推荐启动方式：
 
 ```bash
-FISHBOT_DOCKER_BIN=docker.exe /home/muqiao/桌面/dev/ros2/tools/fishbot.sh start
-FISHBOT_DOCKER_BIN=docker.exe /home/muqiao/桌面/dev/ros2/tools/fishbot.sh status
+FISHBOT_DOCKER_BIN=docker.exe ${HOME}/桌面/dev/ros2/tools/fishbot.sh start
+FISHBOT_DOCKER_BIN=docker.exe ${HOME}/桌面/dev/ros2/tools/fishbot.sh status
 ```
 
 当前脚本行为已经更新为：
@@ -148,8 +148,8 @@ WSL2 NAT 的限制：FishBot 这类局域网设备通常 **无法直连** WSL �
 Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias "WLAN" | Select-Object IPAddress
 ```
 
-把这个 IPv4（例如 `192.168.14.172`）写进 FishBot：
-- `udpserver_ip = 192.168.14.172`
+把这个 IPv4（例如 `<LAN_IP_2>`）写进 FishBot：
+- `udpserver_ip = <LAN_IP_2>`
 - `udpserver_port = 8888`
 
 ### 2.3 Windows：放行 UDP 8888 入站（一次性）
@@ -168,7 +168,7 @@ New-NetFirewallRule -DisplayName "FishBot UDP 8888 (Docker)" -Direction Inbound 
 
 #### 推荐：用一键脚本（避免“终端残留/命令换行/名字冲突”）
 
-仓库已提供脚本：`tools/fishbot.sh`（在 `/home/muqiao/桌面/dev/ros2` 下执行）：
+仓库已提供脚本：`tools/fishbot.sh`（在 `${HOME}/桌面/dev/ros2` 下执行）：
 
 ```bash
 ./tools/fishbot.sh start   # 启动/创建 fishbot_agent（长期运行）
@@ -345,7 +345,7 @@ docker exec -it fishbot_agent bash -lc 'apt-get update && apt-get install -y ros
 
 你也可以把键盘控制做成一个单独镜像（避免反复在 `fishbot_agent` 里 `apt-get install`，也避免你一旦 `rm` 容器就丢包）：
 
-1) 构建（在 `/home/muqiao/桌面/dev/ros2` 下执行）：
+1) 构建（在 `${HOME}/桌面/dev/ros2` 下执行）：
 
 ```bash
 docker build -f tools/Dockerfile.fishbot_tools -t fishbot_tools:humble .
@@ -541,7 +541,7 @@ wsl.exe hostname -I
 在 WSL：
 
 ```bash
-cd /home/muqiao/桌面/dev/ros2
+cd ${HOME}/桌面/dev/ros2
 source ./.ros2_env
 
 docker run --rm -it --net=host \
@@ -584,7 +584,7 @@ New-NetFirewallRule -DisplayName "FishBot UDP 8888 Relay" -Direction Inbound -Ac
 
 ```powershell
 # 把 WSL_IP 改成 B) 里 wsl.exe hostname -I 的值（取第一个 IPv4）
-$WSL_IP = "172.19.145.120"
+$WSL_IP = "<LAN_IP_3>"
 
 powershell -ExecutionPolicy Bypass -File "\\wsl.localhost\\Ubuntu-22.04\\home\\muqiao\\dev\\ros2\\tools\\udp-relay-8888.ps1" -WslIp $WSL_IP
 ```
@@ -601,7 +601,7 @@ wsl.exe -l -v
 
 - `wifi_ssid`：你的 2.4G WiFi（例如手机热点 `fishbot`）
 - `wifi_pswd`：WiFi 密码
-- `udpserver_ip`：Windows **WLAN** 的 IPv4（例如 `192.168.14.172`）
+- `udpserver_ip`：Windows **WLAN** 的 IPv4（例如 `<LAN_IP_2>`）
 - `udpserver_port`：`8888`
 
 写入后让主控板重启/重新联网。
@@ -644,7 +644,7 @@ ping <FishBot屏幕上的IP>
 
 ### G.3 FishBot：把 udpserver_ip 改成 Windows WLAN IP
 
-- `udpserver_ip` = `Get-NetIPAddress ... "WLAN"` 查到的 IPv4（例如 `192.168.14.172`）
+- `udpserver_ip` = `Get-NetIPAddress ... "WLAN"` 查到的 IPv4（例如 `<LAN_IP_2>`）
 - `udpserver_port` = `8888`
 - 写入后重启主控板（断电重上电最稳）
 

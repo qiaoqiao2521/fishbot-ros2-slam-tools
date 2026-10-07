@@ -30,6 +30,43 @@ import serial
 
 from enum import Enum
 
+def normalize_scan_grid(scan_msg):
+    """Put observed echoes on a fixed half-degree circular grid in place.
+
+    Missing/invalid returns stay infinite. Where input angles share a bin,
+    retain the closer measured echo rather than interpolating free space.
+    Header and scan timing are left to the existing publishing callback.
+    """
+    count = 720
+    increment = 2 * math.pi / count
+    ranges = [float('inf')] * count
+    intensities = [0.0] * count
+    angle_min = scan_msg.angle_min
+    angle_increment = scan_msg.angle_increment
+    if (math.isfinite(angle_min) and math.isfinite(angle_increment)
+            and angle_increment != 0):
+        for index, distance in enumerate(scan_msg.ranges):
+            if (not math.isfinite(distance)
+                    or not scan_msg.range_min <= distance <= scan_msg.range_max):
+                continue
+            angle = angle_min + index * angle_increment
+            if not math.isfinite(angle):
+                continue
+            wrapped = (angle + math.pi) % (2 * math.pi)
+            grid_index = int(math.floor(wrapped / increment + 0.5)) % count
+            if distance < ranges[grid_index]:
+                ranges[grid_index] = float(distance)
+                intensity = (scan_msg.intensities[index]
+                             if index < len(scan_msg.intensities) else 0.0)
+                intensities[grid_index] = float(intensity) if math.isfinite(intensity) else 0.0
+    scan_msg.angle_min = -math.pi
+    scan_msg.angle_increment = increment
+    scan_msg.angle_max = -math.pi + (count - 1) * increment
+    scan_msg.ranges = ranges
+    scan_msg.intensities = intensities
+    return scan_msg
+
+
 class LidarType(Enum):
     LIDAR_TYPE_UNKNOWN = 0
     LIDAR_TYPE_X2 = 1
@@ -1078,13 +1115,13 @@ class FishBotLaserDriverNode(Node):
         self.data_buffer = bytearray()
         self.max_buffer_size = 4096  # 最大缓冲区大小，防止无限增长
         self.protocol_mode = None  # None: 未确定, 'tcp': TCP模式, 'udp': UDP模式
+        self.connection_timer = None
         self.driver_type = self.get_parameter('protocol').value
         if self.driver_type == 'serial':
             self._init_serial()
         elif self.driver_type == 'net':
             self._init_udp()
             self._init_tcp()
-            self._accept_connection()
         self.publisher = self.create_publisher(LaserScan, '/scan', 10)
         self.scan_msg = LaserScan()
         self.scan_msg.header.frame_id = self.get_parameter('frame_id').value
@@ -1108,7 +1145,17 @@ class FishBotLaserDriverNode(Node):
         self.laser_type = LidarType.LIDAR_TYPE_UNKNOWN
         self.last_connection_time = time.time()
         self.is_receive_laser_type = False
+        self.last_rx_monotonic = time.monotonic()
+        self.tcp_rx_timeout = 2.0
 
+        self._reset_parsers()
+
+        # One periodic connection check: creating timers inside its callback
+        # starves the data reader after a long wait for the hardware.
+        if self.driver_type == 'net':
+            self.connection_timer = self.create_timer(0.1, self._accept_connection)
+
+    def _reset_parsers(self):
         self.laser_x2_parser = LidarX2Parser()
         self.laser_m1c1_parser = LidarM1C1Parser()
         self.laser_x2n_parser = LidarX2NParser()
@@ -1171,6 +1218,8 @@ class FishBotLaserDriverNode(Node):
     def _accept_connection(self):
         # 如果已经确定了协议模式，不再检查
         if self.protocol_mode is not None:
+            if self.connection_timer is not None:
+                self.connection_timer.cancel()
             return
         
         # 检查是否有 TCP 连接
@@ -1179,8 +1228,10 @@ class FishBotLaserDriverNode(Node):
                 self.conn, addr = self.tcp_sock.accept()
                 self.conn.setblocking(False)
                 self.protocol_mode = 'tcp'
+                self.connection_timer.cancel()
                 self.get_logger().info(f"检测到TCP连接，使用TCP协议: {addr}")
                 self.last_connection_time = time.time()
+                self.last_rx_monotonic = time.monotonic()
                 self.is_receive_laser_type = False
                 # 关闭 UDP socket，不再使用
                 try:
@@ -1196,6 +1247,7 @@ class FishBotLaserDriverNode(Node):
             data, addr = self.udp_sock.recvfrom(4096)
             if data:
                 self.protocol_mode = 'udp'
+                self.connection_timer.cancel()
                 self.get_logger().info(f"检测到UDP数据，使用UDP协议: {addr}")
                 self.last_connection_time = time.time()
                 self.is_receive_laser_type = False
@@ -1210,8 +1262,27 @@ class FishBotLaserDriverNode(Node):
         except BlockingIOError:
             pass
         
-        # 如果都没有，继续等待
-        self.create_timer(0.1, self._accept_connection)
+        # The existing timer will retry; never allocate another timer here.
+
+    def _reset_tcp_connection(self, reason):
+        self.get_logger().warning(f"TCP radar disconnected ({reason}); waiting for reconnection")
+        if self.conn is not None:
+            self.conn.close()
+        self.conn = None
+        self.protocol_mode = None
+        self.data_buffer.clear()
+        self.full_scan_buffer.clear()
+        self.laser_type = LidarType.LIDAR_TYPE_UNKNOWN
+        self.is_receive_laser_type = False
+        self.rate = 0.0
+        self.scan_count = 0
+        self.last_report_count = 0
+        self.last_report_time = self.get_clock().now()
+        self._reset_parsers()
+        # Keep the TCP listener: a replacement connection may already be queued.
+        if self.udp_sock.fileno() < 0:
+            self._init_udp()
+        self.connection_timer.reset()
 
     def process_data(self):
         # print(f"[INFO] 协议模式: {self.protocol_mode}")
@@ -1238,9 +1309,18 @@ class FishBotLaserDriverNode(Node):
                 try:
                     data = self.conn.recv(256)
                     if data:
+                        self.last_rx_monotonic = time.monotonic()
                         self.data_buffer += data
+                    else:
+                        self._reset_tcp_connection('EOF')
+                        return
                 except BlockingIOError:
-                    pass
+                    if time.monotonic() - self.last_rx_monotonic >= self.tcp_rx_timeout:
+                        self._reset_tcp_connection('receive timeout')
+                        return
+                except OSError as exc:
+                    self._reset_tcp_connection(str(exc))
+                    return
             
             # UDP 模式
             elif self.protocol_mode == 'udp':
@@ -1277,6 +1357,8 @@ class FishBotLaserDriverNode(Node):
 
 
     def parse_frame(self,frame):
+        if len(frame) < 4:
+            return
         # 连接成功后5s内应该收到雷达类型信息
         if time.time() - self.last_connection_time < 5 and not self.is_receive_laser_type:
             print(f"\r[INFO] 正在探测雷达型号，耗时:{time.time() - self.last_connection_time:.2f}s", end="", flush=True)
@@ -1317,6 +1399,7 @@ class FishBotLaserDriverNode(Node):
 
         scan_msg.ranges = scan_msg.ranges[::-1]
         scan_msg.intensities = scan_msg.intensities[::-1]
+        normalize_scan_grid(scan_msg)
 
         # 不再重新设置时间戳，保持使用扫描开始时间
         # 这样可以避免TCP传输延迟导致的时间戳不准确问题

@@ -1,0 +1,113 @@
+diff --git a/config/mujoco_controllers.yaml b/config/mujoco_controllers.yaml
+index c6c620f..84027e1 100644
+--- a/config/mujoco_controllers.yaml
++++ b/config/mujoco_controllers.yaml
+@@ -1,40 +1,41 @@
+ controller_manager:
+   ros__parameters:
+     update_rate: 100
+-
+     joint_state_broadcaster:
+       type: joint_state_broadcaster/JointStateBroadcaster
+-
+     imu_sensor_broadcaster:
+       type: imu_sensor_broadcaster/IMUSensorBroadcaster
+-
+     diff_drive_controller:
+       type: diff_drive_controller/DiffDriveController
+-
+ imu_sensor_broadcaster:
+   ros__parameters:
+     sensor_name: imu
+     frame_id: imu_frame
+-
+ diff_drive_controller:
+   ros__parameters:
+-    left_wheel_names: ["middle_left_wheel_joint"]
+-    right_wheel_names: ["middle_right_wheel_joint"]
+-
+-    wheel_separation: 0.64
+-    wheel_radius: 0.11
+-
++    left_wheel_names:
++    - middle_left_wheel_joint
++    right_wheel_names:
++    - middle_right_wheel_joint
++    wheel_separation: 0.6
++    wheel_radius: 0.1
+     odom_frame_id: odom
+     base_frame_id: base_footprint
+     tf_frame_prefix_enable: false
+-
+     position_feedback: true
+     open_loop: false
+     enable_odom_tf: true
+     publish_rate: 30.0
+     cmd_vel_timeout: 0.5
+-
+     linear.x.max_acceleration: 0.2
+     linear.x.max_deceleration: -0.2
+     angular.z.max_acceleration: 0.5
+     angular.z.max_deceleration: -0.5
++/**:
++  ros__parameters:
++    mujoco_plugins:
++      rangefinder_lidar_plugin:
++        lidar_publish_rate: 30.0
++      free_joint_state_publisher:
++        type: mujoco_ros2_control_plugins/FreeJointStatePublisherPlugin
++        publish_rate: 30.0
+diff --git a/launch/mujoco.launch.py b/launch/mujoco.launch.py
+index d28caa3..c1a9355 100644
+--- a/launch/mujoco.launch.py
++++ b/launch/mujoco.launch.py
+@@ -122,7 +122,6 @@ def generate_launch_description():
+             DeclareLaunchArgument("use_sim_time", default_value="true"),
+             robot_state_publisher,
+             mujoco_control,
+-            point_cloud,
+             twist_stamper,
+             joint_state_broadcaster,
+             imu_sensor_broadcaster,
+diff --git a/urdf/mujoco_ros2_control.xacro b/urdf/mujoco_ros2_control.xacro
+index 57d1726..2828c83 100644
+--- a/urdf/mujoco_ros2_control.xacro
++++ b/urdf/mujoco_ros2_control.xacro
+@@ -5,7 +5,8 @@
+         <hardware>
+             <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+             <param name="mujoco_model">$(find bcr_bot)/mjcf/small_warehouse.xml</param>
+-            <param name="headless">false</param>
++            <param name="headless">true</param>
++            <param name="auto_register_cameras">false</param>
+             <param name="camera_publish_rate">15.0</param>
+             <param name="lidar_publish_rate">30.0</param>
+         </hardware>
+@@ -48,27 +49,6 @@
+             <param name="range_max">16.0</param>
+             <param name="laserscan_topic">/bcr_bot/scan</param>
+         </sensor>
+-
+-        <sensor name="kinect_camera_sensor">
+-            <param name="frame_name">kinect_camera_optical</param>
+-            <param name="info_topic">/kinect_camera_sensor/camera_info</param>
+-            <param name="image_topic">/kinect_camera_sensor/color</param>
+-            <param name="depth_topic">/kinect_camera_sensor/depth</param>
+-        </sensor>
+-
+-        <sensor name="stereo_camera_left">
+-            <param name="frame_name">stereo_camera_optical</param>
+-            <param name="info_topic">/bcr_bot/stereo_camera/left/camera_info</param>
+-            <param name="image_topic">/bcr_bot/stereo_camera/left/image_raw</param>
+-            <param name="depth_topic">/bcr_bot/stereo_camera/left/depth</param>
+-        </sensor>
+-
+-        <sensor name="stereo_camera_right">
+-            <param name="frame_name">stereo_camera_optical</param>
+-            <param name="info_topic">/bcr_bot/stereo_camera/right/camera_info</param>
+-            <param name="image_topic">/bcr_bot/stereo_camera/right/image_raw</param>
+-            <param name="depth_topic">/bcr_bot/stereo_camera/right/depth</param>
+-        </sensor>
+     </ros2_control>
+ 
+ </robot>

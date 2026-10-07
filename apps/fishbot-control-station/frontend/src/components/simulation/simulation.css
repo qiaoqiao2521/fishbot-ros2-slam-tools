@@ -1,0 +1,122 @@
+.simulation-page {
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 28px clamp(16px, 3vw, 44px) 32px;
+  font-family: var(--font-body);
+  color: hsl(var(--foreground));
+}
+.simulation-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 20px; }
+.simulation-header h1 { font-family: var(--font-display); font-size: clamp(28px, 3vw, 38px); line-height: 1.3; font-weight: 650; margin: 8px 0 6px; }
+.simulation-header p, .simulation-scene-header p { font-size: 14px; color: hsl(var(--muted-foreground)); margin: 0; }
+.simulation-mode { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; }
+.simulation-mode > span:first-child { width: 8px; height: 8px; background: #297fb1; border-radius: 50%; }
+.simulation-domain { margin-left: 5px; border-left: 1px solid hsl(var(--border)); padding-left: 12px; color: hsl(var(--muted-foreground)); font-weight: 400; }
+.simulation-button { display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 42px; border-radius: 10px; padding: 9px 14px; border: 1px solid hsl(var(--border)); font-size: 14px; font-weight: 600; line-height: 1.4; transition: background-color .15s; }
+.simulation-button:disabled, .simulation-clear-queue:disabled { opacity: .45; cursor: default; }
+.simulation-button:focus-visible, .simulation-waypoints button:focus-visible, .simulation-clear-queue:focus-visible { outline: 3px solid #297fb1; outline-offset: 3px; }
+.simulation-quiet { background: rgba(255, 252, 245, .75); }
+.simulation-quiet:not(:disabled):hover { background: #fffdf7; }
+.simulation-primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary)); }
+.simulation-primary:not(:disabled):hover { background: #50402e; }
+.simulation-cancel { color: #97372c; background: #fcf4ed; border-color: #caa89b; }
+.simulation-cancel:not(:disabled):hover { background: #f1ded2; }
+.simulation-readiness { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 1px solid #c9c4b3; border-radius: 10px; font-size: 13px; margin-bottom: 18px; background: #f6f1e5; }
+.simulation-readiness > span:last-child { color: hsl(var(--muted-foreground)); }
+.simulation-status-dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; background: #aa8037; }
+.simulation-ready { background: #eef2e5; border-color: #b5c3a2; }
+.simulation-ready .simulation-status-dot { background: #577636; }
+.simulation-error { border-left: 3px solid #b24a34; padding: 12px 16px; margin-bottom: 16px; background: #f8e5da; color: #803b30; font-size: 14px; }
+.simulation-layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 22px; align-items: start; }
+.simulation-scene { min-width: 0; background: rgba(255, 253, 247, .77); border: 1px solid hsl(var(--border)); border-radius: 16px; overflow: hidden; }
+.simulation-scene-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 20px 22px 14px; }
+.simulation-page h2 { font-size: 17px; line-height: 1.5; font-weight: 650; margin: 0; }
+.simulation-scene-header p { margin-top: 4px; font-size: 13px; }
+.simulation-map-stage { display: grid; place-items: center; min-height: 360px; padding: 10px 18px 16px; background: #e6e7dd; }
+.simulation-map-frame { position: relative; width: 100%; max-width: min(100%, calc(100vh - 280px)); border: 1px solid #a9aca3; background: #f8f8f1; }
+.simulation-map-frame canvas, .simulation-map-frame svg { display: block; width: 100%; height: 100%; position: absolute; inset: 0; }
+.simulation-map-frame canvas { image-rendering: pixelated; }
+.simulation-map-frame svg { touch-action: manipulation; }
+.simulation-map-frame svg:focus-visible { outline: 3px solid #297fb1; outline-offset: 3px; }
+.simulation-map-editable { cursor: crosshair; }
+.simulation-map-empty { display: grid; justify-items: center; gap: 10px; text-align: center; color: #676b60; }
+.simulation-map-empty p { font-size: 14px; }
+.simulation-map-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 22px 10px; font-size: 12px; color: hsl(var(--muted-foreground)); }
+.simulation-legend { display: flex; flex-wrap: wrap; gap: 16px; }
+.simulation-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.simulation-legend i { display: inline-block; width: 10px; height: 10px; }
+.simulation-legend-robot { background: #2780b2; border-radius: 50%; }
+.simulation-legend-path { background: #577636; height: 3px !important; width: 16px !important; }
+.simulation-legend-obstacle { background: #ce731d; }
+.simulation-position { display: flex; flex-wrap: wrap; gap: 12px 22px; padding: 6px 22px; font-size: 12px; font-variant-numeric: tabular-nums; color: #4e534b; }
+.simulation-keyboard-note { padding: 2px 22px 16px; font-size: 11px; color: hsl(var(--muted-foreground)); margin: 0; }
+.simulation-sidebar { display: grid; gap: 18px; }
+.simulation-task { border: 1px solid hsl(var(--border)); border-radius: 16px; background: rgba(255, 251, 244, .92); padding: 20px; }
+.simulation-task-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.simulation-task-heading > span { font-size: 12px; color: hsl(var(--muted-foreground)); }
+.simulation-mission-state { margin: 14px 0; padding: 11px 12px; border-left: 3px solid #9c9584; background: #efede3; font-size: 13px; }
+.simulation-mission-state p { margin: 4px 0 0; color: hsl(var(--muted-foreground)); line-height: 1.5; }
+.simulation-mission-state small { display: block; margin-top: 6px; font-size: 11px; overflow-wrap: anywhere; color: #6b6c60; }
+.simulation-mission-running { border-color: #297fb1; background: #e9f0ef; }
+.simulation-mission-succeeded { border-color: #577636; background: #ecf0e4; }
+.simulation-mission-failed { border-color: #b24a34; background: #f7e8de; }
+.simulation-waypoints { list-style: none; padding: 0; margin: 0; max-height: 310px; overflow-y: auto; }
+.simulation-waypoints li { display: flex; align-items: center; gap: 10px; padding: 10px 3px; border-bottom: 1px solid #e1d8c6; }
+.simulation-waypoint-number { display: grid; place-items: center; flex-shrink: 0; width: 24px; height: 24px; border: 1px solid #b8a17b; border-radius: 50%; font-size: 12px; color: #715631; }
+.simulation-waypoints li > div { display: grid; flex: 1; gap: 2px; }
+.simulation-waypoints strong { font-size: 13px; font-weight: 600; }
+.simulation-waypoints li > div > span { font-size: 11px; color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; }
+.simulation-waypoints button { padding: 7px; background: none; border: 0; border-radius: 6px; color: #756851; }
+.simulation-waypoints button:hover { background: #eee6d5; }
+.simulation-waypoint-current { background: #f1e8d6; }
+.simulation-waypoint-current .simulation-waypoint-number { background: #986423; color: #fff; border-color: #986423; }
+.simulation-waypoint-tag { font-size: 10px; color: #986423; }
+.simulation-queue-empty { display: flex; gap: 10px; align-items: center; min-height: 82px; color: hsl(var(--muted-foreground)); font-size: 13px; line-height: 1.6; }
+.simulation-queue-empty svg { flex-shrink: 0; }
+.simulation-selection-message { min-height: 18px; font-size: 11px; line-height: 1.5; margin: 12px 0; color: #786044; }
+.simulation-return-home { display: flex; gap: 8px; align-items: center; padding: 8px 0 16px; font-size: 13px; }
+.simulation-return-home input { width: 16px; height: 16px; accent-color: #655234; }
+.simulation-return-home input:focus-visible { outline: 3px solid #297fb1; outline-offset: 3px; }
+.simulation-return-home svg { color: #7b694e; }
+.simulation-mission-actions { display: grid; gap: 8px; }
+.simulation-clear-queue { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 12px 0 0; background: none; border: 0; font-size: 12px; color: #756851; }
+.simulation-obstacle { border-top: 1px solid #bbaa8d; padding: 17px 4px 0; }
+.simulation-obstacle > div:first-child { display: flex; gap: 8px; align-items: center; }
+.simulation-obstacle > div:first-child svg { color: #b06d26; }
+.simulation-obstacle h2 { font-size: 15px; }
+.simulation-obstacle p { font-size: 12px; line-height: 1.8; color: hsl(var(--muted-foreground)); margin: 9px 0; }
+.simulation-obstacle > strong { display: block; font-size: 12px; font-weight: 500; color: #8a632d; margin: 0 0 12px; }
+.simulation-obstacle-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.simulation-obstacle-actions button { font-size: 12px; padding: 8px; }
+.simulation-boundary { margin: 0; font-size: 11px; color: hsl(var(--muted-foreground)); text-align: center; }
+@media (min-width: 1600px) { .simulation-map-frame { max-width: 730px; } }
+@media (max-width: 1050px) {
+  .simulation-layout { grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; }
+  .simulation-task { padding: 16px; }
+  .simulation-scene-header { align-items: flex-start; flex-direction: column; padding: 16px; gap: 12px; }
+  .simulation-map-stage { min-height: 280px; padding: 12px; }
+}
+@media (max-width: 760px) {
+  .simulation-page { padding-top: 20px; }
+  .simulation-header { align-items: flex-start; gap: 12px; }
+  .simulation-header > button { padding: 8px 10px; min-height: 36px; font-size: 12px; }
+  .simulation-header p { font-size: 12px; max-width: 28em; }
+  .simulation-mode { font-size: 10px; gap: 5px; }
+  .simulation-domain { padding-left: 7px; margin-left: 0; }
+  .simulation-readiness { flex-wrap: wrap; gap: 6px 9px; font-size: 12px; }
+  .simulation-readiness > span:last-child { flex-basis: 100%; padding-left: 16px; }
+  .simulation-layout { grid-template-columns: 1fr; gap: 18px; }
+  .simulation-scene-header { flex-direction: row; align-items: center; }
+  .simulation-scene-header h2 { font-size: 15px; }
+  .simulation-scene-header p { font-size: 11px; }
+  .simulation-scene-header button { font-size: 11px; padding: 8px; min-height: 36px; gap: 4px; flex-shrink: 0; }
+  .simulation-scene-header button svg { width: 13px; }
+  .simulation-map-frame { max-width: 100%; }
+  .simulation-map-footer { padding: 12px 14px 8px; font-size: 10px; flex-wrap: wrap; }
+  .simulation-legend { gap: 10px; }
+  .simulation-position { padding: 6px 14px; font-size: 11px; gap: 8px 16px; }
+  .simulation-keyboard-note { padding: 2px 14px 12px; font-size: 10px; }
+  .simulation-waypoints { max-height: 260px; }
+  .simulation-mission-actions { grid-template-columns: 1fr 1fr; }
+  .simulation-obstacle { padding: 16px; background: #f8f1e4; border: 1px solid hsl(var(--border)); border-radius: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .simulation-button { transition: none; } }

@@ -1,0 +1,60 @@
+# One planar geometry source for Nav2, Collision Monitor, diagnostics and replay.
+# Official educational model dimensions; no claim of physical calibration.
+schema_version: 1
+source:
+  repository: https://github.com/fishros/fishbot
+  revision: 84f863f4955891a5e20dd4e68aca442eb3ec0e32
+  file: src/fishbot_description/urdf/fishbot_gazebo.urdf
+  sha256: f55c71f7ad644637a4d43d60bc17e9b91138b294c4ac31ee5e30b1fbf0056749
+  footprint_method: eight-direction outer support envelope of body cylinder and wheel bounds
+frames:
+  base: base_footprint
+  odom: odom
+  map: map
+  scan: laser_frame
+# Planar transform from the official model; runtime TF remains authoritative.
+# Replay must reject an unknown source frame unless an explicit assumption is recorded.
+scan_to_base:
+  x_m: 0.0
+  y_m: 0.0
+  yaw_rad: 0.0
+model_bounds:
+  body_radius_m: 0.10
+  wheels_x_m: [-0.052, 0.012]
+  wheels_y_outer_m: [-0.12, 0.12]
+footprint:
+  # Counterclockwise outer envelope; includes every point of the 0.10 m cylinder.
+  # Unlike an inscribed octagon, its diagonals do not cut into the body.
+  points_m:
+    - [0.10, 0.041421356238]
+    - [0.021421356238, 0.12]
+    - [-0.052, 0.12]
+    - [-0.10, 0.072]
+    - [-0.10, -0.072]
+    - [-0.052, -0.12]
+    - [0.021421356238, -0.12]
+    - [0.10, -0.041421356238]
+  padding_m: 0.005
+motion:
+  max_linear_mps: 0.08
+  max_angular_rps: 0.25
+  slow_linear_mps: 0.03
+collision:
+  min_points: 1
+  source_timeout_s: 0.5
+  # Design horizon, not a measured braking-time claim. Guard owns link failures.
+  hard_reaction_time_s: 0.3
+  approach_time_s: 1.0
+  simulation_step_s: 0.05
+  soft_padding_m: 0.05
+command_guard:
+  profile: fishbot_passage
+  command_timeout_s: 0.25
+  max_linear_speed: 0.08
+  max_angular_speed: 0.25
+  ring_capacity: 40
+  expected_candidate_publishers: [collision_monitor]
+  expected_final_subscribers: [fishbot_motion_control]
+  stop_polygon_topic: /passage_stop_polygon
+  slow_polygon_topic: /passage_slow_polygon
+  footprint_topic: /local_costmap/published_footprint

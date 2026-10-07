@@ -1,11 +1,12 @@
 import { startTransition, useEffect, useState } from 'react'
-import { LayoutDashboard, Radar } from 'lucide-react'
+import { LayoutDashboard, Radar, Route } from 'lucide-react'
 
 import { MotionControlPanel } from '@/components/control/motion-control-panel'
 import { HeaderStatusBar } from '@/components/layout/header-status-bar'
 import { DiagnosticsPanel } from '@/components/logs/diagnostics-panel'
 import { MapNavShell } from '@/components/navigation/map-nav-shell'
 import { RadarWorkbenchPage } from '@/components/radar/radar-workbench-page'
+import { SimulationPage } from '@/components/simulation/simulation-page'
 import { ExpansionPanel } from '@/components/roadmap/expansion-panel'
 import { ConnectionStatusPanel } from '@/components/status/connection-status-panel'
 import { RobotStatePanel } from '@/components/status/robot-state-panel'
@@ -15,7 +16,6 @@ import { useStationBootstrap } from '@/hooks/use-station-bootstrap'
 import { resolveAppRoute, type AppRoute } from '@/lib/app-route'
 
 function App() {
-  useStationBootstrap()
   const [route, setRoute] = useState<AppRoute>(() => resolveAppRoute(window.location.pathname))
 
   useEffect(() => {
@@ -28,7 +28,7 @@ function App() {
   }, [])
 
   function navigate(next: AppRoute) {
-    const pathname = next === 'radar' ? '/radar' : '/'
+    const pathname = next === 'simulation' ? '/simulation' : next === 'radar' ? '/radar' : '/'
     if (window.location.pathname === pathname) {
       return
     }
@@ -39,6 +39,15 @@ function App() {
     })
   }
 
+  if (route === 'simulation') {
+    return <SimulationPage onBack={() => navigate('dashboard')} />
+  }
+
+  return <StationSurface route={route} navigate={navigate} />
+}
+
+function StationSurface({ route, navigate }: { route: 'dashboard' | 'radar'; navigate: (route: AppRoute) => void }) {
+  useStationBootstrap()
   if (route === 'radar') {
     return <RadarWorkbenchPage onBack={() => navigate('dashboard')} />
   }
@@ -60,6 +69,10 @@ function App() {
           <Button variant="default" onClick={() => navigate('radar')}>
             <Radar className="mr-2 h-4 w-4" />
             Radar Workbench
+          </Button>
+          <Button variant="outline" onClick={() => navigate('simulation')}>
+            <Route className="mr-2 h-4 w-4" />
+            仿真巡逻
           </Button>
         </div>
 

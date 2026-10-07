@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mujoco model="fishbot_inspection">
+  <!-- Adapted from fishros/fishbot humble fishbot_gazebo.urdf. See ../README.md. -->
+  <compiler angle="radian"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"
+          cone="elliptic" iterations="50"/>
+  <default>
+    <geom friction="1.0 0.005 0.0001" solref="0.01 1" solimp="0.9 0.95 0.001"/>
+  </default>
+  <worldbody>
+    <!-- The planar ROS footprint is the ground projection. The free joint preserves 6-DoF physics. -->
+    <body name="base_footprint" pos="0 0 0.002">
+      <freejoint name="base_free_joint"/>
+      <!-- +16 mm adapts the original footprint height so both wheels and caster touch z=0. -->
+      <body name="base_link" pos="0 0 0.092">
+      <!-- Camera-only variant: body, inertias, joints, actuators and contacts stay unchanged.
+           Local camera axes: right=-Y, up=+Z, viewing direction=+X. -->
+      <camera name="inspection_camera" pos="0.06 0 0.168"
+              xyaxes="0 -1 0 0 0 1" fovy="55" resolution="640 480"/>
+        <inertial pos="0 0 0" mass="0.2" diaginertia="0.0122666 0.0122666 0.02"/>
+        <geom name="base_collision" type="cylinder" size="0.10 0.06" rgba="0.12 0.30 0.85 1"/>
+        <body name="laser_link" pos="0 0 0.075">
+          <inertial pos="0 0 0" mass="0.1" diaginertia="0.000190416666667 0.0001904 0.00036"/>
+          <geom name="laser_collision" type="cylinder" size="0.02 0.01" rgba="0.12 0.12 0.12 1"/>
+          <!-- 360 beams at [0, 359] degrees; +Z of each site points along its horizontal ray. -->
+          <replicate count="360" sep="-" euler="0 0 0.017453292519943295">
+            <site name="laser_ray" pos="0 0 0" euler="0 1.5707963267948966 0"
+                  size="0.001" rgba="0 0 0 0"/>
+          </replicate>
+        </body>
+        <body name="imu_link" pos="0 0 0.02">
+          <inertial pos="0 0 0" mass="0.1" diaginertia="0.000190416666667 0.0001904 0.00036"/>
+          <geom name="imu_visual" type="box" size="0.01 0.01 0.01"
+                contype="0" conaffinity="0" rgba="0.20 0.70 0.30 1"/>
+          <site name="imu_site" size="0.002" rgba="0 0 0 0"/>
+        </body>
+        <body name="left_wheel_link" pos="-0.02 0.10 -0.06">
+          <joint name="left_wheel_joint" type="hinge" axis="0 1 0"/>
+          <inertial pos="0 0 0" mass="0.2" diaginertia="0.000190416666667 0.0001904 0.00036"/>
+          <geom name="left_wheel_collision" type="cylinder" size="0.032 0.02"
+                euler="1.5707963267948966 0 0" rgba="0.08 0.08 0.08 1"/>
+        </body>
+        <body name="right_wheel_link" pos="-0.02 -0.10 -0.06">
+          <joint name="right_wheel_joint" type="hinge" axis="0 1 0"/>
+          <inertial pos="0 0 0" mass="0.2" diaginertia="0.000190416666667 0.0001904 0.00036"/>
+          <geom name="right_wheel_collision" type="cylinder" size="0.032 0.02"
+                euler="1.5707963267948966 0 0" rgba="0.08 0.08 0.08 1"/>
+        </body>
+        <body name="caster_link" pos="0.06 0 -0.076">
+          <inertial pos="0 0 0" mass="0.02" diaginertia="0.000190416666667 0.0001904 0.00036"/>
+          <!-- Original URDF uses a fixed frictionless sphere. Priority ensures the floor cannot add friction. -->
+          <geom name="caster_collision" type="sphere" size="0.016" friction="0 0 0"
+                priority="1" condim="1" rgba="0.08 0.08 0.08 1"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <!-- Velocity servos apply bounded wheel torque; no base pose/velocity override is used. -->
+    <velocity name="left_wheel_joint" joint="left_wheel_joint" kv="0.25"
+              ctrllimited="true" ctrlrange="-12 12" forcelimited="true" forcerange="-20 20"/>
+    <velocity name="right_wheel_joint" joint="right_wheel_joint" kv="0.25"
+              ctrllimited="true" ctrlrange="-12 12" forcelimited="true" forcerange="-20 20"/>
+  </actuator>
+  <sensor>
+    <rangefinder name="laser" site="laser_ray"/>
+    <framequat name="imu_quat" objtype="site" objname="imu_site"/>
+    <gyro name="imu_gyro" site="imu_site"/>
+    <accelerometer name="imu_accel" site="imu_site"/>
+  </sensor>
+</mujoco>

@@ -1,0 +1,31 @@
+/**:
+  ros__parameters:
+    topic: /ground_truth/free_joint_states
+    publish_rate: 30.0
+    body_names: [base_footprint, moving_obstacle]
+    mujoco_plugins:
+      rangefinder_lidar_plugin:
+        type: mujoco_ros2_control_plugins/RangefinderLidarPlugin
+        lidar_publish_rate: 10.0
+        laser:
+          frame_name: laser_link
+          angle_increment: 0.017453292519943295
+          min_angle: 0.0
+          max_angle: 6.265732014659643
+          range_min: 0.12
+          range_max: 3.5
+          laserscan_topic: /scan
+      free_joint_state_publisher:
+        type: mujoco_ros2_control_plugins/FreeJointStatePublisherPlugin
+      # The installed 0.1.1 plugin reads this exact instance namespace.
+      # It publishes RGB8 and CameraInfo from the snapshotted simulation timestamp.
+      # Source: ros-controls/mujoco_ros2_control tag 0.1.1, camera_plugin.cpp.
+      mujoco_camera_plugin:
+        type: mujoco_ros2_control_plugins/CameraPlugin
+        camera_publish_rate: 5.0
+        inspection_camera:
+          policy: streaming
+          frame_name: inspection_camera_optical_frame
+          image_topic: /inspection/camera/image_raw
+          info_topic: /inspection/camera/camera_info
+          depth_topic: /inspection/camera/depth

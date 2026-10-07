@@ -1,0 +1,171 @@
+{
+  "evidence_source": {
+    "path": "local-only: outputs/physical-obstacle-telemetry.json",
+    "sha256": "b359efa5a26b14e135e18df11584188b1f42f7c18135ae7f1016d80ab595248b",
+    "samples": 1125,
+    "collector_elapsed_s": 120.02505984100571,
+    "collector_stop_reason": "120 second deadline",
+    "time_base": "Wall seconds since telemetry collector start; states and messages are asynchronously sampled."
+  },
+  "mission": {
+    "id": "ba2ba335182f4605a257991d5aba4193",
+    "status": "succeeded",
+    "missed_waypoints": [],
+    "route": [
+      {
+        "x": 2.0,
+        "y": 1.0,
+        "yaw": 0.0
+      },
+      {
+        "x": 2.0,
+        "y": 2.0,
+        "yaw": 3.141592653589793
+      },
+      {
+        "x": -0.5,
+        "y": 2.0,
+        "yaw": -1.5707963267948966
+      },
+      {
+        "x": 0.0,
+        "y": 0.0,
+        "yaw": 0.0
+      }
+    ],
+    "route_count": 4,
+    "patrol_points": 3,
+    "home_points": 1,
+    "return_home": true,
+    "first_observed_running_s": 28.15576055800193,
+    "first_observed_succeeded_s": 119.09367529900192,
+    "observed_duration_s": 90.93791474099999,
+    "terminal_present_in_trace": true,
+    "provenance": "Mission bridge response derived from Nav2 FollowWaypoints; raw Nav2 action result is not embedded in this trace."
+  },
+  "return_home": {
+    "truth_final_x_m": 0.025396827498619733,
+    "truth_final_y_m": 0.11362501371829542,
+    "position_error_m": 0.11642870174264364,
+    "yaw_rad": -0.08985101758234643,
+    "yaw_error_deg": 5.148084092424204,
+    "final_linear_speed_m_s": 6.063809135423413e-11,
+    "final_angular_speed_rad_s": 1.2639416296274081e-17,
+    "stopped": true
+  },
+  "physical_actor": {
+    "phases": [
+      {
+        "first_observed_wall_s": 0.06758731800073292,
+        "state": "parked"
+      },
+      {
+        "first_observed_wall_s": 28.167699631005235,
+        "state": "moving"
+      },
+      {
+        "first_observed_wall_s": 31.867079912000918,
+        "state": "blocking"
+      },
+      {
+        "first_observed_wall_s": 35.31743093000114,
+        "state": "returning"
+      },
+      {
+        "first_observed_wall_s": 38.267155912006274,
+        "state": "parked"
+      }
+    ],
+    "final_state": "parked",
+    "final_position_m": [
+      -0.7,
+      -0.7
+    ],
+    "blocking_hold_observed_s": 3.4499999999999993,
+    "physical_box_size_m": [
+      0.36,
+      0.36
+    ],
+    "returned_to_parking": true
+  },
+  "scan_surface_match": {
+    "method": "Intersect 2D rays from the zero-XY-offset laser against the actual axis-aligned 0.36m actor box; linearly interpolate truth positions and wrapped yaw at each scan ROS timestamp. Match tolerance is 0.02m. Occluded or unmatched beams are excluded from matched error statistics.",
+    "active_actor_interval_wall_s": [
+      28.15576055800193,
+      38.267
+    ],
+    "active_scan_frames_with_actor_matches": 95,
+    "active_matching_beams": 3639,
+    "active_expected_actor_intersections": 3946,
+    "active_matched_abs_error_median_m": 0.0010187558872866154,
+    "active_matched_abs_error_p95_m": 0.015246625619432352,
+    "held_blocking_scan_frames": 33,
+    "held_blocking_frames_with_actor_matches": 33,
+    "held_blocking_matching_beams": 1433,
+    "held_blocking_expected_actor_intersections": 1451,
+    "held_blocking_matched_abs_error_median_m": 0.0007594962986626208,
+    "held_blocking_matched_abs_error_p95_m": 0.002371688793054827,
+    "held_blocking_max_nearest_truth_stamp_gap_s": 0.05000000000001137,
+    "demonstrates_actual_scan_actor_surface": true
+  },
+  "motion": {
+    "blocking_truth_samples": 32,
+    "blocking_samples_linear_speed_below_0_05_m_s": 30,
+    "blocking_min_linear_speed_m_s": 0.001337473670841236,
+    "blocking_median_linear_speed_m_s": 0.012218364390415192,
+    "blocking_median_angular_speed_rad_s": 0.5601234225118666,
+    "blocking_complete_stop_observed": false,
+    "complete_stop_thresholds": {
+      "linear_speed_m_s": 0.01,
+      "angular_speed_rad_s": 0.05
+    },
+    "first_sustained_linear_speed_above_0_05_m_s_after_blocking_s": 45.803175108005235,
+    "sustained_definition": "More than 0.4s of consecutive sampled physical truth above threshold.",
+    "continued_to_complete_route": true,
+    "interpretation": "Forward translation slows while the robot continues turning; a complete stationary stop during held blocking is not supported."
+  },
+  "sampled_clearance": {
+    "minimum_net_clearance_m": 0.08241588604621969,
+    "wall_s": 36.36249147600029,
+    "actor_phase": "returning",
+    "robot_position_m": [
+      0.01451349461931783,
+      0.30440806195086556
+    ],
+    "actor_position_m": [
+      0.3757816107399653,
+      0.013672436595372811
+    ],
+    "method": "Distance from physical robot center to 0.36m axis-aligned box, minus the configured conservative 0.13m robot radius.",
+    "mission_unique_truth_samples": 861,
+    "median_sample_interval_s": 0.11957178349985043,
+    "max_sample_interval_s": 0.16109531199617777,
+    "continuous_no_contact_guarantee": false
+  },
+  "attribution": {
+    "collision_monitor_state_samples": 0,
+    "cm_forced_stop_proven": false,
+    "nav2_recovery_action_proven_from_this_trace": false,
+    "note": "The trace subscribes to collision_monitor_state but contains no received collision state. During blocking, upstream /cmd_vel_nav already requests zero forward velocity and nonzero turning. This supports an upstream navigation pause/turning response, but the exact recovery behavior and CM intervention require separate server logs/state evidence."
+  },
+  "visual_review": {
+    "directory": "local-only: work/accepted-web-frames",
+    "reviewed_frames": [
+      "frame-004.jpg",
+      "frame-009.jpg",
+      "frame-021.jpg"
+    ],
+    "observations": [
+      "Frame 004 shows a live running 4-point task and blocking actor ahead.",
+      "Frame 009 shows the actor returned to parking and a changed navigation path.",
+      "Frame 021 shows the third patrol point in progress and the actor parked."
+    ],
+    "terminal_completion_visible_in_reviewed_frames": false,
+    "terminal_completion_evidence": "Telemetry final mission status and final physical truth, not the reviewed frames."
+  },
+  "limits": [
+    "Simulation evidence only; no real chassis acceptance.",
+    "Minimum clearance is a discrete geometric estimate, not a continuous collision/contact audit.",
+    "Raw action result and recovery logs are outside this trace."
+  ]
+}

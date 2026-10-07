@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>fishbot_mujoco</name><version>0.2.0</version>
+  <description>FishROS-derived wheel contact physics with isolated ROS 2 Jazzy navigation.</description>
+  <maintainer email="maintainer@example.invalid">FishBot maintainers</maintainer>
+  <license>LicenseRef-FishROS-Description-Pending</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>mujoco_ros2_control</exec_depend>
+  <exec_depend>mujoco_ros2_control_plugins</exec_depend>
+  <exec_depend>diff_drive_controller</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend><exec_depend>xacro</exec_depend>
+  <exec_depend>nav2_bringup</exec_depend><exec_depend>rclpy</exec_depend>
+  <exec_depend>nav2_regulated_pure_pursuit_controller</exec_depend>
+  <exec_depend>mujoco_ros2_control_msgs</exec_depend><exec_depend>nav2_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend><exec_depend>nav_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend><exec_depend>tf2_ros</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend><exec_depend>std_srvs</exec_depend>
+  <exec_depend>rosgraph_msgs</exec_depend><exec_depend>action_msgs</exec_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

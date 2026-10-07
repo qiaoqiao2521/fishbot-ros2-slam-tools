@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FishROS humble physical description adapted for MuJoCo; dimensions/inertials retained.
+     base_joint height is raised by 16 mm to put wheel/caster contact on z=0.
+     Original source SHA256: f55c71f7ad644637a4d43d60bc17e9b91138b294c4ac31ee5e30b1fbf0056749 -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="fishbot">
+  <xacro:arg name="headless" default="true" />
+  <xacro:arg name="scene_path" default="$(find fishbot_mujoco)/mjcf/arena.xml" />
+  <xacro:arg name="sim_speed_factor" default="1.0" />
+  <link name="base_footprint" />
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint" />
+    <child link="base_link" />
+    <origin xyz="0.0 0.0 0.092" rpy="0 0 0" />
+  </joint>
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0.0" rpy="0 0 0" />
+      <geometry>
+        <cylinder length="0.12" radius="0.10" />
+      </geometry>
+      <material name="blue">
+        <color rgba="0.1 0.1 1.0 0.5" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.0" rpy="0 0 0" />
+      <geometry>
+        <cylinder length="0.12" radius="0.10" />
+      </geometry>
+      <material name="blue">
+        <color rgba="0.1 0.1 1.0 0.5" />
+      </material>
+    </collision>
+    <inertial>
+      <mass value="0.2" />
+      <inertia ixx="0.0122666" ixy="0" ixz="0" iyy="0.0122666" iyz="0" izz="0.02" />
+    </inertial>
+  </link>
+  <link name="laser_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <cylinder length="0.02" radius="0.02" />
+      </geometry>
+      <material name="black">
+        <color rgba="0.0 0.0 0.0 0.5" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <cylinder length="0.02" radius="0.02" />
+      </geometry>
+      <material name="black">
+        <color rgba="0.0 0.0 0.0 0.5" />
+      </material>
+    </collision>
+    <inertial>
+      <mass value="0.1" />
+      <inertia ixx="0.000190416666667" ixy="0" ixz="0" iyy="0.0001904" iyz="0" izz="0.00036" />
+    </inertial>
+  </link>
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link" />
+    <child link="laser_link" />
+    <origin xyz="0 0 0.075" />
+  </joint>
+  <link name="imu_link">
+    <visual>
+      <origin xyz="0 0 0.0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.02 0.02 0.02" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.0" rpy="0 0 0" />
+      <geometry>
+        <box size="0.02 0.02 0.02" />
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1" />
+      <inertia ixx="0.000190416666667" ixy="0" ixz="0" iyy="0.0001904" iyz="0" izz="0.00036" />
+    </inertial>
+  </link>
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link" />
+    <child link="imu_link" />
+    <origin xyz="0 0 0.02" />
+  </joint>
+  <link name="left_wheel_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.57079 0 0" />
+      <geometry>
+        <cylinder length="0.04" radius="0.032" />
+      </geometry>
+      <material name="black">
+        <color rgba="0.0 0.0 0.0 0.5" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.57079 0 0" />
+      <geometry>
+        <cylinder length="0.04" radius="0.032" />
+      </geometry>
+      <material name="black">
+        <color rgba="0.0 0.0 0.0 0.5" />
+      </material>
+    </collision>
+    <inertial>
+      <mass value="0.2" />
+      <inertia ixx="0.000190416666667" ixy="0" ixz="0" iyy="0.0001904" iyz="0" izz="0.00036" />
+    </inertial>
+  </link>
+  <link name="right_wheel_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.57079 0 0" />
+      <geometry>
+        <cylinder length="0.04" radius="0.032" />
+      </geometry>
+      <material name="black">
+        <color rgba="0.0 0.0 0.0 0.5" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.57079 0 0" />
+      <geometry>
+        <cylinder length="0.04" radius="0.032" />
+      </geometry>
+      <material name="black">
+        <color rgba="0.0 0.0 0.0 0.5" />
+      </material>
+    </collision>
+    <inertial>
+      <mass value="0.2" />
+      <inertia ixx="0.000190416666667" ixy="0" ixz="0" iyy="0.0001904" iyz="0" izz="0.00036" />
+    </inertial>
+  </link>
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link" />
+    <child link="left_wheel_link" />
+    <origin xyz="-0.02 0.10 -0.06" />
+    <axis xyz="0 1 0" />
+  </joint>
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link" />
+    <child link="right_wheel_link" />
+    <origin xyz="-0.02 -0.10 -0.06" />
+    <axis xyz="0 1 0" />
+  </joint>
+  <link name="caster_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.57079 0 0" />
+      <geometry>
+        <sphere radius="0.016" />
+      </geometry>
+      <material name="black">
+        <color rgba="0.0 0.0 0.0 0.5" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.57079 0 0" />
+      <geometry>
+        <sphere radius="0.016" />
+      </geometry>
+      <material name="black">
+        <color rgba="0.0 0.0 0.0 0.5" />
+      </material>
+    </collision>
+    <inertial>
+      <mass value="0.02" />
+      <inertia ixx="0.000190416666667" ixy="0" ixz="0" iyy="0.0001904" iyz="0" izz="0.00036" />
+    </inertial>
+  </link>
+  <joint name="caster_joint" type="fixed">
+    <parent link="base_link" />
+    <child link="caster_link" />
+    <origin xyz="0.06 0.0 -0.076" />
+    <axis xyz="0 1 0" />
+  </joint>
+  <ros2_control name="MujocoSystem" type="system">
+    <hardware>
+      <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+      <param name="mujoco_model">$(arg scene_path)</param>
+      <param name="headless">$(arg headless)</param>
+      <param name="auto_register_cameras">false</param>
+      <param name="sim_speed_factor">$(arg sim_speed_factor)</param>
+    </hardware>
+    <joint name="left_wheel_joint">
+      <command_interface name="velocity" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+      <state_interface name="effort" />
+    </joint>
+    <joint name="right_wheel_joint">
+      <command_interface name="velocity" />
+      <state_interface name="position" />
+      <state_interface name="velocity" />
+      <state_interface name="effort" />
+    </joint>
+    <sensor name="imu">
+      <param name="mujoco_type">imu</param>
+      <param name="mujoco_sensor_name">imu</param>
+      <state_interface name="orientation.x" />
+      <state_interface name="orientation.y" />
+      <state_interface name="orientation.z" />
+      <state_interface name="orientation.w" />
+      <state_interface name="angular_velocity.x" />
+      <state_interface name="angular_velocity.y" />
+      <state_interface name="angular_velocity.z" />
+      <state_interface name="linear_acceleration.x" />
+      <state_interface name="linear_acceleration.y" />
+      <state_interface name="linear_acceleration.z" />
+    </sensor>
+  </ros2_control>
+</robot>

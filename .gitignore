@@ -9,13 +9,6 @@ dist/
 .claude/
 .vscode/
 
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-findings.md
-progress.md
-task_plan.md
-TASKMEMORY.md
 
 *.log
 *.pid
@@ -34,3 +27,29 @@ __pycache__/
 .pio/
 .venv*/
 *.bak*
+
+# Local evidence and independent historical references
+.local/
+.runtime/
+.runs/
+MUJOCO_LOG.TXT
+*.db
+*.db-wal
+*.db-shm
+*.pcap
+*.pcapng
+*.mcap
+.env
+.env.*
+!*.example
+/fishbot/
+/fishbot_tool/
+/fishbot-control-ros2/
+/plans/fishbot-jazzy-mapping/
+/plans/qiaobot-hotspot/
+plans/**/firmware_backup/
+plans/**/saved-*/
+plans/**/restart-backup-*/
+/workspaces/micro_ros_agent_ws/micro-ROS-Agent.corrupt-*/
+/fishbot_nav/src/fishbot_cartographer/map/
+/fishbot_nav/src/fishbot_navigation2/maps/

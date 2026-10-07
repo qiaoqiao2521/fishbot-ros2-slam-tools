@@ -1,5 +1,7 @@
 # FishBot
 
+Main repository: [qiaoqiao2521/fishbot-ros2-slam-tools](https://github.com/qiaoqiao2521/fishbot-ros2-slam-tools).
+
 One robot, one project: controller UI, ROS2 navigation, network LiDAR driver,
 micro-ROS Agent sources, firmware source and staged runtime tools.
 
@@ -29,6 +31,18 @@ or motion is safe. Read FISHBOT_STATUS.md before operating hardware.
   (absorbed from ros2-mobile-panel-day1; FastAPI + prebuilt assets in one
   uvicorn process, default port 8010).
 
+## Virtual navigation and inspection
+
+On a ROS 2 Jazzy workstation, prepare the extracted runtime and selected workspace:
+
+```bash
+./tools/fishbot_mujoco_bootstrap.py
+./tools/fishbot_mujoco.sh build
+./tools/fishbot_inspection.sh
+```
+
+The inspection command runs three observation goals and returns home in isolated domain 97. Its HTML report contains actual onboard RGB images, pixel observations and physical pose/stop evidence. See [visual inspection](docs/VISUAL_INSPECTION.md) for scope and validation. The existing [web patrol](workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/README.md) uses domain 93; [passage control](docs/PASSAGE_CONTROL.md) has its own isolated acceptance.
+
 ## Mobile panel
 
 ```bash
@@ -48,11 +62,10 @@ This update excludes private maps, posegraphs, flash backups and runtime data.
 Historical already-published maps remain in Git history.
 
 Former ros2-tools, fishbot-control-station and fishbot-nav-src have moved to the
-paths above. This repository is published from the canonical local project.
+paths above. The canonical development checkout directly tracks this repository; see [repository continuity](docs/REPOSITORY.md).
 
 ## Acceptance boundary
 
-Offline layout and dispatch tests pass. A clean build and hardware revalidation
-were not performed for this publication. Historical mapping and serialization
-succeeded; delayed motion, posegraph restore/localization and Nav2 remain
-unresolved. Never bypass fresh-odometry motion gates.
+Synthetic MuJoCo navigation, patrol, passage and visual-inspection evidence is recorded in the project plans. The inspection fixture completed three stations and return in 73.703 seconds, with nine fresh photos and a 0.12287 m return error. Its classifier is limited to synthetic indicator panels.
+
+Real mapping is incomplete. Real navigation, full passage, vehicle-side stale-command protection and camera inspection remain unaccepted. Build workspaces separately and verify current hardware readiness before any real motion. Repository synchronization does not establish additional physical acceptance.

@@ -12,6 +12,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      '/sim-api': {
+        target: 'http://127.0.0.1:9070',
+        changeOrigin: true,
+      },
       '/api': {
         target: `http://127.0.0.1:${process.env.BACKEND_PORT || '8080'}`,
         changeOrigin: true,

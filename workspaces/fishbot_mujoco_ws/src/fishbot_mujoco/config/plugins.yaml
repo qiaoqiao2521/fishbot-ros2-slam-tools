@@ -1,0 +1,23 @@
+/**:
+  ros__parameters:
+    # 0.1.1 FreeJointStatePublisherPlugin reads these outside mujoco_plugins.
+    # An empty/default frame_id means MuJoCo world coordinates and requires no ROS TF.
+    topic: /ground_truth/free_joint_states
+    publish_rate: 30.0
+    body_names: [base_footprint, moving_obstacle]
+    mujoco_plugins:
+      # Explicit parameters avoid the 0.1.1 legacy lidar rate parameter mismatch.
+      rangefinder_lidar_plugin:
+        type: mujoco_ros2_control_plugins/RangefinderLidarPlugin
+        lidar_publish_rate: 10.0
+        laser:
+          frame_name: laser_link
+          angle_increment: 0.017453292519943295
+          min_angle: 0.0
+          max_angle: 6.265732014659643
+          range_min: 0.12
+          range_max: 3.5
+          laserscan_topic: /scan
+      # Ground truth is isolated from /odom and does not own any TF edge.
+      free_joint_state_publisher:
+        type: mujoco_ros2_control_plugins/FreeJointStatePublisherPlugin
