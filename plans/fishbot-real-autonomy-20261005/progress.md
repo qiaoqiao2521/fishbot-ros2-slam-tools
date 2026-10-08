@@ -1,7 +1,26 @@
 # Progress
 
-## Current
-2026-10-08, after coupler repair: the user returned the car to the floor near the original opening. Native sensors and raw `odom2tf` recovered. No experimental predicted TF or restamped odometry was used. Fresh scans independently fitted the saved measured graph before SLAM resumed.
+## Current: lower-left exploration, 2026-10-08
+The user redirected exploration to the lower-left corner. A 0.986 m map goal reached its first observation point and passed fresh stopping feedback. The next goal stopped partway on native odom timestamps in the future; cancellation and guard stop were acknowledged. Its immediate stationary acceptance failed, although later raw twist was zero.
+
+A subsequent approximately 25 cm map goal reached the corner observation point and passed fresh stopping feedback. No movement goal remains queued. Complete scene coverage is still pending.
+
+The latest measured lower-left raster has no reachable free-to-unknown boundary within the explored corner. Thin white rays beyond the west/south wall are disconnected from current free space. The latest scan does not establish a vehicle-width exit. This corner inspection can conclude without claiming complete scene coverage.
+
+Direct raw odom2tf was stopped before enabling short-delay current-TF prediction. Raw odometry was not restamped, and native source freshness limits stayed intact. Stationary predicted/raw XY agreed and yaw differed by approximately 2.22e-16 rad; zero-input candidate age was P95 26.14 ms, maximum 26.22 ms. A separate 20 cm Nav2 goal passed action status 4/error 0 and fresh stopping feedback in 15.90 seconds.
+
+These tests establish bounded control-chain operation. They do not establish independent sensor fusion or complete wheel calibration. Wheel pose and twist share one source.
+
+The native clock later crossed the 50 ms future limit. The main-board restart service timed out, but odom reset to zero and a newly created XRCE session independently confirmed the restart. Native ages initially recovered to about -7..37 ms.
+
+SLAM and the predictor were stopped before that reset; fresh scan fitting and the saved graph restored the map pose before another goal. No firmware, computer network, VPN or global NTP setting changed. The final stationary capture again contained native ages down to -56.9 ms, so another movement needs renewed source readiness. Repeated clock drift remains unresolved.
+
+The private `lower-left-corner-checkpoint` contains nonempty PGM/YAML/posegraph/data. Nav2 map saving succeeded and graph serialization returned 0; the 108x119 map has about 7.408 m2 free and 9.648 m2 known. Earlier checkpoints and failed attempts remain preserved. The current stopped map pose is approximately (-0.331, -3.087, 3.591 rad). Original unknown cells remain unknown. RViz, sensors, restored SLAM and the current-TF predictor remain running; only the final guard owns /cmd_vel.
+
+Knowledge closeout: `no_reusable_delta`. The adopted physical-evidence lesson remains applicable; the new results and unresolved vehicle-clock issue belong in project progress. Root Codex owns further timestamp stabilization, scene exploration and full-route acceptance. Private runtime handoff: `.local/real-network-20261008/progress.md`.
+
+## After coupler repair
+2026-10-08, after coupler repair: the user returned the car to the floor near the original opening. Native sensors and raw `odom2tf` recovered. This initial repair retest used no experimental predicted TF or restamped odometry. Fresh scans independently fitted the saved measured graph before SLAM resumed.
 
 | Test | Independent raw-scan ICP | Native wheel odometry |
 | --- | --- | --- |
