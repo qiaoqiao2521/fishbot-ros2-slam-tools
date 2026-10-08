@@ -196,7 +196,7 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(report["velocity_mps"], .03)
         self.assertEqual(report["angular_velocity_rps"], .15)
         self.assertFalse(report["straight_sweeps_applicable"])
-        self.assertEqual(report["zones"]["cm_hard"]["selected_polygon"], "forward_slow_left")
+        self.assertEqual(report["zones"]["cm_hard"]["selected_polygon"], "forward_slow_left_3")
         self.assertEqual(report["collision_association"], event["collision_association"])
         self.assertEqual(report["collision_decision_reproduction"], "not_established")
         self.assertTrue(report["recorded_zones"]["stop_polygon"]["hits"])

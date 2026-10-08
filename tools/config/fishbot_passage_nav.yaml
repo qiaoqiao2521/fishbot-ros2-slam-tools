@@ -85,7 +85,6 @@ local_costmap:
       height: 3
       resolution: 0.025
       plugins:
-      - static_layer
       - obstacle_layer
       - inflation_layer
       inflation_layer:
@@ -270,7 +269,9 @@ collision_monitor:
     transform_tolerance: 0.15
     source_timeout: 0.5
     base_shift_correction: true
-    stop_pub_timeout: 2.0
+    # Fresh zero inputs must remain available for the final guard's explicit reset.
+    # Nonzero command expiry is independently enforced by the final guard.
+    stop_pub_timeout: 3600.0
     polygons:
     - VelocityStop
     - Slowdown

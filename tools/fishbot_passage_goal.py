@@ -19,6 +19,14 @@ def requested_endpoint(x, y, yaw, distance):
     return x + distance * math.cos(yaw), y + distance * math.sin(yaw), yaw
 
 
+def requested_map_endpoint(x, y, yaw, target):
+    """Bound a map target against the fresh current pose, before goal submission."""
+    if (len(target) != 3 or not all(math.isfinite(v) for v in (x, y, yaw, *target))
+            or not 0 < math.hypot(target[0]-x, target[1]-y) <= 3):
+        raise ValueError('finite map pose and target distance in (0, 3] metres required')
+    return tuple(target)
+
+
 def heading_from_quaternion(values):
     if len(values) != 4 or not all(math.isfinite(v) for v in values):
         raise ValueError('invalid map orientation')
@@ -45,6 +53,36 @@ def diagnostic_level(value):
     if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 3:
         raise ValueError('invalid DiagnosticStatus.level')
     return value
+
+
+def check_running_guard(diagnostics, steady_now, ros_now):
+    """Abort active goals on a blocked guard or untrustworthy diagnostics."""
+    if not diagnostics:
+        raise RuntimeError('guard diagnostics missing during goal')
+    received, message = diagnostics[0]
+    receive_age = steady_now - received
+    if not math.isfinite(receive_age) or not 0 <= receive_age <= 1:
+        raise RuntimeError('guard diagnostics receive timeout during goal')
+    source_age = ros_now - (message.header.stamp.sec + message.header.stamp.nanosec * 1e-9)
+    if not math.isfinite(source_age) or not -.05 <= source_age <= 1:
+        raise RuntimeError('guard diagnostics source timestamp outside freshness limit during goal')
+    status = next((s for s in message.status if s.name == 'fishbot_command_guard'), None)
+    if status is None:
+        raise RuntimeError('guard status missing from diagnostics during goal')
+    level = diagnostic_level(status.level)
+    if status.message.startswith('latched:') or level >= 2:
+        raise RuntimeError(f'guard blocked goal: {status.message} (level={level})')
+
+
+def wait_action_future(future, until, spin_once, check_health, steady_now, interrupted):
+    """Monitor the independent final guard while awaiting action acknowledgement/result."""
+    check_health()
+    while not future.done() and steady_now() < until and not interrupted():
+        spin_once()
+        check_health()
+    if not future.done():
+        raise TimeoutError('goal operation interrupted or deadline reached')
+    return future.result()
 
 
 class PendingGoal:
@@ -124,7 +162,10 @@ def finalize_goal(result, goal_requested, request_stop, request_cancel, observe,
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--distance', type=float, default=1.0)
+    destination = parser.add_mutually_exclusive_group()
+    destination.add_argument('--distance', type=float)
+    destination.add_argument('--target', nargs=3, type=float, metavar=('X', 'Y', 'YAW'),
+                             help='map target in metres and radians; at most 3 metres from the fresh pose')
     parser.add_argument('--domain', type=int, default=96)
     parser.add_argument('--real', action='store_true')
     parser.add_argument('--execute', action='store_true')
@@ -132,7 +173,11 @@ def main():
     parser.add_argument('--timeout', type=float, default=90)
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
-    requested_endpoint(0, 0, 0, args.distance)
+    if args.target is None:
+        args.distance = 1.0 if args.distance is None else args.distance
+        requested_endpoint(0, 0, 0, args.distance)
+    elif not all(math.isfinite(v) for v in args.target):
+        parser.error('map target coordinates and yaw must be finite')
     if not 0 <= args.domain <= 232 or (args.domain == 0 and not args.real):
         parser.error('domain 0 requires --real; domain must be 0..232')
     if args.real and (args.domain != 0 or args.use_sim_time):
@@ -141,6 +186,7 @@ def main():
         parser.error('timeout must be 5..180 seconds')
     if not args.execute:
         print(json.dumps({'execute': False, 'distance': args.distance,
+                          'target_requested': args.target,
                           'domain': args.domain, 'action': 'navigate_to_pose'}))
         return 0
     if args.output is None or args.output.exists():
@@ -177,18 +223,20 @@ def main():
     node.create_subscription(DiagnosticArray, '/fishbot_command_guard/diagnostics',
                              lambda m: guard_diagnostic.__setitem__(slice(None), [(time.monotonic(), m)]), 1)
     result = {'completed': False, 'stationary_feedback': False,
-              'distance_requested': args.distance, 'domain': args.domain}
+              'distance_requested': args.distance, 'target_requested': args.target,
+              'domain': args.domain}
     pending = PendingGoal(result)
     goal_requested = False
     began = time.monotonic()
     deadline = began + args.timeout
 
     def wait(future, until):
-        while not future.done() and time.monotonic() < until and not stopped:
-            rclpy.spin_once(node, timeout_sec=.05)
-        if not future.done():
-            raise TimeoutError('goal operation interrupted or deadline reached')
-        return future.result()
+        def check_health():
+            check_running_guard(guard_diagnostic, time.monotonic(),
+                                node.get_clock().now().nanoseconds * 1e-9)
+        return wait_action_future(future, until,
+                                  lambda: rclpy.spin_once(node, timeout_sec=.05),
+                                  check_health, time.monotonic, lambda: bool(stopped))
 
     try:
         def guard_ready():
@@ -219,15 +267,17 @@ def main():
             raise RuntimeError('map pose timestamp is stale')
         t, q = tf.transform.translation, tf.transform.rotation
         yaw = heading_from_quaternion((q.x, q.y, q.z, q.w))
-        x, y, yaw = requested_endpoint(t.x, t.y, yaw, args.distance)
         result['start'] = [t.x, t.y, yaw]
-        result['target'] = [x, y, yaw]
+        x, y, target_yaw = (requested_map_endpoint(t.x, t.y, yaw, args.target)
+                            if args.target is not None else requested_endpoint(t.x, t.y, yaw, args.distance))
+        result['target'] = [x, y, target_yaw]
+        result['relative_target_distance'] = math.hypot(x-t.x, y-t.y)
         goal = NavigateToPose.Goal()
         goal.pose.header.frame_id = 'map'
         goal.pose.header.stamp = node.get_clock().now().to_msg()
         goal.pose.pose.position.x, goal.pose.pose.position.y = x, y
-        goal.pose.pose.orientation.z = math.sin(yaw/2)
-        goal.pose.pose.orientation.w = math.cos(yaw/2)
+        goal.pose.pose.orientation.z = math.sin(target_yaw/2)
+        goal.pose.pose.orientation.w = math.cos(target_yaw/2)
         goal.behavior_tree = str(Path(__file__).parent / 'config/fishbot_passage_tree.xml')
         goal_requested = True
         handle = wait(pending.track(action.send_goal_async(goal)), min(deadline, time.monotonic()+10))

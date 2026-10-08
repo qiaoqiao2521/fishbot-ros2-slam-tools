@@ -58,6 +58,49 @@ class PassageGeometryTest(unittest.TestCase):
                                        ty+x*math.sin(a)+y*math.cos(a))
                         self.assertTrue(inside(transformed, polygon), (v, w, t, transformed))
 
+    def test_every_generated_band_encloses_interior_velocities(self):
+        points = json.loads(self.params['local_costmap']['local_costmap']['ros__parameters']['footprint'])
+        duration = self.geometry['collision']['hard_reaction_time_s']
+        zones = self.params['collision_monitor']['ros__parameters']['VelocityStop']
+        for name in zones['velocity_polygons']:
+            zone = zones[name]
+            polygon = json.loads(zone['points'])
+            self.assertLessEqual(zone['theta_max']-zone['theta_min'], .05+1e-12)
+            for vf in (0., .4, 1.):
+                v = zone['linear_min'] + vf*(zone['linear_max']-zone['linear_min'])
+                for wf in (0., .2, .5, .8, 1.):
+                    w = zone['theta_min'] + wf*(zone['theta_max']-zone['theta_min'])
+                    for i in range(17):
+                        t = duration*i/16
+                        a = w*t
+                        tx = v*math.sin(a)/w if w else v*t
+                        ty = v*(1-math.cos(a))/w if w else 0.
+                        for x, y in points:
+                            moved = (tx+x*math.cos(a)-y*math.sin(a),
+                                     ty+x*math.sin(a)+y*math.cos(a))
+                            self.assertTrue(inside(moved, polygon), (name, v, w, t, moved))
+
+    def test_angular_bands_are_truncated_and_cover_both_signs(self):
+        config = passage.yaml.safe_load((SCRIPT.parent/'config/fishbot_passage_nav.yaml').read_text())
+        for maximum in (.02, .073, .23, .25):
+            geometry = copy.deepcopy(self.geometry)
+            geometry['motion']['max_angular_rps'] = maximum
+            params = passage.build_parameters(config, geometry)
+            zones = params['collision_monitor']['ros__parameters']['VelocityStop']
+            self.assertEqual(zones['velocity_polygons'][0], 'idle_straight')
+            for name in zones['velocity_polygons']:
+                zone = zones[name]
+                self.assertGreaterEqual(zone['theta_min'], -maximum)
+                self.assertLessEqual(zone['theta_max'], maximum)
+                self.assertLessEqual(zone['theta_max']-zone['theta_min'], .05+1e-12)
+            for i in range(201):
+                w = -maximum+2*maximum*i/200
+                for v in (-.08, 0., .08):
+                    zone_for(params, v, w)
+            if maximum == .25:
+                self.assertLess(max(y for _, y in zone_for(params, 0., .025)),
+                                max(y for _, y in zone_for(params, 0., .25)))
+
     def test_nearby_side_wall_is_soft_at_idle_not_fixed_hard_rectangle(self):
         cm = self.params['collision_monitor']['ros__parameters']
         # A wall at y=.16 leaves 4 cm from the wheels. It should invoke the

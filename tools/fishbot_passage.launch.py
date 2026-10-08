@@ -122,7 +122,13 @@ def build_parameters(config, geometry):
     linear_bands = [('idle', -.001, .001), ('forward_slow', 0., vslow),
                     ('reverse_slow', -vslow, 0.), ('forward', vslow, vmax),
                     ('reverse', -vmax, -vslow)]
-    angular_bands = [('straight', -.01, .01), ('left', 0., wmax), ('right', -wmax, 0.)]
+    angular_bands = [('straight', -.01, .01)]
+    # Slow turns use a nearby upper bound, while every band still encloses its
+    # whole velocity interval. Keep both signs and truncate at configured wmax.
+    for i in range(math.ceil(wmax / .05)):
+        low, high = i * .05, min((i + 1) * .05, wmax)
+        angular_bands.extend([(f'left_{i+1}', low, high),
+                              (f'right_{i+1}', -high, -low)])
     radius = max(math.hypot(x, y) for x, y in points)
     for linear_name, vlo, vhi in linear_bands:
         for angular_name, wlo, whi in angular_bands:

@@ -1,6 +1,30 @@
 # Progress
 
 ## Current
+2026-10-08, after coupler repair: the user returned the car to the floor near the original opening. Native sensors and raw `odom2tf` recovered. No experimental predicted TF or restamped odometry was used. Fresh scans independently fitted the saved measured graph before SLAM resumed.
+
+| Test | Independent raw-scan ICP | Native wheel odometry |
+| --- | --- | --- |
+| Stationary baseline | 1.06 mm, 0.014° | Zero change |
+| Straight request, 10 cm | 9.39 cm forward, 0.40° yaw | 10.27 cm forward, 0.17° yaw |
+| Left turn | +8.49° | +8.64° |
+| Right turn | −8.21° | −9.03° |
+
+Each bounded segment completed and passed five seconds of fresh stopping observation. ICP P80 residuals were 7.09–10.07 mm. Right-turn registration retained a secondary solution about 0.74° away. Mechanical agreement improved substantially; these short tests do not establish complete wheel calibration.
+
+Zero-input timing through the full chain passed: candidate age P95 174 ms, maximum 199 ms, and explicit reset succeeded. A subsequent 25 cm Nav2 goal completed in 17.60 seconds, with action status 4, error 0 and fresh stationary feedback. Independent ICP measured 22.59 cm net displacement and +3.63° yaw; native odometry reported 24.73 cm and +6.21°. The remaining 2.58° yaw difference requires further calibration. Net displacement is neither cumulative path length nor a straight-line calibration.
+
+Map saving succeeded and graph serialization returned 0. The new private `repaired-coupler-checkpoint` contains PGM/YAML and posegraph/data, about 7.22 m2 free and 9.20 m2 known. Original checkpoints and failed attempts remain preserved. No firmware, computer network or VPN setting changed. Full coverage, complete-route navigation and installed-board watchdog acceptance remain pending.
+
+The accumulated Passage fixes passed 84/84 offline tests, including ROS message serialization. Root Codex owns further real mapping from fresh pose, scan, clock and stationary checks. No movement goal is queued. Private runtime and evidence handoff: `.local/real-network-20261008/progress.md`.
+
+Knowledge closeout: `no_reusable_delta`. The adopted physical-evidence lesson remains applicable; this turn adds vehicle-specific repair and short-run measurements to project progress.
+
+Preserved build work: `fishbot_motion_control_microros/release.sh` remains `pending`, owned by root Codex. Shell syntax passed; pinned toolchain, boot_app0 provenance and merged-image layout remain unverified. Validate those in an isolated build before accepting release or flashing results.
+
+## Earlier continuation before coupler repair
+2026-10-08: both boards passed persistent server-setting readback and native odom/IMU/scan were received. Computer DHCP and VPN stayed unchanged. Two independent scans aligned to the original measured map within 1.6 mm and 0.16 degrees; the saved graph and live TF were restored. The first continuous real 10 cm goal completed with fresh stopping feedback. Independent ICP measured about 9.14 cm forward and 9.23° left yaw, versus 15.85° wheel yaw. A 30 cm goal stopped partway on collision prediction. Native Nav2 replay found an old local static-map cell on the current footprint. Disabling only that local layer cleared the footprint and remaining 9.22 cm sweep. Later goals stopped on time-transform failures or collision monitoring; a predicted-TF experiment was not accepted as wheel calibration. The last pre-repair serialized graph was `room-side-checkpoint`, about 7.24 m2 free and 9.12 m2 known. Those failures remain evidence; fresh source ages must pass before any further motion.
+
 2026-10-06: user explicitly chooses the official open FishBot geometry without a measuring prerequisite and requests implementation of continuous local control, graded clearance and trigger recording/replay. The new opt-in pipeline and offline replay are implemented. Isolated MuJoCo domain 96 completed one continuous 1.25 m goal through a synthetic 36 cm doorway, including stationary feedback; real hardware was not operated while charging. The real 1 m/mapping task remains incomplete and its saved map/graph are preserved. Root owns later real sensor/time/heading and passage acceptance, without reintroducing a manual measurement gate. Detailed offline/simulation results follow below.
 ## Done
 - Verified each board identity and changed only its computer-server address, with write acknowledgement and explicit stored readback. USB is now unplugged; no further USB action is required for mapping.
@@ -11,12 +35,12 @@
 - Offline connection/grid/guard regressions pass 34/34, including signed left/right turns. Firmware has not been flashed and its loss-of-command watchdog remains unverified.
 
 ## Remaining / next owner
-Root Codex exclusively owns physical continuation. Follow fresh map TF and scan clearance toward the possible lower-right opening; preserve sensors and stop/snapshot on recurrence of timestamp failure. Do not mistake enlarged unknown canvas for large-scene coverage. Navigation and patrol remain pending until mapping and the installed-board stop/command-age boundary are accepted. The current corner triggered the forward stopping corridor; root must reassess the passage and battery condition before further physical movement. Do not reduce clearance simply to force passage.
+Root Codex exclusively owns physical continuation. Start from the latest private checkpoint and fresh map TF, raw scan, native timestamps and stationary feedback. Preserve sensors and stop/snapshot on recurrence of timing failure. Do not mistake enlarged unknown canvas for large-scene coverage. Complete navigation and patrol remain pending until mapping and the installed-board stop/command-age boundary are accepted. Reassess actual clearance before movement; do not reduce protection simply to force passage.
 
 Private runtime/evidence location: `local-only: work/real-20261005/`. Active receiver session: `fishbot-real-20261005`. Individual segment JSON files preserve completed/stopped separately; segments 04 and 05 have stopped=false due to freshness failure even though zero twist was separately observed. Do not overwrite those failures.
 
 ## Repository boundary
-The parent repository retains the preexisting consolidation/migration changes. Their cross-project moves, compatibility links and independent Git boundaries need root Codex review starting at `../../plans/hardware-consolidation-20260915/`; preserve them while committing the scoped verified FishBot fixes and continuity. No remote is configured, so delivery is local only. Maps, runtime logs, addresses/configuration and credentials must stay outside Git.
+The canonical FishBot project now has the existing `qiaoqiao2521/fishbot-ros2-slam-tools` remote. The historical parent migration remains a separate Git boundary. Preserve its cross-project moves and compatibility links. Commit verified FishBot source changes from this project root. Maps, runtime logs, addresses/configuration and credentials must stay outside Git.
 
 ## Continuous-control delivery, 2026-10-06
 - Implemented the user's selected items 2/3/4 using the official model: continuous NavigateToPose/RPP, shared model polygons with soft speed limits and hard collision stops, one stamped final command guard, and trigger JSON/RViz/offline replay. Usage: `docs/PASSAGE_CONTROL.md`. Physical measurement is not a prerequisite in this plan.
