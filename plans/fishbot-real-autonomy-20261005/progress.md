@@ -1,6 +1,13 @@
 # Progress
 
-## Current: lower-left exploration, 2026-10-08
+## Current: working map accepted, 2026-10-09
+The user accepts the latest measured map as the complete working map for this scene. Mapping scope is closed by that decision; unknown cells remain unknown. The accepted private checkpoint and pose graph are bound to SHA256 values in the local acceptance record. No new motion or firmware write occurred during acceptance.
+
+Next: stabilize native clock alignment, switch to fixed-map localization, then verify an outbound route, return and fresh stopping feedback. Use the installed `slam_toolbox localization_launch.py` with explicit `mode: localization` and the accepted pose graph. Stop the mapping node before that switch. Only localization may publish map->odom; retain the existing Passage guard and source gates. Three-point patrol follows the single-route acceptance. Fixed-map navigation and patrol remain unaccepted.
+
+Knowledge closeout: `no_reusable_delta`. This acceptance changes project scope; the existing physical-evidence lesson still applies. Root Codex owns clock stabilization and the subsequent real navigation acceptance.
+
+## Measured lower-left exploration, 2026-10-08
 The user redirected exploration to the lower-left corner. A 0.986 m map goal reached its first observation point and passed fresh stopping feedback. The next goal stopped partway on native odom timestamps in the future; cancellation and guard stop were acknowledged. Its immediate stationary acceptance failed, although later raw twist was zero.
 
 A subsequent approximately 25 cm map goal reached the corner observation point and passed fresh stopping feedback. No movement goal remains queued. Complete scene coverage is still pending.
