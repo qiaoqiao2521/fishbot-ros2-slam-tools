@@ -7,9 +7,12 @@ this test never imports rclpy, binds a port, or connects to hardware.
 """
 
 import ast
+from contextlib import redirect_stdout
 from collections import deque
 from enum import Enum
+import io
 from pathlib import Path
+import struct
 from types import SimpleNamespace
 import unittest
 
@@ -29,6 +32,7 @@ class FakeSocket:
         self.recv_calls = 0
         self.closed = False
         self.blocking = None
+        self.peer_host = '127.0.0.1'
 
     def _check_open(self):
         if self.closed:
@@ -39,7 +43,8 @@ class FakeSocket:
         self.polls += 1
         if not self.pending:
             raise BlockingIOError()
-        return self.pending.popleft(), ("127.0.0.1", 12345)
+        connection = self.pending.popleft()
+        return connection, (connection.peer_host, 12345)
 
     def recvfrom(self, _size):
         self._check_open()
@@ -105,12 +110,16 @@ class FakeParser:
     def __init__(self):
         self.data_buffer = bytearray()
         self.scan_data_buffer = []
+        self.frames = []
 
     def set_scan_params(self, *args):
         self.params = args
 
     def add_scan_callback(self, callback):
         self.callback = callback
+
+    def put_raw_frame(self, frame):
+        self.frames.append(bytes(frame))
 
 
 class FakeNode:
@@ -161,16 +170,20 @@ class FakeNode:
         pass
 
 
-def load_driver(path, protocol="net", source=None):
+def load_driver(path, protocol="net", source=None, real_parse=False):
     """Load real control flow, without executing the module's ROS imports."""
     tree = ast.parse(path.read_text() if source is None else source, filename=str(path))
     lidar_type = next(node for node in tree.body if isinstance(node, ast.ClassDef)
                       and node.name == "LidarType")
     driver = next(node for node in tree.body if isinstance(node, ast.ClassDef)
                   and node.name == "FishBotLaserDriverNode")
+    methods = {"__init__", "_accept_connection", "process_data",
+               "_reset_parsers", "_reset_tcp_connection", "_parser_for_type",
+               "_valid_scan_frame"}
+    if real_parse:
+        methods.add("parse_frame")
     driver.body = [node for node in driver.body if isinstance(node, ast.FunctionDef)
-                   and node.name in {"__init__", "_accept_connection", "process_data",
-                                     "_reset_parsers", "_reset_tcp_connection"}]
+                   and node.name in methods]
     clock = FakeClock()
     fake_base = type("ConfiguredFakeNode", (FakeNode,),
                      {"protocol_override": protocol, "clock": clock})
@@ -178,15 +191,40 @@ def load_driver(path, protocol="net", source=None):
         "Node": fake_base,
         "Enum": Enum,
         "time": clock,
+        "struct": struct,
+        "FakeParser": FakeParser,
         "LaserScan": lambda: SimpleNamespace(header=SimpleNamespace()),
         "LidarX2Parser": FakeParser,
         "LidarM1C1Parser": FakeParser,
         "LidarX2NParser": FakeParser,
         "LidarX2KParser": FakeParser,
     }
-    module = ast.Module(body=[lidar_type, driver], type_ignores=[])
+    # Use each production checksum method; only scan publication is recorded.
+    parser_classes = [node for node in tree.body if isinstance(node, ast.ClassDef)
+                      and node.name in {"LidarX2Parser", "LidarM1C1Parser",
+                                        "LidarX2NParser", "LidarX2KParser"}]
+    for parser in parser_classes:
+        parser.bases = [ast.Name(id="FakeParser", ctx=ast.Load())]
+        parser.body = [method for method in parser.body
+                       if isinstance(method, ast.FunctionDef)
+                       and method.name == "check_frame_checksum"]
+    module = ast.fix_missing_locations(ast.Module(
+        body=[lidar_type, *parser_classes, driver], type_ignores=[]))
     exec(compile(module, str(path), "exec"), namespace)
     return namespace["FishBotLaserDriverNode"]()
+
+
+def scan_frame(count=1, flags=1, angle=90):
+    frame = bytearray(b'\xaa\x55' + bytes((flags, count)))
+    frame += struct.pack('<HHH', (angle * 64 << 1) | 1,
+                         (angle * 64 << 1) | 1, 0)
+    frame += struct.pack('<' + 'H' * count, *([4000] * count))
+    checksum_data = frame[:8] + frame[10:]
+    checksum = 0
+    for index in range(0, len(checksum_data), 2):
+        checksum ^= struct.unpack('<H', checksum_data[index:index + 2])[0]
+    struct.pack_into('<H', frame, 8, checksum)
+    return bytes(frame)
 
 
 class ConnectionTimerTests(unittest.TestCase):
@@ -443,6 +481,155 @@ class ConnectionTimerTests(unittest.TestCase):
                 self.assertEqual(node.protocol_mode, "udp")
                 self.assertEqual(node.data_buffer, datagram)
                 self.assertTrue(node.connection_timer.cancelled)
+
+    def announce_and_validate(self, node, model=2):
+        node.parse_frame(b'\xaa\x55\x99' + bytes((model,)))
+        frame = scan_frame()
+        node.parse_frame(frame)
+        self.assertEqual(node.verified_laser_type.value, model)
+        self.assertEqual(node.verified_laser_peer, '127.0.0.1')
+        return frame
+
+    def test_validated_same_peer_reconnect_dispatches_immediately_without_probe_wait(self):
+        for path in DRIVER_PATHS:
+            with self.subTest(driver=path.relative_to(PROJECT_ROOT)), redirect_stdout(io.StringIO()):
+                node = load_driver(path, real_parse=True)
+                connection = self.connect_tcp(node)
+                frame = self.announce_and_validate(node)
+                old_parser = node.laser_x2k_parser
+                old_parser.scan_data_buffer.append('old revolution')
+                node.data_buffer.extend(b'old partial frame')
+                connection.incoming.append(b'')
+                node.process_data()
+                replacement = self.connect_tcp(node)
+                replacement.incoming.append(frame + b'\xaa\x55')
+                node.process_data()
+                self.assertEqual(node.clock.time() - node.last_connection_time, 0)
+                self.assertTrue(node.is_receive_laser_type)
+                self.assertEqual(node.laser_type.value, 2)
+                self.assertIsNot(node.laser_x2k_parser, old_parser)
+                self.assertFalse(node.laser_x2k_parser.scan_data_buffer)
+                self.assertEqual(node.laser_x2k_parser.frames, [frame])
+
+    def test_first_connection_does_not_guess_cached_type_from_valid_scan(self):
+        for path in DRIVER_PATHS:
+            with self.subTest(driver=path.relative_to(PROJECT_ROOT)), redirect_stdout(io.StringIO()):
+                node = load_driver(path, real_parse=True)
+                self.connect_tcp(node)
+                node.parse_frame(scan_frame())
+                self.assertFalse(node.is_receive_laser_type)
+                self.assertEqual(node.laser_type.value, 0)
+                self.assertFalse(node.laser_x2k_parser.frames)
+                node.clock.advance(5.01)
+                corrupted = bytearray(scan_frame())
+                corrupted[-1] ^= 1
+                node.parse_frame(corrupted)
+                self.assertFalse(node.is_receive_laser_type)
+                node.parse_frame(scan_frame())
+                self.assertTrue(node.is_receive_laser_type)
+                self.assertFalse(node.laser_x2k_parser.frames)
+                node.parse_frame(scan_frame())
+                self.assertEqual(node.laser_x2k_parser.frames, [scan_frame()])
+
+    def test_reconnect_waits_for_valid_revolution_header_and_supports_all_parsers(self):
+        parser_names = {1: 'laser_x2_parser', 2: 'laser_x2k_parser',
+                        3: 'laser_x2n_parser', 5: 'laser_m1c1_parser'}
+        for path in DRIVER_PATHS:
+            for model, parser_name in parser_names.items():
+                with self.subTest(driver=path.relative_to(PROJECT_ROOT), model=model), redirect_stdout(io.StringIO()):
+                    node = load_driver(path, real_parse=True)
+                    connection = self.connect_tcp(node)
+                    self.announce_and_validate(node, model=model)
+                    connection.incoming.append(b'')
+                    node.process_data()
+                    self.connect_tcp(node)
+                    node.parse_frame(scan_frame(count=3, flags=0))
+                    self.assertFalse(node.is_receive_laser_type)
+                    self.assertFalse(getattr(node, parser_name).frames)
+                    node.parse_frame(scan_frame())
+                    self.assertEqual(node.laser_type.value, model)
+                    self.assertEqual(getattr(node, parser_name).frames, [scan_frame()])
+
+    def test_invalid_reconnect_frames_never_restore_type_or_dispatch(self):
+        valid = scan_frame()
+        corrupted = bytearray(valid)
+        corrupted[-1] ^= 1
+        zero_count = bytearray(valid)
+        zero_count[3] = 0
+        invalid_frames = (b'\xaa\x55\x00', valid[:-1], valid + b'\x00\x00',
+                          bytes(corrupted), bytes(zero_count), scan_frame(angle=360),
+                          scan_frame(count=2, flags=1))
+        for path in DRIVER_PATHS:
+            for frame in invalid_frames:
+                with self.subTest(driver=path.relative_to(PROJECT_ROOT), frame=frame.hex()), redirect_stdout(io.StringIO()):
+                    node = load_driver(path, real_parse=True)
+                    connection = self.connect_tcp(node)
+                    self.announce_and_validate(node)
+                    connection.incoming.append(b'')
+                    node.process_data()
+                    self.connect_tcp(node)
+                    node.parse_frame(frame)
+                    self.assertFalse(node.is_receive_laser_type)
+                    self.assertFalse(node.laser_x2k_parser.frames)
+
+    def test_different_peer_must_announce_type_or_finish_normal_probe(self):
+        for path in DRIVER_PATHS:
+            with self.subTest(driver=path.relative_to(PROJECT_ROOT)), redirect_stdout(io.StringIO()):
+                node = load_driver(path, real_parse=True)
+                connection = self.connect_tcp(node)
+                self.announce_and_validate(node)
+                connection.incoming.append(b'')
+                node.process_data()
+                replacement = FakeSocket()
+                replacement.peer_host = '127.0.0.2'
+                node.tcp_sock.pending.append(replacement)
+                node._accept_connection()
+                node.parse_frame(scan_frame())
+                self.assertFalse(node.is_receive_laser_type)
+                self.assertFalse(node.laser_x2k_parser.frames)
+                node.parse_frame(b'\xaa\x55\x99\x05')
+                node.parse_frame(scan_frame())
+                self.assertEqual(node.laser_type.value, 5)
+                self.assertEqual(node.laser_m1c1_parser.frames, [scan_frame()])
+                self.assertEqual(node.verified_laser_peer, '127.0.0.2')
+
+    def test_type_announcement_overrides_cached_parser_and_discards_partial_scan(self):
+        for path in DRIVER_PATHS:
+            with self.subTest(driver=path.relative_to(PROJECT_ROOT)), redirect_stdout(io.StringIO()):
+                node = load_driver(path, real_parse=True)
+                connection = self.connect_tcp(node)
+                self.announce_and_validate(node)
+                connection.incoming.append(b'')
+                node.process_data()
+                self.connect_tcp(node)
+                node.parse_frame(scan_frame())
+                old_parser = node.laser_x2k_parser
+                old_parser.scan_data_buffer.append('cached model partial scan')
+                node.parse_frame(b'\xaa\x55\x99\x05')
+                self.assertEqual(node.laser_type.value, 5)
+                self.assertIsNot(node.laser_x2k_parser, old_parser)
+                self.assertFalse(node.laser_x2k_parser.scan_data_buffer)
+                self.assertEqual(node.verified_laser_type.value, 0)
+                node.parse_frame(scan_frame())
+                self.assertFalse(node.laser_x2k_parser.frames)
+                self.assertEqual(node.laser_m1c1_parser.frames, [scan_frame()])
+
+    def test_unvalidated_announcement_and_invalid_type_cannot_enable_fast_reconnect(self):
+        for path in DRIVER_PATHS:
+            with self.subTest(driver=path.relative_to(PROJECT_ROOT)), redirect_stdout(io.StringIO()):
+                node = load_driver(path, real_parse=True)
+                connection = self.connect_tcp(node)
+                for announcement in (b'\xaa\x55\x99\xff', b'\xaa\x55\x99\x00',
+                                     b'\xaa\x55\x99\x07', b'\xaa\x55\x99\x02extra'):
+                    node.parse_frame(announcement)
+                    self.assertFalse(node.is_receive_laser_type)
+                node.parse_frame(b'\xaa\x55\x99\x02')
+                connection.incoming.append(b'')
+                node.process_data()
+                self.connect_tcp(node)
+                node.parse_frame(scan_frame())
+                self.assertFalse(node.is_receive_laser_type)
+                self.assertFalse(node.laser_x2k_parser.frames)
 
 
 if __name__ == "__main__":

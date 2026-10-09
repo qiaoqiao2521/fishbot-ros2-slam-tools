@@ -31,6 +31,19 @@ class PassageGeometryTest(unittest.TestCase):
     def setUpClass(cls):
         cls.params, cls.geometry = passage.load_parameters()
 
+    def test_timing_profile_selects_recovery_tree_without_changing_collision_geometry(self):
+        tolerant, geometry = passage.load_parameters(timing_profile='tolerant')
+        strict_tree = self.params['bt_navigator']['ros__parameters']['default_nav_to_pose_bt_xml']
+        tolerant_tree = tolerant['bt_navigator']['ros__parameters']['default_nav_to_pose_bt_xml']
+        self.assertEqual(Path(strict_tree).name, 'fishbot_passage_tree.xml')
+        self.assertEqual(Path(tolerant_tree).name, 'fishbot_passage_tolerant_tree.xml')
+        self.assertTrue(Path(tolerant_tree).is_file())
+        self.assertEqual(geometry, self.geometry)
+        for node in ('collision_monitor', 'controller_server', 'local_costmap', 'global_costmap'):
+            self.assertEqual(tolerant[node], self.params[node], node)
+        with self.assertRaises(ValueError):
+            passage.load_parameters(timing_profile='unknown')
+
     def test_model_encloses_round_body_and_outside_wheel_corners(self):
         footprint = self.geometry['footprint']['points_m']
         # An inscribed octagon would fail at angles between its vertices.

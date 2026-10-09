@@ -509,6 +509,10 @@ class TolerantTimingTests(unittest.TestCase):
         self.assertEqual((settings.command_timeout_s, settings.odom_timeout_s), (0.35, 0.35))
         self.assertEqual(settings.geometry['footprint'], document['footprint'])
         self.assertEqual(settings.geometry['command_guard']['timing_profile'], 'tolerant')
+        self.assertIsNone(settings.hold_timeout_s)
+        self.assertIsNone(settings.geometry['command_guard']['hold_timeout_s'])
+        self.assertEqual(settings.recovery_policy, 'auto_resume')
+        self.assertFalse(settings.hold_escalates_to_latch)
         self.assertNotIn('timing_profile', document['command_guard'])
         with self.assertRaises(ValueError):
             guard_module.Settings.from_mapping(document, timing_profile='disabled')
@@ -556,16 +560,20 @@ class TolerantTimingTests(unittest.TestCase):
                 else:
                     core.set_ownership({}, 'final publisher ownership mismatch')
                 self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
-                self.assertIsNotNone(core.latched_reason)
-                self.assertIn('source timestamp' if fault == 'future' else 'ownership', core.latched_reason)
+                if fault == 'future':
+                    self.assertIsNone(core.latched_reason)
+                    self.assertIsNotNone(core.hold_started)
+                else:
+                    self.assertIn('ownership', core.latched_reason)
 
     def test_future_sensor_stamp_cannot_hide_behind_receive_timeout(self):
         core = self.ready()
         core.accept_scan(scan(), transform(), 101.0, 100.0, 10.0)
         self.assertEqual(core.tick(100.0, 10.7), guard_module.ZERO)
-        self.assertEqual(core.latched_reason, 'scan: source stamp in future')
+        self.assertIsNone(core.latched_reason)
+        self.assertIsNotNone(core.hold_started)
 
-    def test_continuous_odom_failure_latches_after_two_seconds(self):
+    def test_continuous_active_odom_failure_waits_without_deadline(self):
         core = self.ready()
         command(core, 0.04)
         self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
@@ -573,7 +581,9 @@ class TolerantTimingTests(unittest.TestCase):
         sensors(core, 102.0, 12.0)
         core.accept_odom(odom(), 99.0, 102.0, 12.0)
         self.assertEqual(core.tick(102.0, 12.0), guard_module.ZERO)
-        self.assertIn('persistent timing fault: odom:', core.latched_reason)
+        self.assertIsNone(core.latched_reason)
+        self.assertTrue(core.hold_motion)
+        self.assertTrue(core.status.startswith('timing hold:'))
 
     def test_deleted_command_does_not_delete_outage_timer(self):
         core = self.ready()
@@ -585,7 +595,9 @@ class TolerantTimingTests(unittest.TestCase):
         self.assertTrue(core.hold_needs_command)
         sensors(core, 102.351, 12.351)
         self.assertEqual(core.tick(102.351, 12.351), guard_module.ZERO)
-        self.assertIn('persistent timing fault: command:', core.latched_reason)
+        self.assertIsNone(core.latched_reason)
+        self.assertTrue(core.hold_needs_command)
+        self.assertTrue(core.status.startswith('timing hold:'))
 
     def test_idle_long_sensor_gap_recovers_without_latch_or_queued_motion(self):
         for source in ('scan', 'odom'):
@@ -619,7 +631,7 @@ class TolerantTimingTests(unittest.TestCase):
                 command(core, 0.04, ros=105.21, steady=15.21)
                 self.assertEqual(core.tick(105.21, 15.21), (0.04, 0.0))
 
-    def test_active_scan_gap_latches_despite_fresh_zero_during_hold(self):
+    def test_active_scan_gap_keeps_zero_output_despite_fresh_zero_during_hold(self):
         core = self.ready()
         command(core, 0.04)
         self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
@@ -631,7 +643,8 @@ class TolerantTimingTests(unittest.TestCase):
             self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
         self.assertTrue(core.motion_active)
         self.assertTrue(core.hold_motion)
-        self.assertIn('persistent timing fault: scan:', core.latched_reason)
+        self.assertIsNone(core.latched_reason)
+        self.assertTrue(core.status.startswith('timing hold:'))
 
     def test_fresh_residual_odom_motion_keeps_zero_output_active(self):
         core = self.ready()
@@ -648,7 +661,8 @@ class TolerantTimingTests(unittest.TestCase):
         sensors(core, 102.0, 12.0)
         core.accept_odom(odom(), 99.0, 102.0, 12.0)
         self.assertEqual(core.tick(102.0, 12.0), guard_module.ZERO)
-        self.assertIn('persistent timing fault: odom:', core.latched_reason)
+        self.assertIsNone(core.latched_reason)
+        self.assertTrue(core.hold_motion)
 
     def test_fresh_zero_and_stationary_odom_retire_motion_before_an_idle_gap(self):
         core = self.ready()
@@ -688,7 +702,8 @@ class TolerantTimingTests(unittest.TestCase):
         core.accept_odom(odom(), 102.1, 102.1, 12.1)
         command(core, ros=102.1, steady=12.1)
         self.assertEqual(core.tick(102.1, 12.1), guard_module.ZERO)
-        self.assertIn('persistent timing fault: scan:', core.latched_reason)
+        self.assertIsNone(core.latched_reason)
+        self.assertTrue(core.hold_motion)
 
     def test_desired_zero_cannot_retire_a_passed_moving_command(self):
         core = self.ready()
@@ -699,17 +714,18 @@ class TolerantTimingTests(unittest.TestCase):
         sensors(core, 102.0, 12.0)
         core.accept_odom(odom(), 99.0, 102.0, 12.0)
         self.assertEqual(core.tick(102.0, 12.0), guard_module.ZERO)
-        self.assertIsNotNone(core.latched_reason)
+        self.assertIsNone(core.latched_reason)
+        self.assertTrue(core.hold_motion)
 
     def test_long_idle_sensor_wait_still_latches_hard_faults(self):
-        for fault in ('future', 'malformed', 'ownership', 'operator'):
+        for fault in ('invalid clock', 'malformed', 'ownership', 'operator'):
             with self.subTest(fault=fault):
                 core = self.ready()
                 self.stale_odom(core)
                 self.assertEqual(core.tick(104.0, 14.0), guard_module.ZERO)
                 self.assertIsNone(core.latched_reason)
-                if fault == 'future':
-                    command(core, ros=104.0, steady=14.0, stamp=104.051)
+                if fault == 'invalid clock':
+                    core.accept_command([0.0] * 6, None, 104.0, 14.0)
                 elif fault == 'malformed':
                     core.accept_command([math.nan, 0, 0, 0, 0, 0], 104.0, 104.0, 14.0)
                 elif fault == 'ownership':
@@ -769,6 +785,238 @@ class TolerantTimingTests(unittest.TestCase):
         core.accept_command([math.nan, 0, 0, 0, 0, 0], 100.11, 100.11, 10.11)
         self.assertEqual(core.tick(100.11, 10.11), guard_module.ZERO)
         self.assertIn('malformed', core.latched_reason)
+
+    def test_long_active_timeout_recovers_and_records_only_pause_and_recovery(self):
+        core = self.ready()
+        command(core, 0.04)
+        self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
+        self.stale_odom(core)
+        source_stamp = core.latest['odom']['source_stamp']
+        for ros, steady in ((104.0, 14.0), (130.0, 40.0)):
+            self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
+            self.assertIsNone(core.latched_reason)
+        self.assertEqual(len(core.events), 1)
+        self.assertEqual(core.events[0]['kind'], 'timing_pause')
+        self.assertEqual(core.events[0]['latest']['odom']['source_stamp'], source_stamp)
+        for ros, steady in ((131.0, 41.0), (131.2, 41.2)):
+            sensors(core, ros, steady)
+            command(core, 0.04, ros=ros, steady=steady)
+            self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
+        self.assertIsNone(core.hold_started)
+        self.assertEqual(len(core.events), 2)
+        event = core.events[-1]
+        self.assertEqual((event['kind'], event['reason']), ('timing_recovered', 'odom: source stamp too old'))
+        self.assertAlmostEqual(event['duration_s'], 31.2)
+        command(core, 0.04, ros=131.21, steady=41.21, stamp=131.19)
+        self.assertEqual(core.tick(131.21, 41.21), guard_module.ZERO)
+        command(core, 0.04, ros=131.21, steady=41.21)
+        self.assertEqual(core.tick(131.21, 41.21), (0.04, 0.0))
+
+    def test_long_invalid_collision_source_auto_recovers_in_idle_active_and_residual_motion(self):
+        for mode in ('idle', 'active', 'residual'):
+            with self.subTest(mode=mode):
+                core = self.ready()
+                if mode == 'active':
+                    command(core, 0.04)
+                    self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
+                elif mode == 'residual':
+                    moving = odom()
+                    moving['angular'][2] = 0.01
+                    core.accept_odom(moving, 100.0, 100.0, 10.0)
+                    core.tick(100.0, 10.0)
+                core.accept_collision_state(1, 'invalid source', 100.0, 10.0)
+                self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+                for ros, steady in ((104.0, 14.0), (130.0, 40.0)):
+                    sensors(core, ros, steady)
+                    command(core, 0.04, ros=ros, steady=steady)
+                    self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
+                    self.assertIsNone(core.latched_reason)
+                    self.assertNotIn('command', core.latest)
+                sensors(core, 131.0, 41.0)
+                command(core, 0.04, ros=131.0, steady=41.0)
+                core.accept_collision_state(0, '', 131.0, 41.0)
+                self.assertNotIn('command', core.latest)
+                self.assertEqual(core.tick(131.0, 41.0), guard_module.ZERO)
+                for ros, steady in ((131.19, 41.19), (131.2, 41.2)):
+                    sensors(core, ros, steady)
+                    command(core, 0.04, ros=ros, steady=steady)
+                    self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
+                self.assertIsNone(core.hold_started)
+                command(core, 0.04, ros=131.21, steady=41.21, stamp=131.19)
+                self.assertEqual(core.tick(131.21, 41.21), guard_module.ZERO)
+                command(core, 0.04, ros=131.21, steady=41.21)
+                self.assertEqual(core.tick(131.21, 41.21), (0.04, 0.0))
+
+    def test_future_command_and_sensor_stamps_auto_pause_until_valid_sources(self):
+        for source in ('command', 'zero command', 'odom', 'scan'):
+            with self.subTest(source=source):
+                core = self.ready()
+                if source in ('command', 'zero command'):
+                    command(core, 0.04 if source == 'command' else 0.0, stamp=101.0)
+                elif source == 'odom':
+                    core.accept_odom(odom(), 101.0, 100.0, 10.0)
+                else:
+                    core.accept_scan(scan(), transform(), 101.0, 100.0, 10.0)
+                self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+                self.assertIsNone(core.latched_reason)
+                self.assertIn('source stamp in future', core.hold_reason)
+                self.assertIsNone(core.latest.get('command'))
+                self.recover(core)
+                command(core, 0.04, ros=100.31, steady=10.31)
+                self.assertEqual(core.tick(100.31, 10.31), (0.04, 0.0))
+
+    def test_collision_source_clear_does_not_skip_other_sensor_recovery(self):
+        core = self.ready()
+        core.accept_collision_state(1, 'invalid source', 100.0, 10.0)
+        core.accept_collision_state(0, '', 104.0, 14.0)
+        self.assertEqual(core.tick(104.0, 14.0), guard_module.ZERO)
+        self.assertIsNone(core.hold_healthy_since)
+        for ros, steady in ((105.0, 15.0), (105.2, 15.2)):
+            sensors(core, ros, steady)
+            self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
+        self.assertIsNone(core.hold_started)
+        self.assertEqual(core.tick(105.21, 15.21), guard_module.ZERO)
+
+    def test_nonfinite_sensor_stamp_remains_a_hard_fault(self):
+        core = self.ready()
+        core.accept_odom(odom(), math.inf, 100.0, 10.0)
+        self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+        self.assertIn('invalid clock or source stamp', core.latched_reason)
+
+    def test_clock_rollback_after_recovery_resets_epoch_without_replaying_old_commands(self):
+        core = self.ready()
+        self.stale_odom(core)
+        self.recover(core)
+        self.assertAlmostEqual(core.resume_ros, 100.3)
+        sensors(core, 90.0, 10.4)
+        command(core, 0.04, ros=90.0, steady=10.4)
+        self.assertEqual(core.tick(90.0, 10.4), guard_module.ZERO)
+        self.assertEqual(core.hold_reason, 'guard clock moved backwards')
+        self.assertIsNone(core.resume_ros)
+        sensors(core, 90.1, 10.5)
+        command(core, 0.04, ros=90.1, steady=10.5, stamp=100.3)
+        self.assertEqual(core.tick(90.1, 10.5), guard_module.ZERO)
+        self.assertIsNone(core.latched_reason)
+        for ros, steady in ((90.2, 10.6), (90.4, 10.8)):
+            sensors(core, ros, steady)
+            command(core, 0.04, ros=ros, steady=steady)
+            self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
+        self.assertIsNone(core.hold_started)
+        self.assertAlmostEqual(core.resume_ros, 90.4)
+        command(core, 0.04, ros=90.41, steady=10.81, stamp=90.39)
+        self.assertEqual(core.tick(90.41, 10.81), guard_module.ZERO)
+        command(core, 0.04, ros=90.41, steady=10.81)
+        self.assertEqual(core.tick(90.41, 10.81), (0.04, 0.0))
+
+    def test_temporary_scan_tf_failure_recovers_without_reset_or_old_candidate(self):
+        core = self.ready()
+        command(core, 0.04)
+        self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
+        detail = 'scan TF unavailable (ExtrapolationException): requested time exceeds latest transform'
+        for ros, steady in ((100.0, 10.0), (104.0, 14.0)):
+            core.accept_odom(odom(), ros, ros, steady)
+            core.accept_scan(scan(), None, ros, ros, steady, tf_error=detail, tf_unavailable=True)
+            command(core, 0.04, ros=ros, steady=steady)
+            self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
+            self.assertIsNone(core.latched_reason)
+            self.assertIsNone(core.latest['scan']['error'])
+            self.assertEqual(core.latest['scan']['tf_issue'], detail)
+            self.assertNotIn('command', core.latest)
+        self.assertEqual(len(core.events), 1)
+        self.assertIn(detail, core.events[0]['reason'])
+        for ros, steady in ((105.0, 15.0), (105.2, 15.2)):
+            sensors(core, ros, steady)
+            command(core, 0.04, ros=ros, steady=steady)
+            self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
+        self.assertIsNone(core.hold_started)
+        command(core, 0.04, ros=105.21, steady=15.21, stamp=105.19)
+        self.assertEqual(core.tick(105.21, 15.21), guard_module.ZERO)
+        command(core, 0.04, ros=105.21, steady=15.21)
+        self.assertEqual(core.tick(105.21, 15.21), (0.04, 0.0))
+
+    def test_strict_temporary_scan_tf_failure_still_latches(self):
+        core = ready_core()
+        core.accept_scan(scan(), None, 100.0, 100.0, 10.0,
+                         tf_error='scan TF unavailable (LookupException): no transform', tf_unavailable=True)
+        self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+        self.assertIn('scan TF unavailable', core.latched_reason)
+
+    def test_temporary_tf_failure_cannot_mask_malformed_scan_or_wrong_frame(self):
+        for scenario in ('zero increment', 'empty', 'infinite metadata', 'infinite returns', 'wrong frame'):
+            with self.subTest(scenario=scenario):
+                document = config()
+                document['frames']['scan'] = 'laser_link'
+                core = guard_module.CommandGuard(guard_module.Settings.from_mapping(document, timing_profile='tolerant'))
+                sensors(core)
+                command(core)
+                core.tick(100.0, 10.0)
+                raw = scan()
+                if scenario == 'zero increment':
+                    raw['angle_increment'] = 0.0
+                elif scenario == 'empty':
+                    raw['ranges'] = []
+                elif scenario == 'infinite metadata':
+                    raw['range_max'] = math.inf
+                elif scenario == 'infinite returns':
+                    raw['ranges'] = [math.inf] * 360
+                else:
+                    raw['frame_id'] = 'wrong_laser'
+                core.accept_scan(raw, None, 100.0, 100.0, 10.0,
+                                 tf_error='scan TF unavailable (LookupException): no transform', tf_unavailable=True)
+                self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+                self.assertIn('scan: malformed', core.latched_reason)
+
+    def test_invalid_scan_transform_remains_hard(self):
+        for scenario in ('translation', 'quaternion', 'stamp', 'target frame', 'source frame'):
+            with self.subTest(scenario=scenario):
+                core, tf = self.ready(), transform()
+                if scenario == 'translation':
+                    tf['translation'][0] = math.inf
+                elif scenario == 'quaternion':
+                    tf['rotation'] = [0.0] * 4
+                elif scenario == 'stamp':
+                    tf['stamp'] = math.nan
+                elif scenario == 'target frame':
+                    tf['target_frame'] = 'wrong_base'
+                else:
+                    tf['source_frame'] = 'wrong_laser'
+                core.accept_scan(scan(), tf, 100.0, 100.0, 10.0)
+                self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+                self.assertIn('scan: malformed', core.latched_reason)
+
+    def test_scan_adapter_classifies_actual_tf2_exception_types_without_text_matching(self):
+        try:
+            from tf2_ros import (ConnectivityException, ExtrapolationException,
+                                 InvalidArgumentException, LookupException, TimeoutException)
+        except ModuleNotFoundError:
+            self.skipTest('source /opt/ros/jazzy/setup.bash for installed tf2 exception classification')
+        tree = ast.parse(SOURCE.read_text())
+        method = next(node for node in ast.walk(tree)
+                      if isinstance(node, ast.FunctionDef) and node.name == 'on_scan')
+        namespace = {'MAX_SCAN_POINTS': guard_module.MAX_SCAN_POINTS,
+                     'settings': NS(base_frame='base_footprint'),
+                     'Time': NS(from_msg=lambda stamp: stamp),
+                     'stamp_seconds': lambda stamp: 100.0,
+                     'LookupException': LookupException, 'ConnectivityException': ConnectivityException,
+                     'ExtrapolationException': ExtrapolationException, 'TimeoutException': TimeoutException}
+        exec(compile(ast.Module(body=[method], type_ignores=[]), str(SOURCE), 'exec'), namespace)
+        raw = scan()
+        message = NS(header=NS(frame_id=raw['frame_id'], stamp=NS()),
+                     **{key: value for key, value in raw.items() if key != 'frame_id'})
+        for error_type in (LookupException, ConnectivityException, ExtrapolationException, TimeoutException,
+                           InvalidArgumentException, RuntimeError):
+            with self.subTest(error_type=error_type):
+                received = []
+
+                def fail(*args):
+                    raise error_type('same diagnostic text')
+
+                node = NS(tf_buffer=NS(lookup_transform=fail), times=lambda: (100.0, 10.0),
+                          guard=NS(accept_scan=lambda *args, **kwargs: received.append(kwargs)))
+                namespace['on_scan'](node, message)
+                self.assertEqual(received[0]['tf_unavailable'],
+                                 error_type not in (InvalidArgumentException, RuntimeError))
+                self.assertIn(error_type.__name__, received[0]['tf_error'])
 
 
 if __name__ == '__main__':

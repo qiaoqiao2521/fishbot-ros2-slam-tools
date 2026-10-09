@@ -11,14 +11,22 @@ passed; its second was canceled and stopped. The user requested a larger continu
 selection. The first closed route falsely completed in-place and remains failed
 physical acceptance; the client now checks ordered intermediates and rejects
 near-start endpoints. At explicit request, the tolerant timing profile uses
-350 ms command/odom limits and short automatic zero-hold recovery. Its initial
-idle scan-gap latch preceded the next RViz goal by 81.780 seconds. Correct idle
-handling now keeps zero output through benign sensor timeouts. Active motion
-still has a two-second recovery window; returning to idle requires fresh zero
-and newer stationary native feedback. Preserve collision, source identity and
-explicit operator stop. The corrected runtime is deployed and fresh-zero readiness
-passed; a new user-selected RViz goal is pending with root Codex. No extended
-quiet-clock prerequisite is added; full physical route evidence is still required.
+350 ms command/odom limits and automatic zero-hold recovery. Ordinary timing
+faults, temporary scan TF queries and CM invalid source no longer escalate
+to permanent locks during idle
+or motion. Recovery requires healthy sources for 200 ms and a new post-recovery
+stamped candidate. Preserve collision checks, source identity and explicit operator
+stop. One later user-selected RViz goal completed; a subsequent scanner reconnect
+caused the old CM-source latch. Those historical failures remain recorded.
+
+The automatic runtime is deployed. A 1.2004-second stationary receiver pause
+recovered without reset or motion. Fifty-nine guard, thirty-two goal and ten
+configuration checks passed, with thirty lidar checks and eleven BT scenarios.
+The default tolerant single-point tree retains live goals through five bounded
+timing waits. Failed historical goals are not replayed. Moving recovery, complete
+routes and faster physical TCP reconnection remain pending with root Codex.
+No extended quiet-clock prerequisite is added; full physical route evidence
+is still required.
 
 Filtered synchronization, leases, reconnect policy and resource rollback passed
 offline/build checks. Sustained native freshness and repeated reconnection remain
@@ -34,7 +42,7 @@ Lower-left exploration reached two observation points with successful fresh stop
 1. [partly complete] Both real boards connected; odom/scan/imu rates verified. Bounded motion response and active zero-command stopping measured. Firmware loss-of-command stopping and delayed-command rejection remain unverified; no unattended navigation acceptance.
 2. [working map accepted by user; isolated simulation acceptance retained] On 2026-10-06, physical work paused while the car charged. User explicitly chooses the official open FishBot geometry without a physical measuring prerequisite and authorizes items 2/3/4: continuous local tracking, graded clearance and trigger recording/replay. New opt-in Nav2/guard/replay tools implement these; the existing short-segment defaults remain intact. The latest saved real map is accepted as the working-map baseline; unmeasured cells remain unknown. MuJoCo domain 96 passed continuous doorway traversal, hard-stop response and task cancellation; 74 focused tests passed. That simulation run did not operate baseline domain 93 or physical domain 0. After coupler repair, bounded real tests and another short continuous goal passed; native timing gates remain mandatory.
 3. [outbound and resumed return complete] Fixed-map localization and Nav2 goals completed with fresh stopping feedback. Wheel return XY error was about 2.73 cm; this is not independent ground truth. Complete-route obstacle response remains unaccepted.
-4. [pending physical acceptance] Continuous-route entry and false-success regression are implemented. Closed-route in-place result is rejected. User selects goals through RViz. Corrected idle timing behavior is deployed with fresh-zero readiness verified; a new goal remains pending. Completed moving route, recovery and stopping need actual evidence.
+4. [partly complete] Continuous-route entry and false-success regression are implemented. Closed-route in-place result is rejected. User selects goals through RViz. The automatic timing policy is deployed and stationary source-fault recovery passed without reset. A later historical RViz single-point goal completed. Completed moving recovery, continuous routes and stopping still need actual evidence.
 
 Root Codex exclusively owns hardware commands and serial configuration. Workers may review or implement offline helpers; they must not independently operate the robot. Preserve healthy sensor listeners; restart only identified faulty receivers when necessary. A half-open TCP session was observed and the radar driver now expires idle TCP connections and accepts replacements.
 

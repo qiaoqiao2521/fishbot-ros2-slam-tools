@@ -76,8 +76,10 @@ class Settings:
     output_stamped: bool = False
     timing_profile: str = 'strict'
     odom_timeout_s: float = ODOM_AGE
-    hold_timeout_s: float = 2.0
+    hold_timeout_s: float | None = 2.0
     recovery_s: float = 0.2
+    recovery_policy: str = 'explicit_reset'
+    hold_escalates_to_latch: bool = True
 
     @classmethod
     def from_mapping(cls, document, **overrides):
@@ -126,19 +128,25 @@ class Settings:
         if options['candidate_topic'] == options['output_topic']:
             raise ValueError('candidate and final topics must differ')
         geometry = deepcopy(document)
+        automatic = timing_profile == 'tolerant'
         geometry.setdefault('command_guard', {}).update(
             timing_profile=timing_profile, command_timeout_s=float(timeout),
             odom_timeout_s=0.35 if timing_profile == 'tolerant' else ODOM_AGE,
-            hold_timeout_s=2.0, recovery_s=0.2)
+            hold_timeout_s=None if automatic else 2.0, recovery_s=0.2,
+            recovery_policy='auto_resume' if automatic else 'explicit_reset',
+            hold_escalates_to_latch=not automatic)
         return cls(frames['base'], frames['odom'], guard.get('profile', 'official-model'),
                    float(linear), float(angular), float(timeout), capacity,
                    candidates, subscribers, geometry, **options,
                    timing_profile=timing_profile,
-                   odom_timeout_s=0.35 if timing_profile == 'tolerant' else ODOM_AGE)
+                   odom_timeout_s=0.35 if timing_profile == 'tolerant' else ODOM_AGE,
+                   hold_timeout_s=None if automatic else 2.0,
+                   recovery_policy='auto_resume' if automatic else 'explicit_reset',
+                   hold_escalates_to_latch=not automatic)
 
 
-def project_scan(raw, transform):
-    """Transform scan endpoints using the TF actually returned at scan time."""
+def validate_scan(raw):
+    """Validate native scan metadata and coverage before any TF lookup result."""
     ranges = raw.get('ranges')
     if not isinstance(ranges, (list, tuple)) or not 1 <= len(ranges) <= MAX_SCAN_POINTS:
         raise ValueError('scan count outside bounded range')
@@ -146,10 +154,23 @@ def project_scan(raw, transform):
     angle, increment = raw.get('angle_min'), raw.get('angle_increment')
     if not all(map(finite, (low, high, angle, increment))) or not 0 <= low < high or increment == 0:
         raise ValueError('invalid scan metadata')
-    if not raw.get('frame_id') or abs(increment) * (len(ranges) - 1) > 2 * math.pi + 0.1:
+    if (not isinstance(raw.get('frame_id'), str) or not raw['frame_id']
+            or abs(increment) * (len(ranges) - 1) > 2 * math.pi + 0.1):
         raise ValueError('invalid scan frame or angular span')
+    if sum(finite(distance) and low <= distance <= high for distance in ranges) < 100:
+        raise ValueError('insufficient finite scan returns (need 100)')
+
+
+def project_scan(raw, transform):
+    """Transform scan endpoints using the TF actually returned at scan time."""
+    validate_scan(raw)
     if transform is None:
         raise ValueError('scan TF unavailable')
+    if 'stamp' in transform and not finite(transform['stamp']):
+        raise ValueError('nonfinite scan TF stamp')
+    ranges = raw['ranges']
+    low, high = raw['range_min'], raw['range_max']
+    angle, increment = raw['angle_min'], raw['angle_increment']
     tx, ty, tz = vector(transform.get('translation'), 3, 'TF translation')
     qx, qy, qz, qw = normalized_quaternion(transform.get('rotation'))
     points = []
@@ -209,6 +230,7 @@ class CommandGuard:
         self.hold_motion = False
         self.resume_ros = None
         self.resume_sequence = 0
+        self.last_tick_ros = None
 
     def _store(self, kind, data, stamp, ros_now, steady_now, error=None):
         self.sequence += 1
@@ -230,9 +252,9 @@ class CommandGuard:
                     or abs(values[5]) > self.settings.max_angular_speed + 1e-9):
                 raise ValueError('command exceeds configured speed limits')
             if (not all(map(finite, (stamp, ros_now)))
-                    or ros_now-stamp < -FUTURE_AGE-1e-9
-                    or (self.settings.timing_profile == 'strict' and any(values)
-                        and ros_now-stamp > self.settings.command_timeout_s+1e-9)):
+                    or (self.settings.timing_profile == 'strict' and (
+                        ros_now-stamp < -FUTURE_AGE-1e-9
+                        or (any(values) and ros_now-stamp > self.settings.command_timeout_s+1e-9)))):
                 raise ValueError('command source timestamp outside freshness limit')
             # A valid old zero cannot move the robot. Preserve its old stamp so
             # tick handles it as idle expiry, without arming or replaying it.
@@ -253,19 +275,31 @@ class CommandGuard:
             error = str(exc)
         self._store('odom', raw, stamp, ros_now, steady_now, error)
 
-    def accept_scan(self, raw, transform, stamp, ros_now, steady_now, tf_error=None):
-        error = tf_error
+    def accept_scan(self, raw, transform, stamp, ros_now, steady_now, tf_error=None, tf_unavailable=False):
+        error, tf_issue = None, None
         # Never retain an unbounded array, even when a message is malformed.
         bounded = dict(raw)
         ranges = raw.get('ranges')
         bounded['ranges'] = list(ranges)[:MAX_SCAN_POINTS] if isinstance(ranges, (list, tuple)) else []
         try:
+            expected_frame = self.settings.geometry['frames'].get('scan')
+            if expected_frame is not None and raw.get('frame_id') != expected_frame:
+                raise ValueError('scan frame disagrees with configuration')
+            validate_scan(raw)
             if tf_error:
-                raise ValueError(tf_error)
-            bounded = project_scan(raw, transform)
+                if not tf_unavailable:
+                    raise ValueError(tf_error)
+                tf_issue = tf_error
+            else:
+                if transform is not None and (
+                        transform.get('target_frame', self.settings.base_frame) != self.settings.base_frame
+                        or transform.get('source_frame', raw['frame_id']) != raw['frame_id']):
+                    raise ValueError('scan TF frames disagree with requested transform')
+                bounded = project_scan(raw, transform)
         except ValueError as exc:
             error = str(exc)
-        self._store('scan', bounded, stamp, ros_now, steady_now, error)
+        record = self._store('scan', bounded, stamp, ros_now, steady_now, error)
+        record['tf_issue'] = tf_issue
 
     def set_ownership(self, graph, issue):
         self.graph, self.owner_issue = deepcopy(graph), issue
@@ -279,6 +313,8 @@ class CommandGuard:
         stamp = record['source_stamp']
         if not all(map(finite, (ros_now, steady_now, stamp, record['received_steady']))):
             return kind + ': invalid clock or source stamp'
+        if record.get('tf_issue'):
+            return kind + ': ' + record['tf_issue']
         received_age = steady_now - record['received_steady']
         source_age = ros_now - stamp
         if received_age < -1e-9 or received_age > limit + 1e-9:
@@ -318,10 +354,12 @@ class CommandGuard:
                           'collision_association': 'latest received data at state callback; '
                           'CM state has no source timestamp or scan sequence'}
 
-    def _event(self, reason, kind, ros_now, steady_now):
+    def _event(self, reason, kind, ros_now, steady_now, **details):
         if len(self.events) == self.events.maxlen:
             self.latched_reason = 'trigger event queue full'
-        self.events.append(self.snapshot(reason, kind, ros_now, steady_now))
+        event = self.snapshot(reason, kind, ros_now, steady_now)
+        event.update(details)
+        self.events.append(event)
 
     def latch(self, reason, ros_now, steady_now):
         if self.latched_reason is None:
@@ -344,7 +382,10 @@ class CommandGuard:
             # Record the triggering candidate first, then prevent its later replay.
             self.latest.pop('command', None)
         if action == 1 and polygon == 'invalid source' and self.armed:
-            self.latch('collision monitor invalid source', ros_now, steady_now)
+            if self.settings.timing_profile == 'tolerant':
+                self._timing_hold('collision monitor invalid source', ros_now, steady_now)
+            else:
+                self.latch('collision monitor invalid source', ros_now, steady_now)
 
     def tick(self, ros_now, steady_now):
         if self.settings.timing_profile == 'tolerant':
@@ -390,8 +431,6 @@ class CommandGuard:
             return 'invalid guard clock'
         if self.owner_issue:
             return self.owner_issue
-        if self.cm_action == 1 and self.cm_polygon == 'invalid source':
-            return 'collision monitor invalid source'
         for kind in ('odom', 'scan', 'command'):
             record = self.latest.get(kind)
             if record is None:
@@ -401,8 +440,6 @@ class CommandGuard:
             stamp, received = record['source_stamp'], record['received_steady']
             if not all(map(finite, (stamp, received))) or steady_now < received - 1e-9:
                 return kind + ': invalid clock or source stamp'
-            if ros_now - stamp < -FUTURE_AGE - 1e-9:
-                return kind + ': source stamp in future'
         return None
 
     def _clear_hold(self):
@@ -441,10 +478,7 @@ class CommandGuard:
             self.hold_motion = True
         self.hold_healthy_since = None
         self.latest.pop('command', None)
-        if ((self.hold_motion or self.hold_needs_command)
-                and steady_now - self.hold_started >= self.settings.hold_timeout_s - 1e-9):
-            self.latch('persistent timing fault: ' + self.hold_reason, ros_now, steady_now)
-        elif self.latched_reason is None:
+        if self.latched_reason is None:
             self.status = 'timing hold: ' + issue
         else:
             self.status = 'latched: ' + self.latched_reason
@@ -462,6 +496,12 @@ class CommandGuard:
                 self.status = 'priming: ' + hard
                 self.latest.pop('command', None)
             return ZERO
+        previous_ros, self.last_tick_ros = self.last_tick_ros, ros_now
+        if previous_ros is not None and previous_ros - ros_now > FUTURE_AGE + 1e-9:
+            # The old epoch cannot remain the lower bound for new commands.
+            self.resume_ros = None
+            self.motion_ros, self.motion_sequence = None, self.sequence
+            return self._timing_hold('guard clock moved backwards', ros_now, steady_now)
         self._observe_motion(ros_now, steady_now)
         issue = self.health_issue(ros_now, steady_now)
         if issue:
@@ -480,7 +520,8 @@ class CommandGuard:
         if command:
             issue = self._age_issue('command', self.settings.command_timeout_s, ros_now, steady_now)
             if issue:
-                if not any(command['data']['twist']):
+                if not any(command['data']['twist']) and issue in (
+                        'command: receive timeout', 'command: source stamp too old'):
                     self.latest.pop('command', None)
                     command = None
                     self.status = 'idle: ' + issue
@@ -496,16 +537,14 @@ class CommandGuard:
                     return self._timing_hold('command: awaiting fresh candidate', ros_now, steady_now)
                 self.hold_needs_command = False
             self.hold_motion = self.hold_motion or self.motion_active
-            if (self.hold_motion
-                    and steady_now - self.hold_started >= self.settings.hold_timeout_s - 1e-9):
-                self.latch('persistent timing fault: ' + self.hold_reason, ros_now, steady_now)
-                return ZERO
             self.latest.pop('command', None)
             if self.hold_healthy_since is None:
                 self.hold_healthy_since = steady_now
             if steady_now - self.hold_healthy_since < self.settings.recovery_s - 1e-9:
                 self.status = 'timing recovery: waiting for stable health'
                 return ZERO
+            self._event(self.hold_reason, 'timing_recovered', ros_now, steady_now,
+                        duration_s=steady_now - self.hold_started)
             self._clear_hold()
             self.resume_ros, self.resume_sequence = ros_now, self.sequence
             self.status = 'ready; awaiting new command after timing recovery'
@@ -544,6 +583,7 @@ class CommandGuard:
         odom = self.latest['odom']['data']
         self.motion_active = bool(any(odom['linear']) or any(odom['angular']))
         self.motion_ros, self.motion_sequence = None, 0
+        self.last_tick_ros = ros_now
         self.status = 'reset; awaiting new command'
         return True, self.status
 
@@ -617,7 +657,8 @@ def create_ros_node(settings, recorder, execute):
     from rclpy.time import Time
     from sensor_msgs.msg import LaserScan
     from std_srvs.srv import Trigger
-    from tf2_ros import Buffer, TransformListener
+    from tf2_ros import (Buffer, ConnectivityException, ExtrapolationException,
+                         LookupException, TimeoutException, TransformListener)
     from visualization_msgs.msg import Marker, MarkerArray
 
     def stamp_seconds(stamp):
@@ -687,18 +728,22 @@ def create_ros_node(settings, recorder, execute):
             raw = {'frame_id': msg.header.frame_id, 'angle_min': msg.angle_min,
                    'angle_increment': msg.angle_increment, 'range_min': msg.range_min,
                    'range_max': msg.range_max, 'ranges': list(msg.ranges)[:MAX_SCAN_POINTS + 1]}
-            transform, error = None, None
+            transform, error, unavailable = None, None, False
             try:
                 tf = self.tf_buffer.lookup_transform(settings.base_frame, msg.header.frame_id,
                                                      Time.from_msg(msg.header.stamp))
                 q = tf.transform.rotation
                 transform = {'translation': xyz(tf.transform.translation),
-                             'rotation': [q.x, q.y, q.z, q.w], 'target_frame': settings.base_frame,
-                             'source_frame': msg.header.frame_id,
+                             'rotation': [q.x, q.y, q.z, q.w], 'target_frame': tf.header.frame_id,
+                             'source_frame': tf.child_frame_id,
                              'stamp': stamp_seconds(tf.header.stamp)}
+            except (LookupException, ConnectivityException, ExtrapolationException, TimeoutException) as exc:
+                unavailable = True
+                error = 'scan TF unavailable (' + type(exc).__name__ + '): ' + str(exc)[:300]
             except Exception as exc:
-                error = 'scan TF unavailable: ' + str(exc)[:300]
-            self.guard.accept_scan(raw, transform, stamp_seconds(msg.header.stamp), *self.times(), tf_error=error)
+                error = 'scan TF failure (' + type(exc).__name__ + '): ' + str(exc)[:300]
+            self.guard.accept_scan(raw, transform, stamp_seconds(msg.header.stamp), *self.times(),
+                                   tf_error=error, tf_unavailable=unavailable)
 
         def on_collision(self, msg):
             self.guard.accept_collision_state(msg.action_type, msg.polygon_name, *self.times())
@@ -781,8 +826,12 @@ def create_ros_node(settings, recorder, execute):
                                  KeyValue(key='timing_profile', value=settings.timing_profile),
                                  KeyValue(key='command_timeout_s', value=str(settings.command_timeout_s)),
                                  KeyValue(key='odom_timeout_s', value=str(settings.odom_timeout_s)),
-                                 KeyValue(key='hold_timeout_s', value=str(settings.hold_timeout_s)),
+                                 KeyValue(key='hold_timeout_s', value='none' if settings.hold_timeout_s is None
+                                          else str(settings.hold_timeout_s)),
                                  KeyValue(key='recovery_s', value=str(settings.recovery_s)),
+                                 KeyValue(key='recovery_policy', value=settings.recovery_policy),
+                                 KeyValue(key='hold_escalates_to_latch',
+                                          value=str(settings.hold_escalates_to_latch)),
                                  KeyValue(key='motion_active', value=str(self.guard.motion_active)),
                                  KeyValue(key='hold_motion', value=str(self.guard.hold_motion)),
                                  KeyValue(key='last_trigger', value=self.recorder.last_path or '')]

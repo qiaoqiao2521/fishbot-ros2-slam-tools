@@ -1,6 +1,38 @@
 # Findings
 
-## 2026-10-09 route false success and timing tolerance
+## 2026-10-09 automatic recovery, current policy
+
+- The initial idle correction still allowed CM invalid source to latch. A known
+  scanner reconnect incurred a five-second identification delay; a new RViz
+  goal during that gap triggered the latch. This was a recovery-policy defect,
+  not evidence that the physical passage was impassable.
+- Tolerant mode now holds zero through ordinary timestamp age, receive gaps,
+  future timestamps, temporary scan TF queries and CM invalid source. These faults no longer become
+  permanent locks during idle or motion. Stable health for 200 ms permits
+  recovery, followed by a new source-stamped candidate. Old candidates are discarded.
+- Pause and recovery events retain original source stamps and reasons. Recovery
+  events include duration. Malformed data, nonfinite clocks, ownership conflicts,
+  recorder failures and explicit stops remain reset-required faults.
+- The default tolerant single-point tree retains live goals across five one-second
+  timing waits. Ordinary geometric recovery clears costmaps at most once.
+  Attempts reset old error codes; cancellation and updated goals interrupt waiting.
+  Failed historical goals are not replayed. Explicit client trees remain separate.
+- Known-scanner TCP reconnect uses a validated new-revolution header from the
+  same peer. Unknown peers and invalid frames retain normal identification.
+  Offline validation passed; physical reconnect speed remains unmeasured.
+- Temporary TF queries are classified by actual exception type and recorded
+  separately from malformed data. Scan validation precedes TF classification;
+  bad frames, transforms, scans and unknown adapter errors remain hard faults.
+- Deployed source passed fifty-nine guard, thirty-two goal, ten configuration,
+  thirty lidar checks and eleven installed BTCPP/Nav2 behavior scenarios.
+  A real stationary 1.2004-second receiver pause recovered automatically with
+  zero reset calls, unchanged native XY and zero native velocity.
+  This establishes stationary recovery only; moving recovery remains unaccepted.
+
+## 2026-10-09 route false success and earlier timing checkpoints
+
+The following observations describe preceding versions. The current automatic
+policy above supersedes their two-second escalation and pending-goal statements.
 
 - A closed through-poses goal ending at current XY can satisfy FollowPath's final goal checker before visiting its intermediates. The real action reported success after only in-place rotation. Net wheel XY change was about 0.44 mm; this is failed route acceptance, not a completed 3.05 m circuit.
 - The client rejects final XY within 10 cm of the fresh start and requires ordered fresh feedback within 15 cm of each intermediate. Action status alone is insufficient route evidence.

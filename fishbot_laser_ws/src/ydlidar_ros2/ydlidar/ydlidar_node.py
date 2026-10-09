@@ -1145,6 +1145,10 @@ class FishBotLaserDriverNode(Node):
         self.laser_type = LidarType.LIDAR_TYPE_UNKNOWN
         self.last_connection_time = time.time()
         self.is_receive_laser_type = False
+        self.connection_peer = None
+        self.verified_laser_peer = None
+        self.verified_laser_type = LidarType.LIDAR_TYPE_UNKNOWN
+        self.reconnect_laser_type = LidarType.LIDAR_TYPE_UNKNOWN
         self.last_rx_monotonic = time.monotonic()
         self.tcp_rx_timeout = 2.0
 
@@ -1233,6 +1237,10 @@ class FishBotLaserDriverNode(Node):
                 self.last_connection_time = time.time()
                 self.last_rx_monotonic = time.monotonic()
                 self.is_receive_laser_type = False
+                self.connection_peer = addr[0]
+                self.reconnect_laser_type = (self.verified_laser_type
+                    if self.connection_peer == self.verified_laser_peer
+                    else LidarType.LIDAR_TYPE_UNKNOWN)
                 # 关闭 UDP socket，不再使用
                 try:
                     self.udp_sock.close()
@@ -1251,6 +1259,8 @@ class FishBotLaserDriverNode(Node):
                 self.get_logger().info(f"检测到UDP数据，使用UDP协议: {addr}")
                 self.last_connection_time = time.time()
                 self.is_receive_laser_type = False
+                self.connection_peer = None
+                self.reconnect_laser_type = LidarType.LIDAR_TYPE_UNKNOWN
                 # 将数据添加到缓冲区
                 self.data_buffer += data
                 # 关闭 TCP socket，不再使用
@@ -1274,6 +1284,8 @@ class FishBotLaserDriverNode(Node):
         self.full_scan_buffer.clear()
         self.laser_type = LidarType.LIDAR_TYPE_UNKNOWN
         self.is_receive_laser_type = False
+        self.connection_peer = None
+        self.reconnect_laser_type = LidarType.LIDAR_TYPE_UNKNOWN
         self.rate = 0.0
         self.scan_count = 0
         self.last_report_count = 0
@@ -1356,16 +1368,65 @@ class FishBotLaserDriverNode(Node):
             self.data_buffer = self.data_buffer[next_header_pos:]
 
 
+    def _parser_for_type(self, laser_type):
+        return {
+            LidarType.LIDAR_TYPE_X2: self.laser_x2_parser,
+            LidarType.LIDAR_TYPE_M1C1: self.laser_m1c1_parser,
+            LidarType.LIDAR_TYPE_X2N: self.laser_x2n_parser,
+            LidarType.LIDAR_TYPE_X2K: self.laser_x2k_parser,
+        }.get(laser_type)
+
+    def _valid_scan_frame(self, frame, laser_type):
+        parser = self._parser_for_type(laser_type)
+        if parser is None or len(frame) < 12 or frame[:2] != b'\xaa\x55':
+            return False
+        count = frame[3]
+        if count == 0 or len(frame) != 10 + 2 * count:
+            return False
+        if frame[2] & 1 and count != 1:
+            return False
+        start, end = struct.unpack('<HH', frame[4:8])
+        if (not start & 1 or not end & 1
+                or start >> 1 >= 360 * 64 or end >> 1 >= 360 * 64):
+            return False
+        return parser.check_frame_checksum(frame)
+
     def parse_frame(self,frame):
         if len(frame) < 4:
             return
+        # Type announcements can arrive after probing or identify a replacement
+        # device. Never carry a partial revolution across a model change.
+        if frame[:3] == b'\xaa\x55\x99':
+            if len(frame) != 4:
+                return
+            try:
+                announced_type = LidarType(frame[3])
+            except ValueError:
+                return
+            if announced_type in (LidarType.LIDAR_TYPE_UNKNOWN, LidarType.LIDAR_TYPE_MAX):
+                return
+            if announced_type != self.laser_type:
+                self._reset_parsers()
+                self.full_scan_buffer.clear()
+            self.laser_type = announced_type
+            self.is_receive_laser_type = True
+            self.reconnect_laser_type = LidarType.LIDAR_TYPE_UNKNOWN
+            # A new announcement must earn its cache again with a valid scan.
+            self.verified_laser_peer = None
+            self.verified_laser_type = LidarType.LIDAR_TYPE_UNKNOWN
+            print(f"\n[INFO] 雷达型号: {self.laser_type}")
+            return
+        # Resume at a checked revolution boundary, not a partial old scan.
+        if (not self.is_receive_laser_type
+                and self.reconnect_laser_type != LidarType.LIDAR_TYPE_UNKNOWN
+                and frame[2] & 1 and frame[3] == 1
+                and self._valid_scan_frame(frame, self.reconnect_laser_type)):
+            self.laser_type = self.reconnect_laser_type
+            self.is_receive_laser_type = True
+            self.get_logger().info(f"Validated reconnect scan for {self.laser_type}")
         # 连接成功后5s内应该收到雷达类型信息
         if time.time() - self.last_connection_time < 5 and not self.is_receive_laser_type:
             print(f"\r[INFO] 正在探测雷达型号，耗时:{time.time() - self.last_connection_time:.2f}s", end="", flush=True)
-            if frame[2] == 0x99:
-                self.laser_type = LidarType(frame[3])
-                print(f"\n[INFO] 雷达型号: {self.laser_type}")
-                self.is_receive_laser_type = True
         elif time.time() - self.last_connection_time > 5 and not self.is_receive_laser_type:
             print(f"\r[INFO] 正在探测雷达型号，耗时:{time.time() - self.last_connection_time:.2f}s", end="", flush=True)
             if (frame[2]&0x01 == 0x01) and (frame[3]&0x01 == 0x01): # X2雷达
@@ -1373,20 +1434,18 @@ class FishBotLaserDriverNode(Node):
                     self.laser_type = LidarType.LIDAR_TYPE_F2
                     print(f"\n[INFO] 雷达型号: {self.laser_type}")
                     self.is_receive_laser_type = True
-                elif (len(frame)-10) == 2:
+                elif (len(frame)-10) == 2 and self._valid_scan_frame(frame, LidarType.LIDAR_TYPE_X2K):
                     self.laser_type = LidarType.LIDAR_TYPE_X2K
                     print(f"\n[INFO] 雷达型号: {self.laser_type}")
                     self.is_receive_laser_type = True
         else:
             try:
-                if self.laser_type == LidarType.LIDAR_TYPE_X2:
-                    self.laser_x2_parser.put_raw_frame(frame)
-                elif self.laser_type == LidarType.LIDAR_TYPE_M1C1:
-                    self.laser_m1c1_parser.put_raw_frame(frame)
-                elif self.laser_type == LidarType.LIDAR_TYPE_X2N:
-                    self.laser_x2n_parser.put_raw_frame(frame)
-                elif self.laser_type == LidarType.LIDAR_TYPE_X2K:
-                    self.laser_x2k_parser.put_raw_frame(frame)
+                parser = self._parser_for_type(self.laser_type)
+                if self._valid_scan_frame(frame, self.laser_type):
+                    parser.put_raw_frame(frame)
+                    if self.protocol_mode == 'tcp':
+                        self.verified_laser_peer = self.connection_peer
+                        self.verified_laser_type = self.laser_type
             except (struct.error, IndexError, ValueError) as exc:
                 print(f"\n[WARN] 丢弃异常雷达帧: {exc}, frame_len={len(frame)}, head={frame[:12].hex()}")
                 return

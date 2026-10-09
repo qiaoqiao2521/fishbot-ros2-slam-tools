@@ -2,6 +2,78 @@
 
 ## Current: fixed-map navigation and continuous route, 2026-10-09
 
+### Automatic recovery policy requested by the user
+
+The user rejects manual timing unlocks as routine operation. Tolerant mode now
+holds zero through old/future timestamps, receive gaps, temporary scan TF queries
+and CM invalid source,
+without a permanent timing latch. Recovery requires healthy sensors and CM
+for 0.2 seconds, followed by a new source-stamped candidate. Malformed data,
+nonfinite clocks, ownership conflicts, recorder failures and operator stops
+still require explicit reset. Strict behavior and collision geometry remain unchanged.
+
+The latest real RViz goal reached its second target at epoch 1791558721.525.
+Radar TCP disconnected at 8728.715 and reconnected at 8730.322. The old driver
+then spent about five seconds identifying the known scanner again. A new goal
+at 8732 hit that scan gap and CM invalid source caused the old hard latch.
+Root canceled failed navigation and reset after fresh zero and sensor recovery:
+native odom age 3.31 ms, scan age 0.541 ms, v/w zero. This reset is preserved
+in private `auto-recovery-pre-unlock.json`; no new movement goal was sent.
+
+The tolerant default single-point tree now waits on transient TF/costmap timing
+errors, retaining its live goal. It allows five one-second waits and one
+geometric costmap refresh per goal. Old error codes reset before each attempt;
+cancel and updated goals interrupt waiting. Eleven installed BTCPP/Nav2 offline
+scenarios passed. Explicit client-selected trees remain separate.
+
+Known-scanner TCP reconnection now skips repeated identification only after a
+validated new-revolution header from the same peer. Unknown peers retain normal
+identification. Twenty-one connection checks and nine scan-grid checks passed.
+The two driver copies match; physical reconnection speed remains unmeasured.
+
+Root stopped navigation before replacing only the identified receiver and
+Passage/Nav2 processes. Receiver PID 503158 and launch PID 503159 loaded the
+reviewed source. All managed Nav2 nodes became active at epoch 1791560291.248.
+Agent, localization, current TF, RViz, board settings and computer networking
+were preserved. Fifty-nine guard, thirty-two goal and ten configuration checks
+passed, alongside the eleven installed BTCPP/Nav2 scenarios.
+
+Final review found a separate scan-TF query branch still classified temporary
+extrapolation as malformed. The adapter now classifies actual TF exception types;
+temporary availability failures use a separate recorded `tf_issue`. Raw scan
+validation runs first, preserving hard faults for malformed scans and frame
+or transform errors. Five added guard checks include actual Jazzy exceptions.
+
+Root loaded the final TF classification into launch PID 518925. All
+ten managed navigation nodes were active. The first probe selected the wrong
+diagnostic topic and incompatible upstream reliability; it sent only zero and
+never paused the receiver. That failed probe is preserved separately.
+After correcting probe configuration, the final source repeated the stationary
+1.2004-second receiver pause successfully, with zero resets, zero native velocity
+and unchanged native XY. Native odom age was 7.31 ms; scan publication age
+was 0.336 ms. This validates the final loaded source for stationary recovery.
+Private receipts: `automatic-final-runtime.json` and
+`automatic-static-recovery-final.json` under `.local/clock-repair-20261009/`.
+
+A stationary fault-injection test paused only receiver PID 503158 for 1.2004
+seconds. The guard reported scan timeout, CM invalid source, then healthy
+without any reset-service call. All commands were zero; native XY, linear speed
+and angular speed remained unchanged. Final native odom age was 3.37 ms and
+scan publication age was 0.806 ms. Final ownership remained guard-to-chassis only.
+Private receipt: `.local/clock-repair-20261009/automatic-static-recovery.json`.
+Timing pause and recovery records retain their reason and original source stamps;
+the matched recovery record includes duration 1.0466 seconds.
+
+This accepts stationary source-fault automatic recovery only. A moving recovery
+route still requires actual sensor, action and stopping evidence. No movement
+goal was sent during deployment or this test. User-selected RViz goals remain
+the next physical acceptance entry; failed historical goals are not replayed.
+Knowledge closeout: `no_reusable_delta`; the adopted physical-evidence lesson
+still applies. Root Codex owns moving acceptance and the preserved release-script
+exception documented below. Source tests do not establish production acceptance.
+
+The preceding stationary timing checkpoints below describe earlier versions.
+
 The user ended wireless experiments and confirmed USB was unplugged. After the
 host restarted, root restored Agent, radar, sole fixed-map localization,
 current-pose TF, Passage/Nav2 and RViz as identified detached processes. The

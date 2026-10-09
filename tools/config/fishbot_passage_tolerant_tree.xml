@@ -1,0 +1,49 @@
+<!-- Keep a live goal through transient TF/costmap timing errors.
+     Five one-second waits per goal; geometric recovery still clears once. -->
+<root BTCPP_format="4" main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence name="TolerantGoalScope">
+      <Script code="costmaps_cleared := false; compute_path_error_code := 0; follow_path_error_code := 0"/>
+      <RecoveryNode number_of_retries="5" name="TransientTimingRecovery">
+        <RecoveryNode number_of_retries="1" name="BoundedGeometricRecovery">
+          <Sequence name="FreshNavigationAttempt">
+            <Script code="compute_path_error_code := 0; follow_path_error_code := 0"/>
+            <PipelineSequence name="PlanAndFollow">
+              <RateController hz="1.0">
+                <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"
+                                   error_code_id="{compute_path_error_code}"/>
+              </RateController>
+              <FollowPath path="{path}" controller_id="FollowPath"
+                          goal_checker_id="general_goal_checker"
+                          error_code_id="{follow_path_error_code}"/>
+            </PipelineSequence>
+          </Sequence>
+          <Sequence name="RefreshCostmapsOnce">
+            <ScriptCondition code="costmaps_cleared == false"/>
+            <Fallback name="GeometricRecoveryAllowed">
+              <AreErrorCodesPresent error_code="{follow_path_error_code}"
+                                   error_codes_to_check="100;104;105;106"/>
+              <AreErrorCodesPresent error_code="{compute_path_error_code}"
+                                   error_codes_to_check="200;207;208"/>
+            </Fallback>
+            <Script code="costmaps_cleared := true"/>
+            <ClearEntireCostmap service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap service_name="global_costmap/clear_entirely_global_costmap"/>
+          </Sequence>
+        </RecoveryNode>
+        <ReactiveFallback name="TimingRecoveryOrUpdatedGoal">
+          <GoalUpdated/>
+          <Sequence name="WaitForTransientTiming">
+            <Fallback name="TransientTimingError">
+              <AreErrorCodesPresent error_code="{follow_path_error_code}"
+                                   error_codes_to_check="102;107"/>
+              <AreErrorCodesPresent error_code="{compute_path_error_code}"
+                                   error_codes_to_check="202"/>
+            </Fallback>
+            <Wait wait_duration="1.0"/>
+          </Sequence>
+        </ReactiveFallback>
+      </RecoveryNode>
+    </Sequence>
+  </BehaviorTree>
+</root>

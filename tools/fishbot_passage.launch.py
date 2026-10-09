@@ -66,8 +66,10 @@ def _number(mapping, key, low, high):
     return float(value)
 
 
-def build_parameters(config, geometry):
+def build_parameters(config, geometry, timing_profile='strict'):
     """Return Nav2 parameters generated from the single authoritative geometry."""
+    if timing_profile not in ('strict', 'tolerant'):
+        raise ValueError('timing_profile must be strict or tolerant')
     if geometry.get('schema_version') != 1:
         raise ValueError('unsupported geometry schema')
     points = convex_polygon(geometry['footprint']['points_m'])
@@ -86,8 +88,9 @@ def build_parameters(config, geometry):
     if any(not isinstance(frames.get(k), str) or not frames[k] for k in ('base', 'odom', 'map', 'scan')):
         raise ValueError('all coordinate frame names are required')
     p = copy.deepcopy(config)
-    p['bt_navigator']['ros__parameters']['default_nav_to_pose_bt_xml'] = str(
-        ROOT/'config/fishbot_passage_tree.xml')
+    tree = ('fishbot_passage_tolerant_tree.xml' if timing_profile == 'tolerant'
+            else 'fishbot_passage_tree.xml')
+    p['bt_navigator']['ros__parameters']['default_nav_to_pose_bt_xml'] = str(ROOT/'config'/tree)
     p['bt_navigator']['ros__parameters'].update(
         global_frame=frames['map'], robot_base_frame=frames['base'])
     p['behavior_server']['ros__parameters'].update(
@@ -152,10 +155,10 @@ def build_parameters(config, geometry):
     return p
 
 
-def load_parameters(config_path=None, geometry_path=None):
+def load_parameters(config_path=None, geometry_path=None, timing_profile='strict'):
     config = yaml.safe_load(Path(config_path or ROOT/'config/fishbot_passage_nav.yaml').read_text())
     geometry = yaml.safe_load(Path(geometry_path or ROOT/'config/fishbot_model_geometry.yaml').read_text())
-    return build_parameters(config, geometry), geometry
+    return build_parameters(config, geometry, timing_profile), geometry
 
 
 def validate_execution_request(domain, execute, allow_real, sim_time, output_dir=''):
@@ -201,7 +204,7 @@ def _launch(context):
     if timing_profile not in ('strict', 'tolerant'):
         raise ValueError('timing_profile must be strict or tolerant')
     output_dir = validate_execution_request(domain, execute, allow_real, sim_time, arg('output_dir'))
-    params, _ = load_parameters(arg('params_file'), arg('geometry_file'))
+    params, _ = load_parameters(arg('params_file'), arg('geometry_file'), timing_profile)
     for name, section in params.items():
         nested = section.get(name, section)
         if 'ros__parameters' in nested:
@@ -209,7 +212,7 @@ def _launch(context):
     if not execute:
         return [LogInfo(msg='Passage configuration valid; execute=false, no ROS nodes started.')]
     guard_path = ROOT/'fishbot_command_guard.py'
-    tree_path = ROOT/'config/fishbot_passage_tree.xml'
+    tree_path = Path(params['bt_navigator']['ros__parameters']['default_nav_to_pose_bt_xml'])
     if not guard_path.is_file() or not tree_path.is_file():
         raise ValueError('passage command guard and bounded behavior tree are required')
     guard_cmd = ['/usr/bin/python3', str(guard_path), '--config', arg('geometry_file'),
@@ -262,7 +265,7 @@ def generate_launch_description():
         DeclareLaunchArgument('ros_domain_id', default_value='96'),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('timing_profile', default_value='strict',
-                              description='strict or tolerant: recover short freshness gaps without replay'),
+                              description='strict or tolerant: automatically recover timing holds without replay'),
         DeclareLaunchArgument('output_dir', default_value='',
                               description='Absolute private evidence directory, required to execute'),
         DeclareLaunchArgument('params_file', default_value=str(ROOT/'config/fishbot_passage_nav.yaml')),
