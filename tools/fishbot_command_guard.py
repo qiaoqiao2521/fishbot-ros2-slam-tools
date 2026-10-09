@@ -193,6 +193,9 @@ class CommandGuard:
         self.graph = {}
         self.owner_issue = 'ownership not checked'
         self.armed = False
+        self.motion_active = False
+        self.motion_ros = None
+        self.motion_sequence = 0
         self.latched_reason = None
         self.status = 'priming'
         self.sequence = 0
@@ -203,6 +206,7 @@ class CommandGuard:
         self.hold_reason = None
         self.hold_healthy_since = None
         self.hold_needs_command = False
+        self.hold_motion = False
         self.resume_ros = None
         self.resume_sequence = 0
 
@@ -307,6 +311,7 @@ class CommandGuard:
         return {'schema_version': 1, 'event_sequence': self.event_sequence,
                           'kind': kind, 'reason': reason, 'ros_time': json_safe(ros_now),
                           'steady_time': json_safe(steady_now), 'profile': self.settings.profile,
+                          'motion_active': self.motion_active, 'hold_motion': self.hold_motion,
                           'geometry': self.settings.geometry, 'zones': dict(self.zones),
                           'graph': self.graph, 'latest': {key: ages(value) for key, value in self.latest.items()},
                           'ring': [ages(record) for record in self.ring],
@@ -403,16 +408,41 @@ class CommandGuard:
     def _clear_hold(self):
         self.hold_started = self.hold_reason = self.hold_healthy_since = None
         self.hold_needs_command = False
+        self.hold_motion = False
+
+    def _observe_motion(self, ros_now, steady_now):
+        """Only healthy feedback and a fresh zero can retire passed motion."""
+        if self._age_issue('odom', self.settings.odom_timeout_s, ros_now, steady_now):
+            return
+        record = self.latest['odom']
+        odom = record['data']
+        if any(odom['linear']) or any(odom['angular']):
+            self.motion_active = True
+            if record['sequence'] > self.motion_sequence:
+                self.motion_sequence = record['sequence']
+                self.motion_ros = max(record['source_stamp'], self.motion_ros or record['source_stamp'])
+            return
+        if self.motion_ros is not None and (record['sequence'] <= self.motion_sequence
+                or record['source_stamp'] < self.motion_ros - 1e-9):
+            return
+        if self.hold_started is None and not self._age_issue(
+                'command', self.settings.command_timeout_s, ros_now, steady_now):
+            if not any(self.latest['command']['data']['twist']):
+                self.motion_active = False
 
     def _timing_hold(self, issue, ros_now, steady_now):
         if self.hold_started is None:
             self.hold_started, self.hold_reason = steady_now, issue
+            self.hold_motion = self.motion_active
             self._event(issue, 'timing_pause', ros_now, steady_now)
+        self.hold_motion = self.hold_motion or self.motion_active
         if issue.startswith('command:'):
             self.hold_needs_command = True
+            self.hold_motion = True
         self.hold_healthy_since = None
         self.latest.pop('command', None)
-        if steady_now - self.hold_started >= self.settings.hold_timeout_s - 1e-9:
+        if ((self.hold_motion or self.hold_needs_command)
+                and steady_now - self.hold_started >= self.settings.hold_timeout_s - 1e-9):
             self.latch('persistent timing fault: ' + self.hold_reason, ros_now, steady_now)
         elif self.latched_reason is None:
             self.status = 'timing hold: ' + issue
@@ -432,6 +462,7 @@ class CommandGuard:
                 self.status = 'priming: ' + hard
                 self.latest.pop('command', None)
             return ZERO
+        self._observe_motion(ros_now, steady_now)
         issue = self.health_issue(ros_now, steady_now)
         if issue:
             if self.armed:
@@ -464,7 +495,9 @@ class CommandGuard:
                 if command is None:
                     return self._timing_hold('command: awaiting fresh candidate', ros_now, steady_now)
                 self.hold_needs_command = False
-            if steady_now - self.hold_started >= self.settings.hold_timeout_s - 1e-9:
+            self.hold_motion = self.hold_motion or self.motion_active
+            if (self.hold_motion
+                    and steady_now - self.hold_started >= self.settings.hold_timeout_s - 1e-9):
                 self.latch('persistent timing fault: ' + self.hold_reason, ros_now, steady_now)
                 return ZERO
             self.latest.pop('command', None)
@@ -487,6 +520,9 @@ class CommandGuard:
             return ZERO
         self.status = 'healthy'
         values = command['data']['twist']
+        if values[0] != 0 or values[5] != 0:
+            self.motion_active = True
+            self.motion_ros, self.motion_sequence = ros_now, self.sequence
         return values[0], values[5]
 
     def reset(self, ros_now, steady_now):
@@ -505,6 +541,9 @@ class CommandGuard:
         self.resume_ros, self.resume_sequence = ros_now, self.sequence
         self.latest.pop('command', None)
         self.armed = True
+        odom = self.latest['odom']['data']
+        self.motion_active = bool(any(odom['linear']) or any(odom['angular']))
+        self.motion_ros, self.motion_sequence = None, 0
         self.status = 'reset; awaiting new command'
         return True, self.status
 
@@ -744,6 +783,8 @@ def create_ros_node(settings, recorder, execute):
                                  KeyValue(key='odom_timeout_s', value=str(settings.odom_timeout_s)),
                                  KeyValue(key='hold_timeout_s', value=str(settings.hold_timeout_s)),
                                  KeyValue(key='recovery_s', value=str(settings.recovery_s)),
+                                 KeyValue(key='motion_active', value=str(self.guard.motion_active)),
+                                 KeyValue(key='hold_motion', value=str(self.guard.hold_motion)),
                                  KeyValue(key='last_trigger', value=self.recorder.last_path or '')]
                 msg.status = [status]
                 self.diagnostics.publish(msg)

@@ -567,6 +567,8 @@ class TolerantTimingTests(unittest.TestCase):
 
     def test_continuous_odom_failure_latches_after_two_seconds(self):
         core = self.ready()
+        command(core, 0.04)
+        self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
         self.stale_odom(core)
         sensors(core, 102.0, 12.0)
         core.accept_odom(odom(), 99.0, 102.0, 12.0)
@@ -576,6 +578,7 @@ class TolerantTimingTests(unittest.TestCase):
     def test_deleted_command_does_not_delete_outage_timer(self):
         core = self.ready()
         command(core, 0.04)
+        self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
         sensors(core, 100.351, 10.351)
         self.assertEqual(core.tick(100.351, 10.351), guard_module.ZERO)
         self.assertNotIn('command', core.latest)
@@ -583,6 +586,154 @@ class TolerantTimingTests(unittest.TestCase):
         sensors(core, 102.351, 12.351)
         self.assertEqual(core.tick(102.351, 12.351), guard_module.ZERO)
         self.assertIn('persistent timing fault: command:', core.latched_reason)
+
+    def test_idle_long_sensor_gap_recovers_without_latch_or_queued_motion(self):
+        for source in ('scan', 'odom'):
+            with self.subTest(source=source):
+                core = self.ready()
+
+                def fault(ros, steady):
+                    sensors(core, ros, steady)
+                    if source == 'scan':
+                        core.accept_scan(scan(), transform(), ros - 1.0, ros, steady)
+                    else:
+                        core.accept_odom(odom(), ros - 1.0, ros, steady)
+
+                fault(100.0, 10.0)
+                self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+                fault(104.0, 14.0)
+                command(core, 0.04, ros=104.0, steady=14.0)
+                self.assertEqual(core.tick(104.0, 14.0), guard_module.ZERO)
+                self.assertIsNone(core.latched_reason)
+                self.assertFalse(core.motion_active)
+                self.assertFalse(core.hold_motion)
+                self.assertNotIn('command', core.latest)
+                for ros, steady in ((105.0, 15.0), (105.2, 15.2)):
+                    sensors(core, ros, steady)
+                    command(core, 0.04, ros=ros, steady=steady)
+                    self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
+                self.assertIsNone(core.hold_started)
+                self.assertEqual(core.tick(105.21, 15.21), guard_module.ZERO)
+                command(core, 0.04, ros=105.21, steady=15.21, stamp=105.19)
+                self.assertEqual(core.tick(105.21, 15.21), guard_module.ZERO)
+                command(core, 0.04, ros=105.21, steady=15.21)
+                self.assertEqual(core.tick(105.21, 15.21), (0.04, 0.0))
+
+    def test_active_scan_gap_latches_despite_fresh_zero_during_hold(self):
+        core = self.ready()
+        command(core, 0.04)
+        self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
+        core.accept_scan(scan(), transform(), 99.0, 100.0, 10.0)
+        self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+        for ros, steady in ((100.1, 10.1), (102.0, 12.0)):
+            core.accept_odom(odom(), ros, ros, steady)
+            command(core, ros=ros, steady=steady)
+            self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
+        self.assertTrue(core.motion_active)
+        self.assertTrue(core.hold_motion)
+        self.assertIn('persistent timing fault: scan:', core.latched_reason)
+
+    def test_fresh_residual_odom_motion_keeps_zero_output_active(self):
+        core = self.ready()
+        moving = odom()
+        moving['linear'][0] = 0.01
+        core.accept_odom(moving, 100.0, 100.0, 10.0)
+        self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+        self.assertTrue(core.motion_active)
+        core.latch('operator/task stop', 100.0, 10.0)
+        command(core)
+        self.assertTrue(core.reset(100.0, 10.0)[0])
+        self.assertTrue(core.motion_active)
+        self.stale_odom(core)
+        sensors(core, 102.0, 12.0)
+        core.accept_odom(odom(), 99.0, 102.0, 12.0)
+        self.assertEqual(core.tick(102.0, 12.0), guard_module.ZERO)
+        self.assertIn('persistent timing fault: odom:', core.latched_reason)
+
+    def test_fresh_zero_and_stationary_odom_retire_motion_before_an_idle_gap(self):
+        core = self.ready()
+        command(core, 0.04)
+        self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
+        sensors(core, 100.1, 10.1)
+        command(core, ros=100.1, steady=10.1)
+        self.assertEqual(core.tick(100.1, 10.1), guard_module.ZERO)
+        self.assertFalse(core.motion_active)
+        self.stale_odom(core, 100.2, 10.2)
+        core.accept_scan(scan(), transform(), 104.0, 104.0, 14.0)
+        self.assertEqual(core.tick(104.0, 14.0), guard_module.ZERO)
+        self.assertIsNone(core.latched_reason)
+
+    def test_zero_requires_stationary_odom_received_and_stamped_after_passed_motion(self):
+        core = self.ready()
+        command(core, 0.04)
+        self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
+        command(core, ros=100.1, steady=10.1)
+        self.assertEqual(core.tick(100.1, 10.1), guard_module.ZERO)
+        self.assertTrue(core.motion_active)  # Last odom preceded the moving output.
+        core.accept_odom(odom(), 99.99, 100.1, 10.1)
+        self.assertEqual(core.tick(100.1, 10.1), guard_module.ZERO)
+        self.assertTrue(core.motion_active)  # A later delivery of older source feedback is insufficient.
+        core.accept_odom(odom(), 100.1, 100.1, 10.1)
+        self.assertEqual(core.tick(100.1, 10.1), guard_module.ZERO)
+        self.assertFalse(core.motion_active)
+
+    def test_preoutput_stationary_odom_and_later_zero_cannot_downgrade_scan_hold(self):
+        core = self.ready()
+        command(core, 0.04)
+        self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
+        command(core, ros=100.1, steady=10.1)
+        core.accept_scan(scan(), transform(), 99.0, 100.1, 10.1)
+        self.assertEqual(core.tick(100.1, 10.1), guard_module.ZERO)
+        self.assertTrue(core.hold_motion)
+        core.accept_odom(odom(), 102.1, 102.1, 12.1)
+        command(core, ros=102.1, steady=12.1)
+        self.assertEqual(core.tick(102.1, 12.1), guard_module.ZERO)
+        self.assertIn('persistent timing fault: scan:', core.latched_reason)
+
+    def test_desired_zero_cannot_retire_a_passed_moving_command(self):
+        core = self.ready()
+        command(core, 0.04)
+        self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
+        core.accept_command([0.0] * 6, 100.0, 100.0, 10.0, desired=True)
+        self.stale_odom(core)
+        sensors(core, 102.0, 12.0)
+        core.accept_odom(odom(), 99.0, 102.0, 12.0)
+        self.assertEqual(core.tick(102.0, 12.0), guard_module.ZERO)
+        self.assertIsNotNone(core.latched_reason)
+
+    def test_long_idle_sensor_wait_still_latches_hard_faults(self):
+        for fault in ('future', 'malformed', 'ownership', 'operator'):
+            with self.subTest(fault=fault):
+                core = self.ready()
+                self.stale_odom(core)
+                self.assertEqual(core.tick(104.0, 14.0), guard_module.ZERO)
+                self.assertIsNone(core.latched_reason)
+                if fault == 'future':
+                    command(core, ros=104.0, steady=14.0, stamp=104.051)
+                elif fault == 'malformed':
+                    core.accept_command([math.nan, 0, 0, 0, 0, 0], 104.0, 104.0, 14.0)
+                elif fault == 'ownership':
+                    core.set_ownership({}, 'final publisher ownership mismatch')
+                else:
+                    core.latch('operator/task stop', 104.0, 14.0)
+                self.assertEqual(core.tick(104.0, 14.0), guard_module.ZERO)
+                self.assertIsNotNone(core.latched_reason)
+
+    def test_reset_discards_old_motion_but_residual_feedback_rearms_it(self):
+        core = self.ready()
+        command(core, 0.04)
+        self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
+        core.latch('operator/task stop', 100.0, 10.0)
+        command(core)
+        self.assertTrue(core.reset(100.0, 10.0)[0])
+        self.assertFalse(core.motion_active)
+        self.assertNotIn('command', core.latest)
+        self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+        moving = odom()
+        moving['angular'][2] = 0.01
+        core.accept_odom(moving, 100.0, 100.0, 10.0)
+        self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+        self.assertTrue(core.motion_active)
 
     def test_zero_idle_does_not_start_command_outage_timer(self):
         core = self.ready()

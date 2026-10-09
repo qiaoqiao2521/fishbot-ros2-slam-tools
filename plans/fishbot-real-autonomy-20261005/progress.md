@@ -39,11 +39,12 @@ Two map clicks reached Nav2, which planned and then failed to make progress.
 The final gate still had an odom-age latch; later fresh feedback did not clear
 that latch automatically. Root's requested fresh-zero reset succeeded.
 
-The user then explicitly requested looser protection. Root applied the opt-in
+The user then explicitly requested looser protection. Root applied the initial opt-in
 `tolerant` timing profile: command/odom expiry 0.35 s, expired data immediately
 outputs zero, stable health 0.2 s clears temporary timing holds, and only a new
 candidate with post-recovery source time may move. A timing recovery window of
-2 s includes the healthy confirmation; expiry becomes an explicit-reset latch.
+2 s includes the healthy confirmation; this initial version applied the
+explicit-reset timing latch even while idle.
 Malformed/future data, ownership, CM invalid source, recording faults and
 operator/task stop remain hard faults. Geometry and collision thresholds stayed
 unchanged; strict remains the default for unselected runs.
@@ -58,14 +59,68 @@ was correct. No movement command or replacement goal was sent. Actual moving
 recovery and completed tolerant-profile routes remain pending under user control.
 
 A later readback observed a natural scan receive gap lasting beyond the
-2 s recovery window, so tolerant mode correctly escalated to a persistent
-scan-timeout latch. This shows the sensor delivery problem remains. Root
-canceled navigation (zero canceling goals) and used fresh zero to reset after
+2 s recovery window. The initial tolerant version escalated to a persistent
+scan-timeout latch while idle. This was the old behavior, not accepted idle
+recovery semantics. Root canceled navigation (zero canceling goals) and used
+fresh zero to reset after
 feedback recovered. Final sample: guard healthy, native odom age 6.00 ms,
 scan age 57.24 ms, v/w zero. No movement command was sent. Evidence:
 `.local/clock-repair-20261009/tolerant-final-unlock.json`.
 
-Current checks: 80 guard/goal/geometry checks passed, including actual Jazzy
+### Idle timing correction and current no-response diagnosis
+
+Trigger `97d0` records persistent scan receive timeout at epoch
+1791556906.706. The user's later RViz goal reached Nav2 at 1791556988.486,
+81.780 seconds after that latch. Nav2 failed its progress checks after about
+40 seconds. This failure is explained by the pre-existing idle timing latch;
+it is not evidence that the narrow opening blocked the car.
+
+The reviewed RViz log contains no new Setting goal after the reset around
+epoch 1791557312. Root's latest readback found fresh source feedback and current
+TF, with native v/w zero. A zero-only CM-chain probe received 39 candidates;
+maximum age was 31.1 ms. This confirms stationary command delivery only.
+
+The correction distinguishes unlocked state from active motion in tolerant
+mode. Actual passed nonzero output or fresh native residual motion activates
+the motion state. Fresh zero plus fresh stationary odometry must follow the
+last nonzero output in receive sequence, with source time no earlier than that
+output, before returning to idle. A later zero cannot erase an existing motion hold.
+
+During idle, benign scan/odom timeouts retain zero output and wait for recovery
+without a permanent timing latch. Healthy confirmation remains 0.2 s, followed
+by a newly received candidate with source time beyond the recovery boundary.
+Active-motion holds retain the two-second window and explicit-reset escalation.
+Hard faults, operator/task stops, strict mode and collision geometry are unchanged.
+
+Root stopped the previous guard, confirmed cancel code 0 with zero canceling
+goals, and terminated the old Passage/Nav2 group with no surviving processes.
+The corrected runtime is deployed as PID 460357; managed nodes became active
+at epoch 1791558126.517. Agent, radar, current TF, fixed-map localization and
+RViz remain the same processes. Private log:
+`.local/clock-repair-20261009/guard-nav-idle-fix.log`; external output directory:
+`navigation-tolerant-idle-fix`. Eighty-nine related checks pass.
+
+Fresh-zero readiness passed at epoch 1791558251.933. Root waited for the zero
+publisher to match both subscribers before resetting: success=true, guard
+`ready; awaiting new command`, motion_active=false and hold_motion=false.
+Latest native odom age was 5.00 ms, scan age 0.514 ms, v/w zero; final ownership
+remained guard publisher and motion-board subscriber. The earlier short priming
+attempt returned `command: missing` and remains preserved, rather than being
+reported as a successful reset. Evidence: private `idle-fix-ready-matched.json`.
+
+A new user-selected RViz goal remains `pending`, owned by root Codex for
+feedback inspection. Verify actual action response, movement and fresh stopping
+feedback before accepting the moving behavior.
+Do not replay the failed goal or claim physical acceptance from this source
+fix, runtime activation or the zero-only probe.
+
+A subsequent 45-second read-only observation received 86 ready diagnostics
+and 878 native odom samples. Native velocity stayed zero and XY unchanged;
+no new goal or upstream command arrived. This is stationary readiness evidence,
+not successful moving navigation. Private `rviz-idle-fix-observation.json`.
+
+Earlier checks: 80 guard/goal/geometry checks passed for the initial tolerant
+version, including actual Jazzy
 message serialization. Earlier 41 firmware checks and application build remain
 bound to unchanged firmware source. These do not repair the failed physical
 source-freshness/reconnection acceptances or establish onboard anti-replay.
