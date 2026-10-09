@@ -1,6 +1,177 @@
 # Progress
 
-## Current: working map accepted, 2026-10-09
+## Current: fixed-map navigation and continuous route, 2026-10-09
+
+The user ended wireless experiments and confirmed USB was unplugged. After the
+host restarted, root restored Agent, radar, sole fixed-map localization,
+current-pose TF, Passage/Nav2 and RViz as identified detached processes. The
+accepted graph remains private; unknown space was not synthesized for the car.
+
+Outbound Nav2 completed with status 4/error 0 and fresh stationary feedback.
+Live localization differed from the seed: the target was 45.44 cm from the
+observed start, and raw wheel displacement was about 47 cm. Do not call this
+a verified 25 cm move. Return attempt 1 canceled on an old-command latch;
+stop acknowledgement, cancellation status 5 and fresh stationary feedback passed.
+Return attempt 2 covered the remaining 22.27 cm and completed with status 4/error
+0 and fresh stopping. Wheel XY return error was about 2.73 cm; no independent
+physical-ground-truth measurement is available.
+
+The first short patrol point completed. The second failed and canceled with
+fresh stationary feedback; third and return were not sent. Two preliminary
+attempts sent no goal because the guard was already latched. Root's offline
+review matched host command-tail delays of 259–262 ms to the unchanged 250 ms
+source limit. The smoother retains input stamps and has the same 250 ms timeout.
+Native odometry was fresh in the matched captures. Do not attribute these
+particular cancellations to the unresolved board-side UDP delivery delay.
+
+The requested 3.05 m continuous closed route returned Nav2 status 4/error 0,
+but the robot only rotated at the start. Raw net XY change was about 0.44 mm;
+intermediate passage was not observed. Final XY equaled current XY, so the
+controller satisfied its final goal check before traversing the path. The
+original result remains private and is explicitly rejected by reassessment.
+The helper now refuses endpoints within 0.1 m of the fresh start and requires
+ordered, fresh map feedback within 0.15 m of each intermediate point.
+No replacement route has been sent; full patrol remains unaccepted.
+
+The user took over RViz goal selection. The configuration lacked SetGoal; root
+added the 2D Goal Pose tool on `/goal_pose` and restored the visible RViz window.
+Two map clicks reached Nav2, which planned and then failed to make progress.
+The final gate still had an odom-age latch; later fresh feedback did not clear
+that latch automatically. Root's requested fresh-zero reset succeeded.
+
+The user then explicitly requested looser protection. Root applied the opt-in
+`tolerant` timing profile: command/odom expiry 0.35 s, expired data immediately
+outputs zero, stable health 0.2 s clears temporary timing holds, and only a new
+candidate with post-recovery source time may move. A timing recovery window of
+2 s includes the healthy confirmation; expiry becomes an explicit-reset latch.
+Malformed/future data, ownership, CM invalid source, recording faults and
+operator/task stop remain hard faults. Geometry and collision thresholds stayed
+unchanged; strict remains the default for unselected runs.
+
+Root stopped the guard and canceled navigation first (zero active canceling
+goals). The launch supervises guard exit, so root restarted only Passage/Nav2,
+retaining Agent, radar, localization, current TF and RViz. New launch PID 431328
+uses timing_profile:=tolerant. Diagnostic readback confirmed both 0.35 s limits,
+2 s window and 0.2 s recovery. Fresh-zero reset succeeded; native odom age was
+1.77 ms, scan age 142.87 ms, v/w zero, and final publisher/subscriber ownership
+was correct. No movement command or replacement goal was sent. Actual moving
+recovery and completed tolerant-profile routes remain pending under user control.
+
+Current checks: 80 guard/goal/geometry checks passed, including actual Jazzy
+message serialization. Earlier 41 firmware checks and application build remain
+bound to unchanged firmware source. These do not repair the failed physical
+source-freshness/reconnection acceptances or establish onboard anti-replay.
+
+Private evidence: `.local/clock-repair-20261009/fixed-map-*-fast-*.json`,
+`real-short-patrol-1/`, `continuous-route-live.json` and
+`navigation-detached-runtime.json`, `real-continuous-route-1/reassessment.json`,
+`tolerant-runtime.json` and `tolerant-ready.json`. Root owns configuration and
+feedback inspection; the user owns RViz goal selection.
+Knowledge closeout: `no_reusable_delta`; the adopted physical-evidence lesson
+already applies, and the timing-tail finding belongs to this project.
+
+## Earlier stationary clock repair, 2026-10-09
+
+The accepted working map remains frozen. SLAM mapping and the odom TF predictor
+were stopped before main-board application updates. Sensors and the final guard
+remain available; no navigation goal is queued. The user moved the car near its
+previous position while connecting USB. Fresh scan fitting produced a strong
+localization seed, but live fixed-map localization has not started.
+
+The identified motion board received application-only updates for periodic time
+synchronization, clock lease expiry, automatic reconnect and resource teardown.
+All 28 effective settings matched afterwards. Bootloader, partition table and
+OTA data stayed unchanged; runtime NVS bytes differed without settings loss.
+The private full backup and each unsuccessful acceptance attempt are preserved.
+
+Three stationary Agent restarts recovered fresh native feedback in approximately
+6, 9 and 12 seconds. This passed automatic reconnection only. Two subsequent
+quiet intervals spanning more than 120 seconds failed sustained clock acceptance.
+Odometry source ages reached 4.69 seconds and 2.51 seconds; radar ages remained
+fresh, and host clock slew was only about 6–7 ms. No motion occurred.
+
+Client 2.4.2 accepts late timestamp replies without matching their origin.
+The application UDP filter is installed and independently checked against actual
+SDK serialization, including the observed 28-byte INFO pong. The first filter
+rejected that pong; the compatibility regression is fixed and retained as a test.
+The subsequent quiet probe still failed: native age reached 3.64 seconds, with a
+51.6-second receive gap and no motion. Raw UDP odometry was already seconds old
+before Agent/DDS processing; source-clock error and transport delay are not fully
+separated by that observation.
+
+Valid ping replies at the host were followed by client session deletion. A single
+100 ms connected ping failure can therefore cause repeated rebuilding. The current
+application removes that independent teardown decision. Waiting-state discovery
+ping, five-second filtered synchronization, the 15-second successful-sync lease
+and 500 ms motor command timeout remain. Actual Agent source confirms unknown
+clients receive no TIMESTAMP reply. Its restart test recovered the first cycle
+in 14.88 seconds but failed the second cycle's readiness window. A quiet probe
+then reached 2.42-second native age; a concurrent wire/DDS diagnostic reached
+3.90 seconds. Those failures remain preserved, with no motion.
+
+Passive physical-interface capture precisely matched 454 DDS stamps; NIC-to-DDS
+delay was at most 5.14 ms. All 236 stale matched frames were already stale at NIC
+ingress. Three TIMESTAMP requests arrived after the computer had already received
+their board-side timeout logs, by approximately 50 ms, 3.20 seconds and 1.29
+seconds. This confirms pre-NIC delivery delay, while transmit queues, radio and
+AP remain unseparated. The Agent port 47138 is a network-byte-order print of 8888;
+it does not establish NAT or socket recreation. Computer routes and VPN stayed
+unchanged during these diagnostics.
+
+Source review also found entity initialization errors logged and ignored before
+unconditionally returning connected. The current application checks every
+creation/add step and safely rolls back partial resources. Tests compile the
+actual create/destroy functions and inject all 13 initialization-stage failures,
+partial contexts, repeated rollback and retry. The 41 policy/lifecycle/filter
+checks, independent review and PlatformIO build passed. New periodic UART fields
+measure sync duration, UDP RSSI, actual Wi-Fi power-save state, configured maximum
+transmit power, historical heap low-water mark and local UDP write duration.
+Current-board acceptance remains incomplete.
+
+With user approval, computer Wi-Fi power saving was disabled temporarily. Its
+125-second probe still failed: maximum native age 4.317 seconds, 391 violations.
+The original enabled state was restored and verified. A separate 125-second
+probe with the radar receiver stopped also failed: maximum age 3.733 seconds,
+475 violations. The receiver was restored with the correct workspace overlay,
+and 20 fresh scans passed. Stopping this receiver does not exclude every source
+of wireless contention. Computer IP, routes and VPN were preserved.
+
+Application 8's diagnostic getters reported power saving disabled (PS=0, error=0).
+Returned transport-write calls had interval maxima of 1.753–8.639 ms. This is a
+local call duration, not over-air delivery time. The heap's historical minimum
+fell from 110096 to 77672 bytes; this alone does not establish a leak. Its baseline
+again failed: maximum native age 5.117 seconds, 435 violations and an 18.187-second
+receive gap. Native poses and twist stayed zero. All 28 effective settings matched
+before the next controlled experiment.
+
+The source already requests WIFI_PS_NONE and uses best-effort odometry/IMU.
+Priority 1 alone cannot establish starvation. Neither a long write call nor
+the observed NIC delay uniquely identifies transmit-buffer congestion.
+The stationary load comparison temporarily changed odom_pub_period from 50 to
+200 ms. A post-startup requested readback confirmed all 28 target settings.
+The 125.98-second observation failed: maximum native age 0.612 seconds and three
+violations. It delivered only a 57.91-second odometry span, then no odometry for
+the final 67.10 seconds. A smaller delivered-frame age is not continuous-readiness
+acceptance. Native poses and twist stayed zero. The original 50 ms and all 28
+effective settings were restored and confirmed by requested post-startup readback.
+
+At that checkpoint, a near-AP stationary comparison was requested. The user
+then confirmed the car was already 1–2 metres from the AP and ended further
+experiments. The current navigation section supersedes that next action; the
+failed source-freshness and reconnection acceptances remain preserved.
+Private handoff: `.local/clock-repair-20261009/handoff-in-progress.json`.
+
+Knowledge closeout: `no_reusable_delta`. The adopted physical-evidence lesson
+still applies; SDK-specific findings and failed hardware probes stay in this
+project. Root Codex owns the repair and subsequent real acceptance.
+
+Preserved delivery exception: the untracked firmware release.sh is not a verified
+release artifact. It references private legacy metadata and a boot_app0 image
+whose merged-image provenance/layout is unverified. Root Codex owns follow-up:
+check it against the pinned toolchain and actual partition/OTA layout before
+execution or publication. Application-only builds and writes do not validate it.
+
+## Working map accepted, 2026-10-09
 The user accepts the latest measured map as the complete working map for this scene. Mapping scope is closed by that decision; unknown cells remain unknown. The accepted private checkpoint and pose graph are bound to SHA256 values in the local acceptance record. No new motion or firmware write occurred during acceptance.
 
 Next: stabilize native clock alignment, switch to fixed-map localization, then verify an outbound route, return and fresh stopping feedback. Use the installed `slam_toolbox localization_launch.py` with explicit `mode: localization` and the accepted pose graph. Stop the mapping node before that switch. Only localization may publish map->odom; retain the existing Passage guard and source gates. Three-point patrol follows the single-route acceptance. Fixed-map navigation and patrol remain unaccepted.
@@ -46,7 +217,7 @@ The accumulated Passage fixes passed 84/84 offline tests, including ROS message 
 
 Knowledge closeout: `no_reusable_delta`. The adopted physical-evidence lesson remains applicable; this turn adds vehicle-specific repair and short-run measurements to project progress.
 
-Preserved build work: `fishbot_motion_control_microros/release.sh` remains `pending`, owned by root Codex. Shell syntax passed; pinned toolchain, boot_app0 provenance and merged-image layout remain unverified. Validate those in an isolated build before accepting release or flashing results.
+Preserved build work: `fishbot_motion_control_microros/release.sh` remains `pending`, owned by root Codex. Shell syntax passed and the selected application builds with pinned top-level dependencies. The legacy release path copies ignored provisioning configuration; boot_app0 provenance and merged-image layout remain unverified. Do not run that path until isolated validation and provisioning exclusion are complete. Current repair uses application-only writes.
 
 ## Earlier continuation before coupler repair
 2026-10-08: both boards passed persistent server-setting readback and native odom/IMU/scan were received. Computer DHCP and VPN stayed unchanged. Two independent scans aligned to the original measured map within 1.6 mm and 0.16 degrees; the saved graph and live TF were restored. The first continuous real 10 cm goal completed with fresh stopping feedback. Independent ICP measured about 9.14 cm forward and 9.23° left yaw, versus 15.85° wheel yaw. A 30 cm goal stopped partway on collision prediction. Native Nav2 replay found an old local static-map cell on the current footprint. Disabling only that local layer cleared the footprint and remaining 9.22 cm sweep. Later goals stopped on time-transform failures or collision monitoring; a predicted-TF experiment was not accepted as wheel calibration. The last pre-repair serialized graph was `room-side-checkpoint`, about 7.24 m2 free and 9.12 m2 known. Those failures remain evidence; fresh source ages must pass before any further motion.

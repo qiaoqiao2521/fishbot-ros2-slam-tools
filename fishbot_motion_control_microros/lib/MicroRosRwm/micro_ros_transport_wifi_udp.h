@@ -14,6 +14,9 @@
 
 extern "C"
 {
+    void fishbot_udp_time_sync_begin();
+    void fishbot_udp_time_sync_end();
+    void fishbot_udp_write_stats_snapshot(uint32_t *calls, uint64_t *max_us, uint32_t *timing_errors);
     bool platformio_transport_open_wifi_udp(struct uxrCustomTransport *transport);
     bool platformio_transport_close_wifi_udp(struct uxrCustomTransport *transport);
     size_t platformio_transport_write_wifi_udp(struct uxrCustomTransport *transport, const uint8_t *buf, size_t len, uint8_t *err);

@@ -476,5 +476,149 @@ class CommandGuardTests(unittest.TestCase):
                 recorder.close()
 
 
+class TolerantTimingTests(unittest.TestCase):
+    def ready(self):
+        core = guard_module.CommandGuard(guard_module.Settings.from_mapping(config(), timing_profile='tolerant'))
+        sensors(core)
+        command(core)
+        self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+        self.assertTrue(core.armed)
+        return core
+
+    def stale_odom(self, core, ros=100.0, steady=10.0):
+        core.accept_odom(odom(), ros - 0.351, ros, steady)
+        self.assertEqual(core.tick(ros, steady), guard_module.ZERO)
+
+    def recover(self, core):
+        sensors(core, 100.1, 10.1)
+        command(core, 0.04, ros=100.1, steady=10.1)
+        self.assertEqual(core.tick(100.1, 10.1), guard_module.ZERO)
+        sensors(core, 100.3, 10.3)
+        command(core, 0.04, ros=100.3, steady=10.3)
+        self.assertEqual(core.tick(100.3, 10.3), guard_module.ZERO)
+        self.assertIsNone(core.hold_started)
+        self.assertNotIn('command', core.latest)
+
+    def test_cli_is_explicit_and_effective_geometry_preserves_footprint(self):
+        argv = ['--config', 'geometry.yaml', '--output-dir', 'private-run']
+        self.assertEqual(guard_module.parse_arguments(argv)[0].timing_profile, 'strict')
+        self.assertEqual(guard_module.parse_arguments(argv + ['--timing-profile', 'tolerant'])[0].timing_profile,
+                         'tolerant')
+        document = config()
+        settings = guard_module.Settings.from_mapping(document, timing_profile='tolerant')
+        self.assertEqual((settings.command_timeout_s, settings.odom_timeout_s), (0.35, 0.35))
+        self.assertEqual(settings.geometry['footprint'], document['footprint'])
+        self.assertEqual(settings.geometry['command_guard']['timing_profile'], 'tolerant')
+        self.assertNotIn('timing_profile', document['command_guard'])
+        with self.assertRaises(ValueError):
+            guard_module.Settings.from_mapping(document, timing_profile='disabled')
+
+    def test_short_stale_odom_recovers_only_on_new_post_recovery_candidate(self):
+        core = self.ready()
+        command(core, 0.04)
+        self.stale_odom(core)
+        self.assertIsNone(core.latched_reason)
+        self.assertTrue(core.status.startswith('timing hold:'))
+        self.assertNotIn('command', core.latest)
+        self.recover(core)
+        # A queued command can arrive after recovery and still be too old to authorize motion.
+        command(core, 0.04, ros=100.31, steady=10.31, stamp=100.29)
+        self.assertEqual(core.tick(100.31, 10.31), guard_module.ZERO)
+        command(core, 0.04, ros=100.31, steady=10.31)
+        self.assertEqual(core.tick(100.31, 10.31), (0.04, 0.0))
+
+    def test_old_nonzero_command_is_a_soft_hold_but_never_executed(self):
+        core = self.ready()
+        command(core, 0.04, stamp=99.649)
+        self.assertIsNone(core.latest['command']['error'])
+        self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+        self.assertIsNone(core.latched_reason)
+        self.assertTrue(core.hold_needs_command)
+        self.recover(core)
+        command(core, 0.04, ros=100.31, steady=10.31)
+        self.assertEqual(core.tick(100.31, 10.31), (0.04, 0.0))
+
+    def test_source_age_tolerance_is_bounded_at_350ms(self):
+        core = self.ready()
+        core.accept_odom(odom(), 99.65, 100.0, 10.0)
+        command(core, 0.04, stamp=99.65)
+        self.assertEqual(core.tick(100.0, 10.0), (0.04, 0.0))
+        self.stale_odom(core)
+        self.assertIsNone(core.latched_reason)
+
+    def test_future_command_and_ownership_fault_cannot_hide_behind_old_odom(self):
+        for fault in ('future', 'ownership'):
+            with self.subTest(fault=fault):
+                core = self.ready()
+                core.accept_odom(odom(), 99.0, 100.0, 10.0)
+                if fault == 'future':
+                    command(core, 0.04, stamp=100.051)
+                else:
+                    core.set_ownership({}, 'final publisher ownership mismatch')
+                self.assertEqual(core.tick(100.0, 10.0), guard_module.ZERO)
+                self.assertIsNotNone(core.latched_reason)
+                self.assertIn('source timestamp' if fault == 'future' else 'ownership', core.latched_reason)
+
+    def test_future_sensor_stamp_cannot_hide_behind_receive_timeout(self):
+        core = self.ready()
+        core.accept_scan(scan(), transform(), 101.0, 100.0, 10.0)
+        self.assertEqual(core.tick(100.0, 10.7), guard_module.ZERO)
+        self.assertEqual(core.latched_reason, 'scan: source stamp in future')
+
+    def test_continuous_odom_failure_latches_after_two_seconds(self):
+        core = self.ready()
+        self.stale_odom(core)
+        sensors(core, 102.0, 12.0)
+        core.accept_odom(odom(), 99.0, 102.0, 12.0)
+        self.assertEqual(core.tick(102.0, 12.0), guard_module.ZERO)
+        self.assertIn('persistent timing fault: odom:', core.latched_reason)
+
+    def test_deleted_command_does_not_delete_outage_timer(self):
+        core = self.ready()
+        command(core, 0.04)
+        sensors(core, 100.351, 10.351)
+        self.assertEqual(core.tick(100.351, 10.351), guard_module.ZERO)
+        self.assertNotIn('command', core.latest)
+        self.assertTrue(core.hold_needs_command)
+        sensors(core, 102.351, 12.351)
+        self.assertEqual(core.tick(102.351, 12.351), guard_module.ZERO)
+        self.assertIn('persistent timing fault: command:', core.latched_reason)
+
+    def test_zero_idle_does_not_start_command_outage_timer(self):
+        core = self.ready()
+        sensors(core, 104.0, 14.0)
+        self.assertEqual(core.tick(104.0, 14.0), guard_module.ZERO)
+        self.assertIsNone(core.latched_reason)
+        self.assertIsNone(core.hold_started)
+
+    def test_recovery_stability_uses_steady_clock_when_ros_time_pauses(self):
+        core = self.ready()
+        self.stale_odom(core)
+        sensors(core, 100.0, 10.1)
+        self.assertEqual(core.tick(100.0, 10.1), guard_module.ZERO)
+        sensors(core, 100.0, 10.3)
+        self.assertEqual(core.tick(100.0, 10.3), guard_module.ZERO)
+        self.assertIsNone(core.hold_started)
+        command(core, 0.04, ros=100.0, steady=10.31)
+        self.assertEqual(core.tick(100.0, 10.31), (0.04, 0.0))
+
+    def test_operator_stop_and_invalid_data_remain_explicit_reset_faults(self):
+        core = self.ready()
+        self.stale_odom(core)
+        core.latch('operator/task stop', 100.0, 10.0)
+        sensors(core, 100.1, 10.1)
+        command(core, 0.04, ros=100.1, steady=10.1)
+        self.assertEqual(core.tick(100.1, 10.1), guard_module.ZERO)
+        self.assertFalse(core.reset(100.1, 10.1)[0])
+        command(core, ros=100.1, steady=10.1)
+        self.assertTrue(core.reset(100.1, 10.1)[0])
+        self.assertIsNone(core.hold_started)
+        command(core, 0.04, ros=100.11, steady=10.11)
+        self.assertEqual(core.tick(100.11, 10.11), (0.04, 0.0))
+        core.accept_command([math.nan, 0, 0, 0, 0, 0], 100.11, 100.11, 10.11)
+        self.assertEqual(core.tick(100.11, 10.11), guard_module.ZERO)
+        self.assertIn('malformed', core.latched_reason)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

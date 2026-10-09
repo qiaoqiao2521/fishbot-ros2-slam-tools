@@ -9,7 +9,9 @@
  *
  */
 #include "fishbot.h"
+#include "fishbot_time_sync_policy.h"
 #include <cmath>
+#include <esp_wifi.h>
 
 // Transfer commands atomically between the transport and motor-control tasks.
 static portMUX_TYPE command_mux = portMUX_INITIALIZER_UNLOCKED;
@@ -17,12 +19,29 @@ static float command_targets[2] = {0, 0};
 static uint32_t command_received_ms = 0;
 static bool command_valid = false;
 static constexpr uint32_t command_timeout_ms = 500;
+static FishbotTimeSyncPolicy time_sync;
+// Mirror only the motion lease under command_mux; the policy stays on core 0.
+static bool command_clock_valid = false;
+static uint32_t command_clock_sync_ms = 0;
+static int64_t display_epoch_ms = 0;
 
 static void invalidate_command()
 {
     portENTER_CRITICAL(&command_mux);
     command_valid = false;
     portEXIT_CRITICAL(&command_mux);
+}
+
+static bool update_command_clock(uint32_t now_ms, int64_t epoch_ms)
+{
+    const bool allowed = time_sync.motion_allowed(now_ms, epoch_ms);
+    portENTER_CRITICAL(&command_mux);
+    command_clock_valid = allowed;
+    command_clock_sync_ms = time_sync.last_sync_ms();
+    display_epoch_ms = epoch_ms > 0 ? epoch_ms : 0;
+    if (!allowed) command_valid = false;
+    portEXIT_CRITICAL(&command_mux);
+    return allowed;
 }
 
 /*==================MicroROS消息============================*/
@@ -45,10 +64,31 @@ rcl_wait_set_t wait_set;             // 用于管理一组等待中的事件，�
 /*==================MicroROS相关执行器&节点===================*/
 rclc_executor_t executor;  // 用于在单个线程中处理多个 ROS 2 资源的回调函数。
 rcl_init_options_t init_options;
+static bool init_options_owned = false;
 rclc_support_t support;    // 用于在 ROS 2 上下文中初始化和配置执行器、节点等资源
 rcl_allocator_t allocator; // 用于在 ROS 2 节点中分配和释放内存
 rcl_node_t node;           // 代表一个 ROS 2 系统中的节点，用于与其他节点通信
 rcl_timer_t timer;         // 用于在指定的时间间隔内执行回调函数
+
+static bool release_init_options()
+{
+    if (!init_options_owned) return true;
+    const rcl_ret_t result = rcl_init_options_fini(&init_options);
+    RCSOFTCHECK(result);
+    if (result != RCL_RET_OK) return false;
+    init_options_owned = false;
+    // Humble's fini frees impl but does not clear the caller's pointer.
+    init_options = rcl_get_zero_initialized_init_options();
+    return true;
+}
+
+static bool transport_step_ok(const char *step, rcl_ret_t result)
+{
+    if (result == RCL_RET_OK) return true;
+    fishlog_debug("ros2", "transport step=%s failed status=%d", step, static_cast<int>(result));
+    return false;
+}
+
 enum states
 {
     WAITING_AGENT,
@@ -282,6 +322,8 @@ bool setup_fishbot_transport()
 // 用于创建 FishBot 的通信节点和相关通信组件的函数。
 bool create_fishbot_transport()
 {
+    // Do not overwrite resources left by an earlier partial initialization.
+    if (!destory_fishbot_transport()) return false;
     // 获取配置文件中定义的 ROS 2 节点名称、命名空间、扭矩和里程计主题名称、里程计帧 ID 等信息
     String nodename = config.ros2_nodename();
     String ros2namespace = config.ros2_namespace();
@@ -299,90 +341,129 @@ bool create_fishbot_transport()
     allocator = rcl_get_default_allocator();
 
     // create init_options
+    if (!release_init_options()) return false;
     init_options = rcl_get_zero_initialized_init_options();
-    RCSOFTCHECK(rcl_init_options_init(&init_options, allocator)); // <--- This was missing on ur side
+    const rcl_ret_t options_result = rcl_init_options_init(&init_options, allocator);
+    RCSOFTCHECK(options_result);
+    if (options_result != RCL_RET_OK)
+    {
+        // The failed initializer may have freed impl without clearing it.
+        init_options = rcl_get_zero_initialized_init_options();
+        return false;
+    }
+    init_options_owned = true;
 
     // Set ROS domain id
-    RCSOFTCHECK(rcl_init_options_set_domain_id(&init_options, config.ros2_domain_id()));
+    const rcl_ret_t domain_result = rcl_init_options_set_domain_id(&init_options, config.ros2_domain_id());
+    RCSOFTCHECK(domain_result);
+    if (domain_result != RCL_RET_OK) return false; // Destroy owns the remaining options.
 
-    // Setup support structure.
-    // RCSOFTCHECK 是一个宏定义，用于检查执行函数的返回值是否出错，如果出错，则会打印错误信息并退出程序。
-    // 调用 rclc_support_init 函数初始化 ROS 2 运行时的支持库，传入 allocator
-    RCSOFTCHECK(rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator));
-    // RCSOFTCHECK(rclc_support_init(&support, 0, NULL, &allocator));
+    // rcl_init copies the options into its context; release our original copy.
+    const rcl_ret_t support_result = rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator);
+    RCSOFTCHECK(support_result);
+    const bool options_released = release_init_options();
+    if (support_result != RCL_RET_OK || !options_released) return false;
     // 调用 rclc_node_init_default 函数初始化 ROS 2 节点，传入节点名称、命名空间和支持库
-    RCSOFTCHECK(rclc_node_init_default(&node, nodename.c_str(), ros2namespace.c_str(), &support));
+    if (!transport_step_ok("node", rclc_node_init_default(
+        &node, nodename.c_str(), ros2namespace.c_str(), &support))) return false;
 
 
     // 调用 rclc_publisher_init_best_effort 函数初始化 ROS 2 发布者，传入节点、消息类型和主题名称。
-    RCSOFTCHECK(rclc_publisher_init_best_effort(
+    if (!transport_step_ok("odom_publisher", rclc_publisher_init_best_effort(
         &odom_publisher,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Odometry),
-        odom_topic.c_str()));
-    RCSOFTCHECK(rclc_publisher_init_best_effort(
+        odom_topic.c_str()))) return false;
+    if (!transport_step_ok("imu_publisher", rclc_publisher_init_best_effort(
         &imu_publisher,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Imu),
-        "imu"));
+        "imu"))) return false;
     // 调用 rclc_subscription_init_best_effort 函数初始化 ROS 2 订阅者，传入节点、消息类型和主题名称。
-    RCSOFTCHECK(rclc_subscription_init_best_effort(
+    if (!transport_step_ok("twist_subscriber", rclc_subscription_init_best_effort(
         &twist_subscriber,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
-        twist_topic.c_str()));
+        twist_topic.c_str()))) return false;
     // 调用 rclc_service_init_default 函数初始化 ROS 2 服务，传入节点、服务类型和服务名称
-    RCSOFTCHECK(rclc_service_init_default(
+    if (!transport_step_ok("config_service", rclc_service_init_default(
         &config_service,
         &node,
         ROSIDL_GET_SRV_TYPE_SUPPORT(fishbot_interfaces, srv, FishBotConfig),
-        "/fishbot_config"));
+        "/fishbot_config"))) return false;
     // 调用 rclc_timer_init_default 函数初始化 ROS 2 定时器，传入支持库、定时器周期和回调函数
-    RCSOFTCHECK(rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(timer_timeout), callback_sensor_publisher_timer_));
+    if (!transport_step_ok("timer", rclc_timer_init_default(
+        &timer, &support, RCL_MS_TO_NS(timer_timeout), callback_sensor_publisher_timer_))) return false;
     // 调用 rclc_executor_init 函数初始化 ROS 2 执行器，传入支持库、执行器线程数和内存分配器
-    RCSOFTCHECK(rclc_executor_init(&executor, &support.context, 3, &allocator));
+    if (!transport_step_ok("executor", rclc_executor_init(
+        &executor, &support.context, 3, &allocator))) return false;
     // 调用 rclc_executor_add_subscription 函数将订阅者添加到执行器中，传入执行器、订阅者、消息和回调函数。
-    RCSOFTCHECK(rclc_executor_add_subscription(&executor, &twist_subscriber, &twist_msg, &callback_twist_subscription_, ON_NEW_DATA));
+    if (!transport_step_ok("add_subscription", rclc_executor_add_subscription(
+        &executor, &twist_subscriber, &twist_msg, &callback_twist_subscription_, ON_NEW_DATA))) return false;
     // 调用 rclc_executor_add_timer 函数将定时器添加到执行器中，传入执行器和定时器。
-    RCSOFTCHECK(rclc_executor_add_timer(&executor, &timer));
+    if (!transport_step_ok("add_timer", rclc_executor_add_timer(&executor, &timer))) return false;
     // 调用 rclc_executor_add_service 函数添加一个服务（Service）的操作
-    RCSOFTCHECK(rclc_executor_add_service(&executor, &config_service, &config_req, &config_res, callback_config_service_));
+    if (!transport_step_ok("add_service", rclc_executor_add_service(
+        &executor, &config_service, &config_req, &config_res, callback_config_service_))) return false;
     return true;
 }
 
 // 用于销毁 ROS 2 节点中的一些资源
 bool destory_fishbot_transport()
 {
-    // 获取 ROS 2 上下文中的 RMW 上下文，并将其赋值给 rmw_context 变量。
-    rmw_context_t *rmw_context = rcl_context_get_rmw_context(&support.context);
-    // 设置 ROS 2 上下文中的 RMW 上下文的实体销毁会话超时时间为 0，这意味着实体销毁操作将立即返回，而不是等待超时
-    (void)rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
-    // RCSOFTCHECK 是一个宏定义，用于检查执行函数的返回值是否出错，如果出错，则会打印错误信息并退出程序。
-    // 用于销毁一个 ROS 2 发布者（Publisher）
-    RCSOFTCHECK(rcl_publisher_fini(&odom_publisher, &node));
-    // 用于销毁一个 ROS 2 订阅者（Subscriber）
-    RCSOFTCHECK(rcl_subscription_fini(&twist_subscriber, &node));
-    // 用于销毁一个 ROS 2 服务（Service）
-    RCSOFTCHECK(rcl_service_fini(&config_service, &node));
-    // 用于销毁一个 ROS 2 定时器（Timer）
-    RCSOFTCHECK(rcl_timer_fini(&timer));
-    // 用于停止执行器（Executor）并释放相关资源
-    RCSOFTCHECK(rclc_executor_fini(&executor));
-    // 用于销毁一个 ROS 2 节点（Node）
-    RCSOFTCHECK(rcl_node_fini(&node));
-    // 用于释放支持库中分配的资源
-    rclc_support_fini(&support);
-    return true;
+    invalidate_command();
+    update_command_clock(millis(), 0);
+    bool cleaned = true;
+    // The RMW timeout setter dereferences context->impl; skip absent contexts.
+    rmw_context_t *rmw_context = support.context.impl ?
+        rcl_context_get_rmw_context(&support.context) : nullptr;
+    if (rmw_context && rmw_context->impl)
+    {
+        const rmw_ret_t result = rmw_uros_set_context_entity_destroy_session_timeout(rmw_context, 0);
+        if (result != RMW_RET_OK)
+        {
+            fishlog_debug("ros2", "transport step=destroy_timeout failed status=%d", static_cast<int>(result));
+            cleaned = false;
+        }
+    }
+    // Release callback references before their resources, then the node/context.
+    if (executor.handles && !transport_step_ok("executor_fini", rclc_executor_fini(&executor))) cleaned = false;
+    if (timer.impl && !transport_step_ok("timer_fini", rcl_timer_fini(&timer))) cleaned = false;
+    if (config_service.impl && !transport_step_ok("service_fini", rcl_service_fini(&config_service, &node))) cleaned = false;
+    if (twist_subscriber.impl && !transport_step_ok("subscriber_fini", rcl_subscription_fini(&twist_subscriber, &node))) cleaned = false;
+    if (imu_publisher.impl && !transport_step_ok("imu_fini", rcl_publisher_fini(&imu_publisher, &node))) cleaned = false;
+    if (odom_publisher.impl && !transport_step_ok("odom_fini", rcl_publisher_fini(&odom_publisher, &node))) cleaned = false;
+    if (node.impl && !transport_step_ok("node_fini", rcl_node_fini(&node))) cleaned = false;
+    // Support initialization may fail before a context or clock exists.
+    if (rcl_clock_valid(&support.clock))
+    {
+        if (transport_step_ok("clock_fini", rcl_clock_fini(&support.clock))) support.clock = rcl_clock_t{};
+        else cleaned = false;
+    }
+    if (support.context.impl)
+    {
+        if (rcl_context_is_valid(&support.context) &&
+            !transport_step_ok("shutdown", rcl_shutdown(&support.context))) cleaned = false;
+        if (!rcl_context_is_valid(&support.context) &&
+            !transport_step_ok("context_fini", rcl_context_fini(&support.context))) cleaned = false;
+    }
+    if (!release_init_options()) cleaned = false;
+    return cleaned;
 }
 
 void loop_fishbot_control()
 {
     float targets[2];
     portENTER_CRITICAL(&command_mux);
-    const bool fresh = command_valid && static_cast<uint32_t>(millis() - command_received_ms) < command_timeout_ms;
+    const uint32_t now_ms = millis();
+    const bool clock_fresh = command_clock_valid &&
+        FishbotTimeSyncPolicy::elapsed(now_ms, command_clock_sync_ms) < FishbotTimeSyncPolicy::sync_max_age_ms;
+    if (!clock_fresh) command_clock_valid = false;
+    const bool fresh = clock_fresh && command_valid && static_cast<uint32_t>(now_ms - command_received_ms) < command_timeout_ms;
     if (!fresh) command_valid = false; // A millis wrap must never revive an expired command.
     targets[0] = fresh ? command_targets[0] : 0;
     targets[1] = fresh ? command_targets[1] : 0;
+    const int64_t display_stamp = display_epoch_ms;
     portEXIT_CRITICAL(&command_mux);
     // Only this task changes PID motion targets. A stale command forces zero PWM.
     pid_controller[0].update_target(targets[0]);
@@ -418,7 +499,8 @@ void loop_fishbot_control()
         display.updateBatteryInfo(battery_voltage);
     }
     // 更新系统信息
-    display.updateCurrentTime(rmw_uros_epoch_millis());
+    // Core 0 alone accesses the RMW session; copy its 64-bit clock atomically.
+    display.updateCurrentTime(display_stamp);
     // 刷新显示屏幕
     display.updateDisplay();
     // 用于处理按钮事件等操作
@@ -452,11 +534,11 @@ void loop_fishbot_transport()
     switch (state)
     {
 
-    // 对于WAITING_AGENT状态，函数会每500毫秒执行一次RMW_RET_OK == rmw_uros_ping_agent(100, 1)语句
+    // Probe every five seconds, with one bounded transport wait.
     // 该语句用于向MicroROS代理发送ping消息，并检查是否能够收到pong消息。
     // 如果收到pong消息，则将状态设置为AGENT_AVAILABLE；否则保持等待状态。
     case WAITING_AGENT:
-        EXECUTE_EVERY_N_MS(5000, state = (RMW_RET_OK == rmw_uros_ping_agent(300, 5)) ? AGENT_AVAILABLE : WAITING_AGENT;);
+        EXECUTE_EVERY_N_MS(5000, state = (RMW_RET_OK == rmw_uros_ping_agent(FishbotTimeSyncPolicy::ping_timeout_ms, 1)) ? AGENT_AVAILABLE : WAITING_AGENT;);
         digitalWrite(2, !digitalRead(2));
         if (state == WAITING_AGENT && wifi_status==FISHBOT_WIFI_STATUS_GOT_IP)
         {
@@ -467,9 +549,13 @@ void loop_fishbot_transport()
     // 对于AGENT_AVAILABLE状态，函数将尝试创建fishbot传输，并将状态设置为AGENT_CONNECTED。
     // 如果创建成功，则继续保持AGENT_CONNECTED状态；否则将状态设置为WAITING_AGENT，并销毁fishbot传输。
     case AGENT_AVAILABLE:
+        time_sync.reset_session(millis());
+        update_command_clock(millis(), 0);
         state = (true == create_fishbot_transport()) ? AGENT_CONNECTED : WAITING_AGENT;
         if (state == AGENT_CONNECTED)
         {
+            // Start the initial sync grace period after entity creation finishes.
+            time_sync.reset_session(millis());
             display.updateWIFIInfo("ping ok", FISHBOT_WIFI_STATUS_OK);
         }
         if (state == WAITING_AGENT)
@@ -477,43 +563,84 @@ void loop_fishbot_transport()
             destory_fishbot_transport();
         };
         break;
-    // 对于AGENT_CONNECTED状态，函数会每200毫秒执行一次RMW_RET_OK == rmw_uros_ping_agent(100, 1)语句
-    // 该语句用于向MicroROS代理发送ping消息，并检查是否能够收到pong消息。
-    // 如果收到pong消息，则保持AGENT_CONNECTED状态，并尝试同步时间。
+    // Periodic synchronization also checks the active XRCE session heartbeat.
+    // A missed exchange only disconnects after the existing sync lease expires.
     case AGENT_CONNECTED:
-        EXECUTE_EVERY_N_MS(5000, state = (RMW_RET_OK == rmw_uros_ping_agent(300, 5)) ? AGENT_CONNECTED : AGENT_DISCONNECTED;);
+    {
+        const uint32_t maintenance_now_ms = millis();
+        const auto maintenance = time_sync.maintenance_due(maintenance_now_ms);
+        if (maintenance == FishbotTimeSyncPolicy::RECONNECT)
+        {
+            state = AGENT_DISCONNECTED;
+        }
+        else if (maintenance == FishbotTimeSyncPolicy::SYNC)
+        {
+            time_sync.begin_sync(maintenance_now_ms);
+            fishbot_udp_time_sync_begin();
+            const rmw_ret_t sync_result = rmw_uros_sync_session(FishbotTimeSyncPolicy::sync_timeout_ms);
+            fishbot_udp_time_sync_end();
+            const bool epoch_synchronized = rmw_uros_epoch_synchronized();
+            const bool synced = sync_result == RMW_RET_OK && epoch_synchronized;
+            const int64_t synced_epoch_ms = rmw_uros_epoch_millis();
+            const uint32_t sync_finished_ms = millis();
+            time_sync.finish_sync(sync_finished_ms, synced, synced_epoch_ms);
+            const bool wifi_udp = config.microros_transport_mode() == CONFIG_TRANSPORT_MODE_WIFI_UDP_CLIENT;
+            const int wifi_rssi_dbm = wifi_udp ? static_cast<int>(WiFi.RSSI()) : 0;
+            wifi_ps_type_t wifi_ps = WIFI_PS_NONE;
+            int8_t wifi_tx_power = 0;
+            const esp_err_t wifi_ps_error = wifi_udp ? esp_wifi_get_ps(&wifi_ps) : ESP_ERR_NOT_SUPPORTED;
+            const esp_err_t wifi_tx_power_error = wifi_udp ? esp_wifi_get_max_tx_power(&wifi_tx_power) : ESP_ERR_NOT_SUPPORTED;
+            uint32_t udp_write_calls = 0;
+            uint64_t udp_write_max_us = 0;
+            uint32_t udp_write_timing_errors = 0;
+            fishbot_udp_write_stats_snapshot(&udp_write_calls, &udp_write_max_us, &udp_write_timing_errors);
+            fishlog_debug("time_sync", "result=%d epoch_synced=%d fresh=%d last_success_age_ms=%lld duration_ms=%lu wifi_rssi_dbm=%d wifi_ps=%d wifi_ps_err=%d wifi_max_tx_qdbm=%d wifi_tx_err=%d min_free_heap=%lu udp_write_calls=%lu udp_write_max_us=%llu udp_write_timing_errors=%lu",
+                          static_cast<int>(sync_result), epoch_synchronized,
+                          time_sync.fresh(sync_finished_ms),
+                          static_cast<long long>(time_sync.last_success_age_ms(sync_finished_ms)),
+                          static_cast<unsigned long>(FishbotTimeSyncPolicy::elapsed(sync_finished_ms, maintenance_now_ms)),
+                          wifi_rssi_dbm,
+                          wifi_ps_error == ESP_OK ? static_cast<int>(wifi_ps) : -1,
+                          static_cast<int>(wifi_ps_error),
+                          wifi_tx_power_error == ESP_OK ? static_cast<int>(wifi_tx_power) : -1,
+                          static_cast<int>(wifi_tx_power_error),
+                          static_cast<unsigned long>(ESP.getMinFreeHeap()),
+                          static_cast<unsigned long>(udp_write_calls),
+                          static_cast<unsigned long long>(udp_write_max_us),
+                          static_cast<unsigned long>(udp_write_timing_errors));
+            if (synced && synced_epoch_ms > 0)
+            {
+                // TimeLib is only the local display clock, never a ROS stamp.
+                setTime(synced_epoch_ms / 1000 + SECS_PER_HOUR * 8);
+            }
+        }
+        // A bounded wait can cross the deadline. Do not spin stale callbacks.
+        if (time_sync.reconnect_due(millis())) state = AGENT_DISCONNECTED;
+        if (state == AGENT_DISCONNECTED)
+        {
+            time_sync.reset_session(millis());
+            update_command_clock(millis(), 0);
+        }
         if (state == AGENT_DISCONNECTED && wifi_status==FISHBOT_WIFI_STATUS_GOT_IP)
         {
-            display.updateWIFIInfo("ping timeout", FISHBOT_WIFI_STATUS_PING_FAILED);
+            display.updateWIFIInfo("session timeout", FISHBOT_WIFI_STATUS_PING_FAILED);
         }
         if (state == AGENT_CONNECTED)
         {
-            if (!rmw_uros_epoch_synchronized())
-            {
-                RCSOFTCHECK(rmw_uros_sync_session(1000));
-                // 如果时间同步成功，则将当前时间设置为MicroROS代理的时间，并输出调试信息。
-                if (rmw_uros_epoch_synchronized())
-                {
-                    // 该函数的参数是一个Unix时间戳，表示自1970年1月1日0时0分0秒以来的秒数
-                    // rmw_uros_epoch_millis()返回MicroROS代理的当前时间（毫秒），除以1000将其转换为秒数。
-                    // SECS_PER_HOUR表示一小时的秒数，乘以8表示东八区的时差。
-                    // 因此，整个计算表达式的结果是将MicroROS代理的时间转换为本地时间
-                    setTime(rmw_uros_epoch_millis() / 1000 + SECS_PER_HOUR * 8);
-                    fishlog_debug("fishbot", "current_time:%ld", rmw_uros_epoch_millis());
-                }
-                delay(10);
-                return;
-            }
+            update_command_clock(millis(), rmw_uros_epoch_millis());
             // 闪烁LED
             digitalWrite(2, !digitalRead(2));
             // 函数调用rclc_executor_spin_some函数，在100毫秒内执行一些待处理的 ROS2 消息。
             RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100)));
         }
         break;
+    }
     // 当状态为AGENT_DISCONNECTED时，函数将销毁fishbot传输并将状态设置为WAITING_AGENT，表示等待MicroROS代理连接。
     // AGENT_DISCONNECTED状态下无法与MicroROS代理通信，需要重新连接
     case AGENT_DISCONNECTED:
         invalidate_command();
+        time_sync.reset_session(millis());
+        update_command_clock(millis(), 0);
         destory_fishbot_transport();
         state = WAITING_AGENT;
         break;
@@ -601,6 +728,9 @@ void callback_sensor_publisher_timer_(rcl_timer_t *timer, int64_t last_call_time
     {
         // 用于获取当前的时间戳，并将其存储在消息的头部中
         int64_t stamp = rmw_uros_epoch_millis();
+        const uint32_t now_ms = millis();
+        update_command_clock(now_ms, stamp);
+        if (!time_sync.accept_stamp(now_ms, stamp)) return;
         // 获取机器人的位置和速度信息，并将其存储在一个ROS消息（odom_msg）中
         odom_t odom = kinematics.odom();
         odom_msg.header.stamp.sec = static_cast<int32_t>(stamp / 1000);              // 秒部分
@@ -649,7 +779,8 @@ void callback_sensor_publisher_timer_(rcl_timer_t *timer, int64_t last_call_time
 void callback_twist_subscription_(const void *msgin)
 {
     const geometry_msgs__msg__Twist *msg = (const geometry_msgs__msg__Twist *)msgin;
-    if (!std::isfinite(msg->linear.x) || !std::isfinite(msg->angular.z))
+    if (!update_command_clock(millis(), rmw_uros_epoch_millis()) ||
+        !std::isfinite(msg->linear.x) || !std::isfinite(msg->angular.z))
     {
         invalidate_command();
         return;

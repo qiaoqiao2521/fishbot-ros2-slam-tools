@@ -1,5 +1,37 @@
 # Findings
 
+## 2026-10-09 route false success and timing tolerance
+
+- A closed through-poses goal ending at current XY can satisfy FollowPath's final goal checker before visiting its intermediates. The real action reported success after only in-place rotation. Net wheel XY change was about 0.44 mm; this is failed route acceptance, not a completed 3.05 m circuit.
+- The client rejects final XY within 10 cm of the fresh start and requires ordered fresh feedback within 15 cm of each intermediate. Action status alone is insufficient route evidence.
+- RViz SetGoal was missing; adding it on `/goal_pose` made clicks reach Nav2. Subsequent no-progress failures coincided with an existing odom-age guard latch. Fresh data alone does not reset a hard latch.
+- Explicit tolerant timing selection changes command/odom expiry from 250 to 350 ms. Expiry stops immediately; transient holds may recover after 200 ms of healthy data, then require a new command with post-recovery source time. A two-second recovery window escalates to a hard latch. Default strict behavior, physical footprint and collision checks remain unchanged.
+- Runtime readback confirmed the tolerant settings, fresh-zero reset, stationary native feedback and sole final command ownership. Eighty related checks passed. No tolerant-profile moving route has yet been accepted.
+
+## 2026-10-09 fixed-map actions and host command tail
+
+- Outbound and resumed return completed through Nav2 with fresh stopping feedback. Actual outbound was about 47 cm, rather than the planned 25 cm, because live localization differed from the offline seed. Wheel return error was about 2.73 cm, without independent ground truth.
+- Short-patrol point 1 completed. Point 2 was canceled and stopped; the remaining points were not sent. Existing latches caused two preliminary no-goal attempts.
+- Matched captures show nonzero host smoother/CM commands received 259–262 ms after the source stamp. The smoother and guard both use 250 ms expiry, with input stamps preserved. Native odometry was fresh in these captures. This host tail is distinct from pre-NIC board-side delivery delays.
+- A single NavigateThroughPoses action follows a path through intermediate poses. It avoids repeated action start, terminal rotation and five-second stationary observation at each small point. Existing bounded clear-costmap recovery and final guard/cancel/stop checks remain applicable. Full physical-route acceptance still needs action and final feedback.
+
+## 2026-10-09 native clock and wireless delivery
+
+The current time-reply filter is required because the built XRCE Client accepts
+unmatched late replies, including replies encountered by the ordinary executor.
+The filter does not resolve all delivery delay. Physical NIC/UART correlation
+found a request arriving 3.20 seconds after its timeout log had reached the host.
+Matched NIC-to-DDS delivery was at most 5.14 ms. This establishes pre-NIC delay,
+without isolating board queues, radio and AP delivery.
+
+The firmware already requests WIFI_PS_NONE and best-effort odometry/IMU.
+Diagnostic getters confirmed board PS=0 with no getter error. Returned UDP write
+interval maxima were 1.753–8.639 ms; these measure local API time, not delivery.
+Priority 1 alone does not establish starvation, and heap's historical minimum
+does not establish a leak. Computer power-saving and radar-receiver isolation
+comparisons both failed; their original states were restored. Current details
+and limits are in ../../docs/FIRMWARE_TIME_SYNC.md. No movement was issued.
+
 ## 2026-10-06 implemented continuous passage pipeline
 
 User rejected manual measuring as a prerequisite and selected the official open-model geometry. Implemented `tools/fishbot_passage.launch.py`, goal client, final command guard, shared model/Nav2 YAML, bounded behavior tree, RViz view and offline trigger replay; see `docs/PASSAGE_CONTROL.md`. No real domain-zero process or car command was started for this work.

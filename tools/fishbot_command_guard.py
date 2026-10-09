@@ -74,6 +74,10 @@ class Settings:
     candidate_topic: str = '/cmd_vel_safe_candidate'
     output_topic: str = '/cmd_vel'
     output_stamped: bool = False
+    timing_profile: str = 'strict'
+    odom_timeout_s: float = ODOM_AGE
+    hold_timeout_s: float = 2.0
+    recovery_s: float = 0.2
 
     @classmethod
     def from_mapping(cls, document, **overrides):
@@ -87,10 +91,14 @@ class Settings:
         for key, value in (('max_linear_speed', linear), ('max_angular_speed', angular)):
             if key in guard and guard[key] != value:
                 raise ValueError('command_guard.' + key + ' disagrees with motion')
-        timeout = guard.get('command_timeout_s', 0.25)
+        timing_profile = overrides.pop('timing_profile', 'strict')
+        if timing_profile not in ('strict', 'tolerant'):
+            raise ValueError('timing_profile must be strict or tolerant')
+        timeout = 0.35 if timing_profile == 'tolerant' else guard.get('command_timeout_s', 0.25)
         capacity = guard.get('ring_capacity', 40)
-        if not finite(timeout) or not 0 < timeout <= 0.25:
-            raise ValueError('command timeout must be positive and <= 0.25 s')
+        ceiling = 0.35 if timing_profile == 'tolerant' else 0.25
+        if not finite(timeout) or not 0 < timeout <= ceiling:
+            raise ValueError('command timeout must be positive and <= ' + str(ceiling) + ' s')
         if not isinstance(capacity, int) or isinstance(capacity, bool) or not 1 <= capacity <= 200:
             raise ValueError('ring_capacity must be in [1, 200]')
         for name in ('base', 'odom'):
@@ -117,9 +125,16 @@ class Settings:
             raise ValueError('command topics must be absolute')
         if options['candidate_topic'] == options['output_topic']:
             raise ValueError('candidate and final topics must differ')
+        geometry = deepcopy(document)
+        geometry.setdefault('command_guard', {}).update(
+            timing_profile=timing_profile, command_timeout_s=float(timeout),
+            odom_timeout_s=0.35 if timing_profile == 'tolerant' else ODOM_AGE,
+            hold_timeout_s=2.0, recovery_s=0.2)
         return cls(frames['base'], frames['odom'], guard.get('profile', 'official-model'),
                    float(linear), float(angular), float(timeout), capacity,
-                   candidates, subscribers, deepcopy(document), **options)
+                   candidates, subscribers, geometry, **options,
+                   timing_profile=timing_profile,
+                   odom_timeout_s=0.35 if timing_profile == 'tolerant' else ODOM_AGE)
 
 
 def project_scan(raw, transform):
@@ -184,6 +199,12 @@ class CommandGuard:
         self.event_sequence = 0
         self.cm_action = 0
         self.cm_polygon = ''
+        self.hold_started = None
+        self.hold_reason = None
+        self.hold_healthy_since = None
+        self.hold_needs_command = False
+        self.resume_ros = None
+        self.resume_sequence = 0
 
     def _store(self, kind, data, stamp, ros_now, steady_now, error=None):
         self.sequence += 1
@@ -206,7 +227,8 @@ class CommandGuard:
                 raise ValueError('command exceeds configured speed limits')
             if (not all(map(finite, (stamp, ros_now)))
                     or ros_now-stamp < -FUTURE_AGE-1e-9
-                    or (any(values) and ros_now-stamp > self.settings.command_timeout_s+1e-9)):
+                    or (self.settings.timing_profile == 'strict' and any(values)
+                        and ros_now-stamp > self.settings.command_timeout_s+1e-9)):
                 raise ValueError('command source timestamp outside freshness limit')
             # A valid old zero cannot move the robot. Preserve its old stamp so
             # tick handles it as idle expiry, without arming or replaying it.
@@ -264,7 +286,7 @@ class CommandGuard:
         return None
 
     def health_issue(self, ros_now, steady_now):
-        return (self._age_issue('odom', ODOM_AGE, ros_now, steady_now)
+        return (self._age_issue('odom', self.settings.odom_timeout_s, ros_now, steady_now)
                 or self._age_issue('scan', SCAN_AGE, ros_now, steady_now)
                 or self.owner_issue
                 or ('collision monitor invalid source' if self.cm_action == 1
@@ -320,6 +342,8 @@ class CommandGuard:
             self.latch('collision monitor invalid source', ros_now, steady_now)
 
     def tick(self, ros_now, steady_now):
+        if self.settings.timing_profile == 'tolerant':
+            return self._tolerant_tick(ros_now, steady_now)
         if self.latched_reason is not None:
             self.status = 'latched: ' + self.latched_reason
             return ZERO
@@ -355,8 +379,119 @@ class CommandGuard:
         self.status = 'healthy'
         return values[0], values[5]
 
+    def _hard_issue(self, ros_now, steady_now):
+        """Inspect every hard fault before a recoverable age issue can hide it."""
+        if not all(map(finite, (ros_now, steady_now))):
+            return 'invalid guard clock'
+        if self.owner_issue:
+            return self.owner_issue
+        if self.cm_action == 1 and self.cm_polygon == 'invalid source':
+            return 'collision monitor invalid source'
+        for kind in ('odom', 'scan', 'command'):
+            record = self.latest.get(kind)
+            if record is None:
+                continue
+            if record['error']:
+                return kind + ': malformed: ' + record['error']
+            stamp, received = record['source_stamp'], record['received_steady']
+            if not all(map(finite, (stamp, received))) or steady_now < received - 1e-9:
+                return kind + ': invalid clock or source stamp'
+            if ros_now - stamp < -FUTURE_AGE - 1e-9:
+                return kind + ': source stamp in future'
+        return None
+
+    def _clear_hold(self):
+        self.hold_started = self.hold_reason = self.hold_healthy_since = None
+        self.hold_needs_command = False
+
+    def _timing_hold(self, issue, ros_now, steady_now):
+        if self.hold_started is None:
+            self.hold_started, self.hold_reason = steady_now, issue
+            self._event(issue, 'timing_pause', ros_now, steady_now)
+        if issue.startswith('command:'):
+            self.hold_needs_command = True
+        self.hold_healthy_since = None
+        self.latest.pop('command', None)
+        if steady_now - self.hold_started >= self.settings.hold_timeout_s - 1e-9:
+            self.latch('persistent timing fault: ' + self.hold_reason, ros_now, steady_now)
+        elif self.latched_reason is None:
+            self.status = 'timing hold: ' + issue
+        else:
+            self.status = 'latched: ' + self.latched_reason
+        return ZERO
+
+    def _tolerant_tick(self, ros_now, steady_now):
+        if self.latched_reason is not None:
+            self.status = 'latched: ' + self.latched_reason
+            return ZERO
+        hard = self._hard_issue(ros_now, steady_now)
+        if hard:
+            if self.armed:
+                self.latch(hard, ros_now, steady_now)
+            else:
+                self.status = 'priming: ' + hard
+                self.latest.pop('command', None)
+            return ZERO
+        issue = self.health_issue(ros_now, steady_now)
+        if issue:
+            if self.armed:
+                return self._timing_hold(issue, ros_now, steady_now)
+            self.status = 'priming: ' + issue
+            self.latest.pop('command', None)
+            return ZERO
+        command = self.latest.get('command')
+        if command and self.resume_ros is not None and (
+                command['sequence'] <= self.resume_sequence
+                or command['source_stamp'] < self.resume_ros - 1e-9):
+            # Receive freshness alone cannot authorize a queued pre-recovery command.
+            self.latest.pop('command', None)
+            command = None
+        if command:
+            issue = self._age_issue('command', self.settings.command_timeout_s, ros_now, steady_now)
+            if issue:
+                if not any(command['data']['twist']):
+                    self.latest.pop('command', None)
+                    command = None
+                    self.status = 'idle: ' + issue
+                elif self.armed:
+                    return self._timing_hold(issue, ros_now, steady_now)
+                else:
+                    self.latest.pop('command', None)
+                    self.status = 'priming: ' + issue
+                    return ZERO
+        if self.hold_started is not None:
+            if self.hold_needs_command:
+                if command is None:
+                    return self._timing_hold('command: awaiting fresh candidate', ros_now, steady_now)
+                self.hold_needs_command = False
+            if steady_now - self.hold_started >= self.settings.hold_timeout_s - 1e-9:
+                self.latch('persistent timing fault: ' + self.hold_reason, ros_now, steady_now)
+                return ZERO
+            self.latest.pop('command', None)
+            if self.hold_healthy_since is None:
+                self.hold_healthy_since = steady_now
+            if steady_now - self.hold_healthy_since < self.settings.recovery_s - 1e-9:
+                self.status = 'timing recovery: waiting for stable health'
+                return ZERO
+            self._clear_hold()
+            self.resume_ros, self.resume_sequence = ros_now, self.sequence
+            self.status = 'ready; awaiting new command after timing recovery'
+            return ZERO
+        if command is None:
+            self.status = ('collision monitor stop: ' + self.cm_polygon if self.cm_action == 1
+                           else ('ready; awaiting new command' if self.armed else 'priming: awaiting command'))
+            return ZERO
+        self.armed = True
+        if self.cm_action == 1:
+            self.status = 'collision monitor stop: ' + self.cm_polygon
+            return ZERO
+        self.status = 'healthy'
+        values = command['data']['twist']
+        return values[0], values[5]
+
     def reset(self, ros_now, steady_now):
-        issue = self.health_issue(ros_now, steady_now) or self._age_issue(
+        hard = self._hard_issue(ros_now, steady_now) if self.settings.timing_profile == 'tolerant' else None
+        issue = hard or self.health_issue(ros_now, steady_now) or self._age_issue(
             'command', self.settings.command_timeout_s, ros_now, steady_now)
         command = self.latest.get('command')
         if issue:
@@ -366,6 +501,8 @@ class CommandGuard:
         if self.cm_action == 1 and self.cm_polygon == 'invalid source':
             return False, 'collision monitor still reports invalid source'
         self.latched_reason = None
+        self._clear_hold()
+        self.resume_ros, self.resume_sequence = ros_now, self.sequence
         self.latest.pop('command', None)
         self.armed = True
         self.status = 'reset; awaiting new command'
@@ -602,6 +739,11 @@ def create_ros_node(settings, recorder, execute):
                 status.message = self.guard.status
                 status.values = [KeyValue(key='execute', value=str(execute)),
                                  KeyValue(key='profile', value=settings.profile),
+                                 KeyValue(key='timing_profile', value=settings.timing_profile),
+                                 KeyValue(key='command_timeout_s', value=str(settings.command_timeout_s)),
+                                 KeyValue(key='odom_timeout_s', value=str(settings.odom_timeout_s)),
+                                 KeyValue(key='hold_timeout_s', value=str(settings.hold_timeout_s)),
+                                 KeyValue(key='recovery_s', value=str(settings.recovery_s)),
                                  KeyValue(key='last_trigger', value=self.recorder.last_path or '')]
                 msg.status = [status]
                 self.diagnostics.publish(msg)
@@ -662,6 +804,7 @@ def parse_arguments(argv=None):
     parser.add_argument('--candidate-topic')
     parser.add_argument('--output-stamped', action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument('--expected-subscriber', action='append')
+    parser.add_argument('--timing-profile', choices=('strict', 'tolerant'), default='strict')
     args, ros_args = parser.parse_known_args(argv)
     if ros_args and ros_args[0] != '--ros-args':
         parser.error('unknown arguments; ROS options must follow --ros-args')
@@ -674,7 +817,8 @@ def main(argv=None):
     settings = Settings.from_mapping(yaml.safe_load(args.config.read_text()),
                                      output_topic=args.output_topic, candidate_topic=args.candidate_topic,
                                      output_stamped=args.output_stamped,
-                                     expected_final_subscribers=args.expected_subscriber)
+                                     expected_final_subscribers=args.expected_subscriber,
+                                     timing_profile=args.timing_profile)
     recorder = TriggerRecorder(args.output_dir)
     import rclpy
     from rclpy.signals import SignalHandlerOptions

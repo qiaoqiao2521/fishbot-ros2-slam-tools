@@ -26,7 +26,7 @@ or motion is safe. Read FISHBOT_STATUS.md before operating hardware.
 - fishbot_nav/src/: navigation, description and bringup packages.
 - fishbot_laser_ws/src/: actual Python network LiDAR driver.
 - workspaces/micro_ros_agent_ws/src/: Agent and message dependencies.
-- fishbot_motion_control_microros/: firmware source, not a flashed update.
+- fishbot_motion_control_microros/: firmware source and [clock repair](docs/FIRMWARE_TIME_SYNC.md).
 - fishbot-web-panel/: phone PWA for live telemetry and safe jog teleop
   (absorbed from ros2-mobile-panel-day1; FastAPI + prebuilt assets in one
   uvicorn process, default port 8010).
@@ -70,4 +70,4 @@ paths above. The canonical development checkout directly tracks this repository;
 
 Synthetic MuJoCo navigation, patrol, passage and visual-inspection evidence is recorded in the project plans. The inspection fixture completed three stations and return in 73.703 seconds, with nine fresh photos and a 0.12287 m return error. Its classifier is limited to synthetic indicator panels.
 
-Real mapping is incomplete. Real navigation, full passage, vehicle-side stale-command protection and camera inspection remain unaccepted. Build workspaces separately and verify current hardware readiness before any real motion. Repository synchronization does not establish additional physical acceptance.
+The user accepted the latest measured map as this scene's working map; unknown cells remain unknown. Fixed-map outbound and a resumed return passed fresh stopping feedback. A [single continuous map-route entry](docs/PASSAGE_CONTROL.md) avoids intermediate stop-and-observe loops. Complete-route patrol, full passage, vehicle-side stale-command protection and camera inspection remain unaccepted. The user paused wireless experiments; sustained native freshness remains unresolved. Build workspaces separately and verify current hardware readiness before any real motion. Repository synchronization does not establish additional physical acceptance.

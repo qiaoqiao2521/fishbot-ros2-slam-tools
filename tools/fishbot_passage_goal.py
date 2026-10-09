@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One continuous Nav2 goal; explicit execution, bounded time and cancellation.
+"""One continuous Nav2 goal or map route, with bounded time and cancellation.
 
 Default inspection never joins a ROS domain or sends a goal. Domain zero also
 requires --real. Navigation may choose a safe route to the requested endpoint.
@@ -25,6 +25,100 @@ def requested_map_endpoint(x, y, yaw, target):
             or not 0 < math.hypot(target[0]-x, target[1]-y) <= 3):
         raise ValueError('finite map pose and target distance in (0, 3] metres required')
     return tuple(target)
+
+
+def validate_map_route(route):
+    """Require JSON [[map_x, map_y, yaw], ...], without loading ROS."""
+    if not isinstance(route, list) or not 2 <= len(route) <= 20:
+        raise ValueError('route requires 2..20 map poses')
+    for pose in route:
+        if (not isinstance(pose, (list, tuple)) or len(pose) != 3
+                or any(isinstance(v, bool) or not isinstance(v, (int, float))
+                       or not math.isfinite(v) for v in pose)):
+            raise ValueError('route poses require finite numeric [x, y, yaw]')
+    length = 0.
+    for start, pose in zip(route, route[1:]):
+        requested_map_endpoint(*start, pose)
+        length += math.hypot(pose[0]-start[0], pose[1]-start[1])
+    if length > 10:
+        raise ValueError('requested route length must not exceed 10 metres')
+    return [tuple(pose) for pose in route]
+
+
+def requested_map_route(x, y, yaw, route):
+    """Bound every requested segment, including the fresh pose to point one."""
+    route = validate_map_route(route)
+    start, length = (x, y, yaw), 0.
+    for pose in route:
+        requested_map_endpoint(*start, pose)
+        length += math.hypot(pose[0]-start[0], pose[1]-start[1])
+        start = pose
+    if length > 10:
+        raise ValueError('requested route length must not exceed 10 metres')
+    if math.hypot(route[-1][0]-x, route[-1][1]-y) <= .1:
+        raise ValueError('closed-loop route ends within 0.1 m of the fresh start; '
+                         'Nav2 goal checker may finish before traversing the route')
+    return route, length
+
+
+class RouteCoverage:
+    """Accept route completion only after fresh ordered intermediate feedback."""
+
+    def __init__(self, route, evidence):
+        self.intermediates = route[:-1]
+        self.evidence = evidence
+        evidence.update(route_waypoint_visits=[], route_feedback_count=0,
+                        route_feedback_remaining=None,
+                        route_intermediate_coverage=False)
+
+    def observe(self, feedback, ros_now):
+        evidence = self.evidence
+        evidence['route_feedback_count'] += 1
+        evidence['route_feedback_remaining'] = int(feedback.number_of_poses_remaining)
+        pose = feedback.current_pose
+        x, y = pose.pose.position.x, pose.pose.position.y
+        age = ros_now - pose.header.stamp.sec - pose.header.stamp.nanosec * 1e-9
+        if (pose.header.frame_id != 'map' or not all(math.isfinite(v) for v in (x, y, age))
+                or not -.05 <= age <= .5):
+            evidence['route_invalid_feedback_count'] = evidence.get('route_invalid_feedback_count', 0) + 1
+            return
+        visits = evidence['route_waypoint_visits']
+        while len(visits) < len(self.intermediates):
+            index = len(visits)
+            target = self.intermediates[index]
+            distance = math.hypot(x-target[0], y-target[1])
+            if distance > .15:
+                break
+            visits.append({'index': index, 'position': [x, y],
+                           'distance': distance, 'source_age': age})
+        evidence['route_intermediate_coverage'] = len(visits) == len(self.intermediates)
+
+    def require_complete(self):
+        if not self.evidence['route_intermediate_coverage']:
+            raise RuntimeError('Nav2 reported success without observed ordered intermediate '
+                               f'waypoints ({len(self.evidence["route_waypoint_visits"])}/'
+                               f'{len(self.intermediates)})')
+
+
+def make_navigation_goal(action_type, pose_type, poses, stamp, through_poses):
+    """Build the installed Jazzy action shape; one goal owns the entire route."""
+    goal = action_type.Goal()
+    messages = []
+    for x, y, yaw in poses:
+        pose = pose_type()
+        pose.header.frame_id, pose.header.stamp = 'map', stamp
+        pose.pose.position.x, pose.pose.position.y = float(x), float(y)
+        pose.pose.orientation.z = math.sin(yaw/2)
+        pose.pose.orientation.w = math.cos(yaw/2)
+        messages.append(pose)
+    if through_poses:
+        goal.poses = messages
+        tree = 'fishbot_passage_through_tree.xml'
+    else:
+        goal.pose = messages[0]
+        tree = 'fishbot_passage_tree.xml'
+    goal.behavior_tree = str(Path(__file__).parent / 'config' / tree)
+    return goal
 
 
 def heading_from_quaternion(values):
@@ -166,6 +260,8 @@ def main():
     destination.add_argument('--distance', type=float)
     destination.add_argument('--target', nargs=3, type=float, metavar=('X', 'Y', 'YAW'),
                              help='map target in metres and radians; at most 3 metres from the fresh pose')
+    destination.add_argument('--route-file', type=Path,
+                             help='JSON [[map_x, map_y, yaw], ...], 2..20 poses; segments <=3 m, requested total <=10 m')
     parser.add_argument('--domain', type=int, default=96)
     parser.add_argument('--real', action='store_true')
     parser.add_argument('--execute', action='store_true')
@@ -173,7 +269,13 @@ def main():
     parser.add_argument('--timeout', type=float, default=90)
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
-    if args.target is None:
+    route = None
+    if args.route_file is not None:
+        try:
+            route = validate_map_route(json.loads(args.route_file.read_text()))
+        except (OSError, ValueError, TypeError) as exc:
+            parser.error('invalid route file: ' + str(exc))
+    elif args.target is None:
         args.distance = 1.0 if args.distance is None else args.distance
         requested_endpoint(0, 0, 0, args.distance)
     elif not all(math.isfinite(v) for v in args.target):
@@ -187,7 +289,9 @@ def main():
     if not args.execute:
         print(json.dumps({'execute': False, 'distance': args.distance,
                           'target_requested': args.target,
-                          'domain': args.domain, 'action': 'navigate_to_pose'}))
+                          'route_requested': route,
+                          'domain': args.domain,
+                          'action': 'navigate_through_poses' if route else 'navigate_to_pose'}))
         return 0
     if args.output is None or args.output.exists():
         parser.error('execution requires a new --output evidence file')
@@ -201,7 +305,8 @@ def main():
     from rclpy.node import Node
     from rclpy.parameter import Parameter
     from rclpy.signals import SignalHandlerOptions
-    from nav2_msgs.action import NavigateToPose
+    from nav2_msgs.action import NavigateToPose, NavigateThroughPoses
+    from geometry_msgs.msg import PoseStamped
     from nav_msgs.msg import Odometry
     from diagnostic_msgs.msg import DiagnosticArray
     from std_srvs.srv import Trigger
@@ -215,7 +320,9 @@ def main():
         signal.signal(sig, lambda signum, frame: stopped.append(signum))
     buffer = Buffer()
     listener = TransformListener(buffer, node)
-    action = ActionClient(node, NavigateToPose, '/navigate_to_pose')
+    action_type = NavigateThroughPoses if route else NavigateToPose
+    action_name = 'navigate_through_poses' if route else 'navigate_to_pose'
+    action = ActionClient(node, action_type, '/' + action_name)
     stop_client = node.create_client(Trigger, '/fishbot_command_guard/stop')
     odom = []
     guard_diagnostic = []
@@ -224,6 +331,7 @@ def main():
                              lambda m: guard_diagnostic.__setitem__(slice(None), [(time.monotonic(), m)]), 1)
     result = {'completed': False, 'stationary_feedback': False,
               'distance_requested': args.distance, 'target_requested': args.target,
+              'route_requested': route, 'action': action_name,
               'domain': args.domain}
     pending = PendingGoal(result)
     goal_requested = False
@@ -268,19 +376,26 @@ def main():
         t, q = tf.transform.translation, tf.transform.rotation
         yaw = heading_from_quaternion((q.x, q.y, q.z, q.w))
         result['start'] = [t.x, t.y, yaw]
-        x, y, target_yaw = (requested_map_endpoint(t.x, t.y, yaw, args.target)
-                            if args.target is not None else requested_endpoint(t.x, t.y, yaw, args.distance))
+        if route is not None:
+            poses, length = requested_map_route(t.x, t.y, yaw, route)
+            result.update(route=[list(pose) for pose in poses], route_length=length)
+            x, y, target_yaw = poses[-1]
+        else:
+            x, y, target_yaw = (requested_map_endpoint(t.x, t.y, yaw, args.target)
+                                if args.target is not None else requested_endpoint(t.x, t.y, yaw, args.distance))
+            poses = [(x, y, target_yaw)]
         result['target'] = [x, y, target_yaw]
         result['relative_target_distance'] = math.hypot(x-t.x, y-t.y)
-        goal = NavigateToPose.Goal()
-        goal.pose.header.frame_id = 'map'
-        goal.pose.header.stamp = node.get_clock().now().to_msg()
-        goal.pose.pose.position.x, goal.pose.pose.position.y = x, y
-        goal.pose.pose.orientation.z = math.sin(target_yaw/2)
-        goal.pose.pose.orientation.w = math.cos(target_yaw/2)
-        goal.behavior_tree = str(Path(__file__).parent / 'config/fishbot_passage_tree.xml')
+        goal = make_navigation_goal(action_type, PoseStamped, poses,
+                                    node.get_clock().now().to_msg(), route is not None)
+        coverage = RouteCoverage(poses, result) if route is not None else None
+        def feedback_callback(message):
+            if coverage is not None:
+                coverage.observe(message.feedback, node.get_clock().now().nanoseconds * 1e-9)
         goal_requested = True
-        handle = wait(pending.track(action.send_goal_async(goal)), min(deadline, time.monotonic()+10))
+        send_future = (action.send_goal_async(goal, feedback_callback=feedback_callback)
+                       if coverage is not None else action.send_goal_async(goal))
+        handle = wait(pending.track(send_future), min(deadline, time.monotonic()+10))
         # Some future adapters dispatch done callbacks on the next executor turn.
         if pending.handle is None:
             pending._accepted(pending.send_future)
@@ -291,6 +406,8 @@ def main():
         result.update(action_status=response.status, error_code=response.result.error_code)
         if response.status != 4 or response.result.error_code != 0:
             raise RuntimeError('Nav2 did not complete the requested goal')
+        if coverage is not None:
+            coverage.require_complete()
         result['completed'] = True
     except Exception as exc:
         result['error'] = str(exc)

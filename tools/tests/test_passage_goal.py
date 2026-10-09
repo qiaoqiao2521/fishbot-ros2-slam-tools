@@ -4,8 +4,10 @@ from pathlib import Path
 import math
 import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
+import xml.etree.ElementTree as ET
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'fishbot_passage_goal.py'
 spec = importlib.util.spec_from_file_location('passage_goal', SCRIPT)
@@ -37,6 +39,155 @@ class Future:
 
 
 class PassageGoalTests(unittest.TestCase):
+    def test_route_bounds_include_fresh_start(self):
+        route = [[1, 0, 0], [1, 1, math.pi/2], [0, .2, -math.pi/2]]
+        poses, length = module.requested_map_route(0, 0, 0, route)
+        self.assertEqual(poses, [tuple(p) for p in route])
+        self.assertAlmostEqual(length, 2 + math.hypot(1, .8))
+        with self.assertRaises(ValueError):
+            module.requested_map_route(-2.001, 0, 0, route)
+        # Inter-point path is 9 m, but the fresh first leg adds 2 m.
+        with self.assertRaisesRegex(ValueError, '10 metres'):
+            module.requested_map_route(-2, 0, 0,
+                                       [[0, 0, 0], [3, 0, 0], [0, 0, 0], [3, 0, 0]])
+
+    def test_closed_loop_near_fresh_start_is_rejected_even_with_different_yaw(self):
+        for end_x in (0, .099999, .1):
+            for yaw in (0, math.pi, -math.pi/2):
+                with self.subTest(end_x=end_x, yaw=yaw), self.assertRaisesRegex(ValueError, 'closed-loop.*goal checker'):
+                    module.requested_map_route(0, 0, .3, [[1, 0, 0], [end_x, 0, yaw]])
+        module.requested_map_route(0, 0, .3, [[1, 0, 0], [.100001, 0, math.pi]])
+
+    @staticmethod
+    def route_feedback(x, y, remaining=1, stamp=100., frame='map'):
+        sec = math.floor(stamp)
+        return SimpleNamespace(number_of_poses_remaining=remaining, current_pose=SimpleNamespace(
+            header=SimpleNamespace(frame_id=frame, stamp=SimpleNamespace(
+                sec=sec, nanosec=round((stamp-sec)*1e9))),
+            pose=SimpleNamespace(position=SimpleNamespace(x=x, y=y))))
+
+    def test_route_feedback_requires_fresh_intermediates_in_order(self):
+        evidence = {}
+        coverage = module.RouteCoverage([(1, 0, 0), (2, 0, 0), (3, 0, 0)], evidence)
+        coverage.observe(self.route_feedback(2, 0, remaining=1), 100.1)
+        self.assertEqual(evidence['route_waypoint_visits'], [])
+        for feedback in (self.route_feedback(1, 0, stamp=99),
+                         self.route_feedback(1, 0, frame='odom'),
+                         self.route_feedback(math.nan, 0)):
+            coverage.observe(feedback, 100.1)
+        self.assertEqual(evidence['route_invalid_feedback_count'], 3)
+        self.assertEqual(evidence['route_waypoint_visits'], [])
+        coverage.observe(self.route_feedback(.851, 0, remaining=2), 100.1)
+        self.assertEqual(len(evidence['route_waypoint_visits']), 1)
+        with self.assertRaisesRegex(RuntimeError, '1/2'):
+            coverage.require_complete()
+        coverage.observe(self.route_feedback(2, 0, remaining=1), 100.1)
+        coverage.require_complete()
+        self.assertTrue(evidence['route_intermediate_coverage'])
+        self.assertEqual(evidence['route_feedback_remaining'], 1)
+        self.assertEqual([v['index'] for v in evidence['route_waypoint_visits']], [0, 1])
+
+    def test_nav2_success_without_route_feedback_enters_stop_and_cancel(self):
+        result = {'completed': False, 'stationary_feedback': False, 'action_status': 4}
+        coverage = module.RouteCoverage([(1, 0, 0), (2, 0, 0)], result)
+        with self.assertRaisesRegex(RuntimeError, '0/1'):
+            coverage.require_complete()
+        calls = []
+        def observe():
+            result['stationary_feedback'] = True
+        module.finalize_goal(result, True, lambda: calls.append('stop'), lambda: calls.append('cancel'),
+                             observe, lambda: None, lambda: None, lambda: None, lambda: None)
+        self.assertFalse(result['completed'])
+        self.assertEqual(calls, ['stop', 'cancel'])
+
+    def test_invalid_routes_are_rejected_without_ros(self):
+        invalid = [[], [[0, 0, 0]], [[0, 0, 0]] * 21,
+                   [[0, 0, 0], [0, 0, 1]],
+                   [[0, 0, 0], [3.001, 0, 0]],
+                   [[0, 0, 0], [1, 0, math.inf]],
+                   [[0, 0, 0], [True, 0, 0]],
+                   [[0, 0, 0], ['1', 0, 0]],
+                   [[0, 0, 0], [1, 0]],
+                   {'poses': [[0, 0, 0], [1, 0, 0]]},
+                   [[0, 0, 0], [3, 0, 0], [0, 0, 0], [3, 0, 0], [0, 0, 0]]]
+        for route in invalid:
+            with self.subTest(route=route), self.assertRaises(ValueError):
+                module.validate_map_route(route)
+
+    def test_route_preview_and_destination_mutual_exclusion(self):
+        route = [[100, -20, 0], [101, -20, .5]]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'route.json'
+            path.write_text(json.dumps(route))
+            p = subprocess.run([sys.executable, str(SCRIPT), '--route-file', str(path)],
+                               text=True, capture_output=True)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            result = json.loads(p.stdout)
+            self.assertEqual(result['route_requested'], route)
+            self.assertEqual(result['action'], 'navigate_through_poses')
+            self.assertIsNone(result['distance'])
+            self.assertFalse(result['execute'])
+            for extra in (['--distance', '1'], ['--target', '0', '1', '0']):
+                p = subprocess.run([sys.executable, str(SCRIPT), '--route-file', str(path), *extra],
+                                   text=True, capture_output=True)
+                self.assertNotEqual(p.returncode, 0)
+                self.assertIn('not allowed with argument', p.stderr)
+            path.write_text('[[0,0,0],[10,0,0]]')
+            p = subprocess.run([sys.executable, str(SCRIPT), '--route-file', str(path), '--execute'],
+                               text=True, capture_output=True)
+            self.assertNotEqual(p.returncode, 0)
+            self.assertIn('invalid route file', p.stderr)
+            self.assertNotIn('rclpy', p.stderr)
+
+    def test_through_tree_matches_installed_jazzy_pipeline_and_bounded_recovery(self):
+        tree = ET.parse(SCRIPT.parent / 'config/fishbot_passage_through_tree.xml')
+        official = Path('/opt/ros/jazzy/share/nav2_bt_navigator/behavior_trees/'
+                        'navigate_through_poses_w_replanning_and_recovery.xml')
+        if official.exists():
+            known_tags = {node.tag for node in ET.parse(official).iter()}
+            self.assertTrue({node.tag for node in tree.iter()} <= known_tags)
+        tags = [node.tag for node in tree.iter()]
+        self.assertIn('ComputePathThroughPoses', tags)
+        self.assertLess(tags.index('RemovePassedGoals'), tags.index('ComputePathThroughPoses'))
+        self.assertNotIn('ComputePathToPose', tags)
+        self.assertFalse({'Spin', 'BackUp', 'Wait'} & set(tags))
+        self.assertEqual(tree.find('.//RecoveryNode').get('number_of_retries'), '1')
+        self.assertEqual(tree.find('.//RemovePassedGoals').get('radius'), '0.1')
+
+    def test_installed_jazzy_action_goal_serializes_route_and_single_pose(self):
+        # This uses real generated message classes and CDR serialization. No node
+        # or DDS participant is created; unavailable ROS installations skip it.
+        code = '''import importlib.util, math
+from nav2_msgs.action import NavigateThroughPoses, NavigateToPose
+from geometry_msgs.msg import PoseStamped
+from builtin_interfaces.msg import Time
+from rclpy.serialization import serialize_message, deserialize_message
+spec=importlib.util.spec_from_file_location('passage_goal', %r)
+m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+route=[(1.,2.,0.),(2.,3.,math.pi/2)]
+g=m.make_navigation_goal(NavigateThroughPoses,PoseStamped,route,Time(sec=123),True)
+g=deserialize_message(serialize_message(g),NavigateThroughPoses.Goal)
+assert len(g.poses)==2 and g.poses[0].header.frame_id=='map'
+assert g.poses[0].header.stamp.sec==123
+assert g.poses[1].pose.position.y==3.
+assert abs(g.poses[1].pose.orientation.z-math.sqrt(.5))<1e-12
+assert g.behavior_tree.endswith('fishbot_passage_through_tree.xml')
+f=NavigateThroughPoses.Feedback(current_pose=g.poses[0],number_of_poses_remaining=1)
+f=deserialize_message(serialize_message(f),NavigateThroughPoses.Feedback)
+e={}; coverage=m.RouteCoverage(route,e); coverage.observe(f,123.1); coverage.require_complete()
+assert e['route_feedback_remaining']==1 and len(e['route_waypoint_visits'])==1
+s=m.make_navigation_goal(NavigateToPose,PoseStamped,route[:1],Time(sec=123),False)
+s=deserialize_message(serialize_message(s),NavigateToPose.Goal)
+assert s.pose.pose.position.x==1.
+assert s.behavior_tree.endswith('fishbot_passage_tree.xml')
+''' % str(SCRIPT)
+        setup = Path('/opt/ros/jazzy/setup.bash')
+        if not setup.exists():
+            self.skipTest('Jazzy generated messages not installed')
+        p = subprocess.run(['bash', '-c', 'source /opt/ros/jazzy/setup.bash; exec /usr/bin/python3 -c "$1"',
+                            'goal-message-check', code], text=True, capture_output=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+
     def test_endpoint_follows_requested_heading(self):
         x, y, yaw = module.requested_endpoint(2, 3, math.pi/2, 1)
         self.assertAlmostEqual(x, 2)

@@ -197,6 +197,9 @@ def _launch(context):
         return text == 'true'
     execute, allow_real, sim_time = boolean('execute'), boolean('allow_real'), boolean('use_sim_time')
     domain = int(arg('ros_domain_id'))
+    timing_profile = arg('timing_profile')
+    if timing_profile not in ('strict', 'tolerant'):
+        raise ValueError('timing_profile must be strict or tolerant')
     output_dir = validate_execution_request(domain, execute, allow_real, sim_time, arg('output_dir'))
     params, _ = load_parameters(arg('params_file'), arg('geometry_file'))
     for name, section in params.items():
@@ -210,7 +213,8 @@ def _launch(context):
     if not guard_path.is_file() or not tree_path.is_file():
         raise ValueError('passage command guard and bounded behavior tree are required')
     guard_cmd = ['/usr/bin/python3', str(guard_path), '--config', arg('geometry_file'),
-                 '--output-dir', str(output_dir/'command_guard'), '--execute']
+                 '--output-dir', str(output_dir/'command_guard'), '--execute',
+                 '--timing-profile', timing_profile]
     if sim_time:
         guard_cmd += ['--output-stamped', '--expected-subscriber', 'diff_drive_controller']
     guard_cmd += ['--ros-args', '-p', 'use_sim_time:='+str(sim_time).lower()]
@@ -257,6 +261,8 @@ def generate_launch_description():
         DeclareLaunchArgument('allow_real', default_value='false'),
         DeclareLaunchArgument('ros_domain_id', default_value='96'),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
+        DeclareLaunchArgument('timing_profile', default_value='strict',
+                              description='strict or tolerant: recover short freshness gaps without replay'),
         DeclareLaunchArgument('output_dir', default_value='',
                               description='Absolute private evidence directory, required to execute'),
         DeclareLaunchArgument('params_file', default_value=str(ROOT/'config/fishbot_passage_nav.yaml')),
