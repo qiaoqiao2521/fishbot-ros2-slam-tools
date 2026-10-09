@@ -4,6 +4,16 @@
 User requested completing real-car mapping, navigation, obstacle avoidance and patrol from scratch in the changed scene. Simulation acceptance does not satisfy this task.
 
 ## Plan and acceptance
+2026-10-10: the user reports the car ran and has powered it off. Saved logs
+confirm two successful RViz goals and three later return failures. A collision
+zone paused output for about 0.140 seconds during a successful goal. Scan-gap
+recovery records occurred between goals at zero native velocity; moving recovery
+remains pending. The shutdown-time ownership stop is separate from navigation.
+Next physical sequence: cold-start fixed-map localization, bidirectional narrow
+passage, then three-point patrol with return, obstacle recovery and cancellation.
+Retain the accepted map and preserve failed results. Root owns physical acceptance;
+no hardware operation follows the current shutdown report.
+
 2026-10-09: the user accepts the measured working map and later ends wireless
 experiments. Unknown cells stay unknown. Fixed-map localization, outbound and a
 resumed return passed with fresh stopping feedback. The first short patrol point

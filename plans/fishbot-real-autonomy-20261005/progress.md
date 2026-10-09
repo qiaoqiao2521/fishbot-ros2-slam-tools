@@ -1,5 +1,44 @@
 # Progress
 
+## Latest physical checkpoint, 2026-10-10 Asia/Shanghai
+
+The user reports successful running without a timing lock and has powered
+the chassis off. Root inspected saved logs only; no hardware command followed
+the shutdown report. Two RViz goals succeeded in 65.15 and 79.29 seconds.
+Three later return goals failed on RPP predicted collisions, controller patience
+or lack of progress. Preserve those failures; five-goal route acceptance did
+not pass.
+
+During the second successful goal, Collision Monitor entered VelocityStop at
+00:10:24.300 and resumed at 00:10:24.440, about 0.140 seconds later. The matched
+trigger retained native odom age about 13 ms and scan publication age about
+39 ms. This was a collision-zone output stop, not a timestamp latch.
+The snapshot association is asynchronous; it does not establish an exact
+internal trigger point or a false obstacle.
+
+Five saved scan-pause recovery pairs lasted about 1.00, 3.70, 1.35, 1.20
+and 1.30 seconds. They occurred outside the five goal intervals, with native
+linear and angular velocities zero. Two records retained motion_active=true;
+that bookkeeping state does not establish actual motion during recovery.
+Moving pause, continuation and completion of the same goal remain unaccepted.
+
+The final ownership stop at 00:17:46.705 followed all five goal results.
+Its final subscriber list was empty and native velocity was zero, consistent
+with the reported chassis shutdown. Do not classify it as a navigation-time
+timestamp lock. No failed goal is queued for replay by root.
+
+Next physical entry: restart sensors, recover fixed-map localization, validate
+bidirectional narrow-passage travel, then run a three-point patrol with return.
+Inspect path centering, turning prediction and obstacle edges before tuning
+clearance. Add temporary-obstacle recovery and cancellation/stopping acceptance
+to that patrol. Cold-start localization and three uninterrupted patrol rounds
+remain pending with root Codex. Maps, scans and raw logs stay private.
+
+Private checkpoint: `.local/clock-repair-20261009/physical-session-20261010.json`.
+Knowledge closeout: `already_covered`; the adopted physical-evidence lesson
+requires native motion and route feedback, not a diagnostic flag or action
+status alone. This checkpoint adds project evidence, not a new global rule.
+
 ## Current: fixed-map navigation and continuous route, 2026-10-09
 
 ### Automatic recovery policy requested by the user

@@ -1,5 +1,23 @@
 # Findings
 
+## 2026-10-10 physical goal results and narrow-passage pause
+
+- Two user-selected RViz goals succeeded; three subsequent return goals failed.
+  RPP repeatedly predicted collision, then exceeded controller patience or
+  progress tolerance. The full requested return route remains unaccepted.
+- During the second success, CM VelocityStop output lasted about 0.140 seconds,
+  then normal output resumed. The matched native source data was fresh.
+  This is distinct from the earlier persistent timestamp lock.
+- Scan-gap pauses recovered automatically between goals with zero native velocity.
+  A retained motion_active flag is insufficient evidence of movement at fault
+  time. Moving automatic recovery requires a fault within an active moving goal,
+  resumed actual travel and subsequent completion/stopping feedback.
+- Final subscriber disappearance occurred after all goal outcomes and matches
+  the user's shutdown report. Do not attribute it to navigation-time timing.
+- The next physical acceptance should join cold-start localization, bidirectional
+  passage and three-point patrol. Inspect path/costmap collision prediction and
+  real obstacle edges before changing controller or collision margins.
+
 ## 2026-10-09 automatic recovery, current policy
 
 - The initial idle correction still allowed CM invalid source to latch. A known
