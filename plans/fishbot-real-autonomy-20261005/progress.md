@@ -57,6 +57,14 @@ uses timing_profile:=tolerant. Diagnostic readback confirmed both 0.35 s limits,
 was correct. No movement command or replacement goal was sent. Actual moving
 recovery and completed tolerant-profile routes remain pending under user control.
 
+A later readback observed a natural scan receive gap lasting beyond the
+2 s recovery window, so tolerant mode correctly escalated to a persistent
+scan-timeout latch. This shows the sensor delivery problem remains. Root
+canceled navigation (zero canceling goals) and used fresh zero to reset after
+feedback recovered. Final sample: guard healthy, native odom age 6.00 ms,
+scan age 57.24 ms, v/w zero. No movement command was sent. Evidence:
+`.local/clock-repair-20261009/tolerant-final-unlock.json`.
+
 Current checks: 80 guard/goal/geometry checks passed, including actual Jazzy
 message serialization. Earlier 41 firmware checks and application build remain
 bound to unchanged firmware source. These do not repair the failed physical
