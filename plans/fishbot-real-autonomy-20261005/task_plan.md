@@ -1,9 +1,18 @@
 # New-scene real FishBot autonomy
 
+## Closure, 2026-10-11 Asia/Shanghai
+
+The user sold the physical car and confirmed mapping/navigation completion.
+Close this physical stage at that accepted scope. The cold-start, passage,
+patrol and firmware follow-ups below are historical plans, superseded by this
+closure. Do not resume hardware operations. Preserve failed results and the
+unverified specialist boundaries; simulation remains a separate reusable asset.
+The current root task is TraceMesh-based retrospective and knowledge writeback.
+
 ## Goal
 User requested completing real-car mapping, navigation, obstacle avoidance and patrol from scratch in the changed scene. Simulation acceptance does not satisfy this task.
 
-## Plan and acceptance
+## Historical plan and acceptance
 2026-10-10: the user reports the car ran and has powered it off. Saved logs
 confirm two successful RViz goals and three later return failures. A collision
 zone paused output for about 0.140 seconds during a successful goal. Scan-gap

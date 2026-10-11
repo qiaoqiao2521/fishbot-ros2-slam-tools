@@ -1,6 +1,18 @@
-# FishBot status — 2026-10-09
+# FishBot status — 2026-10-11
 
 ## Current real work
+
+The user has sold the physical car and explicitly accepts mapping and navigation
+as complete for this project stage. Physical work is closed. Do not schedule
+another power-on, firmware update, passage test or patrol on that vehicle.
+Keep the private map, code and simulation assets for reuse.
+
+This closure does not rewrite failed historical trials or establish additional
+production, moving-recovery or physical-inspection acceptance. The latest task
+retrieves user feedback through TraceMesh and updates the existing knowledge
+page; it operates no hardware.
+
+## Historical physical checkpoints
 
 The user accepted the latest measured checkpoint as this scene's working map. Mapping is closed; unmeasured cells remain unknown. The accepted raster and pose graph are frozen privately by hashes.
 
@@ -10,7 +22,7 @@ The user ended further wireless experiments and requested real navigation under 
 
 A short patrol reached its first point; its second was canceled and stopped. A later 3.05 m through-poses action reported success, but the car only turned at its start: final XY equaled start XY, allowing early goal-checker success. This is a failed physical-route acceptance. The client now rejects endpoints within 10 cm of the fresh start and requires ordered fresh intermediate-pose feedback. Full patrol remains unaccepted.
 
-RViz's missing 2D Goal Pose tool was added, and its map clicks reached Nav2. Those goals failed to make progress because an odometry-age latch still blocked output. At the user's request, the running navigation stack now uses the explicit tolerant timing profile: command/odom expiry 350 ms, immediate zero on expired data, 200 ms healthy recovery before new commands, and persistent timing faults lock after a two-second recovery window. Ownership, malformed/future data, recording faults and operator stop remain explicit-reset faults. Static footprint and collision limits are unchanged. Runtime diagnostics confirmed the selected profile, reset and stationary readiness; 80 related offline checks passed. This does not establish a completed tolerant-profile motion route or repair the board-side delivery failure.
+RViz's missing 2D Goal Pose tool was added, and its map clicks reached Nav2. Those goals failed to make progress because an odometry-age latch still blocked output. The initial historical tolerant deployment used 350 ms command/odom expiry, immediate zero on expired data, 200 ms healthy recovery before new commands, and a two-second recovery window before a persistent timing lock. Its diagnostics and 80 related offline checks are historical evidence. The final deployed policy removed that escalation: ordinary expired/future timestamps, stream gaps, temporary TF failures and CM invalid source pause at zero and recover after 200 ms of healthy sources plus a new post-recovery command. Ownership conflicts, malformed data, nonfinite clocks, recording faults and operator stop still require explicit reset. Static footprint and collision limits are unchanged. This policy change does not establish moving-fault recovery acceptance or repair the board-side delivery failure.
 
 Main-board application updates preserved all 28 effective settings. Filtered synchronization, clock leases, connected-session heartbeat, resource rollback and wireless diagnostics passed 41 host checks and the actual firmware build. Sustained native freshness still failed, including a 5.12-second age and a separate 67.10-second receive gap. Original computer power saving, 20 Hz publication and radar reception were restored. Those failures are retained; continuous clock, reconnection and onboard command-protocol acceptance remain pending. See [firmware clock repair](docs/FIRMWARE_TIME_SYNC.md) and [real task progress](plans/fishbot-real-autonomy-20261005/progress.md).
 
@@ -21,9 +33,9 @@ Main-board application updates preserved all 28 effective settings. Filtered syn
 - Visual inspection visited three stations, captured nine fresh RGB frames, classified green/red/empty and returned home in 73.703 seconds. Return XY error was 0.12287 m; stationary feedback passed. A deadline test confirmed cancellation and stopping.
 - Pixel recognition is limited to the synthetic blue-frame indicator fixture. It does not establish general visual understanding or real camera availability.
 
-## Real robot boundary
+## Historical acceptance boundary
 
-Historical live mapping and map/posegraph persistence passed locally. Working-map acceptance does not establish measured coverage of every unknown area. Complete-route navigation, patrol, full doorway traversal and visual inspection remain unaccepted. Native timestamp consistency and onboard stale-command/watchdog behavior require fresh hardware evidence.
+Historical live mapping and map/posegraph persistence passed locally. Working-map acceptance does not establish measured coverage of every unknown area. Saved records did not establish full patrol, moving source-fault recovery, physical visual inspection or onboard stale-command/watchdog acceptance. These are archived limits, not pending operations on the sold vehicle. The user has accepted mapping/navigation completion within this stage's scope.
 
 The 2026-10-07 repository connection itself flashed no firmware and operated no hardware. Subsequent real work is recorded above. Do not infer physical acceptance from virtual results. Preserve command ownership, fresh odometry/scan checks and bounded stopping verification.
 

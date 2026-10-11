@@ -1,5 +1,40 @@
 # Progress
 
+## Physical stage closed, 2026-10-11 Asia/Shanghai
+
+The user sold the car and explicitly confirms mapping and navigation completion.
+That acceptance closes this stage. Earlier cold-start, passage, patrol and
+firmware proposals no longer authorize or require work on the sold vehicle.
+Keep historical failures, partial tests and private artifacts unchanged.
+No hardware, network, firmware or motion operation occurred in this closeout.
+
+Root retrieves original user feedback with TraceMesh public message interfaces,
+preserving source/store/recording identity and revisions. Duplicate fork copies
+are not additional user complaints. Full-source refresh encountered an unstable
+active recording; full-source activity exceeded its query budget. Selected
+stable stores and bounded historical snapshots supply the evidence instead;
+those limits stay explicit. Ordinary source-timing pauses and permanent locks,
+RViz goal dispatch, collision stops and route false-success are distinct issues.
+
+Knowledge closeout: `updated`; the existing Obsidian page
+`Wiki/ROS2 与 FishBot.md`, section `用户反馈驱动的工程复盘`, and its routing
+entries contain the reusable lessons. Readback confirmed 19 unique evidence rows
+and 10 categories totaling 19, matching source/worktree topic content and routing
+anchors. Independent review checked the technical claims and closure scope;
+the outdated initial timing policy in FISHBOT_STATUS was corrected. Documentation
+diff and RViz YAML checks passed, preserving the goal tool, fixed frame and
+display topics. Delivery commits and remote heads are checked in closeout.
+No Codex memory update or duplicate recall index is created.
+
+Legacy delivery: the existing RViz save is a reviewed presentation/configuration
+serialization delta; preserve its goal tool, topics and collision overlays.
+The untracked firmware `release.sh` remains `pending`, owner root Codex:
+merged-image provenance and provisioning exclusion are not established.
+Do not execute or publish it as a release artifact. Its shortest review entry
+remains the pinned toolchain, partition layout and the preserved handoff below.
+
+The next physical entry described below is historical and superseded.
+
 ## Latest physical checkpoint, 2026-10-10 Asia/Shanghai
 
 The user reports successful running without a timing lock and has powered
