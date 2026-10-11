@@ -1,6 +1,7 @@
 """Boundary tests; real ROS action/physical acceptance is a separate integration run."""
 import copy
 import math
+import queue
 import sys
 import threading
 import unittest
@@ -114,6 +115,20 @@ class MissionSemanticsTests(unittest.TestCase):
         self.record.finish(GoalStatus.STATUS_CANCELED, 0, [])
         self.assertEqual(self.record.value['status'], 'canceled')
 
+    def test_pending_dispatch_does_not_claim_nav2_acceptance(self):
+        self.assertEqual(self.record.value['dispatch_state'], 'pending')
+        self.assertIsNone(self.record.value['stop_reason'])
+
+    def test_first_cancel_reason_survives_acknowledgement_and_final_result(self):
+        self.record.request_cancel('仿真未就绪：仿真时钟未就绪或已暂停')
+        self.record.request_cancel('用户请求取消')
+        self.record.value['message'] = 'Nav2 已接收取消请求，等待终止结果'
+        self.record.finish(GoalStatus.STATUS_CANCELED, 0, [])
+        self.assertEqual(self.record.value['status'], 'canceled')
+        self.assertEqual(self.record.value['stop_reason'], '仿真未就绪：仿真时钟未就绪或已暂停')
+        self.record.begin(self.points, False)
+        self.assertIsNone(self.record.value['stop_reason'])
+
     def test_success_requires_no_error_and_no_missed_waypoints(self):
         self.record.finish(GoalStatus.STATUS_SUCCEEDED, 0, [{'index': 0, 'error_code': 600}])
         self.assertEqual(self.record.value['status'], 'failed')
@@ -134,6 +149,81 @@ class MissionSemanticsTests(unittest.TestCase):
             self.record.request_cancel()
         next_id = self.record.begin(self.points, False)
         self.assertNotEqual(next_id, previous_id)
+
+
+class DispatchFeedbackTests(unittest.TestCase):
+    def harness(self):
+        record = MissionRecord()
+        record.begin([{'x': 1.0, 'y': 1.0, 'yaw': 0.0}], False)
+        sent_cancels = []
+        bridge = SimpleNamespace(lock=threading.RLock(), mission=record,
+                                 goal_handle=None, cancel_requested=False, cancel_sent=False,
+                                 send_cancel=lambda: sent_cancels.append(True),
+                                 result=lambda _mission_id, _future: None)
+        return bridge, sent_cancels
+
+    def test_running_receipt_changes_only_after_nav2_accepts(self):
+        bridge, _sent = self.harness()
+        result = Future()
+        response = Future()
+        response.set_result(SimpleNamespace(accepted=True, get_result_async=lambda: result))
+        MissionBridge.goal_response(bridge, bridge.mission.value['id'], response)
+        self.assertEqual(bridge.mission.value['dispatch_state'], 'accepted')
+        self.assertEqual(bridge.mission.value['status'], 'running')
+        self.assertFalse(result.done())
+
+    def test_nav2_rejection_does_not_become_execution(self):
+        bridge, _sent = self.harness()
+        response = Future()
+        response.set_result(SimpleNamespace(accepted=False))
+        MissionBridge.goal_response(bridge, bridge.mission.value['id'], response)
+        self.assertEqual(bridge.mission.value['dispatch_state'], 'rejected')
+        self.assertEqual(bridge.mission.value['status'], 'failed')
+        self.assertIsNone(bridge.goal_handle)
+
+    def test_missing_receipt_is_unavailable_not_accepted(self):
+        bridge, _sent = self.harness()
+        response = Future()
+        response.set_exception(RuntimeError('response lost'))
+        MissionBridge.goal_response(bridge, bridge.mission.value['id'], response)
+        self.assertEqual(bridge.mission.value['dispatch_state'], 'unavailable')
+        self.assertEqual(bridge.mission.value['status'], 'failed')
+
+    def test_result_subscription_error_does_not_erase_the_actual_acceptance(self):
+        bridge, _sent = self.harness()
+        response = Future()
+
+        def unavailable_result():
+            raise RuntimeError('result subscription failed')
+
+        response.set_result(SimpleNamespace(accepted=True, get_result_async=unavailable_result))
+        MissionBridge.goal_response(bridge, bridge.mission.value['id'], response)
+        self.assertEqual(bridge.mission.value['dispatch_state'], 'accepted')
+        self.assertEqual(bridge.mission.value['status'], 'failed')
+
+    def test_late_acceptance_keeps_pending_cancel_and_its_reason(self):
+        bridge, sent = self.harness()
+        MissionBridge.request_cancel(bridge, '任务接收超时，等待响应后取消')
+        response = Future()
+        response.set_result(SimpleNamespace(accepted=True, get_result_async=Future))
+        MissionBridge.goal_response(bridge, bridge.mission.value['id'], response)
+        self.assertEqual(bridge.mission.value['dispatch_state'], 'accepted')
+        self.assertEqual(bridge.mission.value['status'], 'canceling')
+        self.assertEqual(bridge.mission.value['stop_reason'], '任务接收超时，等待响应后取消')
+        self.assertEqual(sent, [True])
+
+    def test_readiness_cancel_captures_the_specific_source_reason(self):
+        bridge, _sent = self.harness()
+        bridge.poll_lifecycle = lambda _wall: None
+        bridge.evaluate_ready = lambda _wall: (False, '仿真时钟未就绪或已暂停')
+        bridge.goal_sent_wall = 0.0
+        bridge.goal_send_future = None
+        bridge.pending_services = []
+        bridge.operations = queue.Queue()
+        bridge.request_cancel = lambda message: MissionBridge.request_cancel(bridge, message)
+        MissionBridge.tick(bridge)
+        bridge.mission.finish(GoalStatus.STATUS_CANCELED, 0, [])
+        self.assertEqual(bridge.mission.value['stop_reason'], '仿真未就绪：仿真时钟未就绪或已暂停')
 
 
 class LifecycleRetryTests(unittest.TestCase):

@@ -4,7 +4,7 @@ import { ArrowLeft, Box, Check, Home, MapPin, Play, Route, Square, Trash2, X } f
 import { SimulationMapView } from '@/components/simulation/simulation-map'
 import { useSimulation } from '@/hooks/use-simulation'
 import {
-  DEMO_WAYPOINTS, MAX_WAYPOINTS, isFreeWaypoint, missionIsActive, missionLabel,
+  DEMO_WAYPOINTS, MAX_WAYPOINTS, isFreeWaypoint, missionIsActive, missionLabel, missionProgressText,
   type Point, type Pose,
 } from '@/lib/simulation'
 import './simulation.css'
@@ -20,6 +20,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
   const editable = !active && !pending
   const displayedPoints = active ? state!.mission.waypoints : waypoints
   const mission = state?.mission
+  const awaitingAcceptance = mission?.status === 'running' && mission.dispatch_state === 'pending'
   const error = actionError ?? connectionError ?? mapError
   const physical = state?.truth
   const obstacleLabel = {
@@ -52,13 +53,11 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
   }
 
   const statusText = !connected ? state ? '连接中断，正在重连' : '正在连接仿真'
-    : ready ? active ? '导航运行中' : '已就绪，可以派发' : '等待仿真就绪'
-  const progressText = mission?.status === 'running'
-    ? mission.return_home && mission.current_index === mission.waypoints.length - 1
-      ? '正在返回起点' : `正在前往第 ${mission.current_index + 1} / ${mission.waypoints.length} 个点`
-    : mission?.status === 'succeeded' ? `已完成 ${mission.waypoints.length} 个导航点`
-      : mission?.status === 'canceling' ? '等待导航取消并停稳'
-        : '选点后派发，小车会依次前往。'
+    : ready ? awaitingAcceptance ? '等待 Nav2 确认'
+      : mission?.status === 'canceling' ? '正在取消任务'
+        : active ? '导航运行中' : '已就绪，可以派发' : '等待仿真就绪'
+  const progressText = missionProgressText(mission)
+  const sceneTitle = active ? awaitingAcceptance ? '等待 Nav2 确认任务' : '巡逻正在进行' : '点地图，安排一圈巡逻'
 
   return (
     <div className="simulation-page">
@@ -83,7 +82,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
         <section className="simulation-scene" aria-labelledby="simulation-map-title">
           <div className="simulation-scene-header">
             <div>
-              <h2 id="simulation-map-title">{active ? '巡逻正在进行' : '点地图，安排一圈巡逻'}</h2>
+              <h2 id="simulation-map-title">{sceneTitle}</h2>
               <p>{active ? '蓝色是小鱼，绿色线是当前导航路径。' : '点击空旷处添加巡逻点，编号就是前往的顺序。'}</p>
             </div>
             <button type="button" className="simulation-button simulation-quiet" disabled={!map || !editable} onClick={loadDemo}><Route size={16} />载入三点路线</button>
@@ -114,14 +113,15 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
           <section className="simulation-task">
             <div className="simulation-task-heading"><h2>巡逻路线</h2><span>{active ? displayedPoints.length : waypoints.length} 个点</span></div>
             <div className={`simulation-mission-state simulation-mission-${mission?.status ?? 'idle'}`} aria-live="polite">
-              <strong>{missionLabel(mission?.status)}</strong>
+              <strong>{missionLabel(mission?.status, mission?.dispatch_state)}</strong>
               <p>{progressText}</p>
               {mission?.message && mission.status !== 'idle' && <small>{mission.message}</small>}
+              {mission?.stop_reason && <small>取消触发原因：{mission.stop_reason}</small>}
             </div>
 
             {displayedPoints.length ? <ol className="simulation-waypoints">
               {displayedPoints.map((point, index) => {
-                const current = active && index === mission?.current_index
+                const current = mission?.status === 'running' && !awaitingAcceptance && index === mission.current_index
                 const done = active && index < (mission?.current_index ?? 0)
                 const isHome = active && mission?.return_home && index === displayedPoints.length - 1
                 return <li key={`${index}-${point.x}-${point.y}`} className={current ? 'simulation-waypoint-current' : ''}>
@@ -147,7 +147,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
             <p>巡逻途中，让箱子驶入小车前方，观察减速与避障；箱子随后自动退回。</p>
             <strong aria-live="polite">{obstacleLabel}</strong>
             <div className="simulation-obstacle-actions">
-              <button type="button" className="simulation-button simulation-quiet" disabled={!ready || mission?.status !== 'running' || !!pending || state?.obstacle.state !== 'parked'} onClick={() => void act('obstacle', { action: 'block' })}>移入障碍</button>
+              <button type="button" className="simulation-button simulation-quiet" disabled={!ready || mission?.status !== 'running' || awaitingAcceptance || !!pending || state?.obstacle.state !== 'parked'} onClick={() => void act('obstacle', { action: 'block' })}>移入障碍</button>
               <button type="button" className="simulation-button simulation-quiet" disabled={!connected || !!pending || !state?.obstacle || state.obstacle.state === 'parked' || state.obstacle.state === 'returning'} onClick={() => void act('obstacle', { action: 'clear' })}>移走障碍</button>
             </div>
           </section>

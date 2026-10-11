@@ -170,12 +170,15 @@ class ReplayTests(unittest.TestCase):
         guard = replay.command_guard_module()
         geometry = copy.deepcopy(self.geometry)
         geometry["frames"]["base"] = "base_link"
+        geometry["frames"]["scan"] = "laser_link"
         core = guard.CommandGuard(guard.Settings.from_mapping(geometry))
         transform = dict(translation=[0.08, 0.01, 0.4],
                          rotation=[0.0, math.sin(math.pi/4), 0.0, math.cos(math.pi/4)],
                          source_frame="laser_link", target_frame="base_link", stamp=100.0)
         core.accept_scan(scan_with_points((0.12, 0), frame="laser_link"), transform,
                          100.0, 100.01, 20.0)
+        self.assertIsNone(core.latest["scan"]["error"])
+        self.assertIn("points_base", core.latest["scan"]["data"])
         core.accept_command([0.03, 0, 0, 0, 0, 0.15], 100.0, 100.01, 20.0)
         core.zones["stop_polygon"] = dict(frame_id="base_link", source_stamp=99.95,
             points=[[-.13, -.13, 0], [.13, -.13, 0], [.13, .13, 0], [-.13, .13, 0]])

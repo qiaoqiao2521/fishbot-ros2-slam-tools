@@ -8,6 +8,7 @@ export type SimulationMap = {
   data: number[]
 }
 export type MissionStatus = 'idle' | 'running' | 'canceling' | 'canceled' | 'succeeded' | 'failed'
+export type MissionDispatchState = 'pending' | 'accepted' | 'rejected' | 'unavailable'
 export type SimulationState = {
   mode: 'mujoco'
   domain: 93
@@ -23,6 +24,8 @@ export type SimulationState = {
     waypoints: Pose[]
     return_home: boolean
     message: string
+    dispatch_state?: MissionDispatchState | null
+    stop_reason?: string | null
   }
   obstacle: { state: string; x: number | null; y: number | null; size: number }
   home: Pose
@@ -87,6 +90,8 @@ export function validateSimulationMap(value: SimulationMap): SimulationMap {
 export function validateSimulationState(value: SimulationState): SimulationState {
   if (!value || value.mode !== 'mujoco' || value.domain !== 93 || typeof value.ready !== 'boolean' || !value.mission
     || !['idle', 'running', 'canceling', 'canceled', 'succeeded', 'failed'].includes(value.mission.status)
+    || (value.mission.dispatch_state != null && !['pending', 'accepted', 'rejected', 'unavailable'].includes(value.mission.dispatch_state))
+    || (value.mission.stop_reason != null && typeof value.mission.stop_reason !== 'string')
     || !Number.isInteger(value.mission.current_index) || value.mission.current_index < 0
     || !Array.isArray(value.mission.waypoints) || !value.mission.waypoints.every(finitePose)
     || !Array.isArray(value.path) || !value.path.every(finitePoint) || !finitePose(value.home)
@@ -112,11 +117,25 @@ export function missionIsActive(state: SimulationState | null): boolean {
   return state?.mission.status === 'running' || state?.mission.status === 'canceling'
 }
 
-export function missionLabel(status?: MissionStatus): string {
+export function missionLabel(status?: MissionStatus, dispatchState?: MissionDispatchState | null): string {
+  if (status === 'running' && dispatchState === 'pending') return '等待 Nav2 确认'
   return status ? {
     idle: '尚未派发', running: '正在巡逻', canceling: '正在取消', canceled: '已取消',
     succeeded: '巡逻完成', failed: '任务失败',
   }[status] : '等待连接'
+}
+
+export function missionProgressText(mission?: SimulationState['mission']): string {
+  if (mission?.status === 'running') {
+    if (mission.dispatch_state === 'pending') return '任务已提交，尚未收到 Nav2 接收回执。'
+    return mission.return_home && mission.current_index === mission.waypoints.length - 1
+      ? '正在返回起点' : `正在前往第 ${mission.current_index + 1} / ${mission.waypoints.length} 个点`
+  }
+  if (mission?.status === 'succeeded') return `已完成 ${mission.waypoints.length} 个导航点`
+  if (mission?.status === 'canceling') return '等待 Nav2 取消结果'
+  if (mission?.status === 'canceled') return 'Nav2 已确认取消任务。'
+  if (mission?.status === 'failed') return '任务未完成，请查看 Nav2 回执。'
+  return '选点后派发，小车会依次前往。'
 }
 
 export async function requestSimulation<T>(path: string, body?: object, signal?: AbortSignal): Promise<T> {

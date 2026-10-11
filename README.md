@@ -11,13 +11,17 @@ From this checkout (no personal workspace path required):
 
 ```bash
 ./fishbot.sh check
+./fishbot.sh check-feedback
 ./fishbot.sh stack help
 ./fishbot.sh teleop help
 python3 tools/test_layout.py
 ```
 
-check is offline only. It does not establish that ROS is built, sensors are fresh
-or motion is safe. Read FISHBOT_STATUS.md before operating hardware.
+`check` validates layout and shell syntax. `check-feedback` runs existing offline
+guard, route, mission and UI regressions. It starts no ROS graph or simulation.
+Missing dependencies and skipped tests mean incomplete verification.
+See [feedback workflow](docs/USER_FEEDBACK.md) for commands and remaining cases.
+The physical robot was sold; the user confirmed mapping and navigation complete.
 
 ## Layout
 
@@ -70,4 +74,9 @@ paths above. The canonical development checkout directly tracks this repository;
 
 Synthetic MuJoCo navigation, patrol, passage and visual-inspection evidence is recorded in the project plans. The inspection fixture completed three stations and return in 73.703 seconds, with nine fresh photos and a 0.12287 m return error. Its classifier is limited to synthetic indicator panels.
 
-The user accepted the latest measured map as this scene's working map; unknown cells remain unknown. Fixed-map outbound and a resumed return passed fresh stopping feedback. A [single continuous map-route entry](docs/PASSAGE_CONTROL.md) avoids intermediate stop-and-observe loops. Complete-route patrol, full passage, vehicle-side stale-command protection and camera inspection remain unaccepted. The user paused wireless experiments; sustained native freshness remains unresolved. Build workspaces separately and verify current hardware readiness before any real motion. Repository synchronization does not establish additional physical acceptance.
+The user accepted the latest measured map as this scene's working map; unknown cells remain unknown. Fixed-map outbound and a resumed return passed fresh stopping feedback. A [single continuous map-route entry](docs/PASSAGE_CONTROL.md) avoids intermediate stop-and-observe loops.
+
+The user closed the physical stage on 2026-10-11 after selling the robot.
+Historical limits remain: complete-route patrol, full passage, vehicle-side stale-command protection and camera inspection lack physical acceptance.
+Sustained native freshness remains unresolved. These limits do not reopen physical work.
+Offline regressions and repository synchronization establish no additional physical acceptance.

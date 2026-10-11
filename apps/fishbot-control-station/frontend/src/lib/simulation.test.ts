@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  isFreeWaypoint, mapToWorld, missionIsActive, missionLabel, requestSimulation,
+  isFreeWaypoint, mapToWorld, missionIsActive, missionLabel, missionProgressText, requestSimulation,
   validateSimulationMap, validateSimulationState, worldToMap,
   type SimulationMap, type SimulationState,
 } from '@/lib/simulation'
@@ -15,7 +15,7 @@ const state: SimulationState = {
   mode: 'mujoco', domain: 93, ready: true, reason: '已就绪',
   pose: { x: 0, y: 0, yaw: 0 }, truth: { x: 0, y: 0, yaw: 0, linear_speed: 0, angular_speed: 0 },
   path: [], home: { x: 0, y: 0, yaw: 0 },
-  mission: { id: 'mission-1', status: 'running', current_index: 0, waypoints: [{ x: 2, y: 1, yaw: 0 }], return_home: false, message: '前往中' },
+  mission: { id: 'mission-1', status: 'running', current_index: 0, waypoints: [{ x: 2, y: 1, yaw: 0 }], return_home: false, message: '前往中', dispatch_state: 'accepted', stop_reason: null },
   obstacle: { state: 'parked', x: -0.7, y: -0.7, size: 0.36 },
 }
 
@@ -49,6 +49,37 @@ describe('simulation map coordinates', () => {
 })
 
 describe('simulation server responses', () => {
+  it('shows HTTP dispatch pending as waiting for Nav2 rather than traveling', async () => {
+    const pending = { ...state, mission: { ...state.mission, dispatch_state: 'pending' } }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(pending), { status: 202 })))
+    const received = validateSimulationState(await requestSimulation<SimulationState>('mission', {}))
+    expect(missionIsActive(received)).toBe(true)
+    expect(missionLabel(received.mission.status, received.mission.dispatch_state)).toBe('等待 Nav2 确认')
+    expect(missionProgressText(received.mission)).toContain('尚未收到 Nav2 接收回执')
+    const accepted = { ...received.mission, dispatch_state: 'accepted' as const }
+    expect(missionLabel(accepted.status, accepted.dispatch_state)).toBe('正在巡逻')
+    expect(missionProgressText(accepted)).toBe('正在前往第 1 / 1 个点')
+  })
+
+  it('keeps the original cancellation trigger visible after a final canceled result', () => {
+    const canceled = { ...state, mission: { ...state.mission, status: 'canceled' as const,
+      message: 'Nav2 已取消巡逻', stop_reason: '仿真未就绪：仿真时钟未就绪或已暂停' } }
+    const received = validateSimulationState(canceled)
+    expect(received.mission.stop_reason).toBe('仿真未就绪：仿真时钟未就绪或已暂停')
+    expect(missionProgressText(received.mission)).toBe('Nav2 已确认取消任务。')
+    expect(missionIsActive(received)).toBe(false)
+  })
+
+  it('accepts older bridge states without the additive receipt fields', () => {
+    const legacy = { ...state, mission: { ...state.mission } }
+    delete legacy.mission.dispatch_state
+    delete legacy.mission.stop_reason
+    expect(validateSimulationState(legacy).mission.status).toBe('running')
+    expect(missionLabel(legacy.mission.status)).toBe('正在巡逻')
+    expect(() => validateSimulationState({ ...state, mission: { ...state.mission, dispatch_state: 'invented' } } as unknown as SimulationState)).toThrow('当前 MuJoCo 仿真')
+    expect(() => validateSimulationState({ ...state, mission: { ...state.mission, stop_reason: 123 } } as unknown as SimulationState)).toThrow('当前 MuJoCo 仿真')
+  })
+
   it('preserves paused readiness reasons when the obstacle has not supplied coordinates', () => {
     const paused = {
       ...state, ready: false, reason: '仿真时钟暂停，等待继续',

@@ -120,19 +120,24 @@ class MissionRecord:
     """Only terminal action results can produce a successful/canceled mission."""
     def __init__(self):
         self.value = {'id': None, 'status': 'idle', 'current_index': 0, 'waypoints': [],
-                      'return_home': False, 'message': '等待巡逻任务', 'missed_waypoints': []}
+                      'return_home': False, 'message': '等待巡逻任务', 'missed_waypoints': [],
+                      'dispatch_state': None, 'stop_reason': None}
 
     def begin(self, points, return_home):
         if self.value['status'] in ACTIVE_STATUSES:
             raise APIError('A mission is already running or canceling', 409)
+        # Keep the legacy active-status contract; dispatch_state carries the Nav2 receipt.
         self.value = {'id': uuid.uuid4().hex, 'status': 'running', 'current_index': 0,
                       'waypoints': points, 'return_home': return_home,
-                      'message': '正在提交 Nav2 巡逻任务', 'missed_waypoints': []}
+                      'message': '任务已提交，等待 Nav2 接收回执', 'missed_waypoints': [],
+                      'dispatch_state': 'pending', 'stop_reason': None}
         return self.value['id']
 
-    def request_cancel(self):
+    def request_cancel(self, reason='用户请求取消'):
         if self.value['status'] not in ACTIVE_STATUSES:
             raise APIError('There is no active mission to cancel', 409)
+        if self.value['stop_reason'] is None:
+            self.value['stop_reason'] = reason
         self.value['status'] = 'canceling'
         self.value['message'] = '正在请求取消，等待 Nav2 实际结果'
 
@@ -401,7 +406,7 @@ class MissionBridge(Node):
             self.ready, self.reason = self.evaluate_ready(wall)
             if (self.mission.value['status'] == 'running' and not self.ready
                     and self.goal_sent_wall is not None and wall-self.goal_sent_wall > 1):
-                self.request_cancel('仿真状态过期，正在取消任务')
+                self.request_cancel(f'仿真未就绪：{self.reason}')
             if (self.goal_send_future is not None and not self.goal_send_future.done()
                     and wall-self.goal_sent_wall > 5 and not self.cancel_requested):
                 self.request_cancel('任务接收超时，等待响应后取消')
@@ -472,7 +477,8 @@ class MissionBridge(Node):
             self.goal_send_future = self.client.send_goal_async(
                 goal, feedback_callback=lambda msg: self.feedback(mission_id, msg))
         except Exception:
-            self.mission.value.update(status='failed', message='无法提交 Nav2 巡逻任务')
+            self.mission.value.update(status='failed', dispatch_state='unavailable',
+                                      message='无法提交 Nav2 巡逻任务')
             raise
         self.goal_send_future.add_done_callback(lambda f: self.goal_response(mission_id, f))
 
@@ -490,16 +496,20 @@ class MissionBridge(Node):
             try:
                 handle = future.result()
                 if not handle.accepted:
-                    self.mission.value.update(status='failed', message='Nav2 拒绝了巡逻任务')
+                    self.mission.value.update(status='failed', dispatch_state='rejected',
+                                              message='Nav2 拒绝了巡逻任务')
                     return
                 self.goal_handle = handle
+                self.mission.value['dispatch_state'] = 'accepted'
                 if not self.cancel_requested:
-                    self.mission.value['message'] = 'Nav2 巡逻进行中'
+                    self.mission.value['message'] = 'Nav2 已接受，巡逻进行中'
                 handle.get_result_async().add_done_callback(lambda f: self.result(mission_id, f))
                 if self.cancel_requested:
                     self.send_cancel()
             except Exception as error:
-                self.mission.value.update(status='failed', message=f'任务接收失败：{error}')
+                if self.mission.value['dispatch_state'] != 'accepted':
+                    self.mission.value['dispatch_state'] = 'unavailable'
+                self.mission.value.update(status='failed', message=f'任务回执处理失败：{error}')
 
     def result(self, mission_id, future):
         with self.lock:
@@ -520,7 +530,7 @@ class MissionBridge(Node):
     def request_cancel(self, message):
         if self.mission.value['status'] not in ACTIVE_STATUSES:
             return
-        self.mission.request_cancel()
+        self.mission.request_cancel(message)
         self.mission.value['message'] = message
         self.cancel_requested = True
         if self.goal_handle is not None and not self.cancel_sent:
