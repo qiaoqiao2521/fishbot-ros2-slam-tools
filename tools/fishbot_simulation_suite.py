@@ -49,10 +49,12 @@ def read_json(path, default=None):
     return json.loads(Path(path).read_text())
 
 
-def selected_environment():
+def selected_environment(domain=96):
     env = os.environ.copy()
-    if env.get('ROS_DOMAIN_ID') != '96' or env.get('FISHBOT_MUJOCO_DOMAIN_ID') != '96':
-        raise RuntimeError('Use fishbot_simulation_suite.sh: domain 96 must be explicitly selected')
+    if domain not in (96, 102):
+        raise RuntimeError('Suite collectors support isolated domains 96 and 102 only')
+    if env.get('ROS_DOMAIN_ID') != str(domain) or env.get('FISHBOT_MUJOCO_DOMAIN_ID') != str(domain):
+        raise RuntimeError('Suite domain '+str(domain)+' must be explicitly selected')
     if env.get('ROS_AUTOMATIC_DISCOVERY_RANGE') != 'LOCALHOST':
         raise RuntimeError('Suite requires LOCALHOST discovery')
     if env.get('ROS_STATIC_PEERS', ''):
@@ -73,7 +75,8 @@ def domain_is_empty(timeout=5):
             rclpy.spin_once(node, timeout_sec=.15)
             others = [name for name in node.get_node_names() if name != node.get_name()]
             if others:
-                raise RuntimeError('Domain 96 already contains nodes: ' + ', '.join(sorted(set(others))))
+                raise RuntimeError('Domain '+os.environ.get('ROS_DOMAIN_ID', '96')+' already contains nodes: '
+                                   + ', '.join(sorted(set(others))))
         return
     finally:
         node.destroy_node()
@@ -108,7 +111,7 @@ def finish_process(process):
     return False
 
 
-def collect(path, require_guard):
+def collect(path, require_guard, require_amcl=False):
     import rclpy
     from rclpy.executors import SingleThreadedExecutor
     from rclpy.signals import SignalHandlerOptions
@@ -125,7 +128,7 @@ def collect(path, require_guard):
     done = []
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: done.append(True))
-    data = {'domain': 96, 'truth': [], 'events': [], 'association':
+    data = {'domain': int(os.environ['ROS_DOMAIN_ID']), 'truth': [], 'events': [], 'association':
             'CM state has no timestamp; truth, scans and CM are associated by local receipt time only.',
             'operator_reset_count': 0,
             'reset_count_source': 'Suite launches an empty isolated domain and never invokes reset; counts suite calls only.'}
@@ -212,7 +215,8 @@ def collect(path, require_guard):
         startup = Readiness(False)
         startup.nav = True
         startup.lifecycle_clients = {name: startup.create_client(GetState, '/'+name+'/get_state')
-            for name in ('map_server', 'controller_server', 'planner_server', 'bt_navigator', 'collision_monitor')}
+            for name in ('map_server', 'controller_server', 'planner_server', 'bt_navigator', 'collision_monitor')
+                        + (('amcl',) if require_amcl else ())}
     executor = SingleThreadedExecutor()
     executor.add_node(node)
     if startup is not None:
@@ -267,6 +271,8 @@ def collect(path, require_guard):
 
 def execute_case(case, directory, env):
     started = time.monotonic()
+    domain = str(env.get('ROS_DOMAIN_ID', '96'))
+    case['domain'] = int(domain)
     directory.mkdir(mode=0o700)
     processes, streams = [], []
     def start(command, label):
@@ -283,18 +289,18 @@ def execute_case(case, directory, env):
         domain_is_empty()
         execution.update(domain_empty=True, phase='startup')
         if case['kind'] == 'motion':
-            launch_command = ['ros2', 'launch', 'fishbot_mujoco', 'sim.launch.py', 'ros_domain_id:=96',
+            launch_command = ['ros2', 'launch', 'fishbot_mujoco', 'sim.launch.py', 'ros_domain_id:='+domain,
                               'headless:=true', 'rviz:=false', 'nav:=false', 'bridge:=false', 'obstacle:=false']
         else:
             launch_command = ['ros2', 'launch', str(ROOT/'tools/fishbot_passage_sim.launch.py'),
-                'ros_domain_id:=96', 'output_dir:='+str(directory),
+                'ros_domain_id:='+domain, 'output_dir:='+str(directory),
                 'door_width_m:='+str(case['door_width_m']), 'initial_yaw_rad:='+str(case['initial_yaw_rad']),
                 'timing_profile:='+('tolerant' if case['kind'] == 'scan_gap' else 'strict'),
                 'scan_gap_s:='+str(case.get('scan_gap_s', 0)),
                 'scan_trigger_distance_m:='+str(case.get('scan_trigger_distance_m', .15))]
         launch = start(launch_command, 'launch')
         recorder = start([sys.executable, '-B', str(Path(__file__).resolve()), '--collect',
-                          str(directory/'recording.json'), '--require-guard',
+                          str(directory/'recording.json'), '--domain', domain, '--require-guard',
                           'false' if case['kind'] == 'motion' else 'true'], 'recorder')
         deadline = time.monotonic()+55
         while not (directory/'ready.json').is_file():
@@ -307,7 +313,7 @@ def execute_case(case, directory, env):
         if case['kind'] == 'motion':
             command = [sys.executable, str(SCRIPTS/'verify_stack.py'), 'motion', '--output', str(directory/'motion.json')]
         else:
-            command = [sys.executable, str(ROOT/'tools/fishbot_passage_goal.py'), '--domain', '96',
+            command = [sys.executable, str(ROOT/'tools/fishbot_passage_goal.py'), '--domain', domain,
                 '--use-sim-time', '--execute', '--timeout', '90', '--output', str(directory/'goal.json'),
                 '--timing-profile', 'tolerant' if case['kind'] == 'scan_gap' else 'strict']
             if case['kind'] == 'route':
@@ -399,15 +405,23 @@ def startup_retry_allowed(result, directory):
     try:
         recording = read_json(directory/'recording.json', {})
         truth = recording.get('truth', [])
-        if len(truth) < 2 or not isinstance(recording.get('final_steady_time'), (float, int)):
+        if len(truth) < 2 or not all(isinstance(recording.get(key), (float, int))
+                and math.isfinite(recording[key]) for key in ('final_steady_time','final_ros_now')):
             return False
         fields = ('steady_time', 'stamp', 'x', 'y', 'yaw', 'linear_speed', 'angular_speed')
         if any(not all(isinstance(sample.get(key), (int, float)) and math.isfinite(sample[key])
                        for key in fields) for sample in truth):
             return False
         origin = truth[0]
+        if (not 0 <= recording['final_steady_time']-truth[-1]['steady_time'] <= .25
+                or not -.05 <= recording['final_ros_now']-truth[-1]['stamp'] <= .25
+                or any(not 0 < right[key]-left[key] <= .3
+                       for left, right in zip(truth, truth[1:]) for key in ('steady_time','stamp'))):
+            return False
         return all(abs(sample['linear_speed']) < .005 and abs(sample['angular_speed']) < .02
                    and math.hypot(sample['x']-origin['x'], sample['y']-origin['y']) < .01
+                   and abs(math.atan2(math.sin(sample['yaw']-origin['yaw']),
+                                      math.cos(sample['yaw']-origin['yaw']))) < .02
                    for sample in truth)
     except (ValueError, TypeError, KeyError, OSError):
         return False
@@ -444,10 +458,14 @@ def main():
     parser.add_argument('--cases', nargs='+', help='select named cases from the fixed acceptance matrix')
     parser.add_argument('--collect', type=Path, help=argparse.SUPPRESS)
     parser.add_argument('--require-guard', choices=('true', 'false'), default='true', help=argparse.SUPPRESS)
+    parser.add_argument('--domain', type=int, default=96, choices=(96, 102), help=argparse.SUPPRESS)
+    parser.add_argument('--require-amcl', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
-    env = selected_environment()
+    if not args.collect and args.domain != 96:
+        parser.error('The regular suite uses domain 96; use the campaign for domain 102')
+    env = selected_environment(args.domain)
     if args.collect:
-        collect(args.collect, args.require_guard == 'true')
+        collect(args.collect, args.require_guard == 'true', args.require_amcl)
         return 0
     signal.signal(signal.SIGTERM, interrupt_suite)
     cases = case_matrix(args.seed)

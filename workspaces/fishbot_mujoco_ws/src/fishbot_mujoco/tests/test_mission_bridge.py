@@ -4,6 +4,7 @@ import math
 import queue
 import sys
 import threading
+import time
 import unittest
 from concurrent.futures import Future
 from pathlib import Path
@@ -13,12 +14,43 @@ from rclpy.task import Future as ROSFuture
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from mission_bridge import (APIError, GoalStatus, MissionBridge, MissionRecord,
-                            require_free_point, validate_mission)
+                            Handler, require_free_point, simulation_domain, validate_mission)
 
 
 def fixture_grid():
     return {'width': 40, 'height': 40, 'resolution': 0.1,
             'origin': [-2.0, -2.0, 0.0], 'data': [0]*1600}
+
+
+class IsolationTests(unittest.TestCase):
+    def test_default_domain_preserves_baseline(self):
+        self.assertEqual(simulation_domain({'ROS_DOMAIN_ID': '93',
+            'ROS_AUTOMATIC_DISCOVERY_RANGE': 'LOCALHOST'}), 93)
+
+    def test_isolated_domain_requires_explicit_matching_selection(self):
+        env = {'FISHBOT_MUJOCO_DOMAIN_ID': '100', 'ROS_DOMAIN_ID': '100',
+               'ROS_AUTOMATIC_DISCOVERY_RANGE': 'LOCALHOST'}
+        self.assertEqual(simulation_domain(env), 100)
+        for changes in ({'ROS_DOMAIN_ID': '0'}, {'FISHBOT_MUJOCO_DOMAIN_ID': '0', 'ROS_DOMAIN_ID': '0'},
+                        {'FISHBOT_MUJOCO_DOMAIN_ID': '233', 'ROS_DOMAIN_ID': '233'},
+                        {'FISHBOT_MUJOCO_DOMAIN_ID': '١', 'ROS_DOMAIN_ID': '١'},
+                        {'ROS_AUTOMATIC_DISCOVERY_RANGE': 'SUBNET'}, {'ROS_STATIC_PEERS': '192.168.0.1'}):
+            with self.subTest(changes=changes), self.assertRaises(SystemExit):
+                simulation_domain({**env, **changes})
+        with self.assertRaises(SystemExit):
+            simulation_domain({'ROS_DOMAIN_ID': '100', 'ROS_AUTOMATIC_DISCOVERY_RANGE': 'LOCALHOST'})
+
+    def test_configured_loopback_origin_retains_host_and_origin_restrictions(self):
+        server = SimpleNamespace(port=9076, ui_ports={5173, 5180})
+        handler = SimpleNamespace(server=server, headers={'Host': '127.0.0.1:9076',
+                                                         'Origin': 'http://127.0.0.1:5180'})
+        self.assertTrue(Handler.allowed(handler))
+        for origin in ('http://192.168.0.1:5180', 'http://127.0.0.1:5181',
+                       'http://127.0.0.1:5180/path', 'http://user@127.0.0.1:5180'):
+            handler.headers['Origin'] = origin
+            self.assertFalse(Handler.allowed(handler))
+        handler.headers = {'Host': '192.168.0.1:9076'}
+        self.assertFalse(Handler.allowed(handler))
 
 
 class GoalBoundaryTests(unittest.TestCase):
@@ -185,13 +217,68 @@ class DispatchFeedbackTests(unittest.TestCase):
         self.assertEqual(bridge.mission.value['status'], 'failed')
         self.assertIsNone(bridge.goal_handle)
 
-    def test_missing_receipt_is_unavailable_not_accepted(self):
+    def test_missing_receipt_retains_unknown_ownership_and_forbids_new_goal(self):
         bridge, _sent = self.harness()
+        mission_id = bridge.mission.value['id']
         response = Future()
         response.set_exception(RuntimeError('response lost'))
         MissionBridge.goal_response(bridge, bridge.mission.value['id'], response)
         self.assertEqual(bridge.mission.value['dispatch_state'], 'unavailable')
-        self.assertEqual(bridge.mission.value['status'], 'failed')
+        self.assertEqual(bridge.mission.value['status'], 'canceling')
+        self.assertEqual(bridge.mission.value['cleanup_state'], 'unresolved')
+        self.assertEqual(bridge.mission.value['id'], mission_id)
+        self.assertIsNone(bridge.goal_handle)
+        with self.assertRaises(APIError) as caught:
+            bridge.mission.begin(bridge.mission.value['waypoints'], False)
+        self.assertEqual(caught.exception.status, 409)
+
+    def test_synchronous_send_error_is_unknown_and_never_retried(self):
+        from builtin_interfaces.msg import Time
+        bridge, sent_cancels = self.harness()
+        bridge.mission = MissionRecord()
+        bridge.ready, bridge.grid, bridge.truth = True, fixture_grid(), None
+        bridge.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=Time))
+        sent = []
+        def send(*_args, **_kwargs):
+            sent.append(True)
+            raise RuntimeError('transport send error')
+        bridge.client = SimpleNamespace(send_goal_async=send)
+        body = {'waypoints': [{'x': 1., 'y': 1.}], 'issued_at': time.time()}
+        with self.assertRaisesRegex(RuntimeError, 'transport send error'):
+            MissionBridge.start_mission(bridge, body)
+        mission_id = bridge.mission.value['id']
+        self.assertEqual(bridge.mission.value['status'], 'canceling')
+        self.assertEqual(bridge.mission.value['cleanup_state'], 'unresolved')
+        self.assertEqual(bridge.mission.value['dispatch_state'], 'unavailable')
+        with self.assertRaises(APIError) as caught:
+            MissionBridge.start_mission(bridge, body)
+        self.assertEqual(caught.exception.status, 409)
+        self.assertEqual(bridge.mission.value['id'], mission_id)
+        self.assertEqual(sent, [True])
+        self.assertEqual(sent_cancels, [])
+
+    def test_cancel_endpoint_without_ack_handle_stays_unknown(self):
+        bridge, sent_cancels = self.harness()
+        response = Future()
+        response.set_exception(RuntimeError('acceptance response lost'))
+        MissionBridge.goal_response(bridge, bridge.mission.value['id'], response)
+        mission_id, reason = bridge.mission.value['id'], bridge.mission.value['stop_reason']
+        bridge.poll_lifecycle = bridge.poll_collision_monitor = lambda _wall: None
+        bridge.evaluate_ready = lambda _wall: (True, 'ready')
+        bridge.goal_send_future, bridge.goal_sent_wall = response, 0.
+        bridge.pending_services, bridge.operations = [], queue.Queue()
+        bridge.state = lambda: copy.deepcopy(bridge.mission.value)
+        op = SimpleNamespace(kind='cancel', body={}, deadline=time.monotonic()+2., future=Future())
+        bridge.operations.put(op)
+        MissionBridge.tick(bridge)
+        status, value = op.future.result()
+        self.assertEqual(status, 202)
+        self.assertEqual(value['status'], 'canceling')
+        self.assertEqual(value['cleanup_state'], 'unresolved')
+        self.assertEqual(value['id'], mission_id)
+        self.assertEqual(value['stop_reason'], reason)
+        self.assertEqual(sent_cancels, [])
+        self.assertIsNone(bridge.result_future)
 
     def test_result_subscription_error_does_not_erase_the_actual_acceptance(self):
         bridge, _sent = self.harness()

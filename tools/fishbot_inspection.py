@@ -17,12 +17,13 @@ from fishbot_inspection_vision import analyze_rgb, save_report
 from fishbot_passage_goal import PendingGoal, heading_from_quaternion
 
 
-def validate_environment(env):
-    if (env.get('ROS_DOMAIN_ID') != '97'
-            or env.get('FISHBOT_MUJOCO_DOMAIN_ID') != '97'
+def validate_environment(env, domain='97'):
+    if (not str(domain).isdigit() or not 1 <= int(domain) <= 232
+            or env.get('ROS_DOMAIN_ID') != str(domain)
+            or env.get('FISHBOT_MUJOCO_DOMAIN_ID') != str(domain)
             or env.get('ROS_AUTOMATIC_DISCOVERY_RANGE') != 'LOCALHOST'
             or env.get('ROS_STATIC_PEERS', '')):
-        raise ValueError('Inspection requires isolated simulation domain 97 and loopback discovery')
+        raise ValueError(f'Inspection requires isolated simulation domain {domain} and loopback discovery')
 
 
 def stamp_seconds(stamp):
@@ -32,6 +33,16 @@ def stamp_seconds(stamp):
 def fresh(stamp, received, now, wall, limit=.6):
     return (all(math.isfinite(v) for v in (stamp, received, now, wall))
             and -.05 <= now-stamp <= limit and 0 <= wall-received <= limit)
+
+
+def freshness_evidence(stamp, received, source_clock, steady_clock, limit=.6):
+    """Record both clock domains; never subtract a ROS stamp from monotonic time."""
+    if not fresh(stamp, received, source_clock, steady_clock, limit):
+        raise ValueError('capture feedback missing or stale in source/receive time')
+    return {'source_clock_s':source_clock,'source_stamp_s':stamp,
+            'received_steady_time':received,'capture_steady_time':steady_clock,
+            'source_age_s':source_clock-stamp,'receipt_age_s':steady_clock-received,
+            'limit_s':limit,'min_source_age_s':-.05}
 
 
 def decode_rgb(message):
@@ -76,14 +87,15 @@ def validate_capture_pose(frame_id, image_stamp, truth_stamp, pose, velocity, go
             'physical_error': {'xy_m': xy, 'yaw_rad': yaw}, 'velocity': velocity}
 
 
-def main():
+def main(argv=None, *, domain='97', observation_fn=analyze_rgb, report_fn=save_report,
+         aggregate_fn=None, station_count=3, vision_method=None, capture_timeout=5.):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--route', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--goal-timeout', type=float, default=90.)
     parser.add_argument('--camera-topic', default='/inspection/camera/image_raw')
-    args = parser.parse_args()
-    validate_environment(os.environ)
+    args = parser.parse_args(argv)
+    validate_environment(os.environ, domain)
     if not math.isfinite(args.goal_timeout) or not 1 <= args.goal_timeout <= 120:
         parser.error('goal timeout must be 1..120 wall seconds')
     route = json.loads(args.route.read_text())
@@ -92,8 +104,13 @@ def main():
         goal = station['goal']
         if len(goal) != 3 or not all(math.isfinite(v) and abs(v) <= 8 for v in goal):
             parser.error('invalid synthetic route pose')
-    if len(stations) != 3:
-        parser.error('this fixture requires three stations')
+    if len(stations) != station_count:
+        parser.error(f'this fixture requires {station_count} stations')
+    for station in stations:
+        if 'alternate_goal' in station:
+            goal = station['alternate_goal']
+            if len(goal) != 3 or not all(math.isfinite(v) and abs(v) <= 8 for v in goal):
+                parser.error('invalid alternate observation pose')
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     if (output/'report.json').exists():
@@ -122,9 +139,9 @@ def main():
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda signum, frame: interrupts.append(signum))
     start = time.monotonic()
-    report = {'schema_version': 1, 'environment': 'MuJoCo simulation', 'domain': 97,
+    report = {'schema_version': 1, 'environment': 'MuJoCo simulation', 'domain': int(domain),
               'overall_status': 'running', 'stations': [], 'return_home': {},
-              'vision_method': 'RGB blue-panel and red/green indicator rules; synthetic fixture only',
+              'vision_method': vision_method or 'RGB blue-panel and red/green indicator rules; synthetic fixture only',
               'camera_topic': args.camera_topic, 'trajectory': trajectory}
     pending = None
 
@@ -190,15 +207,19 @@ def main():
                     stable_since = time.monotonic()
             return count >= 5 and time.monotonic()-stable_since >= duration
         spin(time.monotonic()+5, settled, allow_interrupted=allow_interrupted)
-        return {'verified': True, 'truth': pose_values(sample('truth')[0].pose.pose),
-                'stamp': sample('truth')[2], 'duration_s': duration, 'samples': count}
+        truth_value, odom_value = sample('truth'), sample('odom')
+        source_clock, steady_clock = now(), time.monotonic()
+        return {'verified': True, 'truth': pose_values(truth_value[0].pose.pose),
+                'stamp': truth_value[2], 'duration_s': duration, 'samples': count,
+                'truth_freshness':freshness_evidence(truth_value[2],truth_value[1],source_clock,steady_clock),
+                'odom_freshness':freshness_evidence(odom_value[2],odom_value[1],source_clock,steady_clock)}
 
     def persist():
         report['elapsed_s'] = round(time.monotonic()-start, 3)
         temporary = output/'report.json.tmp'
         temporary.write_text(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
         temporary.replace(output/'report.json')
-        save_report(report, output)
+        report_fn(report, output)
 
     def navigate(target, record):
         nonlocal pending
@@ -235,35 +256,44 @@ def main():
             raise RuntimeError('localization transform stale after arrival')
         pending = None
 
-    def capture(record, index):
+    def capture(record, index, station=None, view='primary'):
         after = now()
         frames = []
         last = after
-        deadline = time.monotonic()+5
+        deadline = time.monotonic()+capture_timeout
         while len(frames) < 3:
             def new_frame():
                 value = samples.get('image')
                 return value is not None and value[2] > last and fresh(value[2], value[1], now(), time.monotonic())
             spin(deadline, new_frame, health=True)
-            message, _, stamp = sample('image')
+            message, received, stamp = sample('image')
+            age_evidence = freshness_evidence(stamp,received,now(),time.monotonic())
             truth_stamp, body = min(truth_history, key=lambda value: abs(value[0]-stamp))
             twist = body.twist.twist
             binding = validate_capture_pose(message.header.frame_id, stamp, truth_stamp,
                 pose_values(body.pose.pose), [twist.linear.x, twist.linear.y, twist.angular.z], record['goal'])
             rgb = decode_rgb(message)
-            observation = analyze_rgb(rgb)
-            photo = f'station-{index+1}-frame-{len(frames)+1}.png'
+            observation = observation_fn(rgb)
+            if hasattr(observation, 'done') and hasattr(observation, 'result'):
+                spin(deadline, observation.done, health=True)
+                observation = observation.result()
+            suffix = '' if view == 'primary' else f'-{view}'
+            photo = f'station-{index+1}{suffix}-frame-{len(frames)+1}.png'
             path = output/photo
             PillowImage.fromarray(rgb).save(path)
             frames.append({'photo': photo, 'capture_stamp': stamp, 'frame_id': message.header.frame_id,
-                           'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), **binding, **observation})
+                           'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                           'capture_freshness':age_evidence, **binding, **observation})
             last = stamp
         record['frames'] = frames
         record.update({key: frames[-1][key] for key in ('photo', 'capture_stamp', 'frame_id', 'evidence')})
         record['pose'] = frames[-1]['pose']
-        states = [frame['state'] for frame in frames]
-        record['state'] = states[0] if len(set(states)) == 1 else 'unknown'
-        record['reason'] = frames[-1]['reason'] if len(set(states)) == 1 else 'three fresh frames disagree'
+        if aggregate_fn is not None:
+            record.update(aggregate_fn(frames, station))
+        else:
+            states = [frame['state'] for frame in frames]
+            record['state'] = states[0] if len(set(states)) == 1 else 'unknown'
+            record['reason'] = frames[-1]['reason'] if len(set(states)) == 1 else 'three fresh frames disagree'
         record['post_capture_stationary'] = stationary(.3)
         print(json.dumps({'station': record['name'], 'state': record['state'], 'photo': str(output/record['photo'])}, ensure_ascii=False), flush=True)
 
@@ -300,7 +330,15 @@ def main():
             record = {'name': station['name'], 'question': station['question'], 'state': 'pending'}
             report['stations'].append(record)
             navigate(station['goal'], record)
-            capture(record, index)
+            capture(record, index, station)
+            if aggregate_fn is not None and record['state'] == 'unknown' and 'alternate_goal' in station:
+                alternate = {'name': station['name'], 'question': station['question'], 'state': 'pending'}
+                record['alternate_view'] = alternate
+                navigate(station['alternate_goal'], alternate)
+                capture(alternate, index, station, 'alternate')
+                record['primary_state'] = record['state']
+                record['state'] = alternate['state']
+                record['reason'] = alternate['reason']
             persist()
         navigate(route['home'], report['return_home'])
         report['return_home']['completed'] = True

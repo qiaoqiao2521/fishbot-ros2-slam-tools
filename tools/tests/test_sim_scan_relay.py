@@ -144,6 +144,7 @@ class PassageFixtureTests(unittest.TestCase):
             generated = self.build(Path(temporary) / 'fixture')
             self.assertEqual(generated['scan_input'], '/scan')
         self.assertEqual(fixture.fixture_options(95)['domain'], 95)
+        self.assertEqual(fixture.fixture_options(102, scan_gap_s=.9)['domain'], 102)
         for domain in (0, 93, 233):
             with self.assertRaises(ValueError):
                 fixture.fixture_options(domain)

@@ -96,10 +96,10 @@ def main():
         ScanGap(args.gap_seconds, args.trigger_distance, lambda event: None, 0.)
         print('Relay parameters valid; execute absent, no ROS nodes started.')
         return 0
-    if (os.environ.get('ROS_DOMAIN_ID') != '96'
+    if (os.environ.get('ROS_DOMAIN_ID') not in ('96', '102')
             or os.environ.get('ROS_AUTOMATIC_DISCOVERY_RANGE') != 'LOCALHOST'
             or os.environ.get('ROS_STATIC_PEERS', '')):
-        raise ValueError('Scan relay requires domain 96, localhost discovery and no static peers')
+        raise ValueError('Scan relay requires domain 96 or 102, localhost discovery and no static peers')
     import rclpy
     from mujoco_ros2_control_msgs.msg import FreeJointStateArray
     from rclpy.clock import Clock, ClockType

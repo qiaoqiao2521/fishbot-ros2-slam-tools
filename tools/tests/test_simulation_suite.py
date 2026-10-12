@@ -86,8 +86,8 @@ class SuiteBoundaries(unittest.TestCase):
             self.assertEqual(suite.read_json(path/'result.json'), result)
 
     def stationary_startup_failure(self, directory):
-        suite.write_json(directory/'recording.json', {'final_steady_time':2., 'truth':[
-            dict(steady_time=t, stamp=t, x=0., y=0., yaw=0., linear_speed=0., angular_speed=0.) for t in (1., 2.)]})
+        suite.write_json(directory/'recording.json', {'final_steady_time':2., 'final_ros_now':2., 'truth':[
+            dict(steady_time=t, stamp=t, x=0., y=0., yaw=0., linear_speed=0., angular_speed=0.) for t in (1.8, 2.)]})
         return dict(status='failed', case={'name':'case','kind':'navigation'},
             execution=dict(phase='startup', startup_failure_kind='readiness_timeout',
                            domain_empty=True, cleanup_complete=True, goal_process_started=False))
@@ -124,6 +124,21 @@ class SuiteBoundaries(unittest.TestCase):
                 (path/name).write_text('{}')
                 self.assertFalse(suite.startup_retry_allowed(original, path))
                 (path/name).unlink()
+
+    def test_startup_retry_rejects_stale_frozen_or_unobserved_truth(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary)
+            result = self.stationary_startup_failure(path)
+            original = suite.read_json(path/'recording.json')
+            for transform in (lambda data: data.update(final_steady_time=3.),
+                              lambda data: data.update(final_ros_now=3.),
+                              lambda data: data['truth'][1].update(stamp=1.8),
+                              lambda data: data['truth'][0].update(steady_time=1.),
+                              lambda data: data['truth'][1].update(yaw=.1)):
+                capture = copy.deepcopy(original)
+                transform(capture)
+                suite.write_json(path/'recording.json', capture)
+                self.assertFalse(suite.startup_retry_allowed(result, path))
 
     def test_only_one_cold_restart_and_first_failure_remains_unchanged(self):
         with tempfile.TemporaryDirectory() as temporary:

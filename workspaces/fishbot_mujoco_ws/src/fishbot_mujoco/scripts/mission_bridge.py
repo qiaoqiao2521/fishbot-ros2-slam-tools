@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Loopback-only HTTP mission API for the isolated domain-93 MuJoCo fixture.
+"""Loopback-only HTTP mission API for an explicitly isolated MuJoCo domain.
 
 HTTP workers never spin or mutate the ROS node. Their short-lived requests enter
 one executor-owned queue; navigation remains a FollowWaypoints action, with no
@@ -40,6 +40,7 @@ from sensor_msgs.msg import LaserScan
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformListener
+from wait_ready import validate_sim_domain
 
 
 HOME = {'x': 0.0, 'y': 0.0, 'yaw': 0.0}
@@ -50,6 +51,14 @@ CLEANUP_ATTEMPTS = 3
 CLEANUP_RETRY_SECONDS = 1.0
 CLEANUP_RESPONSE_SECONDS = 3.0
 CM_ACTIONS = {0: 'do_nothing', 1: 'stop', 2: 'slowdown', 3: 'approach', 4: 'limit'}
+
+
+def simulation_domain(environ=None):
+    env = os.environ if environ is None else environ
+    validate_sim_domain(env)
+    if env.get('ROS_STATIC_PEERS', '').strip():
+        raise SystemExit('Mission API requires empty ROS_STATIC_PEERS for loopback isolation')
+    return int(env.get('FISHBOT_MUJOCO_DOMAIN_ID', '93'))
 
 
 class APIError(Exception):
@@ -168,10 +177,11 @@ class Operation:
 
 
 class MissionBridge(Node):
-    def __init__(self):
+    def __init__(self, domain=93):
         super().__init__('fishbot_mission_bridge', parameter_overrides=[
             rclpy.parameter.Parameter('use_sim_time', value=True)])
         self.lock = threading.RLock()
+        self.domain = domain
         self.operations = queue.Queue(maxsize=32)
         self.mission = MissionRecord()
         self.grid = None
@@ -432,7 +442,7 @@ class MissionBridge(Node):
                 obstacle.update(self.obstacle_truth)
             else:
                 obstacle.update(x=None, y=None)
-            return copy.deepcopy({'mode': 'mujoco', 'domain': 93,
+            return copy.deepcopy({'mode': 'mujoco', 'domain': self.domain,
                 'ready': self.ready, 'reason': self.reason,
                 'pose': self.pose if self.ready else None,
                 'truth': self.truth if clock_fresh and self.fresh('truth', ros_now, wall) else None,
@@ -526,9 +536,10 @@ class MissionBridge(Node):
         try:
             self.goal_send_future = self.client.send_goal_async(
                 goal, feedback_callback=lambda msg: self.feedback(mission_id, msg))
-        except Exception:
-            self.mission.value.update(status='failed', dispatch_state='unavailable',
-                                      message='无法提交 Nav2 巡逻任务')
+        except Exception as error:
+            # A local send error does not establish whether Nav2 received the goal.
+            self.mission.value['dispatch_state'] = 'unavailable'
+            self.request_cancel(f'提交异常，Nav2 接收状态未知：{error}')
             raise
         self.goal_send_future.add_done_callback(lambda f: self.goal_response(mission_id, f))
 
@@ -559,7 +570,7 @@ class MissionBridge(Node):
             except Exception as error:
                 if self.mission.value['dispatch_state'] != 'accepted':
                     self.mission.value['dispatch_state'] = 'unavailable'
-                    self.mission.value.update(status='failed', message=f'任务回执处理失败：{error}')
+                    self.request_cancel(f'接收回执异常，Nav2 接收状态未知：{error}')
                 else:
                     self.request_cancel(f'已接受任务的回执异常：{error}')
 
@@ -621,6 +632,10 @@ class MissionBridge(Node):
             self.result_retry_wall = self.cancel_retry_wall = 0.0
             self.cancel_sent = False
         self.mission.value['cleanup_state'] = 'retrying'
+        if self.goal_handle is None and self.mission.value.get('dispatch_state') == 'unavailable':
+            self.mission.value.update(cleanup_state='unresolved',
+                message='Nav2 接收状态未知，当前无法确认取消；原任务保留，禁止派发新目标')
+            return
         if self.goal_handle is not None and not self.cancel_sent:
             self.send_cancel()
 
@@ -716,8 +731,9 @@ class LocalHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 16
 
-    def __init__(self, port, bridge):
+    def __init__(self, port, bridge, ui_port=5173):
         self.bridge = bridge
+        self.ui_ports = {5173, 5174, 5175, 5176, 5177, ui_port}
         super().__init__(('127.0.0.1', port), Handler)
         self.port = self.server_address[1]
 
@@ -740,7 +756,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             parsed = urlsplit(origin)
             return (parsed.scheme == 'http' and parsed.hostname in {'localhost', '127.0.0.1'}
-                    and parsed.port in {5173, 5174, 5175, 5176, 5177}
+                    and parsed.port in self.server.ui_ports
                     and not parsed.path and not parsed.query and not parsed.fragment
                     and parsed.username is None)
         except ValueError:
@@ -824,22 +840,24 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=9070)
+    parser.add_argument('--ui-port', type=int, default=5173)
     args, ros_args = parser.parse_known_args()
     if args.port < 1024 or args.port > 65535:
         raise SystemExit('HTTP port must be between 1024 and 65535')
-    if os.environ.get('ROS_DOMAIN_ID') != '93' or os.environ.get('ROS_AUTOMATIC_DISCOVERY_RANGE') != 'LOCALHOST':
-        raise SystemExit('Requires simulation domain 93 and LOCALHOST discovery')
+    if args.ui_port < 1024 or args.ui_port > 65535:
+        raise SystemExit('UI port must be between 1024 and 65535')
+    domain = simulation_domain()
     # Keep ROS alive briefly on SIGINT/SIGTERM so an active action can be canceled.
     rclpy.init(args=ros_args, signal_handler_options=SignalHandlerOptions.NO)
     def stop(_signal, _frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, stop)
-    bridge = MissionBridge()
+    bridge = MissionBridge(domain=domain)
     executor = SingleThreadedExecutor()
     executor.add_node(bridge)
     server = None
     try:
-        server = LocalHTTPServer(args.port, bridge)
+        server = LocalHTTPServer(args.port, bridge, ui_port=args.ui_port)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         bridge.get_logger().info(f'MuJoCo mission API http://127.0.0.1:{args.port}/sim-api/state')
         executor.spin()

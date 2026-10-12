@@ -26,6 +26,13 @@ The physical robot was sold; the user confirmed mapping and navigation complete.
 Run the [six-case simulation suite](docs/SIMULATION_SUITE.md) with `./fishbot.sh sim-suite`.
 It records actual truth trajectories, moving scan faults, cancellation and old-command rejection.
 
+The simulation extensions reuse the same ROS 2 and MuJoCo stack:
+
+- [Localization recovery](docs/LOCALIZATION_RECOVERY.md): `./fishbot.sh localization-recovery --output <new-directory>`.
+- [Object inspection](docs/OBJECT_INSPECTION.md): `./fishbot.sh object-inspection <new-directory>`.
+- [Random and continuous campaigns](docs/SIMULATION_CAMPAIGN.md): `./fishbot.sh sim-campaign --mode random` or `--mode soak`.
+- [Web runtime acceptance](docs/WEB_RUNTIME_ACCEPTANCE.md): isolated Goal dispatch, cancellation and observed Collision Monitor states.
+
 ## Layout
 
 - tools/: staged startup, preflight, teleop and map saving.
@@ -76,6 +83,10 @@ paths above. The canonical development checkout directly tracks this repository;
 ## Acceptance boundary
 
 Synthetic MuJoCo navigation, patrol, passage and visual-inspection evidence is recorded in the project plans. The inspection fixture completed three stations and return in 73.703 seconds, with nine fresh photos and a 0.12287 m return error. Its classifier is limited to synthetic indicator panels.
+
+The separate object-inspection fixture runs local YOLO11n on actual camera RGB. It completed seven navigation actions and captured eighteen images. Cup/laptop detection, an alternate occluded view, and return passed; return error was 0.09044 m.
+
+Missing detections remain unknown. Its image-position gate is 0.22 m; this is not a real-world accuracy benchmark. See [object inspection](docs/OBJECT_INSPECTION.md).
 
 The user accepted the latest measured map as this scene's working map; unknown cells remain unknown. Fixed-map outbound and a resumed return passed fresh stopping feedback. A [single continuous map-route entry](docs/PASSAGE_CONTROL.md) avoids intermediate stop-and-observe loops.
 

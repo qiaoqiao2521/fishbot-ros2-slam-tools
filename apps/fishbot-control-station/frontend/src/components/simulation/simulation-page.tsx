@@ -4,7 +4,7 @@ import { ArrowLeft, Box, Check, Home, MapPin, Play, Route, Square, Trash2, X } f
 import { SimulationMapView } from '@/components/simulation/simulation-map'
 import { useSimulation } from '@/hooks/use-simulation'
 import {
-  DEMO_WAYPOINTS, MAX_WAYPOINTS, collisionMonitorText, isFreeWaypoint, missionCanRetryCancel,
+  DEMO_WAYPOINTS, MAX_WAYPOINTS, SIMULATION_DOMAIN, collisionMonitorText, isFreeWaypoint, missionCanRetryCancel,
   missionIsActive, missionLabel, missionProgressText,
   type Point, type Pose,
 } from '@/lib/simulation'
@@ -22,6 +22,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
   const displayedPoints = active ? state!.mission.waypoints : waypoints
   const mission = state?.mission
   const awaitingAcceptance = mission?.status === 'running' && mission.dispatch_state === 'pending'
+  const unknownAcceptance = mission?.status === 'canceling' && mission.dispatch_state === 'unavailable'
   const canRetryCancel = missionCanRetryCancel(mission)
   const collisionMonitor = state?.collision_monitor
   const error = actionError ?? connectionError ?? mapError
@@ -56,18 +57,18 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
   }
 
   const statusText = !connected ? state ? '连接中断，正在重连' : '正在连接仿真'
-    : ready ? awaitingAcceptance ? '等待 Nav2 确认'
+    : ready ? unknownAcceptance ? 'Nav2 接收状态未知' : awaitingAcceptance ? '等待 Nav2 确认'
       : mission?.status === 'canceling' ? '正在取消任务'
         : active ? '导航运行中' : '已就绪，可以派发' : '等待仿真就绪'
   const progressText = missionProgressText(mission)
-  const sceneTitle = active ? awaitingAcceptance ? '等待 Nav2 确认任务'
+  const sceneTitle = active ? unknownAcceptance ? '原任务接收状态未知' : awaitingAcceptance ? '等待 Nav2 确认任务'
     : mission?.status === 'canceling' ? '正在收束巡逻任务' : '巡逻正在进行' : '点地图，安排一圈巡逻'
 
   return (
     <div className="simulation-page">
       <header className="simulation-header">
         <div>
-          <div className="simulation-mode"><span aria-hidden="true" />MuJoCo 物理仿真 <span className="simulation-domain">仿真域 93</span></div>
+          <div className="simulation-mode"><span aria-hidden="true" />MuJoCo 物理仿真 <span className="simulation-domain">仿真域 {SIMULATION_DOMAIN}</span></div>
           <h1>小鱼巡逻</h1>
           <p>在地图上安排路线，看小车绕障、到点，再回到起点。</p>
         </div>
@@ -141,7 +142,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
             <div className="simulation-mission-actions">
               <button type="button" className="simulation-button simulation-primary" disabled={!ready || !editable || waypoints.length === 0}
                 onClick={() => void act('mission', { waypoints, return_home: returnHome, issued_at: Date.now() / 1000 })}><Play size={17} />{pending === 'mission' ? '正在派发…' : '开始巡逻'}</button>
-              <button type="button" className="simulation-button simulation-cancel" disabled={!active || !!pending || (mission?.status === 'canceling' && !canRetryCancel)} onClick={() => void act('cancel')}><Square size={15} />{canRetryCancel ? '重试取消' : mission?.status === 'canceling' ? '正在取消…' : '取消任务'}</button>
+              <button type="button" className="simulation-button simulation-cancel" disabled={!active || !!pending || (mission?.status === 'canceling' && !canRetryCancel)} onClick={() => void act('cancel')}><Square size={15} />{unknownAcceptance ? '取消无法确认' : canRetryCancel ? '重试取消' : mission?.status === 'canceling' ? '正在取消…' : '取消任务'}</button>
             </div>
             <button type="button" className="simulation-clear-queue" disabled={!editable || waypoints.length === 0} onClick={() => { setWaypoints([]); setSelectionMessage('待派发巡逻点已清空。') }}><Trash2 size={14} />清空待派发点</button>
           </section>

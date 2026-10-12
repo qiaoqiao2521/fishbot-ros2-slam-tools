@@ -321,6 +321,23 @@ def save_suite_report(report, output_dir):
     overall = report.get('status', 'unknown')
     first_passed = sum(case.get('first_attempt_passed', case.get('status') == 'passed') for case in cases)
     restarts = sum(case.get('startup_restart_count', 0) for case in cases)
+    soak = report.get('soak')
+    soak_html = ''
+    if isinstance(soak, dict):
+        samples = soak.get('resources', [])
+        observed_rss = [sample.get('rss_bytes') for sample in samples if _finite(sample.get('rss_bytes'))]
+        resource_text = ('RSS 首/末/峰值 '+ '/'.join(f'{value / 1024**2:.1f}' for value in
+                         (observed_rss[0], observed_rss[-1], max(observed_rss)))+' MiB'
+                         if observed_rss else '缺少资源样本')
+        soak_html = (f'<article><h2>同进程连续运行</h2><p>launch PID：{escape(str(soak.get("launch_pid")))}；'
+                     f'启动 {escape(str(soak.get("launch_count")))} 次；复位 {escape(str(soak.get("operator_reset_count")))} 次；'
+                     f'观察 {escape(str(round(soak.get("observed_duration_s", 0), 3)))} 秒；'
+                     f'动作收束 {escape(str(soak.get("completed_goal_count")))} 次。</p>'
+                     f'<p>30 分钟独立验收：{"通过" if soak.get("qualified_30_minutes") is True else "未通过 / 尚未达到时长"}；'
+                     f'{resource_text}。资源只统计本轮 launch 进程组；增量不直接等于泄漏。</p>'
+                     '<p><a href="report.json">完整报告和资源样本</a>'
+                     + (' · <a href="recording.json">连续物理真值</a>' if (output/'recording.json').is_file() else '')
+                     + '</p></article>')
     rows, sections = [], []
     def metric_text(value):
         return f'{value:.3f}' if _finite(value) else '未知'
@@ -331,7 +348,7 @@ def save_suite_report(report, output_dir):
         rows.append(f'<tr><td><a href="#case-{index}">{escape(name)}</a></td>'
                     f'<td>{escape(str(result.get("kind")))}</td><td>{label}</td>'
                     f'<td>{metric_text(metrics.get("elapsed_s"))}</td>'
-                    f'<td>{metric_text(result.get("total_wall_elapsed_s"))}</td>'
+                    f'<td>{metric_text(result.get("total_wall_elapsed_s", result.get("wall_elapsed_s")))}</td>'
                     f'<td>{escape(str(metrics.get("pause_count")))}</td>'
                     f'<td>{metric_text(metrics.get("pause_total_duration_s"))}</td></tr>')
         stations = [{'goal': pose} for pose in case.get('route', [])]
@@ -397,7 +414,7 @@ def save_suite_report(report, output_dir):
             '失败与证据不足都计入未通过。运动探针与导航闭环分别判断。</p>'
             f'<p>首轮通过 {first_passed}/{planned}；启动重启 {restarts} 次。'
             '仅静止且尚未启动命令进程的就绪超时允许重启一次；已发任务不自动重发。失败尝试保留原始证据。</p>'
-            f'<p>整批实际耗时 {metric_text(report.get("wall_elapsed_s"))} 秒。场景总耗时包含启动等待、重试、清理和回放。</p>'
+            f'<p>整批实际耗时 {metric_text(report.get("wall_elapsed_s"))} 秒。场景总耗时包含启动等待、重试、清理和回放。</p>{soak_html}'
             '<table><thead><tr><th>场景</th><th>类型</th><th>结果</th><th>Goal 耗时 s</th><th>场景总耗时 s</th><th>内部停顿次数</th><th>停顿总时长 s</th></tr></thead>'
             f'<tbody>{"".join(rows)}</tbody></table>{"".join(sections)}</body></html>')
     destination = output / 'index.html'

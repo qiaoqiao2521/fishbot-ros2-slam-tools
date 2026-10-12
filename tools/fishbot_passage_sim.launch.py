@@ -26,8 +26,8 @@ def fixture_options(domain, door_width_m=.36, initial_yaw_rad=0., scan_gap_s=0.,
         values[name] = number
     if 0 < values['scan_gap_s'] < .2:
         raise ValueError('scan_gap_s must be zero or 0.2..1 seconds')
-    if values['scan_gap_s'] and int(domain) != 96:
-        raise ValueError('Scan fault injection requires isolated domain 96')
+    if values['scan_gap_s'] and int(domain) not in (96, 102):
+        raise ValueError('Scan fault injection requires isolated domain 96 or 102')
     if timing_profile not in ('strict', 'tolerant'):
         raise ValueError('timing_profile must be strict or tolerant')
     return dict(domain=int(domain), timing_profile=timing_profile, **values)
@@ -112,6 +112,9 @@ def setup(context):
     domain = LaunchConfiguration('ros_domain_id').perform(context)
     options = fixture_options(domain, *(arg(name) for name in (
         'door_width_m', 'initial_yaw_rad', 'scan_gap_s', 'scan_trigger_distance_m', 'timing_profile')))
+    localization = arg('localization')
+    if localization not in ('static', 'amcl'):
+        raise ValueError('localization must be static or amcl')
     root = Path(__file__).resolve().parent
     share = Path(get_package_share_directory('fishbot_mujoco'))
     # Reuse the owning passage stack's output/privacy boundary before writing fixtures.
@@ -122,17 +125,36 @@ def setup(context):
     output.mkdir(parents=True, exist_ok=True)
     fixture = build_fixture(share / 'mjcf/passage.xml', share / 'config/plugins.yaml',
                             output / 'fixture', options)
+    navigation_params = str(root/'config/fishbot_passage_nav.yaml')
+    if localization == 'amcl':
+        params = yaml.safe_load(Path(navigation_params).read_text())
+        amcl = yaml.safe_load((share/'config/nav2.yaml').read_text())['amcl']['ros__parameters']
+        amcl.update(use_sim_time=True, autostart_node=True, sigma_hit=.05, max_beams=180,
+                    z_hit=.95, z_rand=.05, update_min_a=.02, update_min_d=.02,
+                    initial_pose={'x':0., 'y':0., 'z':0., 'yaw':options['initial_yaw_rad']})
+        params['amcl'] = {'ros__parameters':amcl}
+        params['global_costmap']['global_costmap']['ros__parameters']['plugins'] = ['static_layer','inflation_layer']
+        navigation_params = str(output/'fixture/amcl-navigation.yaml')
+        Path(navigation_params).write_text(yaml.safe_dump(params, sort_keys=False))
+        fixture.update(map_to_odom_owner='AMCL', navigation_parameters=navigation_params)
+    else:
+        fixture['map_to_odom_owner'] = 'static fixture transform'
+    (output/'fixture/provenance.json').write_text(json.dumps(fixture, indent=2)+'\n')
+    localization_node = (Node(package='nav2_amcl', executable='amcl', name='amcl',
+                             parameters=[navigation_params], output='screen') if localization == 'amcl' else
+        Node(package='tf2_ros', executable='static_transform_publisher', name='fixture_map_to_odom',
+             arguments=['--frame-id','map','--child-frame-id','odom', '--yaw', str(options['initial_yaw_rad'])],
+             parameters=[{'use_sim_time':True}]))
     navigation = [
         Node(package='nav2_map_server', executable='map_server', name='map_server',
              parameters=[{'use_sim_time':True,'yaml_filename':fixture['generated_map'],
                           'autostart_node':True}], output='screen'),
-        Node(package='tf2_ros', executable='static_transform_publisher', name='fixture_map_to_odom',
-             arguments=['--frame-id','map','--child-frame-id','odom', '--yaw', str(options['initial_yaw_rad'])],
-             parameters=[{'use_sim_time':True}]),
+        localization_node,
         IncludeLaunchDescription(PythonLaunchDescriptionSource(str(root / 'fishbot_passage.launch.py')),
                                  launch_arguments={'execute':'true','ros_domain_id':domain,'allow_real':'false',
                                                    'use_sim_time':'true','output_dir':str(output / 'triggers'),
                                                    'geometry_file':fixture['generated_geometry'],
+                                                   'params_file':navigation_params,
                                                    'timing_profile':options['timing_profile']}.items()),
     ]
     sensors_ready = Node(package='fishbot_mujoco', executable='wait_ready.py',
@@ -180,6 +202,7 @@ def generate_launch_description():
         DeclareLaunchArgument('output_dir'),
         DeclareLaunchArgument('door_width_m', default_value='.36'),
         DeclareLaunchArgument('initial_yaw_rad', default_value='0'),
+        DeclareLaunchArgument('localization', default_value='static'),
         DeclareLaunchArgument('timing_profile', default_value='strict'),
         DeclareLaunchArgument('scan_gap_s', default_value='0'),
         DeclareLaunchArgument('scan_trigger_distance_m', default_value='.15'),

@@ -13,7 +13,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/sim-api': {
-        target: 'http://127.0.0.1:9070',
+        target: `http://127.0.0.1:${process.env.FISHBOT_MISSION_PORT || '9070'}`,
         changeOrigin: true,
       },
       '/api': {

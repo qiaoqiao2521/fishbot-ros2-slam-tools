@@ -19,7 +19,7 @@ export type CollisionMonitorReport = {
 }
 export type SimulationState = {
   mode: 'mujoco'
-  domain: 93
+  domain: number
   ready: boolean
   reason: string
   pose: Pose | null
@@ -42,6 +42,13 @@ export type SimulationState = {
 }
 
 export const MAX_WAYPOINTS = 12
+export function simulationDomain(value = '93'): number {
+  if (!/^[0-9]+$/.test(value) || Number(value) < 1 || Number(value) > 232) {
+    throw new Error('仿真域必须为 1–232，不能使用实车域 0。')
+  }
+  return Number(value)
+}
+export const SIMULATION_DOMAIN = simulationDomain(import.meta.env.VITE_FISHBOT_SIM_DOMAIN)
 export const DEMO_WAYPOINTS: Pose[] = [
   { x: 2, y: 1, yaw: 0 },
   { x: 2, y: 2, yaw: Math.PI },
@@ -97,8 +104,9 @@ export function validateSimulationMap(value: SimulationMap): SimulationMap {
   return value
 }
 
-export function validateSimulationState(value: SimulationState): SimulationState {
-  if (!value || value.mode !== 'mujoco' || value.domain !== 93 || typeof value.ready !== 'boolean' || !value.mission
+export function validateSimulationState(value: SimulationState, expectedDomain = SIMULATION_DOMAIN): SimulationState {
+  if (!value || value.mode !== 'mujoco' || value.domain !== expectedDomain || !Number.isInteger(value.domain)
+    || value.domain < 1 || value.domain > 232 || typeof value.ready !== 'boolean' || !value.mission
     || !['idle', 'running', 'canceling', 'canceled', 'succeeded', 'failed'].includes(value.mission.status)
     || (value.mission.dispatch_state != null && !['pending', 'accepted', 'rejected', 'unavailable'].includes(value.mission.dispatch_state))
     || (value.mission.stop_reason != null && typeof value.mission.stop_reason !== 'string')
@@ -134,6 +142,7 @@ export function collisionMonitorText(report?: CollisionMonitorReport): string {
 
 export function missionCanRetryCancel(mission?: SimulationState['mission']): boolean {
   return mission?.status === 'canceling' && mission.cleanup_state === 'unresolved'
+    && mission.dispatch_state !== 'unavailable'
 }
 
 function finitePoint(value: Point): boolean {
@@ -150,6 +159,7 @@ export function missionIsActive(state: SimulationState | null): boolean {
 
 export function missionLabel(status?: MissionStatus, dispatchState?: MissionDispatchState | null): string {
   if (status === 'running' && dispatchState === 'pending') return '等待 Nav2 确认'
+  if (status === 'canceling' && dispatchState === 'unavailable') return '接收状态未知'
   return status ? {
     idle: '尚未派发', running: '正在巡逻', canceling: '正在取消', canceled: '已取消',
     succeeded: '巡逻完成', failed: '任务失败',
@@ -163,8 +173,11 @@ export function missionProgressText(mission?: SimulationState['mission']): strin
       ? '正在返回起点' : `正在前往第 ${mission.current_index + 1} / ${mission.waypoints.length} 个点`
   }
   if (mission?.status === 'succeeded') return `已完成 ${mission.waypoints.length} 个导航点`
-  if (mission?.status === 'canceling') return mission.cleanup_state === 'unresolved'
-    ? '终态仍未知，原目标保留；可以重试取消。' : '等待 Nav2 取消结果'
+  if (mission?.status === 'canceling') {
+    if (mission.dispatch_state === 'unavailable') return 'Nav2 接收状态仍未知，原任务保留；当前无法确认取消。'
+    return mission.cleanup_state === 'unresolved'
+      ? '终态仍未知，原目标保留；可以重试取消。' : '等待 Nav2 取消结果'
+  }
   if (mission?.status === 'canceled') return 'Nav2 已确认取消任务。'
   if (mission?.status === 'failed') return '任务未完成，请查看 Nav2 回执。'
   return '选点后派发，小车会依次前往。'

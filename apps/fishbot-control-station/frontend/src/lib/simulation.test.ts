@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   collisionMonitorText, isFreeWaypoint, mapToWorld, missionCanRetryCancel,
-  missionIsActive, missionLabel, missionProgressText, requestSimulation,
+  missionIsActive, missionLabel, missionProgressText, requestSimulation, simulationDomain,
   validateSimulationMap, validateSimulationState, worldToMap,
   type SimulationMap, type SimulationState,
 } from '@/lib/simulation'
@@ -50,6 +50,18 @@ describe('simulation map coordinates', () => {
 })
 
 describe('simulation server responses', () => {
+  it('requires a matching explicitly selected nonzero simulation domain', () => {
+    expect(simulationDomain()).toBe(93)
+    expect(simulationDomain('100')).toBe(100)
+    for (const value of ['0', '233', '-1', '100.5', '١', '100junk']) {
+      expect(() => simulationDomain(value)).toThrow('仿真域必须')
+    }
+    const isolated = { ...state, domain: 100 }
+    expect(validateSimulationState(isolated, 100).domain).toBe(100)
+    expect(() => validateSimulationState(isolated)).toThrow('当前 MuJoCo 仿真')
+    expect(() => validateSimulationState(state, 100)).toThrow('当前 MuJoCo 仿真')
+    expect(() => validateSimulationState({ ...state, domain: 0 }, 0)).toThrow('当前 MuJoCo 仿真')
+  })
   it('keeps unknown cleanup active and exposes cancellation retry without accepting new goals', () => {
     const unresolved = { ...state, mission: { ...state.mission, status: 'canceling' as const,
       cleanup_state: 'unresolved' as const, stop_reason: '结果回执异常' } }
@@ -59,6 +71,19 @@ describe('simulation server responses', () => {
     expect(missionProgressText(received.mission)).toContain('终态仍未知')
     expect(missionCanRetryCancel({ ...received.mission, cleanup_state: 'retrying' })).toBe(false)
     expect(missionCanRetryCancel({ ...received.mission, status: 'canceled' })).toBe(false)
+  })
+
+  it('retains an unknown acceptance without offering a cancellation it cannot send', () => {
+    const unknown = { ...state, mission: { ...state.mission, status: 'canceling' as const,
+      dispatch_state: 'unavailable' as const, cleanup_state: 'unresolved' as const,
+      stop_reason: '接收回执异常' } }
+    const received = validateSimulationState(unknown)
+    expect(received.mission.id).toBe(state.mission.id)
+    expect(missionIsActive(received)).toBe(true)
+    expect(missionCanRetryCancel(received.mission)).toBe(false)
+    expect(missionLabel(received.mission.status, received.mission.dispatch_state)).toBe('接收状态未知')
+    expect(missionProgressText(received.mission)).toContain('当前无法确认取消')
+    expect(missionProgressText(received.mission)).not.toContain('可以重试取消')
   })
 
   it('shows real CM events without treating their age as a heartbeat timeout', () => {

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+_fishbot_campaign_root="$(dirname -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")")"
+if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
+    exec /usr/bin/python3 -B "$_fishbot_campaign_root/tools/fishbot_simulation_campaign.py" "$@"
+fi
+_fishbot_campaign_mode=''
+for ((_fishbot_campaign_index=1; _fishbot_campaign_index<=$#; _fishbot_campaign_index++)); do
+    if [[ "${!_fishbot_campaign_index}" == --mode ]]; then
+        _fishbot_campaign_value=$((_fishbot_campaign_index+1))
+        _fishbot_campaign_mode="${!_fishbot_campaign_value:-}"
+    fi
+done
+case "$_fishbot_campaign_mode" in
+    soak) export FISHBOT_MUJOCO_DOMAIN_ID=96 ;;
+    random) export FISHBOT_MUJOCO_DOMAIN_ID=102 ;;
+    *) echo 'Select --mode soak or --mode random' >&2; exit 2 ;;
+esac
+export ROS_STATIC_PEERS=''
+set +u
+source "$_fishbot_campaign_root/tools/fishbot_mujoco_env.sh"
+set -u
+exec /usr/bin/python3 -B "$_fishbot_campaign_root/tools/fishbot_simulation_campaign.py" "$@"
