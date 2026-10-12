@@ -1,5 +1,15 @@
 # 核对与发现
 
+## 随机启动与采集修复
+
+原1207已完成planner激活，却在约2.018秒后于GetState等待future失败而中止bringup。官方异常文本不能单独证明请求发送失败。官方启动前已有service发现等待，简单新增service_is_ready门禁不足以解决已知路径；RESET混合ACTIVE/INACTIVE也不安全。本轮复用官方1.3.13源码小补丁：变更只一次，异常确认查询最多两次各2秒，错误状态/持续异常/关闭保留失败。实际延迟服务3案逐请求证明原版中止、补丁重查恢复、持续异常仍中止；执行库SHA绑定，未改系统安装。
+
+旧collector每回调写最新truth，4936帧出现327374次write，最慢117毫秒。新collector逐帧写、就绪停止startup RPC、truth/clock MessageInfo及有界计时；长测复用原Goal逻辑的一个client，不再每腿新建Python/DDS。最终45300帧/write一一对应，写入最大8.445毫秒。不能从前后改善追认原每处空窗的具体机制。
+
+终点必须先读原帧，再独立取当前steady/ROS时钟；借用采样时ros_now会误接纳已旧数据，先取时钟再读帧可能误拒刚更新帧。证据flush和清理独立执行，异常/取消真实终态回算，unknown attempts不从分母消失。
+
+原20种子20/20首试通过，长测同launch/client1808.296秒、25/25及完整就绪窗零孔洞；根Agent独立source/pose/freshness/stop/readback通过。随机发送前仍3空窗、长测就绪前1空窗、诊断窗口截断均保留。原19/20、23/24及中断repair-a不改判。执行代码以启动SHA为准，匹配已提交5746210的12文件blob，未重写原f3ba429 revision。全部最终证据留本机，当前进度回源progress。
+
 上一轮suite六场景首轮通过，但其固定map→odom未覆盖AMCL估计误差。家庭场景已经有AMCL、低电回充、换视角、任务续接；新的定位故障与通用识别复用这些入口。
 
 inspection当前主要是合成颜色/蓝框标记。home任务解析限red_box和indicator；权重、真实模型推理与常见物体资产需要本轮确认，不能改名为通用感知后照用颜色规则。
