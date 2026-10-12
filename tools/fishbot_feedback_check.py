@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PYTHON_GROUPS = {
     'control': tuple(ROOT / 'tools/tests' / name for name in (
         'test_command_guard.py', 'test_passage_goal.py', 'test_passage_config.py',
-        'test_passage_replay.py', 'test_passage_timing_tree.py')),
+        'test_passage_replay.py', 'test_passage_timing_tree.py',
+        'test_sim_scan_relay.py', 'test_simulation_suite.py', 'test_simulation_report.py')),
     'mission': (ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests'
                 / 'test_mission_bridge.py',),
 }

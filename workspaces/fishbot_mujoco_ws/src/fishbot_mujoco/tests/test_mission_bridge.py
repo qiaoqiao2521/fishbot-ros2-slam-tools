@@ -7,7 +7,9 @@ import threading
 import unittest
 from concurrent.futures import Future
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
+from unittest.mock import patch
+from rclpy.task import Future as ROSFuture
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from mission_bridge import (APIError, GoalStatus, MissionBridge, MissionRecord,
@@ -158,8 +160,10 @@ class DispatchFeedbackTests(unittest.TestCase):
         sent_cancels = []
         bridge = SimpleNamespace(lock=threading.RLock(), mission=record,
                                  goal_handle=None, cancel_requested=False, cancel_sent=False,
-                                 send_cancel=lambda: sent_cancels.append(True),
-                                 result=lambda _mission_id, _future: None)
+                                 send_cancel=lambda: sent_cancels.append(True))
+        for name in ('reset_cleanup', 'subscribe_result', 'result', 'request_cancel', 'retry_cleanup'):
+            setattr(bridge, name, MethodType(getattr(MissionBridge, name), bridge))
+        bridge.reset_cleanup()
         return bridge, sent_cancels
 
     def test_running_receipt_changes_only_after_nav2_accepts(self):
@@ -199,7 +203,10 @@ class DispatchFeedbackTests(unittest.TestCase):
         response.set_result(SimpleNamespace(accepted=True, get_result_async=unavailable_result))
         MissionBridge.goal_response(bridge, bridge.mission.value['id'], response)
         self.assertEqual(bridge.mission.value['dispatch_state'], 'accepted')
-        self.assertEqual(bridge.mission.value['status'], 'failed')
+        self.assertEqual(bridge.mission.value['status'], 'canceling')
+        self.assertIsNotNone(bridge.goal_handle)
+        with self.assertRaises(APIError):
+            bridge.mission.begin(bridge.mission.value['waypoints'], False)
 
     def test_late_acceptance_keeps_pending_cancel_and_its_reason(self):
         bridge, sent = self.harness()
@@ -215,6 +222,7 @@ class DispatchFeedbackTests(unittest.TestCase):
     def test_readiness_cancel_captures_the_specific_source_reason(self):
         bridge, _sent = self.harness()
         bridge.poll_lifecycle = lambda _wall: None
+        bridge.poll_collision_monitor = lambda _wall: None
         bridge.evaluate_ready = lambda _wall: (False, '仿真时钟未就绪或已暂停')
         bridge.goal_sent_wall = 0.0
         bridge.goal_send_future = None
@@ -224,6 +232,206 @@ class DispatchFeedbackTests(unittest.TestCase):
         MissionBridge.tick(bridge)
         bridge.mission.finish(GoalStatus.STATUS_CANCELED, 0, [])
         self.assertEqual(bridge.mission.value['stop_reason'], '仿真未就绪：仿真时钟未就绪或已暂停')
+
+
+class AcceptedCleanupTests(unittest.TestCase):
+    def harness(self, result_method, cancel_method):
+        bridge, _sent = DispatchFeedbackTests().harness()
+        bridge.send_cancel = MethodType(MissionBridge.send_cancel, bridge)
+        bridge.cancel_response = MethodType(MissionBridge.cancel_response, bridge)
+        handle = SimpleNamespace(accepted=True, get_result_async=result_method,
+                                 cancel_goal_async=cancel_method)
+        response = Future()
+        response.set_result(handle)
+        with patch('mission_bridge.time.monotonic', return_value=10.0):
+            MissionBridge.goal_response(bridge, bridge.mission.value['id'], response)
+        return bridge, handle
+
+    def terminal(self, status=GoalStatus.STATUS_CANCELED):
+        return SimpleNamespace(status=status, result=SimpleNamespace(
+            missed_waypoints=[], error_code=0, error_msg=''))
+
+    def test_subscription_and_cancel_send_errors_retry_without_releasing_goal(self):
+        result, cancel = Future(), Future()
+        result_calls, cancel_calls = [], []
+        def subscribe():
+            result_calls.append(True)
+            if len(result_calls) == 1:
+                raise RuntimeError('result unavailable')
+            return result
+        def request_cancel():
+            cancel_calls.append(True)
+            if len(cancel_calls) == 1:
+                raise RuntimeError('cancel unavailable')
+            return cancel
+        bridge, handle = self.harness(subscribe, request_cancel)
+        self.assertEqual(bridge.mission.value['status'], 'canceling')
+        self.assertIs(bridge.goal_handle, handle)
+        with patch('mission_bridge.time.monotonic', return_value=11.1):
+            bridge.retry_cleanup(11.1)
+            cancel.set_result(SimpleNamespace(goals_canceling=[object()]))
+            self.assertEqual(bridge.mission.value['status'], 'canceling')
+            result.set_result(self.terminal())
+        self.assertEqual((len(result_calls), len(cancel_calls)), (2, 2))
+        self.assertEqual(bridge.mission.value['status'], 'canceled')
+        self.assertIsNone(bridge.goal_handle)
+        self.assertIn('result unavailable', bridge.mission.value['stop_reason'])
+
+    def test_result_read_exception_retains_handle_and_accepts_later_terminal(self):
+        first, second, cancel = Future(), Future(), Future()
+        requests = iter([first, second])
+        bridge, handle = self.harness(lambda: next(requests), lambda: cancel)
+        with patch('mission_bridge.time.monotonic', return_value=10.0):
+            first.set_exception(RuntimeError('response lost'))
+        self.assertEqual(bridge.mission.value['status'], 'canceling')
+        self.assertIs(bridge.goal_handle, handle)
+        with patch('mission_bridge.time.monotonic', return_value=11.1):
+            bridge.retry_cleanup(11.1)
+            second.set_result(self.terminal(GoalStatus.STATUS_SUCCEEDED))
+        self.assertEqual(bridge.mission.value['status'], 'succeeded')
+        self.assertIsNone(bridge.goal_handle)
+
+    def test_immediate_terminal_callback_does_not_cancel_a_cleared_handle(self):
+        result = Future()
+        result.set_result(self.terminal(GoalStatus.STATUS_SUCCEEDED))
+        canceled = []
+        bridge, _handle = self.harness(lambda: result, lambda: canceled.append(True))
+        self.assertEqual(bridge.mission.value['status'], 'succeeded')
+        self.assertIsNone(bridge.goal_handle)
+        self.assertEqual(canceled, [])
+
+    def test_failed_attempts_are_bounded_and_user_can_retry_the_same_goal(self):
+        calls = []
+        def unavailable():
+            calls.append(True)
+            raise RuntimeError('offline')
+        bridge, handle = self.harness(unavailable, unavailable)
+        for wall in (11.1, 12.2, 13.3, 14.4):
+            with patch('mission_bridge.time.monotonic', return_value=wall):
+                bridge.retry_cleanup(wall)
+        self.assertEqual(len(calls), 6)
+        self.assertEqual(bridge.mission.value['cleanup_state'], 'unresolved')
+        self.assertEqual(bridge.mission.value['status'], 'canceling')
+        self.assertIs(bridge.goal_handle, handle)
+        with self.assertRaises(APIError):
+            bridge.mission.begin(bridge.mission.value['waypoints'], False)
+        with patch('mission_bridge.time.monotonic', return_value=15.0):
+            bridge.request_cancel('用户请求取消', retry=True)
+            bridge.retry_cleanup(15.0)
+        self.assertEqual(len(calls), 8)
+        self.assertEqual(bridge.mission.value['cleanup_state'], 'retrying')
+
+    def test_late_old_result_and_cancel_callbacks_do_not_override_new_requests(self):
+        first, second, first_cancel, second_cancel = [Future() for _ in range(4)]
+        first.set_running_or_notify_cancel()
+        first_cancel.set_running_or_notify_cancel()
+        results, cancels = iter([first, second]), iter([first_cancel, second_cancel])
+        bridge, _handle = self.harness(lambda: next(results), lambda: next(cancels))
+        with patch('mission_bridge.time.monotonic', return_value=10.0):
+            bridge.request_cancel('test cleanup')
+        for wall in (13.1, 14.2):
+            with patch('mission_bridge.time.monotonic', return_value=wall):
+                bridge.retry_cleanup(wall)
+        first.set_result(self.terminal(GoalStatus.STATUS_SUCCEEDED))
+        first_cancel.set_result(SimpleNamespace(goals_canceling=[object()]))
+        self.assertEqual(bridge.mission.value['status'], 'canceling')
+        self.assertIs(bridge.result_future, second)
+        self.assertIs(bridge.cancel_future, second_cancel)
+        second.set_result(self.terminal())
+        self.assertEqual(bridge.mission.value['status'], 'canceled')
+
+    def test_cancel_response_exception_does_not_disable_followup_cancel(self):
+        result, first, second = Future(), Future(), Future()
+        cancels = iter([first, second])
+        bridge, _handle = self.harness(lambda: result, lambda: next(cancels))
+        with patch('mission_bridge.time.monotonic', return_value=10.0):
+            bridge.request_cancel('test cancel')
+            first.set_exception(RuntimeError('reply lost'))
+        with patch('mission_bridge.time.monotonic', return_value=11.1):
+            bridge.retry_cleanup(11.1)
+        self.assertIs(bridge.cancel_future, second)
+        self.assertEqual(bridge.mission.value['status'], 'canceling')
+
+    def test_unknown_action_result_cannot_release_the_accepted_goal(self):
+        result, cancel = Future(), Future()
+        bridge, handle = self.harness(lambda: result, lambda: cancel)
+        result.set_result(self.terminal(GoalStatus.STATUS_UNKNOWN))
+        self.assertEqual(bridge.mission.value['status'], 'canceling')
+        self.assertIs(bridge.goal_handle, handle)
+        self.assertIn('未返回终态', bridge.mission.value['stop_reason'])
+
+    def test_unanswered_cleanup_requests_exhaust_without_fake_terminal(self):
+        for future_type in (Future, ROSFuture):
+            with self.subTest(future_type=future_type):
+                results = [future_type() for _ in range(3)]
+                cancels = [future_type() for _ in range(3)]
+                result_requests, cancel_requests = iter(results), iter(cancels)
+                bridge, handle = self.harness(lambda: next(result_requests), lambda: next(cancel_requests))
+                with patch('mission_bridge.time.monotonic', return_value=10.0):
+                    bridge.request_cancel('test timeout')
+                for wall in (13.1, 14.2, 17.3, 18.4, 21.5, 30.0):
+                    with patch('mission_bridge.time.monotonic', return_value=wall):
+                        bridge.retry_cleanup(wall)
+                self.assertTrue(all(future.cancelled() for future in results+cancels))
+                self.assertEqual((bridge.result_attempts, bridge.cancel_attempts), (3, 3))
+                self.assertEqual(bridge.mission.value['cleanup_state'], 'unresolved')
+                self.assertEqual(bridge.mission.value['status'], 'canceling')
+                self.assertIs(bridge.goal_handle, handle)
+
+
+class CollisionMonitorReportTests(unittest.TestCase):
+    def harness(self):
+        bridge = SimpleNamespace(lock=threading.RLock(), cm_report=None,
+            cm_publishers=(b'publisher',), cm_check_wall=0.0,
+            lifecycle={'collision_monitor': {'active': True, 'wall': 100.0}})
+        return bridge
+
+    def test_continuing_stop_is_not_expired_by_event_age(self):
+        bridge = self.harness()
+        with patch('mission_bridge.time.monotonic', return_value=1.0):
+            MissionBridge.on_collision_monitor(bridge, SimpleNamespace(action_type=1, polygon_name='VelocityStop'))
+        state = MissionBridge.collision_monitor_state(bridge, 100.0)
+        self.assertEqual(state['action'], 'stop')
+        self.assertEqual(state['polygon_name'], 'VelocityStop')
+        self.assertEqual(state['observation_age_s'], 99.0)
+        with patch('mission_bridge.time.monotonic', return_value=100.0):
+            MissionBridge.on_collision_monitor(bridge, SimpleNamespace(action_type=0, polygon_name=''))
+        self.assertEqual(MissionBridge.collision_monitor_state(bridge, 100.0)['action'], 'do_nothing')
+
+    def test_missing_source_or_inactive_monitor_is_unknown(self):
+        for publishers, active in (((), True), ((b'publisher',), False)):
+            bridge = self.harness()
+            bridge.cm_publishers = publishers
+            bridge.lifecycle['collision_monitor']['active'] = active
+            bridge.cm_report = {'action': 'stop', 'action_type': 1, 'polygon_name': 'old', 'wall': 1.0}
+            report = MissionBridge.collision_monitor_state(bridge, 100.0)
+            self.assertEqual(report['action'], 'unknown')
+            self.assertIsNone(report['polygon_name'])
+
+    def test_publisher_replacement_discards_previous_epoch(self):
+        bridge = self.harness()
+        bridge.cm_report = {'action': 'stop', 'action_type': 1, 'polygon_name': 'old', 'wall': 1.0}
+        bridge.get_publishers_info_by_topic = lambda _topic: [SimpleNamespace(endpoint_gid=b'new')]
+        MissionBridge.poll_collision_monitor(bridge, 100.0)
+        self.assertIsNone(bridge.cm_report)
+        self.assertEqual(bridge.cm_publishers, (b'new',))
+
+    def test_first_graph_poll_keeps_an_event_received_before_discovery(self):
+        bridge = self.harness()
+        bridge.cm_publishers = ()
+        bridge.cm_report = {'action': 'stop', 'action_type': 1, 'polygon_name': 'VelocityStop', 'wall': 99.0}
+        bridge.get_publishers_info_by_topic = lambda _topic: [SimpleNamespace(endpoint_gid=b'new')]
+        MissionBridge.poll_collision_monitor(bridge, 100.0)
+        self.assertEqual(MissionBridge.collision_monitor_state(bridge, 100.0)['action'], 'stop')
+
+    def test_clock_rollback_discards_previous_report(self):
+        bridge = self.harness()
+        bridge.cm_report = {'action': 'stop'}
+        bridge.clock_last = 5.0
+        bridge.clock_advance_wall = 1.0
+        bridge.sample = lambda _name, _stamp: None
+        MissionBridge.on_clock(bridge, SimpleNamespace(clock=SimpleNamespace(sec=1, nanosec=0)))
+        self.assertIsNone(bridge.cm_report)
 
 
 class LifecycleRetryTests(unittest.TestCase):

@@ -39,6 +39,16 @@ class Future:
 
 
 class PassageGoalTests(unittest.TestCase):
+    def test_single_goal_selects_explicit_tolerant_tree(self):
+        class Goal:
+            pass
+        pose_type = lambda: SimpleNamespace(header=SimpleNamespace(), pose=SimpleNamespace(
+            position=SimpleNamespace(), orientation=SimpleNamespace()))
+        action_type = SimpleNamespace(Goal=Goal)
+        goal = module.make_navigation_goal(action_type, pose_type, [(1., 0., 0.)], None, False, 'tolerant')
+        self.assertTrue(goal.behavior_tree.endswith('fishbot_passage_tolerant_tree.xml'))
+        self.assertEqual(goal.pose.pose.position.x, 1.)
+
     def test_route_bounds_include_fresh_start(self):
         route = [[1, 0, 0], [1, 1, math.pi/2], [0, .2, -math.pi/2]]
         poses, length = module.requested_map_route(0, 0, 0, route)

@@ -4,7 +4,8 @@ import { ArrowLeft, Box, Check, Home, MapPin, Play, Route, Square, Trash2, X } f
 import { SimulationMapView } from '@/components/simulation/simulation-map'
 import { useSimulation } from '@/hooks/use-simulation'
 import {
-  DEMO_WAYPOINTS, MAX_WAYPOINTS, isFreeWaypoint, missionIsActive, missionLabel, missionProgressText,
+  DEMO_WAYPOINTS, MAX_WAYPOINTS, collisionMonitorText, isFreeWaypoint, missionCanRetryCancel,
+  missionIsActive, missionLabel, missionProgressText,
   type Point, type Pose,
 } from '@/lib/simulation'
 import './simulation.css'
@@ -21,6 +22,8 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
   const displayedPoints = active ? state!.mission.waypoints : waypoints
   const mission = state?.mission
   const awaitingAcceptance = mission?.status === 'running' && mission.dispatch_state === 'pending'
+  const canRetryCancel = missionCanRetryCancel(mission)
+  const collisionMonitor = state?.collision_monitor
   const error = actionError ?? connectionError ?? mapError
   const physical = state?.truth
   const obstacleLabel = {
@@ -57,7 +60,8 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
       : mission?.status === 'canceling' ? '正在取消任务'
         : active ? '导航运行中' : '已就绪，可以派发' : '等待仿真就绪'
   const progressText = missionProgressText(mission)
-  const sceneTitle = active ? awaitingAcceptance ? '等待 Nav2 确认任务' : '巡逻正在进行' : '点地图，安排一圈巡逻'
+  const sceneTitle = active ? awaitingAcceptance ? '等待 Nav2 确认任务'
+    : mission?.status === 'canceling' ? '正在收束巡逻任务' : '巡逻正在进行' : '点地图，安排一圈巡逻'
 
   return (
     <div className="simulation-page">
@@ -137,9 +141,18 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
             <div className="simulation-mission-actions">
               <button type="button" className="simulation-button simulation-primary" disabled={!ready || !editable || waypoints.length === 0}
                 onClick={() => void act('mission', { waypoints, return_home: returnHome, issued_at: Date.now() / 1000 })}><Play size={17} />{pending === 'mission' ? '正在派发…' : '开始巡逻'}</button>
-              <button type="button" className="simulation-button simulation-cancel" disabled={!active || !!pending || mission?.status === 'canceling'} onClick={() => void act('cancel')}><Square size={15} />{mission?.status === 'canceling' ? '正在取消…' : '取消任务'}</button>
+              <button type="button" className="simulation-button simulation-cancel" disabled={!active || !!pending || (mission?.status === 'canceling' && !canRetryCancel)} onClick={() => void act('cancel')}><Square size={15} />{canRetryCancel ? '重试取消' : mission?.status === 'canceling' ? '正在取消…' : '取消任务'}</button>
             </div>
             <button type="button" className="simulation-clear-queue" disabled={!editable || waypoints.length === 0} onClick={() => { setWaypoints([]); setSelectionMessage('待派发巡逻点已清空。') }}><Trash2 size={14} />清空待派发点</button>
+          </section>
+
+          <section className="simulation-collision-report" aria-labelledby="simulation-collision-title">
+            <h2 id="simulation-collision-title">最近 CM 报告</h2>
+            <strong aria-live="polite">{connected ? collisionMonitorText(collisionMonitor) : '连接中断，当前报告未知。'}</strong>
+            <p>{collisionMonitor?.available && collisionMonitor.observation_age_s != null
+              ? `最近变化在 ${collisionMonitor.observation_age_s.toFixed(1)} 秒前；持续状态不定时重发。`
+              : '等待状态来源与监测节点就绪。'}</p>
+            <small>该报告说明监测层最近的决定；零速本身不能确定停因。</small>
           </section>
 
           <section className="simulation-obstacle" aria-labelledby="simulation-obstacle-title">

@@ -9,6 +9,14 @@ export type SimulationMap = {
 }
 export type MissionStatus = 'idle' | 'running' | 'canceling' | 'canceled' | 'succeeded' | 'failed'
 export type MissionDispatchState = 'pending' | 'accepted' | 'rejected' | 'unavailable'
+export type CollisionMonitorReport = {
+  source: '/collision_monitor_state'
+  available: boolean
+  action: 'unknown' | 'do_nothing' | 'stop' | 'slowdown' | 'approach' | 'limit'
+  action_type: number | null
+  polygon_name: string | null
+  observation_age_s: number | null
+}
 export type SimulationState = {
   mode: 'mujoco'
   domain: 93
@@ -26,7 +34,9 @@ export type SimulationState = {
     message: string
     dispatch_state?: MissionDispatchState | null
     stop_reason?: string | null
+    cleanup_state?: 'retrying' | 'unresolved' | null
   }
+  collision_monitor?: CollisionMonitorReport
   obstacle: { state: string; x: number | null; y: number | null; size: number }
   home: Pose
 }
@@ -92,6 +102,8 @@ export function validateSimulationState(value: SimulationState): SimulationState
     || !['idle', 'running', 'canceling', 'canceled', 'succeeded', 'failed'].includes(value.mission.status)
     || (value.mission.dispatch_state != null && !['pending', 'accepted', 'rejected', 'unavailable'].includes(value.mission.dispatch_state))
     || (value.mission.stop_reason != null && typeof value.mission.stop_reason !== 'string')
+    || (value.mission.cleanup_state != null && !['retrying', 'unresolved'].includes(value.mission.cleanup_state))
+    || (value.collision_monitor != null && !validCollisionMonitor(value.collision_monitor))
     || !Number.isInteger(value.mission.current_index) || value.mission.current_index < 0
     || !Array.isArray(value.mission.waypoints) || !value.mission.waypoints.every(finitePose)
     || !Array.isArray(value.path) || !value.path.every(finitePoint) || !finitePose(value.home)
@@ -103,6 +115,25 @@ export function validateSimulationState(value: SimulationState): SimulationState
     throw new Error('收到的状态不是当前 MuJoCo 仿真，请检查仿真服务。')
   }
   return value
+}
+
+function validCollisionMonitor(value: CollisionMonitorReport): boolean {
+  return !!value && value.source === '/collision_monitor_state' && typeof value.available === 'boolean'
+    && ['unknown', 'do_nothing', 'stop', 'slowdown', 'approach', 'limit'].includes(value.action)
+    && (value.action_type === null || (Number.isInteger(value.action_type) && value.action_type >= 0 && value.action_type <= 4))
+    && (value.polygon_name === null || typeof value.polygon_name === 'string')
+    && (value.observation_age_s === null || (Number.isFinite(value.observation_age_s) && value.observation_age_s >= 0))
+}
+
+export function collisionMonitorText(report?: CollisionMonitorReport): string {
+  if (!report?.available || report.action === 'unknown') return '未知：尚无可用的 Collision Monitor 报告。'
+  const label = { do_nothing: '放行', stop: '停车', slowdown: '减速', approach: '接近限速', limit: '速度限制' }[report.action]
+  const polygon = report.polygon_name === 'invalid source' ? '传感器或坐标变换来源无效' : report.polygon_name || '无触发区域'
+  return `${label} · ${polygon}`
+}
+
+export function missionCanRetryCancel(mission?: SimulationState['mission']): boolean {
+  return mission?.status === 'canceling' && mission.cleanup_state === 'unresolved'
 }
 
 function finitePoint(value: Point): boolean {
@@ -132,7 +163,8 @@ export function missionProgressText(mission?: SimulationState['mission']): strin
       ? '正在返回起点' : `正在前往第 ${mission.current_index + 1} / ${mission.waypoints.length} 个点`
   }
   if (mission?.status === 'succeeded') return `已完成 ${mission.waypoints.length} 个导航点`
-  if (mission?.status === 'canceling') return '等待 Nav2 取消结果'
+  if (mission?.status === 'canceling') return mission.cleanup_state === 'unresolved'
+    ? '终态仍未知，原目标保留；可以重试取消。' : '等待 Nav2 取消结果'
   if (mission?.status === 'canceled') return 'Nav2 已确认取消任务。'
   if (mission?.status === 'failed') return '任务未完成，请查看 Nav2 回执。'
   return '选点后派发，小车会依次前往。'

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  isFreeWaypoint, mapToWorld, missionIsActive, missionLabel, missionProgressText, requestSimulation,
+  collisionMonitorText, isFreeWaypoint, mapToWorld, missionCanRetryCancel,
+  missionIsActive, missionLabel, missionProgressText, requestSimulation,
   validateSimulationMap, validateSimulationState, worldToMap,
   type SimulationMap, type SimulationState,
 } from '@/lib/simulation'
@@ -49,6 +50,27 @@ describe('simulation map coordinates', () => {
 })
 
 describe('simulation server responses', () => {
+  it('keeps unknown cleanup active and exposes cancellation retry without accepting new goals', () => {
+    const unresolved = { ...state, mission: { ...state.mission, status: 'canceling' as const,
+      cleanup_state: 'unresolved' as const, stop_reason: '结果回执异常' } }
+    const received = validateSimulationState(unresolved)
+    expect(missionIsActive(received)).toBe(true)
+    expect(missionCanRetryCancel(received.mission)).toBe(true)
+    expect(missionProgressText(received.mission)).toContain('终态仍未知')
+    expect(missionCanRetryCancel({ ...received.mission, cleanup_state: 'retrying' })).toBe(false)
+    expect(missionCanRetryCancel({ ...received.mission, status: 'canceled' })).toBe(false)
+  })
+
+  it('shows real CM events without treating their age as a heartbeat timeout', () => {
+    const collision_monitor = { source: '/collision_monitor_state' as const, available: true,
+      action: 'stop' as const, action_type: 1, polygon_name: 'VelocityStop', observation_age_s: 90 }
+    const received = validateSimulationState({ ...state, collision_monitor })
+    expect(collisionMonitorText(received.collision_monitor)).toBe('停车 · VelocityStop')
+    expect(collisionMonitorText({ ...collision_monitor, polygon_name: 'invalid source' })).toContain('来源无效')
+    expect(collisionMonitorText({ ...collision_monitor, available: false })).toContain('未知')
+    expect(collisionMonitorText()).toContain('未知')
+    expect(() => validateSimulationState({ ...state, collision_monitor: { ...collision_monitor, observation_age_s: -1 } })).toThrow('当前 MuJoCo 仿真')
+  })
   it('shows HTTP dispatch pending as waiting for Nav2 rather than traveling', async () => {
     const pending = { ...state, mission: { ...state.mission, dispatch_state: 'pending' } }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(pending), { status: 202 })))

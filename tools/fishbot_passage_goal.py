@@ -100,7 +100,7 @@ class RouteCoverage:
                                f'{len(self.intermediates)})')
 
 
-def make_navigation_goal(action_type, pose_type, poses, stamp, through_poses):
+def make_navigation_goal(action_type, pose_type, poses, stamp, through_poses, timing_profile='strict'):
     """Build the installed Jazzy action shape; one goal owns the entire route."""
     goal = action_type.Goal()
     messages = []
@@ -116,7 +116,8 @@ def make_navigation_goal(action_type, pose_type, poses, stamp, through_poses):
         tree = 'fishbot_passage_through_tree.xml'
     else:
         goal.pose = messages[0]
-        tree = 'fishbot_passage_tree.xml'
+        tree = ('fishbot_passage_tolerant_tree.xml' if timing_profile == 'tolerant'
+                else 'fishbot_passage_tree.xml')
     goal.behavior_tree = str(Path(__file__).parent / 'config' / tree)
     return goal
 
@@ -222,6 +223,8 @@ class PendingGoal:
             response = self.result_future.result()
             self.evidence['cancel_terminal_status'] = response.status if response else None
             self.evidence['canceled'] = bool(response and response.status == 5)
+            if response and response.status in (4, 5, 6):
+                self.evidence.setdefault('terminal_steady_time', time.monotonic())
 
 
 def finalize_goal(result, goal_requested, request_stop, request_cancel, observe,
@@ -266,6 +269,7 @@ def main():
     parser.add_argument('--real', action='store_true')
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--use-sim-time', action='store_true')
+    parser.add_argument('--timing-profile', choices=('strict', 'tolerant'), default='strict')
     parser.add_argument('--timeout', type=float, default=90)
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
@@ -286,6 +290,8 @@ def main():
         parser.error('--real requires domain 0 and system time')
     if not math.isfinite(args.timeout) or not 5 <= args.timeout <= 180:
         parser.error('timeout must be 5..180 seconds')
+    if route is not None and args.timing_profile != 'strict':
+        parser.error('continuous routes currently use the strict route tree')
     if not args.execute:
         print(json.dumps({'execute': False, 'distance': args.distance,
                           'target_requested': args.target,
@@ -332,7 +338,7 @@ def main():
     result = {'completed': False, 'stationary_feedback': False,
               'distance_requested': args.distance, 'target_requested': args.target,
               'route_requested': route, 'action': action_name,
-              'domain': args.domain}
+              'domain': args.domain, 'timing_profile': args.timing_profile}
     pending = PendingGoal(result)
     goal_requested = False
     began = time.monotonic()
@@ -387,12 +393,14 @@ def main():
         result['target'] = [x, y, target_yaw]
         result['relative_target_distance'] = math.hypot(x-t.x, y-t.y)
         goal = make_navigation_goal(action_type, PoseStamped, poses,
-                                    node.get_clock().now().to_msg(), route is not None)
+                                    node.get_clock().now().to_msg(), route is not None, args.timing_profile)
         coverage = RouteCoverage(poses, result) if route is not None else None
         def feedback_callback(message):
             if coverage is not None:
                 coverage.observe(message.feedback, node.get_clock().now().nanoseconds * 1e-9)
         goal_requested = True
+        result['goal_send_count'] = 1
+        result['goal_sent_steady_time'] = time.monotonic()
         send_future = (action.send_goal_async(goal, feedback_callback=feedback_callback)
                        if coverage is not None else action.send_goal_async(goal))
         handle = wait(pending.track(send_future), min(deadline, time.monotonic()+10))
@@ -401,8 +409,10 @@ def main():
             pending._accepted(pending.send_future)
         if not handle.accepted:
             raise RuntimeError('Nav2 rejected the goal')
+        result['accepted_steady_time'] = time.monotonic()
         action_result = pending.get_result()
         response = wait(action_result, deadline)
+        result['terminal_steady_time'] = time.monotonic()
         result.update(action_status=response.status, error_code=response.result.error_code)
         if response.status != 4 or response.result.error_code != 0:
             raise RuntimeError('Nav2 did not complete the requested goal')

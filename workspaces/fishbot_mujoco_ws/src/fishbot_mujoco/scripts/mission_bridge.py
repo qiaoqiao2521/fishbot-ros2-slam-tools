@@ -26,6 +26,7 @@ from geometry_msgs.msg import PoseStamped
 from lifecycle_msgs.srv import GetState
 from mujoco_ros2_control_msgs.msg import FreeJointStateArray
 from nav2_msgs.action import FollowWaypoints
+from nav2_msgs.msg import CollisionMonitorState
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from rclpy.action import ActionClient
 from rclpy.clock import Clock, ClockType
@@ -45,6 +46,10 @@ HOME = {'x': 0.0, 'y': 0.0, 'yaw': 0.0}
 ROBOT_RADIUS = 0.13
 MAX_WAYPOINTS = 12  # User-selected points; an optional home point is additional.
 ACTIVE_STATUSES = {'running', 'canceling'}
+CLEANUP_ATTEMPTS = 3
+CLEANUP_RETRY_SECONDS = 1.0
+CLEANUP_RESPONSE_SECONDS = 3.0
+CM_ACTIONS = {0: 'do_nothing', 1: 'stop', 2: 'slowdown', 3: 'approach', 4: 'limit'}
 
 
 class APIError(Exception):
@@ -121,7 +126,7 @@ class MissionRecord:
     def __init__(self):
         self.value = {'id': None, 'status': 'idle', 'current_index': 0, 'waypoints': [],
                       'return_home': False, 'message': '等待巡逻任务', 'missed_waypoints': [],
-                      'dispatch_state': None, 'stop_reason': None}
+                      'dispatch_state': None, 'stop_reason': None, 'cleanup_state': None}
 
     def begin(self, points, return_home):
         if self.value['status'] in ACTIVE_STATUSES:
@@ -130,7 +135,7 @@ class MissionRecord:
         self.value = {'id': uuid.uuid4().hex, 'status': 'running', 'current_index': 0,
                       'waypoints': points, 'return_home': return_home,
                       'message': '任务已提交，等待 Nav2 接收回执', 'missed_waypoints': [],
-                      'dispatch_state': 'pending', 'stop_reason': None}
+                      'dispatch_state': 'pending', 'stop_reason': None, 'cleanup_state': None}
         return self.value['id']
 
     def request_cancel(self, reason='用户请求取消'):
@@ -142,6 +147,7 @@ class MissionRecord:
         self.value['message'] = '正在请求取消，等待 Nav2 实际结果'
 
     def finish(self, status, error_code, missed, error_msg=''):
+        self.value['cleanup_state'] = None
         self.value['missed_waypoints'] = missed
         if status == GoalStatus.STATUS_CANCELED:
             self.value.update(status='canceled', message='Nav2 已取消巡逻')
@@ -186,6 +192,10 @@ class MissionBridge(Node):
         self.goal_sent_wall = None
         self.cancel_sent = False
         self.cancel_requested = False
+        self.reset_cleanup()
+        self.cm_report = None
+        self.cm_publishers = ()
+        self.cm_check_wall = 0.0
         self.last_lifecycle_poll = 0.0
         self.lifecycle = {name: {'active': False, 'wall': 0.0, 'future': None}
                           for name in ('amcl', 'controller_server', 'bt_navigator',
@@ -206,6 +216,9 @@ class MissionBridge(Node):
                                  self.on_truth, qos_profile_sensor_data)
         self.create_subscription(Path, '/plan', self.on_path, 10)
         self.create_subscription(String, '/sim/obstacle/state', self.on_obstacle, 10)
+        # Jazzy CM publishes a volatile change event, not a timestamped heartbeat.
+        self.create_subscription(CollisionMonitorState, '/collision_monitor_state',
+                                 self.on_collision_monitor, 10)
         self.create_subscription(OccupancyGrid, '/map', self.on_map,
                                  QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                                             durability=DurabilityPolicy.TRANSIENT_LOCAL))
@@ -217,6 +230,40 @@ class MissionBridge(Node):
     def sample(self, name, stamp):
         self.samples[name] = (stamp_seconds(stamp), time.monotonic())
 
+    def on_collision_monitor(self, msg):
+        with self.lock:
+            action = CM_ACTIONS.get(msg.action_type)
+            self.cm_report = (None if action is None else {
+                'action': action, 'action_type': int(msg.action_type),
+                'polygon_name': msg.polygon_name, 'wall': time.monotonic()})
+
+    def poll_collision_monitor(self, wall):
+        if wall-self.cm_check_wall < 0.75:
+            return
+        self.cm_check_wall = wall
+        try:
+            publishers = tuple(sorted(bytes(info.endpoint_gid) for info in
+                self.get_publishers_info_by_topic('/collision_monitor_state')))
+        except Exception:
+            publishers = ()
+        if publishers != self.cm_publishers and (self.cm_publishers or not publishers):
+            # A replacement publisher starts a new observation epoch.
+            self.cm_report = None
+        self.cm_publishers = publishers
+        lifecycle = self.lifecycle['collision_monitor']
+        if not lifecycle['active'] or wall-lifecycle['wall'] > 3:
+            self.cm_report = None
+
+    def collision_monitor_state(self, wall):
+        lifecycle = self.lifecycle['collision_monitor']
+        available = bool(self.cm_publishers) and lifecycle['active'] and wall-lifecycle['wall'] <= 3
+        report = self.cm_report if available else None
+        return {'source': '/collision_monitor_state', 'available': available,
+                'action': report['action'] if report else 'unknown',
+                'action_type': report['action_type'] if report else None,
+                'polygon_name': report['polygon_name'] if report else None,
+                'observation_age_s': max(0.0, wall-report['wall']) if report else None}
+
     def on_clock(self, msg):
         with self.lock:
             current = stamp_seconds(msg.clock)
@@ -224,6 +271,7 @@ class MissionBridge(Node):
                 self.clock_advance_wall = time.monotonic()
             elif self.clock_last is not None and current < self.clock_last:
                 self.clock_advance_wall = None
+                self.cm_report = None
             self.clock_last = current
             self.sample('clock', msg.clock)
 
@@ -389,7 +437,8 @@ class MissionBridge(Node):
                 'pose': self.pose if self.ready else None,
                 'truth': self.truth if clock_fresh and self.fresh('truth', ros_now, wall) else None,
                 'path': self.path, 'trajectory': self.trajectory,
-                'mission': self.mission.value, 'obstacle': obstacle, 'home': HOME})
+                'mission': self.mission.value, 'obstacle': obstacle, 'home': HOME,
+                'collision_monitor': self.collision_monitor_state(wall)})
 
     def enqueue(self, kind, body):
         op = Operation(kind, body, time.monotonic()+2.0, Future())
@@ -403,6 +452,7 @@ class MissionBridge(Node):
         with self.lock:
             wall = time.monotonic()
             self.poll_lifecycle(wall)
+            self.poll_collision_monitor(wall)
             self.ready, self.reason = self.evaluate_ready(wall)
             if (self.mission.value['status'] == 'running' and not self.ready
                     and self.goal_sent_wall is not None and wall-self.goal_sent_wall > 1):
@@ -410,8 +460,7 @@ class MissionBridge(Node):
             if (self.goal_send_future is not None and not self.goal_send_future.done()
                     and wall-self.goal_sent_wall > 5 and not self.cancel_requested):
                 self.request_cancel('任务接收超时，等待响应后取消')
-            if self.cancel_requested and self.goal_handle is not None and not self.cancel_sent:
-                self.send_cancel()
+            self.retry_cleanup(wall)
             for pending in list(self.pending_services):
                 op, future, deadline = pending
                 if not future.done() and wall > deadline:
@@ -435,10 +484,10 @@ class MissionBridge(Node):
                     elif op.kind == 'cancel':
                         if op.body:
                             raise APIError('Cancel request must be an empty object')
-                        self.mission.request_cancel()
-                        self.cancel_requested = True
-                        if self.goal_handle is not None and not self.cancel_sent:
-                            self.send_cancel()
+                        if self.mission.value['status'] not in ACTIVE_STATUSES:
+                            raise APIError('There is no active mission to cancel', 409)
+                        self.request_cancel('用户请求取消',
+                            retry=self.mission.value.get('cleanup_state') == 'unresolved')
                         op.future.set_result((202, self.state()))
                     elif op.kind == 'obstacle':
                         self.request_obstacle(op)
@@ -470,6 +519,7 @@ class MissionBridge(Node):
         mission_id = self.mission.begin(points, return_home)
         self.goal_handle = None
         self.cancel_requested = self.cancel_sent = False
+        self.reset_cleanup()
         self.goal_sent_wall = time.monotonic()
         self.trajectory = [dict(self.truth and {'x': self.truth['x'], 'y': self.truth['y']} or HOME)]
         self.path = []
@@ -503,56 +553,134 @@ class MissionBridge(Node):
                 self.mission.value['dispatch_state'] = 'accepted'
                 if not self.cancel_requested:
                     self.mission.value['message'] = 'Nav2 已接受，巡逻进行中'
-                handle.get_result_async().add_done_callback(lambda f: self.result(mission_id, f))
-                if self.cancel_requested:
+                self.subscribe_result()
+                if self.cancel_requested and self.goal_handle is not None:
                     self.send_cancel()
             except Exception as error:
                 if self.mission.value['dispatch_state'] != 'accepted':
                     self.mission.value['dispatch_state'] = 'unavailable'
-                self.mission.value.update(status='failed', message=f'任务回执处理失败：{error}')
+                    self.mission.value.update(status='failed', message=f'任务回执处理失败：{error}')
+                else:
+                    self.request_cancel(f'已接受任务的回执异常：{error}')
+
+    def reset_cleanup(self):
+        self.result_future = self.cancel_future = None
+        self.result_attempts = self.cancel_attempts = 0
+        self.result_retry_wall = self.cancel_retry_wall = 0.0
+        self.result_sent_wall = self.cancel_sent_wall = 0.0
+        self.cancel_requested_wall = None
+
+    def subscribe_result(self):
+        if self.goal_handle is None or self.result_future is not None:
+            return
+        mission_id = self.mission.value['id']
+        self.result_attempts += 1
+        self.result_sent_wall = time.monotonic()
+        try:
+            future = self.goal_handle.get_result_async()
+            self.result_future = future
+            future.add_done_callback(lambda f: self.result(mission_id, f))
+        except Exception as error:
+            self.result_future = None
+            self.result_retry_wall = time.monotonic()+CLEANUP_RETRY_SECONDS
+            self.request_cancel(f'结果回执异常，正在收束任务：{error}')
 
     def result(self, mission_id, future):
         with self.lock:
-            if self.mission.value['id'] != mission_id:
+            if self.mission.value['id'] != mission_id or self.result_future is not future:
                 return
             try:
                 response = future.result()
+                if response.status not in (GoalStatus.STATUS_SUCCEEDED,
+                                            GoalStatus.STATUS_CANCELED, GoalStatus.STATUS_ABORTED):
+                    raise RuntimeError(f'Nav2 未返回终态：{response.status}')
                 missed = [{'index': int(m.index), 'error_code': int(m.error_code)}
                           for m in response.result.missed_waypoints]
                 self.mission.finish(response.status, response.result.error_code, missed,
                                     response.result.error_msg)
             except Exception as error:
-                self.mission.value.update(status='failed', message=f'无法读取任务结果：{error}')
+                self.result_future = None
+                self.result_retry_wall = time.monotonic()+CLEANUP_RETRY_SECONDS
+                self.request_cancel(f'无法确认任务结果，正在收束：{error}')
+                return
             self.goal_handle = None
             self.goal_send_future = None
             self.cancel_requested = self.cancel_sent = False
+            self.reset_cleanup()
 
-    def request_cancel(self, message):
+    def request_cancel(self, message, retry=False):
         if self.mission.value['status'] not in ACTIVE_STATUSES:
             return
         self.mission.request_cancel(message)
         self.mission.value['message'] = message
         self.cancel_requested = True
+        if self.cancel_requested_wall is None:
+            self.cancel_requested_wall = time.monotonic()
+        if retry:
+            self.result_attempts = self.cancel_attempts = 0
+            self.result_retry_wall = self.cancel_retry_wall = 0.0
+            self.cancel_sent = False
+        self.mission.value['cleanup_state'] = 'retrying'
         if self.goal_handle is not None and not self.cancel_sent:
             self.send_cancel()
 
     def send_cancel(self):
-        self.cancel_sent = True
+        if (self.goal_handle is None or self.cancel_future is not None or self.cancel_sent
+                or self.cancel_attempts >= CLEANUP_ATTEMPTS
+                or time.monotonic() < self.cancel_retry_wall):
+            return
         mission_id = self.mission.value['id']
-        self.goal_handle.cancel_goal_async().add_done_callback(lambda f: self.cancel_response(mission_id, f))
+        self.cancel_attempts += 1
+        self.cancel_sent_wall = time.monotonic()
+        try:
+            future = self.goal_handle.cancel_goal_async()
+            self.cancel_future = future
+            future.add_done_callback(lambda f: self.cancel_response(mission_id, f))
+        except Exception as error:
+            self.cancel_future = None
+            self.cancel_retry_wall = time.monotonic()+CLEANUP_RETRY_SECONDS
+            self.mission.value['message'] = f'取消发送异常，保留目标等待重试：{error}'
 
     def cancel_response(self, mission_id, future):
         with self.lock:
-            if self.mission.value['id'] != mission_id or self.mission.value['status'] not in ACTIVE_STATUSES:
+            if (self.mission.value['id'] != mission_id or self.cancel_future is not future
+                    or self.mission.value['status'] not in ACTIVE_STATUSES):
                 return
+            self.cancel_future = None
             try:
                 if not future.result().goals_canceling:
                     # Even a rejection can race a terminal success; the result decides.
                     self.mission.value['message'] = '取消未获确认，等待 Nav2 最终结果'
                 else:
+                    self.cancel_sent = True
                     self.mission.value['message'] = 'Nav2 已接收取消请求，等待终止结果'
             except Exception as error:
                 self.mission.value['message'] = f'取消响应异常，等待最终结果：{error}'
+            self.cancel_retry_wall = time.monotonic()+CLEANUP_RETRY_SECONDS
+
+    def retry_cleanup(self, wall):
+        if not self.cancel_requested or self.goal_handle is None:
+            return
+        for name in ('result', 'cancel'):
+            future = getattr(self, name+'_future')
+            sent = getattr(self, name+'_sent_wall')
+            since = max(sent, self.cancel_requested_wall or sent)
+            if future is not None and not future.done() and wall-since > CLEANUP_RESPONSE_SECONDS:
+                # Canceling a local future removes the rclpy pending request, not the Nav2 goal.
+                setattr(self, name+'_future', None)
+                future.cancel()
+                setattr(self, name+'_retry_wall', wall+CLEANUP_RETRY_SECONDS)
+        if (self.result_future is None and self.result_attempts < CLEANUP_ATTEMPTS
+                and wall >= self.result_retry_wall):
+            self.subscribe_result()
+        if not self.cancel_sent and wall >= self.cancel_retry_wall:
+            self.send_cancel()
+        result_exhausted = self.result_future is None and self.result_attempts >= CLEANUP_ATTEMPTS
+        cancel_exhausted = (not self.cancel_sent and self.cancel_future is None
+                            and self.cancel_attempts >= CLEANUP_ATTEMPTS)
+        if result_exhausted or cancel_exhausted:
+            self.mission.value['cleanup_state'] = 'unresolved'
+            self.mission.value['message'] = '有限收束未确认终态；目标仍保留，可重试取消，不能派发新目标'
 
     def request_obstacle(self, op):
         if (set(op.body) != {'action'} or not isinstance(op.body['action'], str)

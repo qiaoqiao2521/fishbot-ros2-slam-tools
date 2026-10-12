@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """Bounded simulation acceptance: action success AND measured MuJoCo position.
 
-Run only in domain 93 with loopback discovery; never drive the real robot.
+Use the explicitly selected simulation domain with loopback discovery.
 """
 import argparse
 import json
@@ -21,6 +21,7 @@ from sensor_msgs.msg import LaserScan
 from lifecycle_msgs.srv import GetState
 from mujoco_ros2_control_msgs.msg import FreeJointStateArray
 from tf2_ros import Buffer, TransformListener
+from wait_ready import validate_sim_domain
 
 
 class Probe(Node):
@@ -144,7 +145,7 @@ class Probe(Node):
         now = self.get_clock().now().nanoseconds * 1e-9
         if now-self.scan_times[-1] > 0.5 or now-self.odom_times[-1] > 0.5:
             raise RuntimeError('Stale sensors')
-        report = {'mode': self.args.mode, 'domain': 93,
+        report = {'mode': self.args.mode, 'domain': int(os.environ['ROS_DOMAIN_ID']),
                   'scan_points': len(self.scan.ranges), 'scan_hz': self.rate(self.scan_times),
                   'odom_hz': self.rate(self.odom_times), 'scan_frame': self.scan.header.frame_id,
                   'valid_scan_points': sum(math.isfinite(r) and self.scan.range_min <= r <= self.scan.range_max for r in self.scan.ranges)}
@@ -252,8 +253,7 @@ def main():
     parser.add_argument('--yaw-tolerance', type=float, default=0.30)
     parser.add_argument('--output', required=True)
     args = parser.parse_args()
-    if os.environ.get('ROS_DOMAIN_ID') != '93' or os.environ.get('ROS_AUTOMATIC_DISCOVERY_RANGE') != 'LOCALHOST':
-        raise SystemExit('Requires simulation domain 93 and LOCALHOST discovery')
+    validate_sim_domain()
     rclpy.init()
     probe = Probe(args)
     report = None

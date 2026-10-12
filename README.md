@@ -23,6 +23,9 @@ Missing dependencies and skipped tests mean incomplete verification.
 See [feedback workflow](docs/USER_FEEDBACK.md) for commands and remaining cases.
 The physical robot was sold; the user confirmed mapping and navigation complete.
 
+Run the [six-case simulation suite](docs/SIMULATION_SUITE.md) with `./fishbot.sh sim-suite`.
+It records actual truth trajectories, moving scan faults, cancellation and old-command rejection.
+
 ## Layout
 
 - tools/: staged startup, preflight, teleop and map saving.
