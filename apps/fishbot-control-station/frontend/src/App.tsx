@@ -49,7 +49,7 @@ function App() {
 function StationSurface({ route, navigate }: { route: 'dashboard' | 'radar'; navigate: (route: AppRoute) => void }) {
   useStationBootstrap()
   if (route === 'radar') {
-    return <RadarWorkbenchPage onBack={() => navigate('dashboard')} />
+    return <RadarWorkbenchPage onBack={() => navigate('dashboard')} onPatrol={() => navigate('simulation')} />
   }
 
   return (

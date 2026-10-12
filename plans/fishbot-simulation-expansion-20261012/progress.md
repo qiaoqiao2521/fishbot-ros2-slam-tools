@@ -50,6 +50,8 @@ pending，owner=root Codex：主vault先前观察的分叉历史13/15及其他�
 
 ## 同期雷达界面与Goal API改动接续
 
+2026-10-13 updated：已从 Unitree 原对话与 NOTES.md 核对原14项成果来源，在新的 `plans/fishbot-unitree-console-20261013/` 中审查、复用并完成前后端测试及隔离domain106实际验收。两张PNG确认为相同旧离线演示，不含实测地图。以下pending文字保留为当时接续记录；本项已由新计划收束，独立固件release.sh仍按“固件遗留接续”保留owner=root。
+
 pending，owner=root Codex（原编辑者待核实）：收尾期间新增雷达视图、地图点选与Java `/goal_pose` API修改，mtime表明本轮正在写入，未找到所属本地计划。本轮先只读核对并保留，不覆盖或混入已冻结的仿真功能。涉及 `apps/fishbot-control-station/backend/src/main/java/com/fishbot/station/service/{ControlService,RosTopicService}.java`、`web/ControlController.java`、新增 `domain/NavigationGoalRequest.java`、`src/test/java/com/fishbot/station/service/RosTopicSafetyTest.java`；前端 `src/components/radar/{radar-viewport,radar-workbench-page}.tsx`、`src/lib/{api,radar-workbench,radar-workbench.test}.ts`。实际路径均相对上述backend/frontend根。
 
 最短接续：先确认这些文件是否仍在编辑及目标域；读回 `/goal_pose` 请求、停止锁与源时间语义，再运行backend现有 `RosTopicSafetyTest`、frontend雷达工作台测试、类型检查与构建，使用独立仿真域验收真实接受/取消和到点。不得以HTTP发送成功代表Nav2接受或物理到点。未运行实车，也不重启domain93。仿真网页的30个启动前输入不包含这些同期修改，原回执来源继续单独核对；本轮前端验证采用待提交文件快照，60个启动前源码SHA在验证后仍一致；类型检查及Vite构建通过，避免将进行中的界面改动冒充已验收版本。后续又出现backend `NavigationStateService.java` 与 `NavigationStateServiceTest.java`，同样保留pending。静态审查发现offlineTelemetry请求返回200只证明本地处理，不能作为Nav2接受；primitive double缺省坐标须单独验证。backend使用现有 `./gradlew test --tests '*RosTopicSafetyTest' --tests '*NavigationStateServiceTest'`，不另建框架。

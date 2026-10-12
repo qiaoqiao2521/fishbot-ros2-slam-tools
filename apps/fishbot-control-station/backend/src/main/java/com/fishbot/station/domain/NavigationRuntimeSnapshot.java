@@ -4,5 +4,6 @@ public record NavigationRuntimeSnapshot(
         MapRuntimeSnapshot map,
         TfRuntimeSnapshot tf,
         LocalizationRuntimeSnapshot localization,
-        NavStatusRuntimeSnapshot navStatus) {
+        NavStatusRuntimeSnapshot navStatus,
+        PathRuntimeSnapshot path) {
 }

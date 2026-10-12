@@ -17,6 +17,15 @@ FishBot Control Station is a web-first robot control console for FishBot. It rep
 - Logs and diagnostics
 - Expandable layout for map, navigation goals, patrol tasks, and parameter configuration
 
+## Map Navigation
+
+`/radar` supports map and scan overlays, position and heading selection, navigation goals, and initial pose submission.
+Observation mode sends no commands. Operators explicitly submit each draft.
+The path overlay uses the latest observed ROS `/plan`.
+Patrol opens the existing `/simulation` task page, with its separately configured MuJoCo environment.
+Web and mobile browsers share this interface.
+See [map-navigation.md](docs/map-navigation.md) for message contracts, simulation time, acceptance evidence, and limits.
+
 ## Workspace Layout
 
 - `backend/`: Spring Boot project, rosbridge client abstraction, REST and event streaming APIs
@@ -73,35 +82,35 @@ fishbot-control-station/
 Install frontend dependencies once:
 
 ```bash
-cd /home/muqiao/dev/ros2/apps/fishbot-control-station/frontend
+cd /home/muqiao/dev/ros2/projects/fishbot/apps/fishbot-control-station/frontend
 npm install
 ```
 
 Offline development mode:
 
 ```bash
-cd /home/muqiao/dev/ros2/apps/fishbot-control-station
+cd /home/muqiao/dev/ros2/projects/fishbot/apps/fishbot-control-station
 ./scripts/dev-offline.sh
 ```
 
 Online mode with rosbridge in WSL:
 
 ```bash
-cd /home/muqiao/dev/ros2/apps/fishbot-control-station
+cd /home/muqiao/dev/ros2/projects/fishbot/apps/fishbot-control-station
 ./scripts/dev-online.sh
 ```
 
 Direct backend-only startup:
 
 ```bash
-cd /home/muqiao/dev/ros2/apps/fishbot-control-station/backend
+cd /home/muqiao/dev/ros2/projects/fishbot/apps/fishbot-control-station/backend
 ./gradlew bootRun
 ```
 
 Direct frontend-only startup:
 
 ```bash
-cd /home/muqiao/dev/ros2/apps/fishbot-control-station/frontend
+cd /home/muqiao/dev/ros2/projects/fishbot/apps/fishbot-control-station/frontend
 npm run dev -- --host 127.0.0.1
 ```
 

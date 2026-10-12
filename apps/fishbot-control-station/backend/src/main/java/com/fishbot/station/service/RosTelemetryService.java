@@ -21,6 +21,7 @@ public class RosTelemetryService {
     private final PerceptionStateService perceptionStateService;
     private final DiagnosticsService diagnosticsService;
     private final ObjectMapper objectMapper;
+    private final RosTimeService rosTimeService;
 
     public RosTelemetryService(@Qualifier("controlRosbridgeClient") RosbridgeClient controlRosbridgeClient,
                                @Qualifier("laserRosbridgeClient") RosbridgeClient laserRosbridgeClient,
@@ -28,7 +29,8 @@ public class RosTelemetryService {
                                NavigationStateService navigationStateService,
                                PerceptionStateService perceptionStateService,
                                DiagnosticsService diagnosticsService,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               RosTimeService rosTimeService) {
         this.controlRosbridgeClient = controlRosbridgeClient;
         this.laserRosbridgeClient = laserRosbridgeClient;
         this.robotStateService = robotStateService;
@@ -36,6 +38,7 @@ public class RosTelemetryService {
         this.perceptionStateService = perceptionStateService;
         this.diagnosticsService = diagnosticsService;
         this.objectMapper = objectMapper;
+        this.rosTimeService = rosTimeService;
     }
 
     @PostConstruct
@@ -66,6 +69,12 @@ public class RosTelemetryService {
             Instant now = Instant.now();
 
             switch (topic) {
+                case "/clock" -> {
+                    if (controlBridge) rosTimeService.updateClock(msg);
+                }
+                case "/plan" -> {
+                    if (!controlBridge) navigationStateService.updateFromPath(msg, now);
+                }
                 case "/odom" -> {
                     if (controlBridge) {
                         robotStateService.updateFromOdom(msg, now);

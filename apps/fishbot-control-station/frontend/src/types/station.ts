@@ -118,6 +118,17 @@ export type NavigationSnapshot = {
   tf: TfSnapshot
   localization: LocalizationSnapshot
   navStatus: NavStatusSnapshot
+  /** Optional for compatibility with control stations predating path telemetry. */
+  path?: NavigationPathSnapshot
+}
+
+export type NavigationPathSnapshot = {
+  ready: boolean
+  frameId: string
+  poseCount: number
+  points: Array<{ x: number; y: number }>
+  lastUpdate: string | null
+  statusMessage: string
 }
 
 export type LaserScanPointSnapshot = {

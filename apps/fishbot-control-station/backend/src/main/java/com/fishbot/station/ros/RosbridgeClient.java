@@ -9,6 +9,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicLong;
 
 import jakarta.annotation.PostConstruct;
 
@@ -34,6 +35,7 @@ public class RosbridgeClient {
     private final List<RosTopicSubscription> subscriptions;
     private final HttpClient httpClient;
     private final AtomicBoolean connected = new AtomicBoolean(false);
+    private final AtomicLong connectionGeneration = new AtomicLong();
     private final AtomicReference<Instant> lastMessage = new AtomicReference<>(Instant.EPOCH);
     private final Sinks.Many<String> incoming = Sinks.many().multicast().onBackpressureBuffer();
     private final AtomicReference<WebSocket> webSocket = new AtomicReference<>();
@@ -61,6 +63,10 @@ public class RosbridgeClient {
 
     public boolean isConnected() {
         return connected.get();
+    }
+
+    public long getConnectionGeneration() {
+        return connectionGeneration.get();
     }
 
     public Instant getLastMessageTime() {
@@ -118,6 +124,7 @@ public class RosbridgeClient {
                             return;
                         }
                         webSocket.set(socket);
+                        connectionGeneration.incrementAndGet();
                         connected.set(true);
                         log.info("Connected to rosbridge [{}] {}", name, properties.getUrl());
                         subscriptions.forEach(subscription -> subscribe(subscription.topic(), subscription.type()));

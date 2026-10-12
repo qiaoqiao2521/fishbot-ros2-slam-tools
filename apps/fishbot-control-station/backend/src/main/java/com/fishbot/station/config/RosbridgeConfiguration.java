@@ -24,6 +24,7 @@ public class RosbridgeConfiguration {
                 objectMapper,
                 List.of(
                         new RosTopicSubscription("/odom", "nav_msgs/msg/Odometry"),
+                        new RosTopicSubscription("/clock", "rosgraph_msgs/msg/Clock"),
                         new RosTopicSubscription("/imu", "sensor_msgs/msg/Imu")));
     }
 
@@ -40,6 +41,7 @@ public class RosbridgeConfiguration {
                 List.of(
                         new RosTopicSubscription("/scan", "sensor_msgs/msg/LaserScan"),
                         new RosTopicSubscription("/map", "nav_msgs/msg/OccupancyGrid"),
+                        new RosTopicSubscription("/plan", "nav_msgs/msg/Path"),
                         new RosTopicSubscription("/tf", "tf2_msgs/msg/TFMessage"),
                         new RosTopicSubscription("/tf_static", "tf2_msgs/msg/TFMessage"),
                         new RosTopicSubscription("/amcl_pose", "geometry_msgs/msg/PoseWithCovarianceStamped"),

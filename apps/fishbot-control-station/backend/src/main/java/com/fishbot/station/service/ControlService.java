@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fishbot.station.config.SafetyProperties;
 import com.fishbot.station.domain.ControlCommandRequest;
+import com.fishbot.station.domain.NavigationGoalRequest;
 
 import reactor.core.publisher.Mono;
 
@@ -35,7 +36,7 @@ public class ControlService {
     public Mono<Void> sendVelocity(ControlCommandRequest request) {
         return Mono.defer(() -> {
         synchronized (stopLatched) {
-        if (stopLatched.get()) return Mono.error(new IllegalStateException("Station stop is latched; restart the station after checking other velocity publishers"));
+        if (stopLatched.get()) return Mono.error(new StationStopLatchedException());
         if (!Double.isFinite(request.getLinearX()) || !Double.isFinite(request.getAngularZ())) {
             return Mono.error(new IllegalArgumentException("Velocity must be finite"));
         }
@@ -48,6 +49,29 @@ public class ControlService {
                     log.warn("Failed to publish cmd_vel", err);
                 });
         }
+        });
+    }
+
+    public Mono<Void> sendNavigationGoal(NavigationGoalRequest request) {
+        return Mono.defer(() -> {
+        synchronized (stopLatched) {
+        if (stopLatched.get()) return Mono.error(new StationStopLatchedException());
+        return rosTopicService.publishGoalPose(request.getX(), request.getY(), request.getYaw(), request.getSource())
+                .doOnError(err -> {
+                    diagnosticsService.recordError("control", "goal_pose failure: " + err.getMessage());
+                    log.warn("Failed to publish goal_pose", err);
+                });
+        }
+        });
+    }
+
+    public Mono<Void> sendInitialPose(NavigationGoalRequest request) {
+        return Mono.defer(() -> {
+            synchronized (stopLatched) {
+                if (stopLatched.get()) return Mono.error(new StationStopLatchedException());
+                return rosTopicService.publishInitialPose(request.getX(), request.getY(), request.getYaw(), request.getSource())
+                        .doOnError(error -> diagnosticsService.recordError("control", "initialpose failure: " + error.getMessage()));
+            }
         });
     }
 

@@ -7,6 +7,11 @@ public class StationRuntimeProperties {
 
     private String telemetryMode = "rosbridge";
     private long offlineTickMs = 100;
+    private boolean useSimTime;
+
+    public boolean isUseSimTime() { return useSimTime; }
+
+    public void setUseSimTime(boolean useSimTime) { this.useSimTime = useSimTime; }
 
     public String getTelemetryMode() {
         return telemetryMode;

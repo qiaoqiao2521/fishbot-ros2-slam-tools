@@ -3,6 +3,8 @@ package com.fishbot.station.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import com.fishbot.station.ros.RosbridgeClient;
 
 import java.time.Instant;
 
@@ -17,7 +19,7 @@ class NavigationStateServiceTest {
 
     @Test
     void updatesMapSnapshotFromOccupancyGrid() throws Exception {
-        NavigationStateService service = new NavigationStateService(new StationRuntimeProperties());
+        NavigationStateService service = new NavigationStateService(new StationRuntimeProperties(), mock(RosbridgeClient.class));
         Instant now = Instant.parse("2026-03-18T03:00:00Z");
 
         String json = """
@@ -52,7 +54,7 @@ class NavigationStateServiceTest {
 
     @Test
     void updatesTfSnapshotFromTransformMessages() throws Exception {
-        NavigationStateService service = new NavigationStateService(new StationRuntimeProperties());
+        NavigationStateService service = new NavigationStateService(new StationRuntimeProperties(), mock(RosbridgeClient.class));
         Instant now = Instant.parse("2026-03-18T03:01:00Z");
 
         String json = """
@@ -75,7 +77,7 @@ class NavigationStateServiceTest {
 
     @Test
     void updatesLocalizationSnapshotFromAmclPose() throws Exception {
-        NavigationStateService service = new NavigationStateService(new StationRuntimeProperties());
+        NavigationStateService service = new NavigationStateService(new StationRuntimeProperties(), mock(RosbridgeClient.class));
         Instant now = Instant.parse("2026-03-18T03:02:00Z");
 
         String json = """
@@ -102,7 +104,7 @@ class NavigationStateServiceTest {
 
     @Test
     void updatesNavStatusSnapshotFromGoalStatusArray() throws Exception {
-        NavigationStateService service = new NavigationStateService(new StationRuntimeProperties());
+        NavigationStateService service = new NavigationStateService(new StationRuntimeProperties(), mock(RosbridgeClient.class));
         Instant now = Instant.parse("2026-03-18T03:03:00Z");
 
         String json = """
@@ -125,14 +127,17 @@ class NavigationStateServiceTest {
     }
 
     @Test
-    void startsWithOfflineShellHintsWhenOfflineModeEnabled() {
+    void startsWithOfflineMapPreviewWhenOfflineModeEnabled() {
         StationRuntimeProperties props = new StationRuntimeProperties();
         props.setTelemetryMode("offline");
-        NavigationStateService service = new NavigationStateService(props);
+        NavigationStateService service = new NavigationStateService(props, mock(RosbridgeClient.class));
 
         var snapshot = service.snapshot();
-        assertFalse(snapshot.map().ready());
+        assertTrue(snapshot.map().ready());
         assertTrue(snapshot.map().statusMessage().contains("offline"));
+        assertFalse(snapshot.map().sampledCells().isEmpty());
+        assertTrue(snapshot.localization().ready());
+        assertFalse(snapshot.navStatus().ready());
         assertTrue(snapshot.navStatus().statusMessage().contains("offline"));
     }
 }

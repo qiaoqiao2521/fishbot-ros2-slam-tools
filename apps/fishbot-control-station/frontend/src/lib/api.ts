@@ -75,6 +75,7 @@ export type RawNavigationSnapshot = {
   tf: RawTfSnapshot
   localization: RawLocalizationSnapshot
   navStatus: RawNavStatusSnapshot
+  path?: NavigationSnapshot['path'] | null
 }
 
 export type RawPerceptionSnapshot = PerceptionSnapshot
@@ -190,6 +191,14 @@ export function mapNavigationSnapshot(raw: RawNavigationSnapshot): NavigationSna
     tf: raw.tf,
     localization: raw.localization,
     navStatus: raw.navStatus,
+    path: raw.path ?? {
+      ready: false,
+      frameId: '',
+      poseCount: 0,
+      points: [],
+      lastUpdate: null,
+      statusMessage: '路径状态未知：当前服务未提供路径数据',
+    },
   }
 }
 
@@ -238,5 +247,55 @@ export async function postStop(path: '/api/v1/control/stop' | '/api/v1/control/e
 
   if (!response.ok) {
     throw new Error(`Failed to call ${path}`)
+  }
+}
+
+export class MapPublicationUnconfirmedError extends Error {
+  readonly name = 'MapPublicationUnconfirmedError'
+  readonly possiblySubmitted = true
+}
+
+async function fetchMapPublication(path: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(path, init)
+  } catch (error) {
+    throw new MapPublicationUnconfirmedError(error instanceof Error ? error.message : '未收到发布回执')
+  }
+}
+
+export async function postNavigationGoal(goal: { x: number; y: number; yaw?: number; source?: string }) {
+  const response = await fetchMapPublication('/api/v1/control/goal', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      x: goal.x,
+      y: goal.y,
+      yaw: goal.yaw ?? 0,
+      source: goal.source ?? 'radar-workbench',
+    }),
+  })
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null
+    const message = body?.error ?? `goal request failed (${response.status})`
+    if (response.status >= 500 && body?.error !== 'clock_unavailable') throw new MapPublicationUnconfirmedError(message)
+    throw new Error(message)
+  }
+}
+
+export async function postInitialPose(pose: { x: number; y: number; yaw: number; source?: string }) {
+  const response = await fetchMapPublication('/api/v1/control/initial-pose', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...pose, source: pose.source ?? 'radar-workbench' }),
+  })
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null
+    const message = body?.error ?? `initial pose request failed (${response.status})`
+    if (response.status >= 500 && body?.error !== 'clock_unavailable') throw new MapPublicationUnconfirmedError(message)
+    throw new Error(message)
   }
 }
