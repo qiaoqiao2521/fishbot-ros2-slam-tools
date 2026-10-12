@@ -257,89 +257,134 @@ def finalize_goal(result, goal_requested, request_stop, request_cancel, observe,
     attempt('write evidence', record_result)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    destination = parser.add_mutually_exclusive_group()
-    destination.add_argument('--distance', type=float)
-    destination.add_argument('--target', nargs=3, type=float, metavar=('X', 'Y', 'YAW'),
-                             help='map target in metres and radians; at most 3 metres from the fresh pose')
-    destination.add_argument('--route-file', type=Path,
-                             help='JSON [[map_x, map_y, yaw], ...], 2..20 poses; segments <=3 m, requested total <=10 m')
-    parser.add_argument('--domain', type=int, default=96)
-    parser.add_argument('--real', action='store_true')
-    parser.add_argument('--execute', action='store_true')
-    parser.add_argument('--use-sim-time', action='store_true')
-    parser.add_argument('--timing-profile', choices=('strict', 'tolerant'), default='strict')
-    parser.add_argument('--timeout', type=float, default=90)
-    parser.add_argument('--output', type=Path)
-    args = parser.parse_args()
-    route = None
-    if args.route_file is not None:
+class PassageGoalRuntime:
+    """Reuse the original guarded goal path without repeated DDS participants."""
+
+    def __init__(self, args, route=None, interrupted=None):
+        if not 0 <= args.domain <= 232 or (args.domain == 0 and not args.real):
+            raise ValueError('domain 0 requires --real; domain must be 0..232')
+        if args.real and (args.domain != 0 or args.use_sim_time):
+            raise ValueError('--real requires domain 0 and system time')
+        if route is not None:
+            route = validate_map_route(route)
+        self.identity = (args.domain, args.real, args.use_sim_time)
+        self.through_poses = route is not None
+        self.interrupted = interrupted or (lambda: False)
+        self.pending = self.last_result = None
+        self.blocked = self.closed = False
+        os.environ['ROS_DOMAIN_ID'] = str(args.domain)
+        if not args.real:
+            os.environ['ROS_AUTOMATIC_DISCOVERY_RANGE'] = 'LOCALHOST'
+            os.environ['ROS_LOCALHOST_ONLY'] = '1'
+            os.environ.pop('ROS_STATIC_PEERS', None)
+        import rclpy
+        from rclpy.action import ActionClient
+        from rclpy.node import Node
+        from rclpy.parameter import Parameter
+        from rclpy.signals import SignalHandlerOptions
+        from nav2_msgs.action import NavigateToPose, NavigateThroughPoses
+        from geometry_msgs.msg import PoseStamped
+        from nav_msgs.msg import Odometry
+        from diagnostic_msgs.msg import DiagnosticArray
+        from std_srvs.srv import Trigger
+        from rclpy.qos import qos_profile_sensor_data
+        from tf2_ros import Buffer, TransformListener
+        self.rclpy, self.Trigger, self.PoseStamped = rclpy, Trigger, PoseStamped
+        self.node = None
+        self.owns_context = False
+        rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
+        self.owns_context = True
         try:
-            route = validate_map_route(json.loads(args.route_file.read_text()))
-        except (OSError, ValueError, TypeError) as exc:
-            parser.error('invalid route file: ' + str(exc))
-    elif args.target is None:
-        args.distance = 1.0 if args.distance is None else args.distance
-        requested_endpoint(0, 0, 0, args.distance)
-    elif not all(math.isfinite(v) for v in args.target):
-        parser.error('map target coordinates and yaw must be finite')
-    if not 0 <= args.domain <= 232 or (args.domain == 0 and not args.real):
-        parser.error('domain 0 requires --real; domain must be 0..232')
-    if args.real and (args.domain != 0 or args.use_sim_time):
-        parser.error('--real requires domain 0 and system time')
+            node = self.node = Node('fishbot_passage_goal', parameter_overrides=[
+                Parameter('use_sim_time', value=args.use_sim_time)])
+            buffer = Buffer()
+            listener = TransformListener(buffer, node)
+            action_type = NavigateThroughPoses if route is not None else NavigateToPose
+            action_name = 'navigate_through_poses' if route is not None else 'navigate_to_pose'
+            action = ActionClient(node, action_type, '/' + action_name)
+            stop_client = node.create_client(Trigger, '/fishbot_command_guard/stop')
+            odom = []
+            guard_diagnostic = []
+            node.create_subscription(Odometry, '/odom', lambda m: odom.__setitem__(slice(None), [(time.monotonic(), m)]), qos_profile_sensor_data)
+            node.create_subscription(DiagnosticArray, '/fishbot_command_guard/diagnostics',
+                                     lambda m: guard_diagnostic.__setitem__(slice(None), [(time.monotonic(), m)]), 1)
+            self.buffer, self.listener = buffer, listener
+            self.action_type, self.action_name, self.action = action_type, action_name, action
+            self.stop_client, self.odom, self.guard_diagnostic = stop_client, odom, guard_diagnostic
+        except BaseException:
+            self.close({})
+            raise
+
+    def spin_once(self, on_spin=None):
+        if self.closed:
+            raise RuntimeError('passage goal runtime is closed')
+        if on_spin is not None:
+            on_spin()
+        self.rclpy.spin_once(self.node, timeout_sec=.05)
+
+    def spin_for(self, seconds, on_spin=None):
+        if not math.isfinite(seconds) or seconds < 0:
+            raise ValueError('idle spin duration must be finite and nonnegative')
+        deadline = time.monotonic()+seconds
+        while time.monotonic() < deadline:
+            if self.interrupted():
+                raise InterruptedError('passage goal runtime interrupted')
+            self.spin_once(on_spin)
+
+    def execute(self, args, route=None, on_spin=None):
+        return run_goal(self, args, route, on_spin)
+
+    def close(self, result=None):
+        if self.closed:
+            return
+        self.closed = True
+        result = self.last_result if result is None else result
+        errors = []
+        operations = []
+        if self.node is not None:
+            operations.append(('destroy node', self.node.destroy_node))
+        if self.owns_context:
+            operations.append(('ROS shutdown', self.rclpy.shutdown))
+        for label, operation in operations:
+            try:
+                operation()
+            except Exception as exc:
+                errors.append(label + ': ' + str(exc))
+        if errors:
+            if result is None:
+                raise RuntimeError('; '.join(errors))
+            result.setdefault('cleanup_errors', []).extend(errors)
+
+
+def run_goal(runtime, args, route=None, on_spin=None):
+    """One send, with the original guard, TF, cancellation and stationary gates."""
+    if runtime.closed:
+        raise RuntimeError('passage goal runtime is closed')
+    if runtime.blocked:
+        raise RuntimeError('previous goal did not finish successfully and stationary; '
+                           'original goal ownership is retained')
+    if (runtime.identity != (args.domain, args.real, args.use_sim_time)
+            or runtime.through_poses != (route is not None)):
+        raise ValueError('persistent runtime domain, clock and action shape must remain fixed')
     if not math.isfinite(args.timeout) or not 5 <= args.timeout <= 180:
-        parser.error('timeout must be 5..180 seconds')
+        raise ValueError('timeout must be 5..180 seconds')
     if route is not None and args.timing_profile != 'strict':
-        parser.error('continuous routes currently use the strict route tree')
-    if not args.execute:
-        print(json.dumps({'execute': False, 'distance': args.distance,
-                          'target_requested': args.target,
-                          'route_requested': route,
-                          'domain': args.domain,
-                          'action': 'navigate_through_poses' if route else 'navigate_to_pose'}))
-        return 0
-    if args.output is None or args.output.exists():
-        parser.error('execution requires a new --output evidence file')
-    os.environ['ROS_DOMAIN_ID'] = str(args.domain)
-    if not args.real:
-        os.environ['ROS_AUTOMATIC_DISCOVERY_RANGE'] = 'LOCALHOST'
-        os.environ['ROS_LOCALHOST_ONLY'] = '1'
-        os.environ.pop('ROS_STATIC_PEERS', None)
-    import rclpy
-    from rclpy.action import ActionClient
-    from rclpy.node import Node
-    from rclpy.parameter import Parameter
-    from rclpy.signals import SignalHandlerOptions
-    from nav2_msgs.action import NavigateToPose, NavigateThroughPoses
-    from geometry_msgs.msg import PoseStamped
-    from nav_msgs.msg import Odometry
-    from diagnostic_msgs.msg import DiagnosticArray
-    from std_srvs.srv import Trigger
-    from rclpy.qos import qos_profile_sensor_data
-    from tf2_ros import Buffer, TransformListener
-    rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
-    node = Node('fishbot_passage_goal', parameter_overrides=[
-        Parameter('use_sim_time', value=args.use_sim_time)])
-    stopped = []
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(sig, lambda signum, frame: stopped.append(signum))
-    buffer = Buffer()
-    listener = TransformListener(buffer, node)
-    action_type = NavigateThroughPoses if route else NavigateToPose
-    action_name = 'navigate_through_poses' if route else 'navigate_to_pose'
-    action = ActionClient(node, action_type, '/' + action_name)
-    stop_client = node.create_client(Trigger, '/fishbot_command_guard/stop')
-    odom = []
-    guard_diagnostic = []
-    node.create_subscription(Odometry, '/odom', lambda m: odom.__setitem__(slice(None), [(time.monotonic(), m)]), qos_profile_sensor_data)
-    node.create_subscription(DiagnosticArray, '/fishbot_command_guard/diagnostics',
-                             lambda m: guard_diagnostic.__setitem__(slice(None), [(time.monotonic(), m)]), 1)
+        raise ValueError('continuous routes currently use the strict route tree')
+    if route is not None:
+        route = validate_map_route(route)
+    node, buffer = runtime.node, runtime.buffer
+    rclpy, Trigger, PoseStamped = runtime.rclpy, runtime.Trigger, runtime.PoseStamped
+    action_type, action_name, action = runtime.action_type, runtime.action_name, runtime.action
+    stop_client, odom = runtime.stop_client, runtime.odom
+    guard_diagnostic = runtime.guard_diagnostic
     result = {'completed': False, 'stationary_feedback': False,
               'distance_requested': args.distance, 'target_requested': args.target,
               'route_requested': route, 'action': action_name,
               'domain': args.domain, 'timing_profile': args.timing_profile}
     pending = PendingGoal(result)
+    runtime.pending = pending
+    runtime.last_result = result
+    runtime.blocked = True
     goal_requested = False
     began = time.monotonic()
     deadline = began + args.timeout
@@ -349,8 +394,8 @@ def main():
             check_running_guard(guard_diagnostic, time.monotonic(),
                                 node.get_clock().now().nanoseconds * 1e-9)
         return wait_action_future(future, until,
-                                  lambda: rclpy.spin_once(node, timeout_sec=.05),
-                                  check_health, time.monotonic, lambda: bool(stopped))
+                                  lambda: runtime.spin_once(on_spin),
+                                  check_health, time.monotonic, runtime.interrupted)
 
     try:
         def guard_ready():
@@ -368,11 +413,11 @@ def main():
             expected = 'fishbot_motion_control' if args.real else 'diff_drive_controller'
             return guard_preflight(status.message, {v.key:v.value for v in status.values}, publishers, subscribers, expected)
 
-        while time.monotonic() < min(deadline, began + 15) and not stopped:
-            rclpy.spin_once(node, timeout_sec=.05)
+        while time.monotonic() < min(deadline, began + 15) and not runtime.interrupted():
+            runtime.spin_once(on_spin)
             if guard_ready() and action.server_is_ready() and buffer.can_transform('map', 'base_footprint', rclpy.time.Time()):
                 break
-        if stopped or not action.server_is_ready() or not guard_ready():
+        if runtime.interrupted() or not action.server_is_ready() or not guard_ready():
             raise RuntimeError('new passage guard/navigation is not ready; no goal sent')
         tf = buffer.lookup_transform('map', 'base_footprint', rclpy.time.Time())
         now = node.get_clock().now().nanoseconds * 1e-9
@@ -431,7 +476,7 @@ def main():
                 stop_future = stop_client.call_async(Trigger.Request())
                 stop_deadline = time.monotonic()+2
                 while not stop_future.done() and time.monotonic() < stop_deadline:
-                    rclpy.spin_once(node, timeout_sec=.05)
+                    runtime.spin_once(on_spin)
                 response = stop_future.result() if stop_future.done() else None
                 result['guard_stop_acknowledged'] = bool(response and response.success)
 
@@ -440,18 +485,18 @@ def main():
             result['cancel_acknowledged'] = False
             end = time.monotonic()+3
             while cancel is not None and not cancel.done() and time.monotonic() < end:
-                rclpy.spin_once(node, timeout_sec=.05)
+                runtime.spin_once(on_spin)
             terminal = pending.get_result()
             end = time.monotonic()+3
             while terminal is not None and not terminal.done() and time.monotonic() < end:
-                rclpy.spin_once(node, timeout_sec=.05)
+                runtime.spin_once(on_spin)
             pending.refresh()
 
         def observe():
             since = None
             stop_end = time.monotonic()+5
             while time.monotonic() < stop_end:
-                rclpy.spin_once(node, timeout_sec=.05)
+                runtime.spin_once(on_spin)
                 now = time.monotonic()
                 good = False
                 if odom:
@@ -464,17 +509,82 @@ def main():
                 since = (since if since is not None else now) if good else None
                 result['stationary_feedback'] = bool(since is not None and now-since >= 1)
 
-        def record_result():
-            result['elapsed_s'] = time.monotonic()-began
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            with args.output.open('x') as f:
-                os.chmod(args.output, 0o600)
-                json.dump(result, f, indent=2, allow_nan=False)
-
         finalize_goal(result, goal_requested, request_stop, request_cancel, observe,
-                      pending.refresh, node.destroy_node, rclpy.shutdown, record_result)
-        print(json.dumps(result, allow_nan=False))
+                      pending.refresh, lambda: None, lambda: None, lambda: None)
+        result['elapsed_s'] = time.monotonic()-began
+        runtime.blocked = not (result['completed'] and result['stationary_feedback']
+                               and result.get('action_status') == 4
+                               and result.get('goal_accepted') is True
+                               and not result.get('error') and not result.get('cleanup_errors'))
+    return result
+
+
+def record_goal_result(result, output):
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open('x') as stream:
+        os.chmod(output, 0o600)
+        json.dump(result, stream, indent=2, allow_nan=False)
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    destination = parser.add_mutually_exclusive_group()
+    destination.add_argument('--distance', type=float)
+    destination.add_argument('--target', nargs=3, type=float, metavar=('X', 'Y', 'YAW'),
+                             help='map target in metres and radians; at most 3 metres from the fresh pose')
+    destination.add_argument('--route-file', type=Path,
+                             help='JSON [[map_x, map_y, yaw], ...], 2..20 poses; segments <=3 m, requested total <=10 m')
+    parser.add_argument('--domain', type=int, default=96)
+    parser.add_argument('--real', action='store_true')
+    parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--use-sim-time', action='store_true')
+    parser.add_argument('--timing-profile', choices=('strict', 'tolerant'), default='strict')
+    parser.add_argument('--timeout', type=float, default=90)
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    route = None
+    if args.route_file is not None:
+        try:
+            route = validate_map_route(json.loads(args.route_file.read_text()))
+        except (OSError, ValueError, TypeError) as exc:
+            parser.error('invalid route file: ' + str(exc))
+    elif args.target is None:
+        args.distance = 1.0 if args.distance is None else args.distance
+        requested_endpoint(0, 0, 0, args.distance)
+    elif not all(math.isfinite(v) for v in args.target):
+        parser.error('map target coordinates and yaw must be finite')
+    if not 0 <= args.domain <= 232 or (args.domain == 0 and not args.real):
+        parser.error('domain 0 requires --real; domain must be 0..232')
+    if args.real and (args.domain != 0 or args.use_sim_time):
+        parser.error('--real requires domain 0 and system time')
+    if not math.isfinite(args.timeout) or not 5 <= args.timeout <= 180:
+        parser.error('timeout must be 5..180 seconds')
+    if route is not None and args.timing_profile != 'strict':
+        parser.error('continuous routes currently use the strict route tree')
+    if not args.execute:
+        print(json.dumps({'execute': False, 'distance': args.distance,
+                          'target_requested': args.target,
+                          'route_requested': route,
+                          'domain': args.domain,
+                          'action': 'navigate_through_poses' if route else 'navigate_to_pose'}))
+        return 0
+    if args.output is None or args.output.exists():
+        parser.error('execution requires a new --output evidence file')
+    stopped = []
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda signum, frame: stopped.append(signum))
+    runtime = PassageGoalRuntime(args, route, interrupted=lambda: bool(stopped))
+    result = None
+    try:
+        result = run_goal(runtime, args, route)
+    finally:
+        runtime.close(result)
+        if result is None:
+            result = runtime.last_result
+        if result is not None:
+            record_goal_result(result, args.output)
+            print(json.dumps(result, allow_nan=False))
     return 0 if result['completed'] and result['stationary_feedback'] and not result.get('cleanup_errors') else 1
+
 
 
 if __name__ == '__main__':

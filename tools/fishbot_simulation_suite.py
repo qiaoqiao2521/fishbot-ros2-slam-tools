@@ -120,7 +120,9 @@ def collect(path, require_guard, require_amcl=False):
     from geometry_msgs.msg import PolygonStamped
     from lifecycle_msgs.srv import GetState
     from nav_msgs.msg import OccupancyGrid
-    from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+    from rosgraph_msgs.msg import Clock
+    from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
+    from fishbot_sampling_trace import SamplingTrace
     sys.path.insert(0, str(SCRIPTS))
     from verify_stack import Probe
     from wait_ready import Readiness
@@ -132,6 +134,7 @@ def collect(path, require_guard, require_amcl=False):
             'CM state has no timestamp; truth, scans and CM are associated by local receipt time only.',
             'operator_reset_count': 0,
             'reset_count_source': 'Suite launches an empty isolated domain and never invokes reset; counts suite calls only.'}
+    trace = SamplingTrace(rolling_limit=4096, window_event_limit=4096)
 
     class Recorder(Probe):
         def __init__(self):
@@ -143,6 +146,8 @@ def collect(path, require_guard, require_amcl=False):
             self.last_ros_now = None
             self.clock_advanced_wall = None
             self.map_observation = None
+            # Observe MessageInfo separately; rclpy's TimeSource still owns ROS time.
+            self.create_subscription(Clock, '/clock', self.on_clock_trace, qos_profile_sensor_data)
             self.create_subscription(OccupancyGrid, '/map', self.on_map,
                 QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                            durability=DurabilityPolicy.TRANSIENT_LOCAL))
@@ -170,7 +175,23 @@ def collect(path, require_guard, require_amcl=False):
             self.odom_received = time.monotonic()
             super().on_odom(msg)
 
-        def on_truth(self, msg):
+        def on_clock_trace(self, msg, info):
+            start, epoch = time.monotonic(), time.time_ns()
+            stamp = msg.clock.sec+msg.clock.nanosec*1e-9
+            trace.callback('clock', info, stamp, start, epoch, time.monotonic(), time.time_ns())
+
+        def on_truth(self, msg, info):
+            start, epoch = time.monotonic(), time.time_ns()
+            receipt = None
+            try:
+                self.record_truth(msg)
+                if data['truth'] and data['truth'][-1]['steady_time'] >= start:
+                    receipt = data['truth'][-1]['steady_time']
+            finally:
+                trace.callback('truth', info, msg.header.stamp.sec+msg.header.stamp.nanosec*1e-9,
+                    start, epoch, time.monotonic(), time.time_ns(), truth_receipt_steady=receipt)
+
+        def record_truth(self, msg):
             previous_updates = self.truth_updates
             super().on_truth(msg)
             if self.truth is None or self.truth_updates == previous_updates or self.truth_time != (
@@ -222,12 +243,18 @@ def collect(path, require_guard, require_amcl=False):
     if startup is not None:
         executor.add_node(startup)
     last_ready_log = 0.
+    last_written_truth = 0
     ready = False
     try:
         while not done:
+            loop_start = time.monotonic()
+            spin_start = time.monotonic()
             executor.spin_once(timeout_sec=.05)
-            if startup is not None:
+            trace.stage('spin_once', spin_start, time.monotonic())
+            if startup is not None and not ready:
+                lifecycle_start = time.monotonic()
                 startup.update_lifecycle()
+                trace.stage('lifecycle', lifecycle_start, time.monotonic())
             now = time.monotonic()
             ros_now = node.get_clock().now().nanoseconds*1e-9
             if node.last_ros_now is not None and ros_now > node.last_ros_now:
@@ -236,9 +263,12 @@ def collect(path, require_guard, require_amcl=False):
             if not ready and startup is not None and now-last_ready_log >= 5:
                 print('Startup gate: '+str(startup.reason()), flush=True)
                 last_ready_log = now
-            if data['truth']:
+            if len(data['truth']) != last_written_truth:
                 latest = dict(data['truth'][-1], ros_now=ros_now)
+                write_start = time.monotonic()
                 write_json(path.parent / 'latest-truth.json', latest)
+                trace.stage('latest_file_write', write_start, time.monotonic())
+                last_written_truth = len(data['truth'])
             if not ready and node.truth is not None and node.scan is not None and node.odom is not None:
                 try:
                     node.snapshot()
@@ -258,15 +288,24 @@ def collect(path, require_guard, require_amcl=False):
                         ready = True
                 except RuntimeError:
                     pass
+            trace.stage('total', loop_start, time.monotonic())
     finally:
         data['final_steady_time'] = time.monotonic()
         data['final_ros_now'] = node.get_clock().now().nanoseconds*1e-9
-        write_json(path, data)
-        executor.shutdown()
+        errors = []
+        operations = [('recording write', lambda: write_json(path, data)),
+            ('sampling trace write', lambda: write_json(path.parent / 'sampling-trace.json',
+                trace.finalize(data['final_steady_time']))), ('executor shutdown', executor.shutdown)]
         if startup is not None:
-            startup.destroy_node()
-        node.destroy_node()
-        rclpy.shutdown()
+            operations.append(('readiness destroy', startup.destroy_node))
+        operations.extend((('recorder destroy', node.destroy_node), ('ROS shutdown', rclpy.shutdown)))
+        for label, operation in operations:
+            try:
+                operation()
+            except Exception as exc:
+                errors.append(label+': '+str(exc))
+        if errors:
+            raise RuntimeError('; '.join(errors))
 
 
 def execute_case(case, directory, env):

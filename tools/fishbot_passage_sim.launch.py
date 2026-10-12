@@ -137,6 +137,10 @@ def setup(context):
         navigation_params = str(output/'fixture/amcl-navigation.yaml')
         Path(navigation_params).write_text(yaml.safe_dump(params, sort_keys=False))
         fixture.update(map_to_odom_owner='AMCL', navigation_parameters=navigation_params)
+        fixture['navigation_parameter_sha256'] = {
+            str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in
+            (root/'config/fishbot_passage_nav.yaml', share/'config/nav2.yaml', Path(navigation_params))}
+        fixture['navigation_parameter_receipt_phase'] = 'generated before launch actions are returned'
     else:
         fixture['map_to_odom_owner'] = 'static fixture transform'
     (output/'fixture/provenance.json').write_text(json.dumps(fixture, indent=2)+'\n')

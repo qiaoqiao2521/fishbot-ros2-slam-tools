@@ -1,0 +1,48 @@
+--- a/nav2_lifecycle_manager/src/lifecycle_manager.cpp
++++ b/nav2_lifecycle_manager/src/lifecycle_manager.cpp
+@@ -245,11 +245,42 @@
+ {
+   message(transition_label_map_[transition] + node_name);
+ 
+-  if (!node_map_[node_name]->change_state(transition) ||
+-    !(node_map_[node_name]->get_state() == transition_state_map_[transition]))
+-  {
++  // A state change can succeed while its read-only confirmation times out.
++  // Never repeat the transition; query the resulting state at most twice.
++  if (!node_map_[node_name]->change_state(transition)) {
+     RCLCPP_ERROR(get_logger(), "Failed to change state for node: %s", node_name.c_str());
+     return false;
++  }
++  for (unsigned int attempt = 1; attempt <= 2; ++attempt) {
++    const auto query_started = std::chrono::steady_clock::now();
++    try {
++      // Keep LifecycleServiceClient's upstream two-second query timeout.
++      const auto state = node_map_[node_name]->get_state();
++      const double elapsed_ms = std::chrono::duration<double, std::milli>(
++        std::chrono::steady_clock::now() - query_started).count();
++      RCLCPP_INFO(
++        get_logger(),
++        "State confirmation node=%s attempt=%u/2 elapsed_ms=%.3f state=%u expected=%u",
++        node_name.c_str(), attempt, elapsed_ms,
++        static_cast<unsigned int>(state),
++        static_cast<unsigned int>(transition_state_map_[transition]));
++      if (state != transition_state_map_[transition]) {
++        RCLCPP_ERROR(get_logger(), "Failed to change state for node: %s", node_name.c_str());
++        return false;
++      }
++      break;
++    } catch (const std::runtime_error & e) {
++      const double elapsed_ms = std::chrono::duration<double, std::milli>(
++        std::chrono::steady_clock::now() - query_started).count();
++      const bool retry = attempt < 2 && rclcpp::ok();
++      RCLCPP_WARN(
++        get_logger(),
++        "State confirmation node=%s attempt=%u/2 elapsed_ms=%.3f exception=%s retry=%s",
++        node_name.c_str(), attempt, elapsed_ms, e.what(), retry ? "true" : "false");
++      if (!retry) {
++        throw;
++      }
++    }
+   }
+ 
+   if (transition == Transition::TRANSITION_ACTIVATE) {
