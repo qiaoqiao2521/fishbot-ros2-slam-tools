@@ -4,6 +4,8 @@
 
 2026-10-12 本轮实现、仿真验收和独立复核完成。root串行整合成果，交付使用既有`qiaoqiao2521/fishbot-ros2-slam-tools`的main远端。仅操作源码、离线测试和隔离domain96；没有硬件、网络或baseline domain93操作。
 
+源码与测试已通过提交`c875139`交付；main远端SHA回读一致。此前未核实的release.sh继续保留，交接见保留项。
+
 ## Done
 
 - 复用现有MuJoCo/passage、Goal客户端、Probe、Readiness、轨迹SVG和扫描回放，加入固定seed场景矩阵。
@@ -17,6 +19,8 @@
 ## 验收
 
 最终运行：`/tmp/fishbot-suite-20261012-final-f/index.html`和`report.json`。首轮 **6/6通过，0次启动重启，总耗时276.959秒**；七项运行源码SHA与最终源码一致。目录中的原始日志、真值、Goal、模型来源、扫描事件和回放保留在本机，不提交Git。
+
+持久副本位于`~/.cache/fishbot/simulation-suites/suite-20261012-final-f-c875139/`；109文件与原运行目录逐项SHA一致。上一失败整批full-e的103文件也保存在同级`suite-20261012-full-e/`，不覆盖或改写原证据。历史来源中的绝对路径仍指向原运行位置；重跑使用下方suite命令重新生成场景。
 
 | 场景 | 实际结果 |
 | --- | --- |
