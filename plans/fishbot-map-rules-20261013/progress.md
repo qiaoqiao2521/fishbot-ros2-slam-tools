@@ -2,7 +2,7 @@
 
 ## Current
 
-第一阶段实现、离线回归、原生导航、桌面/触屏验收及功能源码交付已完成。无实体车操作；没有训练策略权重。
+当前第一阶段六项Acceptance均已实现并逐项验证。严格复审补齐手机完整保存/载入、UI模板派发以及删除后实际路线恢复；修复已确认删除被新观测撤销的状态错误。既有与新增失败记录全部保留；根串行提交推送本轮修复与可复用验收入口。无实体车操作，没有训练策略权重。
 
 ## Delivered behavior
 
@@ -62,3 +62,41 @@ updated：Obsidian既有 `Wiki/ROS2 与 FishBot.md` 第18节“软件禁区与�
 ## Git delivery
 
 功能提交 `422e26fb2995e7ad612f912b23aae937c007bf5c` 已推送既有 `qiaoqiao2521/fishbot-ros2-slam-tools` 的main；GitHub API读回一致。操作前验证新账户ID238822818、目标owner和fetch/push URL，保持公开可见性。只提交29份已审查代码/测试/文档；最终收尾文档另行提交。不上传缓存、运行日志、地图、凭据或固件保留项。最终运行关键源与当前frontend SHA再次读回一致，规则revision10已applied，真值静止。根为保留项及后续接续owner。
+
+## Strict closeout audit
+
+根与独立只读审查对照原始脚本/轨迹确认：上一轮第1/3/5/6项证据满足；第2/4项partial。手机仅画图并撤销；桌面模板载入只核点数，未跑UI派发；删除后返程真值最小x约1.113609，没有穿过原禁区x0.45～0.75。原7/7报告真实，但不能等同六项Acceptance全部完成。
+
+接续：保留原domain107运行和原规则；390px触屏新增远处临时规则，保存后只删除自己ID；保存两点模板、载入并核坐标/yaw/返航开关；UI派发一次并真实到达原禁区内部及最终点。独立Probe持续记录truth，读回两costmap、按序经过两点、同ID终态与完整连续停稳。脚本为tools/fishbot_map_rules_ui_acceptance.py及伴随cjs。根负责实际运行及串行交付。
+
+## Strict closeout results
+
+| 原计划验收项 | 结果 | 对应证据 |
+| --- | --- | --- |
+| 1. 几何、版本、地图、活动/未知保护 | PASS | 当前405项反馈回归，其中97项mission（27 helper+70 bridge）；native禁区目标拒绝、活动规则409且原ID不变。 |
+| 2. 桌面/390触屏完整规则与模板操作 | PASS | 原最终桌面7项+当前ui-strict-f的9项手机行为；触屏画/撤销/保存/仅移除自己的ID；实际模板保存、读取、载入，坐标/yaw/返航开关逐值核对。 |
+| 3. 两costmap实际禁区与独立绕行 | PASS | 新版acceptance-strict-d 7/7，原参数和0.144142米保守外接圆；593帧，终点1.713厘米，最小净距23.592厘米，扫掠下界22.790厘米。 |
+| 4. 删除后costmap及路线实际恢复 | PASS | native点0→254→0；ui-strict-f两点实际完成，252帧进入原x0.45～0.75/y±0.3区域，前后两图与实际mask测试点均为0。该轮临时软件规则位于原生81点确认空旷区，未覆盖实体障碍。 |
+| 5. 原确认/取消/未知/时间保护 | PASS | 当前405回归零跳过；native行驶取消同ID终态并完整停稳；UI真实模板保存转发后丢回执，只有一次保存POST，同ID读回对账；全程仅一次mission POST。 |
+| 6. app、执行源与既有远端交付 | PENDING | 页面HTTP/真实UI可用，6个关键启动源+54个frontend源SHA核对；固定生成参数SHA；功能与本次修复均由根交付既有新账户main，远端读回另由Git确认。 |
+
+ui-strict-f总12项（9 UI+3独立物理）通过，零页面异常或横向溢出。920帧，最大接收间隙0.047107秒、源间隙0.040秒，源年龄0～0.006秒；终点误差0.059990米、偏航0.167429弧度。按保存模板实际触屏坐标(.61,0)、(.15,.40)评分，顺序经过两点、同ID成功/记录与完整0.7秒新鲜停稳通过。触屏像素取整允许目标选点至多3厘米差异；保存→载入→真实派发的坐标/yaw/返航开关必须完全相同，未放宽物理评分。
+
+### 这轮故障与失败边界
+
+- ui-strict-a：新Probe尚未发现snapshot-time map TF，未操作UI或运动；补有界只读发现等待，保留快照时间与响应门限。
+- ui-strict-b：UI9项与物理路线已执行，但任务后规则持续published。原因是已确认的删除事务永久保留；后续扫描在旧删格产生254，误撤销applied。4帧生产匹配重放与UI先前applied事件定位因果。仅在同版本全healthy后退休previous mask；当前墙持续查、新版本重建、初次254/255或部分图确认仍等待。新增3行为回归，未改Nav2参数、模型、TF选择或时间门限。
+- ui-strict-c：新版UI9项和完整路线通过，规则状态保持applied；父验收错误要求后续local软代价140等于0。12帧原生数据/TF一致，mask0，global0、local140，最近实时lethal距离约0.293米；保留软代价，不改导航。修正测试为mask0且成本<253，保留实际值。
+- ui-strict-d：复用负x测试区后首次删除无法确认。该区域覆盖合成实体挡板边缘；这是首次未确认的合法拒绝，不作为修复失败或强制标applied。改用原生数据证实空旷的独立测试区。
+- ui-strict-e：2,-2候选区接近另一挡板的膨胀边缘，81点初始全0门禁拒绝，未操作UI或任务。结合实际arena.xml选择2,2区域；ui-strict-f81点0门禁与完整链通过。
+- native GetCostmap存在已观察到的raw拷贝/更新并发空白；snapshot/latest TF在静止探针一致。此项保留为独立局限，不以它忽略有效当前禁区反证，未新增生产稳定性声明。
+
+### 当前运行与新增证据
+
+证据根沿用session-20261013。`runtime-fadd107c/strict-restart-source-manifest.json`绑定当前bridge SHA `4d16b15e4df970726a874ff3611f56c71d880cbc75834a79c84226a6084bc2c0`；`strict-delivery-runtime.json`绑定native回归PID604602；`strict-final-runtime.json`绑定最终UI episode PID626695。四unit、端口、生成参数SHA不变。重启只发生在自有空闲合成episode，规则、模板、实际记录与每轮失败均保存；没有操作其他运行实例或网络。
+
+新增结果：`acceptance-strict-d/result.json`/truth.jsonl、`ui-strict-f/result.json`/truth.jsonl/browser-result.json/marker.json及5张手机阶段图；`feedback-strict.json`；诊断为`rules-confirmation-debug/`与`after-route-point/`。ui-strict-b/physical-analysis.json为离线分析，未把失败记录改为重跑通过。
+
+Knowledge strict closeout: updated。根修订原Obsidian FishBot第18节，追加删除版本事务、软代价及同一UI任务链验收；同步原问题入口触发词。两处文本与锚点实际读回通过，保留既有dirty内容，未复制原始日志。当前进度只留项目。
+
+UI终态补充读回3项通过：同ui-strict-f原ID的记录实际显示“巡逻完成”；规则显示导航已应用，载入同模板后开始可用；零POST。使用可复用terminalVisible等待资源异步刷新，再保存06-phone-confirmed-terminal-and-applied.png。此为同一任务继续只读验收，不新增任务或重跑。运行关键6源与54前端源再次匹配，规则22 applied、同ID succeeded、真值静止。第6项只剩本轮Git提交/推送，根串行收尾。

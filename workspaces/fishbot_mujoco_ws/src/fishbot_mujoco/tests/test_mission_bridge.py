@@ -785,6 +785,7 @@ class MapRulesFilterRecoveryTests(unittest.TestCase):
     def harness(self):
         bridge = SimpleNamespace(lock=threading.RLock(), rules_store=SimpleNamespace(error=None),
             rules_mask=build_mask(fixture_grid(), []), rules_check_wall=0., rules_epoch=1,
+            previous_rules_mask=None,
             rules_hard_failure=False, rules_graph_missing_since=None, rules_graph_missing_last=None,
             rules_checks={}, lifecycle={}, rules_subscribers_present=lambda: True,
             get_logger=lambda: SimpleNamespace(debug=lambda _message: None))
@@ -900,6 +901,99 @@ class MapRulesFilterRecoveryTests(unittest.TestCase):
         self.poll(bridge, bridge.rules_check_wall+.75, True)
         self.assertFalse(bridge.rules_hard_failure)
         self.assertEqual(bridge.rules_apply_state, 'published')
+
+    def deletion_bridge(self):
+        bridge = self.harness()
+        bridge.grid = fixture_grid()
+        retained = {'id': 'retained', 'kind': 'wall', 'width': .02, 'points': [
+            {'x': -.4, 'y': .4}, {'x': -.4, 'y': .8}]}
+        removed = {'id': 'removed', 'kind': 'no_go', 'points': [
+            {'x': -1.5, 'y': 1.}, {'x': -1.2, 'y': 1.},
+            {'x': -1.2, 'y': 1.3}, {'x': -1.5, 'y': 1.3}]}
+        bridge.rules_mask = build_mask(bridge.grid, [retained])
+        bridge.previous_rules_mask = build_mask(bridge.grid, [retained, removed])
+        bridge.rules_publish_stamp = 99.
+        bridge.rules_checks['global']['costmap_ok'] = False
+        bridge.rules_checks['local']['costmap_ok'] = False
+        return bridge
+
+    def deletion_result(self, bridge, name, wall, observed):
+        from builtin_interfaces.msg import Time
+        from nav2_msgs.msg import Costmap
+        bridge.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=int(wall*1e9)))
+        msg = Costmap()
+        msg.header.frame_id = 'map'
+        msg.metadata.size_x, msg.metadata.size_y, msg.metadata.resolution = 40, 40, .1
+        msg.metadata.origin.position.x, msg.metadata.origin.position.y = -2., -2.
+        msg.metadata.origin.orientation.w = 1.
+        msg.metadata.update_time = Time(sec=int(wall), nanosec=int((wall-int(wall))*1e9))
+        msg.data = observed
+        future = Future()
+        future.set_result(SimpleNamespace(map=msg))
+        bridge.rules_checks[name]['costmap_future'] = future
+        with patch('mission_bridge.time.monotonic', return_value=wall):
+            MissionBridge.rules_result(bridge, name, 'costmap', 1, future)
+
+    def test_completed_deletion_does_not_revoke_rules_when_a_live_obstacle_arrives_later(self):
+        bridge = self.deletion_bridge()
+        previous = copy.deepcopy(bridge.previous_rules_mask)
+        cleared = [254 if cell == 100 else 0 for cell in bridge.rules_mask['data']]
+        self.deletion_result(bridge, 'global', 100., cleared)
+        self.poll(bridge, 100., True)
+        self.assertEqual(bridge.rules_apply_state, 'published')
+        self.assertIsNotNone(bridge.previous_rules_mask)
+        self.deletion_result(bridge, 'local', 100.75, cleared)
+        self.poll(bridge, 100.75, True)
+        self.assertEqual(bridge.rules_apply_state, 'applied')
+        self.assertIsNone(bridge.previous_rules_mask)
+
+        observed = list(cleared)
+        removed_cell = next(i for i, cell in enumerate(previous['data'])
+                            if cell == 100 and bridge.rules_mask['data'][i] == 0)
+        observed[removed_cell] = 254  # Newly observed physical obstacle, after deletion was confirmed.
+        for name in ('global', 'local'):
+            self.deletion_result(bridge, name, 101.5, observed)
+        self.poll(bridge, 101.5, True)
+        self.assertEqual(bridge.rules_apply_state, 'applied')
+
+        retained_cell = bridge.rules_mask['data'].index(100)
+        observed[retained_cell] = 0  # Current virtual wall still requires continuous confirmation.
+        self.deletion_result(bridge, 'global', 102.25, observed)
+        self.poll(bridge, 102.25, True)
+        self.assertEqual(bridge.rules_apply_state, 'published')
+
+    def test_unconfirmed_deleted_lethal_or_unknown_cells_are_never_retired(self):
+        for value in (254, 255):
+            with self.subTest(value=value):
+                bridge = self.deletion_bridge()
+                observed = [254 if cell == 100 else 0 for cell in bridge.rules_mask['data']]
+                removed_cell = next(i for i, cell in enumerate(bridge.previous_rules_mask['data'])
+                                    if cell == 100 and bridge.rules_mask['data'][i] == 0)
+                observed[removed_cell] = value
+                for name in ('global', 'local'):
+                    self.deletion_result(bridge, name, 100., observed)
+                self.poll(bridge, 100., True)
+                self.assertEqual(bridge.rules_apply_state, 'published')
+                self.assertIsNotNone(bridge.previous_rules_mask)
+                self.assertFalse(bridge.rules_hard_failure)
+
+    def test_new_publication_reinstates_deletion_verification_after_an_applied_revision(self):
+        from builtin_interfaces.msg import Time
+        bridge = self.deletion_bridge()
+        current = copy.deepcopy(bridge.rules_mask)
+        cleared = [254 if cell == 100 else 0 for cell in current['data']]
+        for name in ('global', 'local'):
+            self.deletion_result(bridge, name, 100., cleared)
+        self.poll(bridge, 100., True)
+        self.assertIsNone(bridge.previous_rules_mask)
+        bridge.rules_store = SimpleNamespace(error=None, map_id='same_map', document={'revision': 3, 'zones': []})
+        bridge.rules_mask_publisher = SimpleNamespace(publish=lambda _message: None)
+        bridge.rules_info_publisher = SimpleNamespace(publish=lambda _message: None)
+        bridge.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: Time(sec=101)))
+        MissionBridge.publish_rules(bridge)
+        self.assertEqual(bridge.previous_rules_mask, current)
+        self.assertEqual(bridge.rules_apply_state, 'published')
+        self.assertTrue(all(not check['costmap_ok'] for check in bridge.rules_checks.values()))
 
 
     def costmap_result(self, bridge, wall, value, frame='map', stamp=None, error=None):

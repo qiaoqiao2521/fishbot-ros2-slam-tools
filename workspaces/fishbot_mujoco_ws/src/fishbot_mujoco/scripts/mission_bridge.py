@@ -573,6 +573,12 @@ class MissionBridge(Node):
             healthy = (healthy and lifecycle['active'] and wall-lifecycle['wall'] <= 3.
                        and check['params_ok'] and check['costmap_ok'] and wall-check['wall'] <= 3.)
         self.rules_apply_state = 'applied' if healthy else 'published'
+        if healthy:
+            # Both costmaps have confirmed this revision's deletion transaction.
+            # Later sensor observations may legitimately occupy a removed zone;
+            # they must not turn an already-confirmed deletion into a new failure.
+            # Current mask cells remain under continuous readback verification.
+            self.previous_rules_mask = None
         invalid = [(name, check.get('config_reason', '')) for name, check in self.rules_checks.items()
                    if check['config_invalid']]
         mismatched = [name for name, check in self.rules_checks.items()
