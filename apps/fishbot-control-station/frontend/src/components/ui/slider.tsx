@@ -27,7 +27,7 @@ export function Slider({
         </span>
       </div>
       <input
-        className="h-2.5 w-full cursor-pointer appearance-none rounded-full border border-border/60 bg-[rgba(111,86,51,0.12)] accent-[hsl(var(--accent))]"
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full border border-border/60 bg-slate-200 accent-[hsl(var(--accent))]"
         max={max}
         min={min}
         onChange={(event) => onChange(Number(event.target.value))}

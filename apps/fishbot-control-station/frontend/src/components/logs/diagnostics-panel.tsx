@@ -1,8 +1,7 @@
-import { AlertTriangle, Command, Download, WavesLadder } from 'lucide-react'
+import { Download } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { buildExportSnapshot } from '@/lib/station-runtime'
 import { useStationStore } from '@/store/station-store'
 import type { DiagnosticEntry } from '@/types/station'
@@ -31,49 +30,39 @@ export function DiagnosticsPanel() {
   }
 
   return (
-    <Card>
-      <div className="panel-header">
-        <div>
-          <div className="station-kicker mb-2">operator trace / transport notes / incident export</div>
-          <CardTitle>Logs & Diagnostics</CardTitle>
-          <CardDescription>
-            保留最近控制命令、错误和 rosbridge 连接日志，同时为地图、导航和任务调试扩展留出入口。
-          </CardDescription>
-        </div>
+    <section className="station-section" aria-labelledby="diagnostics-heading">
+      <div className="station-section-heading">
+        <h2 id="diagnostics-heading">日志与诊断</h2>
         <Button variant="outline" className="gap-2" onClick={exportLogs}>
           <Download className="h-4 w-4" />
           导出快照
         </Button>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <LogColumn icon={Command} title="Recent commands" entries={diagnostics.commands} />
-        <LogColumn icon={AlertTriangle} title="Recent errors" entries={diagnostics.errors} />
-        <LogColumn icon={WavesLadder} title="Transport log" entries={diagnostics.transport} />
+      <div className="station-logs-grid">
+        <LogColumn title="控制命令" entries={diagnostics.commands} />
+        <LogColumn title="错误与警告" entries={diagnostics.errors} />
+        <LogColumn title="连接记录" entries={diagnostics.transport} />
       </div>
-    </Card>
+    </section>
   )
 }
 
 function LogColumn({
   entries,
-  icon: Icon,
   title,
 }: {
-  icon: typeof Command
   title: string
   entries: DiagnosticEntry[]
 }) {
   return (
-    <div className="station-well rounded-[28px] p-4">
-      <div className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.16em] text-foreground/90">
-        <Icon className="h-4 w-4 text-accent" />
-        {title}
-      </div>
-      <div className="space-y-3">
+    <div className="min-w-0">
+      <h3 className="mb-3 text-sm font-semibold">{title}</h3>
+      {entries.length === 0 && <p className="text-sm text-muted-foreground">暂无记录</p>}
+      <ul className="station-log-list">
         {entries.map((entry) => (
-          <div key={entry.id} className="station-chip rounded-2xl p-3">
-            <div className="mb-2 flex items-center justify-between gap-3">
+          <li key={entry.id}>
+            <div className="mb-1 flex items-center justify-between gap-3">
               <Badge
                 variant={
                   entry.level === 'error'
@@ -83,16 +72,16 @@ function LogColumn({
                       : 'neutral'
                 }
               >
-                {entry.level}
+                {{ error: '错误', warning: '警告', info: '记录' }[entry.level]}
               </Badge>
-              <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+              <time dateTime={entry.timestamp} className="text-xs text-muted-foreground">
                 {new Date(entry.timestamp).toLocaleTimeString('zh-CN')}
-              </span>
+              </time>
             </div>
-            <p className="text-sm leading-6 text-foreground/84">{entry.message}</p>
-          </div>
+            <p className="break-words text-sm leading-6">{entry.message}</p>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   )
 }

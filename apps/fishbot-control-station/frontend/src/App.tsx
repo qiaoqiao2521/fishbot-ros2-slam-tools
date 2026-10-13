@@ -1,5 +1,6 @@
 import { startTransition, useEffect, useState } from 'react'
-import { LayoutDashboard, Radar, Route } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Bot, ChevronRight, LayoutDashboard, Radar, Route, Workflow } from 'lucide-react'
 
 import { MotionControlPanel } from '@/components/control/motion-control-panel'
 import { HeaderStatusBar } from '@/components/layout/header-status-bar'
@@ -12,7 +13,6 @@ import { ExpansionPanel } from '@/components/roadmap/expansion-panel'
 import { ConnectionStatusPanel } from '@/components/status/connection-status-panel'
 import { RobotStatePanel } from '@/components/status/robot-state-panel'
 import { RuntimeModePanel } from '@/components/status/runtime-mode-panel'
-import { Button } from '@/components/ui/button'
 import { useStationBootstrap } from '@/hooks/use-station-bootstrap'
 import { resolveAppRoute, type AppRoute } from '@/lib/app-route'
 
@@ -38,15 +38,53 @@ function App() {
     startTransition(() => {
       setRoute(next)
     })
+    window.scrollTo(0, 0)
   }
 
-  if (route === 'simulation') {
-    return <SimulationPage onBack={() => navigate('dashboard')} onCooperation={() => navigate('cooperation')} />
-  }
+  return (
+    <StationFrame route={route} navigate={navigate}>
+      {route === 'simulation' ? (
+        <SimulationPage onBack={() => navigate('dashboard')} onCooperation={() => navigate('cooperation')} />
+      ) : route === 'cooperation' ? (
+        <CooperationPage onBack={() => navigate('dashboard')} />
+      ) : <StationSurface route={route} navigate={navigate} />}
+    </StationFrame>
+  )
+}
 
-  if (route === 'cooperation') return <CooperationPage onBack={() => navigate('dashboard')} />
+const workspaces = [
+  { route: 'dashboard', label: '控制总览', icon: LayoutDashboard },
+  { route: 'radar', label: '雷达与地图', icon: Radar },
+  { route: 'simulation', label: '仿真巡逻', icon: Route },
+  { route: 'cooperation', label: '车臂协同', icon: Workflow },
+] as const
 
-  return <StationSurface route={route} navigate={navigate} />
+function StationFrame({ route, navigate, children }: {
+  route: AppRoute
+  navigate: (route: AppRoute) => void
+  children: ReactNode
+}) {
+  return (
+    <div className="station-app">
+      <aside className="station-sidebar">
+        <div className="station-brand"><span><Bot size={22} /></span><div>FishBot<small>机器人工作台</small></div></div>
+        <nav aria-label="工作区" className="station-navigation">
+          {workspaces.map((workspace) => (
+            <button key={workspace.route} type="button" onClick={() => navigate(workspace.route)}
+              aria-current={route === workspace.route ? 'page' : undefined} title={workspace.label}>
+              <workspace.icon size={19} /><span>{workspace.label}</span>
+              <ChevronRight size={14} className="station-nav-arrow" />
+            </button>
+          ))}
+        </nav>
+        <div className="station-sidebar-note"><span>FishBot + SO101</span><small>控制 · 感知 · 协作</small></div>
+      </aside>
+      <div className="station-workspace">
+        <div className="station-topbar"><span>工作台 <ChevronRight size={14} /> <strong>{workspaces.find((item) => item.route === route)?.label}</strong></span><span className="station-topbar-mark">FishBot 控制站</span></div>
+        {children}
+      </div>
+    </div>
+  )
 }
 
 function StationSurface({ route, navigate }: { route: 'dashboard' | 'radar'; navigate: (route: AppRoute) => void }) {
@@ -56,48 +94,14 @@ function StationSurface({ route, navigate }: { route: 'dashboard' | 'radar'; nav
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden text-foreground">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[linear-gradient(180deg,rgba(94,70,38,0.16),transparent)]" />
-      <div className="pointer-events-none absolute left-[6%] top-16 h-32 w-32 rounded-full bg-[rgba(199,147,56,0.18)] blur-3xl" />
-      <div className="pointer-events-none absolute bottom-10 right-[10%] h-40 w-40 rounded-full bg-[rgba(124,91,39,0.14)] blur-3xl" />
-
-      <div className="mx-auto flex min-h-screen max-w-[1620px] flex-col gap-6 px-4 py-5 md:px-6 lg:px-8">
-        <HeaderStatusBar />
-
-        <div className="flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={() => navigate('dashboard')}>
-            <LayoutDashboard className="mr-2 h-4 w-4" />
-            Console
-          </Button>
-          <Button variant="default" onClick={() => navigate('radar')}>
-            <Radar className="mr-2 h-4 w-4" />
-            Radar Workbench
-          </Button>
-          <Button variant="outline" onClick={() => navigate('simulation')}>
-            <Route className="mr-2 h-4 w-4" />
-            仿真巡逻
-          </Button>
-          <Button variant="outline" onClick={() => navigate('cooperation')}>
-            固定工位 · 车臂协同
-          </Button>
-        </div>
-
-        <main className="grid flex-1 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
-          <section className="grid gap-6">
-            <MotionControlPanel />
-            <MapNavShell />
-            <DiagnosticsPanel />
-          </section>
-
-          <section className="grid gap-6">
-            <ConnectionStatusPanel />
-            <RuntimeModePanel />
-            <RobotStatePanel />
-            <ExpansionPanel />
-          </section>
-        </main>
-      </div>
-    </div>
+    <main className="station-dashboard">
+      <header className="station-page-heading"><div><h1>控制总览</h1><p>手动控制、实时观测与地图诊断</p></div><span className="station-page-tag"><Bot size={15} /> FishBot</span></header>
+      <HeaderStatusBar />
+      <div className="station-overview-grid"><MotionControlPanel /><RobotStatePanel /></div>
+      <MapNavShell onOpen={() => navigate('radar')} />
+      <DiagnosticsPanel />
+      <details className="station-details station-advanced"><summary>连接与运行详情<span>数据来源、连接端点与导航队列</span></summary><div className="station-advanced-content"><ConnectionStatusPanel /><RuntimeModePanel /><ExpansionPanel /></div></details>
+    </main>
   )
 }
 

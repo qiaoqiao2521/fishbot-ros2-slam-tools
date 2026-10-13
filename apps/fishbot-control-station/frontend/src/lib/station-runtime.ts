@@ -102,8 +102,8 @@ export function getModePresentation(
 
   return {
     label: 'live robot link',
-    summary: '当前是实机链路。',
-    detail: '状态来自 rosbridge 和 ROS 话题，适合联调真实 `/odom`、`/imu`、`/cmd_vel` 与后续导航状态。',
+    summary: '当前通过 ROS 桥接读取话题。',
+    detail: '状态来自 rosbridge 的话题报告；仿真和实体都可使用这条链路，连接成功不等于实体机器人在线。',
     tone: connection.robotOnline ? 'success' : 'warning',
     capability: connection.robotOnline ? 'Real telemetry + control' : 'Control path only',
   }

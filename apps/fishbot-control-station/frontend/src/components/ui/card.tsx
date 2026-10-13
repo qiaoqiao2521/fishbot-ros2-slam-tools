@@ -6,7 +6,7 @@ export function Card({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('glass-panel rounded-[32px] p-5 md:p-6', className)} {...props} />
+  return <div className={cn('glass-panel min-w-0 rounded-xl p-5', className)} {...props} />
 }
 
 export function CardTitle({
@@ -16,7 +16,7 @@ export function CardTitle({
   return (
     <h2
       className={cn(
-        'font-[family:var(--font-display)] text-lg font-semibold uppercase tracking-[0.18em] text-foreground/96',
+        'font-[family:var(--font-display)] text-base font-semibold text-foreground',
         className,
       )}
       {...props}

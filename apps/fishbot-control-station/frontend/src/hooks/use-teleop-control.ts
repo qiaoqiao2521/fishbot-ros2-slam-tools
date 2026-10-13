@@ -13,6 +13,7 @@ const repeatMs = 140
 
 export function useTeleopControl() {
   const intervalRef = useRef<number | null>(null)
+  const holdGenerationRef = useRef(0)
   const lastPublishAtRef = useRef(0)
   const sequenceRef = useRef(0)
   const {
@@ -94,6 +95,8 @@ export function useTeleopControl() {
   }
 
   const clearLoop = () => {
+    // Invalidate any first publish still awaiting its HTTP acknowledgement.
+    holdGenerationRef.current += 1
     if (intervalRef.current !== null) {
       window.clearInterval(intervalRef.current)
       intervalRef.current = null
@@ -102,8 +105,10 @@ export function useTeleopControl() {
 
   const begin = async (direction: Exclude<ControlDirection, 'stop'>) => {
     clearLoop()
+    const generation = holdGenerationRef.current
     setActiveDirection(direction)
     await publish(direction)
+    if (generation !== holdGenerationRef.current) return
     intervalRef.current = window.setInterval(() => {
       void publish(direction)
     }, repeatMs)
@@ -244,8 +249,14 @@ export function useTeleopControl() {
       window.removeEventListener('blur', blur)
       document.removeEventListener('visibilitychange', visibility)
       clearLoop()
+      if (useStationStore.getState().activeDirection !== null) {
+        setActiveDirection(null)
+        void postStop('/api/v1/control/stop').catch(() => {
+          appendError({ id: crypto.randomUUID(), level: 'error', message: 'Failed to publish page-exit stop', timestamp: new Date().toISOString() })
+        })
+      }
     }
-  }, [handleBegin, handleStop])
+  }, [handleBegin, handleStop, setActiveDirection, appendError])
 
   return {
     activeDirection,

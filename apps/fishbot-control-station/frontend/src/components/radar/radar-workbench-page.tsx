@@ -98,15 +98,12 @@ export function RadarWorkbenchPage({
 
   return (
     <div className="relative min-h-screen overflow-hidden text-foreground">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-52 bg-[linear-gradient(180deg,rgba(78,56,28,0.16),transparent)]" />
-      <div className="pointer-events-none absolute left-[8%] top-20 h-40 w-40 rounded-full bg-[rgba(196,132,34,0.16)] blur-3xl" />
-      <div className="pointer-events-none absolute bottom-16 right-[9%] h-48 w-48 rounded-full bg-[rgba(58,87,82,0.14)] blur-3xl" />
 
       <div className="mx-auto flex min-h-screen max-w-[1680px] flex-col gap-5 px-4 py-5 md:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Button variant="outline" onClick={onBack}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Console
+            控制总览
           </Button>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -126,9 +123,9 @@ export function RadarWorkbenchPage({
             <Card>
               <div className="panel-header">
                 <div>
-                  <div className="station-kicker mb-2">mapping hooks / nav handoff / future slots</div>
-                  <CardTitle>Mapping Prep</CardTitle>
-                  <CardDescription>这页先把建图前观察和后续 Nav2 接入位都留好。</CardDescription>
+
+                  <CardTitle>地图与定位状态</CardTitle>
+                  <CardDescription>查看地图、坐标变换、定位与导航报告。</CardDescription>
                 </div>
               </div>
 

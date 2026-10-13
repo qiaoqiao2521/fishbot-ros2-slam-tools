@@ -1,75 +1,34 @@
-import { Activity, Bot, Cable, Clock3 } from 'lucide-react'
-
 import { Badge } from '@/components/ui/badge'
-import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { useStationStore } from '@/store/station-store'
 
 export function ConnectionStatusPanel() {
-  const { connection } = useStationStore()
+  const { connection, usingFallbackData } = useStationStore()
+  const isFallback = usingFallbackData || connection.mode === 'fallback'
   const isOffline = connection.mode === 'offline'
-  const badgeVariant = isOffline ? 'neutral' : connection.reconnecting ? 'warning' : 'success'
-  const badgeLabel = isOffline ? 'offline simulator' : connection.reconnecting ? 'reconnecting' : 'steady'
-  const summary = isOffline
-    ? '当前没有走 rosbridge 真链路，面板展示的是后端离线遥测。适合继续做控制台开发和动作回放。'
-    : '面向联调的双桥连接面板。控制页看 9090，雷达页看 9091，但浏览器始终只连同一个 backend。'
+  const connectionReport = (connected: boolean) => isFallback ? '未核实' : isOffline ? '未使用' : connected ? '已连接' : '未连接'
+  const telemetryReport = (online: boolean) => isFallback ? '示例数据' : isOffline ? '后端模拟' : online ? '已报告遥测' : '未报告新遥测'
 
-  return (
-    <Card>
-      <div className="panel-header">
-        <div>
-          <div className="station-kicker mb-2">transport summary / signal integrity</div>
-          <CardTitle>Connection Surface</CardTitle>
-          <CardDescription>{summary}</CardDescription>
-        </div>
-        <Badge variant={badgeVariant}>
-          {badgeLabel}
-        </Badge>
-      </div>
-
-      <div className="metric-grid">
-        <ConnectionMetric
-          icon={Cable}
-          label="Control bridge"
-          value={isOffline ? 'bypassed' : connection.controlBridge.connected ? 'connected' : 'disconnected'}
-        />
-        <ConnectionMetric
-          icon={Bot}
-          label="Control feed"
-          value={isOffline ? 'simulated' : connection.controlBridge.telemetryOnline ? 'online' : 'stale'}
-        />
-        <ConnectionMetric
-          icon={Clock3}
-          label="Laser bridge"
-          value={isOffline ? 'bypassed' : connection.laserBridge.connected ? 'connected' : 'disconnected'}
-        />
-        <ConnectionMetric
-          icon={Activity}
-          label="Laser feed"
-          value={isOffline ? 'simulated' : connection.laserBridge.telemetryOnline ? 'online' : 'stale'}
-        />
-        <ConnectionMetric icon={Cable} label="Control endpoint" value={connection.controlBridge.endpoint} />
-        <ConnectionMetric icon={Activity} label="Laser endpoint" value={connection.laserBridge.endpoint} />
-      </div>
-    </Card>
-  )
+  return <section className="station-section" aria-labelledby="connection-details-heading">
+    <div className="station-section-heading">
+      <h2 id="connection-details-heading">链路与来源</h2>
+      <Badge variant={isFallback ? 'warning' : 'neutral'}>
+        {isFallback ? '示例快照' : isOffline ? '离线模拟' : connection.reconnecting ? '正在重连' : '最近桥接报告'}
+      </Badge>
+    </div>
+    <dl className="station-data-grid">
+      <ConnectionMetric label="控制传输" value={connectionReport(connection.controlBridge.connected)} />
+      <ConnectionMetric label="控制遥测" value={telemetryReport(connection.controlBridge.telemetryOnline)} />
+      <ConnectionMetric label="雷达传输" value={connectionReport(connection.laserBridge.connected)} />
+      <ConnectionMetric label="雷达遥测" value={telemetryReport(connection.laserBridge.telemetryOnline)} />
+      <ConnectionMetric label="控制地址" value={connection.controlBridge.endpoint} />
+      <ConnectionMetric label="雷达地址" value={connection.laserBridge.endpoint} />
+      <ConnectionMetric label="控制报告时间" value={connection.controlBridge.lastMessageAt} />
+      <ConnectionMetric label="雷达报告时间" value={connection.laserBridge.lastMessageAt} />
+    </dl>
+    <p className="mt-3 text-xs leading-5 text-muted-foreground">传输连接不代表实体在线或已经停稳。</p>
+  </section>
 }
 
-function ConnectionMetric({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof Cable
-  label: string
-  value: string
-}) {
-  return (
-    <div className="station-well rounded-[24px] p-4">
-      <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-        <Icon className="h-4 w-4" />
-        {label}
-      </div>
-      <div className="station-readout text-lg font-semibold text-foreground/92">{value}</div>
-    </div>
-  )
+function ConnectionMetric({ label, value }: { label: string; value: string }) {
+  return <div className="station-metric"><dt>{label}</dt><dd className="station-value break-all">{value || '未提供'}</dd></div>
 }

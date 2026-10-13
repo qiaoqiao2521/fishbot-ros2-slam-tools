@@ -1,63 +1,31 @@
-import { Cpu, DatabaseZap, RadioTower, ShieldEllipsis } from 'lucide-react'
-
 import { Badge } from '@/components/ui/badge'
-import { Card, CardDescription, CardTitle } from '@/components/ui/card'
 import { getModePresentation } from '@/lib/station-runtime'
 import { useStationStore } from '@/store/station-store'
 
 export function RuntimeModePanel() {
   const { connection, usingFallbackData } = useStationStore()
   const mode = getModePresentation(connection, usingFallbackData)
+  const isFallback = usingFallbackData || connection.mode === 'fallback'
+  const isOffline = connection.mode === 'offline'
+  const label = isFallback ? '前端示例快照' : isOffline ? '离线模拟' : 'ROS 实时链路'
+  const capability = isFallback ? '界面预览' : isOffline ? '后端模拟遥测与控制' : connection.robotOnline ? 'ROS 遥测与控制' : '控制链路，等待遥测'
 
-  const facts = [
-    {
-      icon: ShieldEllipsis,
-      label: 'Runtime mode',
-      value: mode.label,
-    },
-    {
-      icon: DatabaseZap,
-      label: 'Capability',
-      value: mode.capability,
-    },
-    {
-      icon: RadioTower,
-      label: 'Data source',
-      value: usingFallbackData ? 'frontend local mock' : connection.endpoint,
-    },
-    {
-      icon: Cpu,
-      label: 'Operator note',
-      value: connection.statusLabel,
-    },
-  ]
+  return <section className="station-section" aria-labelledby="runtime-mode-heading">
+    <div className="station-section-heading">
+      <h2 id="runtime-mode-heading">运行模式</h2>
+      <Badge variant={isFallback ? mode.tone : 'neutral'}>{label}</Badge>
+    </div>
+    <dl className="station-data-grid">
+      <RuntimeMetric label="当前能力" value={capability} />
+      <RuntimeMetric label="数据来源" value={isFallback ? '前端本地示例' : connection.endpoint} />
+      <RuntimeMetric label="服务报告" value={connection.statusLabel} />
+    </dl>
+    <p className="mt-3 text-xs leading-5 text-muted-foreground">
+      {isFallback ? '尚未确认实时数据来源。' : isOffline ? '模拟状态用于界面和控制联调。' : 'ROS 消息可能来自仿真或设备；链路连接不证明实体在线。'}
+    </p>
+  </section>
+}
 
-  return (
-    <Card>
-      <div className="panel-header">
-        <div>
-          <div className="station-kicker mb-2">source of truth / capability envelope</div>
-          <CardTitle>Runtime Mode</CardTitle>
-          <CardDescription>{mode.summary}</CardDescription>
-        </div>
-        <Badge variant={mode.tone}>{mode.label}</Badge>
-      </div>
-
-      <div className="station-well rounded-[28px] p-5">
-        <p className="mb-4 text-sm leading-6 text-foreground/84">{mode.detail}</p>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          {facts.map((fact) => (
-            <div key={fact.label} className="station-chip rounded-2xl p-4">
-              <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                <fact.icon className="h-4 w-4" />
-                {fact.label}
-              </div>
-              <div className="station-readout text-sm font-semibold text-foreground/92">{fact.value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </Card>
-  )
+function RuntimeMetric({ label, value }: { label: string; value: string }) {
+  return <div className="station-metric"><dt>{label}</dt><dd className="station-value break-all">{value || '未提供'}</dd></div>
 }
