@@ -7,6 +7,7 @@ import { DiagnosticsPanel } from '@/components/logs/diagnostics-panel'
 import { MapNavShell } from '@/components/navigation/map-nav-shell'
 import { RadarWorkbenchPage } from '@/components/radar/radar-workbench-page'
 import { SimulationPage } from '@/components/simulation/simulation-page'
+import { CooperationPage } from '@/components/cooperation/cooperation-page'
 import { ExpansionPanel } from '@/components/roadmap/expansion-panel'
 import { ConnectionStatusPanel } from '@/components/status/connection-status-panel'
 import { RobotStatePanel } from '@/components/status/robot-state-panel'
@@ -28,7 +29,7 @@ function App() {
   }, [])
 
   function navigate(next: AppRoute) {
-    const pathname = next === 'simulation' ? '/simulation' : next === 'radar' ? '/radar' : '/'
+    const pathname = next === 'cooperation' ? '/cooperation' : next === 'simulation' ? '/simulation' : next === 'radar' ? '/radar' : '/'
     if (window.location.pathname === pathname) {
       return
     }
@@ -40,8 +41,10 @@ function App() {
   }
 
   if (route === 'simulation') {
-    return <SimulationPage onBack={() => navigate('dashboard')} />
+    return <SimulationPage onBack={() => navigate('dashboard')} onCooperation={() => navigate('cooperation')} />
   }
+
+  if (route === 'cooperation') return <CooperationPage onBack={() => navigate('dashboard')} />
 
   return <StationSurface route={route} navigate={navigate} />
 }
@@ -73,6 +76,9 @@ function StationSurface({ route, navigate }: { route: 'dashboard' | 'radar'; nav
           <Button variant="outline" onClick={() => navigate('simulation')}>
             <Route className="mr-2 h-4 w-4" />
             仿真巡逻
+          </Button>
+          <Button variant="outline" onClick={() => navigate('cooperation')}>
+            固定工位 · 车臂协同
           </Button>
         </div>
 

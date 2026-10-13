@@ -12,6 +12,8 @@
 
 控制站 `/radar` 使用 React → Java → rosbridge，提供初位姿、导航目标和真实 `/plan` 叠层。显式提交前只保留位置与朝向草稿。模拟环境采用实际 `/clock`，连接代次隔离旧路径和旧时钟。`/simulation` 继续复用 Python mission bridge 的巡逻与 Goal 所有权，两页分别标识运行环境。数据契约和本轮验收见 [map-navigation.md](../apps/fishbot-control-station/docs/map-navigation.md)。
 
+`/cooperation` 使用独立domain114及同一MuJoCo世界。Nav2速度通过ROS薄适配驱动车轮；SO101规划复用只读依赖，规划克隆冻结停止车辆，执行器驱动实际关节。任务桥按双指接触、货物抬升、托盘落稳、机械臂退出与载物停车的反馈推进。相机与货物始终属于同一世界；原生目标回执和取消按任务所有权分别确认。入口与验收边界见 [COOPERATION.md](COOPERATION.md)。
+
 `/simulation` 的虚拟墙与禁区使用独立版本化规则。mission bridge 发布 mask 与 filter info，Nav2 global/local 的 KeepoutFilter 和后置原生 InflationLayer 实际应用规则；软件规则不成为 MuJoCo 墙体、雷达回波或 AMCL 原地图。路线模板只保存任务输入，实际执行仍由原 FollowWaypoints 所有者派发并记录终态。配置、应用读回、未知回执与独立物理验收见 [MAP_RULES.md](MAP_RULES.md)。
 
 连续过窄口入口使用 `Nav2 → 速度平滑 → Collision Monitor → 最终命令守卫 → 底盘`，统一官方模型外廓，区分限速余量和硬碰撞范围，并记录可回放的停车数据。配置、仿真和实车接入边界见 [PASSAGE_CONTROL.md](PASSAGE_CONTROL.md)。原短段控制脚本保留；两套入口不可同时控制最终速度。

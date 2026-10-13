@@ -1,0 +1,145 @@
+# 固定 SO101 工位与小车运输
+
+控制站 `/cooperation` 使用同一 MuJoCo 世界中的 FishBot、固定 SO101 和一件自由货物。车先到工位附近，再通过理想仿真信标进行原生精停靠。机械臂把货物放到车载托盘并退出后，车辆运输到交付点。页面相机来自实际物理世界；合作对话由执行阶段及接触反馈产生。
+
+入口在 `/simulation` 标题旁的“固定工位 · 车臂协同”。协同默认使用独立 ROS domain114，HTTP 端口9086。原巡逻 domain107 与地图规则保持独立。
+
+## 复用与边界
+
+- 复用 FishBot 原车体、轮惯量、Nav2、速度平滑与 Collision Monitor。
+- 复用 SO101 原模型、IK、OMPL、碰撞检查和载荷规划。SO101 checkout 是只读依赖。
+- 一件10g货物使用自由关节。执行世界只在创建新回合时初始化 `qpos`；任务中由执行器、重力和接触推进。没有吸附、运行时传送或跨世界货物复制。
+- 薄 ROS 适配发布编码器里程计、激光、关节状态和仿真时钟，并把速度与关节参考交给 MuJoCo 执行器。新世界没有宣称使用 `ros2_control`。
+- 近距离精停靠使用真值派生的理想仿真信标。没有 RGB 或 AprilTag 识别，没有噪声和遮挡模型，也没有硬件验收。
+- 合成工位、接触材料和位置误差只在仿真验收。没有实车、SO101硬件、策略训练或宇树行走控制验收。
+
+## 启动
+
+需要 ROS2 Jazzy、已构建的本项目 MuJoCo/Nav2 环境，以及含接触规划实现的 SO101 checkout。选择已有 SO101 Python，其中应有 MuJoCo、NumPy、SciPy、OMPL；启动脚本补入系统 PyYAML 和 ROS 包搜索路径。
+
+在项目根准备新回合。输出目录必须不存在，以保留之前的成功和失败证据。
+
+```bash
+export FISHBOT_COOP_PYTHON=/path/to/so101-planning/bin/python
+./tools/fishbot_cooperation.sh prepare \
+  --so101-project /path/to/so101 \
+  --output /path/to/new-scene
+```
+
+启动生成场景及原生 Nav2。输出目录保存任务账本、逐帧物理状态和实际相机画面。
+
+```bash
+FISHBOT_COOP_DOMAIN=114 ./tools/fishbot_cooperation.sh run \
+  manifest:=/path/to/new-scene/scene-manifest.json \
+  output:=/path/to/new-runtime \
+  port:=9086
+```
+
+前端 Vite/preview 的 `/coop-api` 默认代理到本机9086。更改端口时，在启动前端前设置 `FISHBOT_COOP_PORT`。原仿真页的域继续由 `VITE_FISHBOT_SIM_DOMAIN` 配置；协同页独立显示114。
+
+## 任务确认
+
+停靠前通过独立 ROS Bool `/cooperation/docking_guard` 启用执行端停车平面保护。桥接器收到当前场景的新鲜使能回执后才释放车辆保持。仿真执行端在500Hz读取实际车体原点；沿程到停车平面剩余不超过0.01m时锁存，仅把轮速度执行器目标归零，接触、惯性及重力继续积分。该保护属于理想 plant 观测，不代表硬件停靠传感已实现。
+
+原生停靠成功仍必须单独确认。保护触发后2秒未获成功回执，任务取消并报失败；保护停车不会伪造成功。正常退场先确认原生终态、实际车体保持与停稳，再发送禁用保护，等待源时间更新的禁用回执后才继续。清理也必须确认禁用，超时保留unknown与车辆保持。原生停靠自动重试为0，当前合作不派发UndockRobot；该参数组合不能外推到其他停靠模式。
+
+```mermaid
+flowchart LR
+  A[读取新鲜物理反馈] --> B{停稳且有效观测落在捕获区}
+  B -->|是| C[AMCL近端对准]
+  B -->|否| D[NavigateToPose前往staging<br/>途中可用有效信标校准]
+  B -->|来源或坐标错误| X[停止任务并保留原因]
+  D --> F[停稳并读取1米内有效信标]
+  F --> C
+  C --> G[原生DockRobot精停靠]
+  G --> H[车体实际停稳与交接位置确认]
+  H --> I[双指接触与抬升]
+  I --> J[真实托盘支撑与松爪落稳]
+  J --> K[机械臂回位并停稳]
+  K --> L[NavigateToPose载物运输]
+  L --> M[货物保留与最终停稳]
+```
+
+每一步读取新鲜物理反馈。抓取要求抬升至少25mm、双指各超过0.02N并持续1秒。释放要求托盘实际支撑、低指力和低相对速度持续1秒。车辆只能在机械臂实际回位并停稳后启动。完成要求同一货物实际运输至少0.5m、仍在托盘、车体与货物停稳。
+
+规划克隆冻结实际停止车辆的全部几何。克隆中的 `qpos` 查询不会移动执行世界。夹爪压力、原1mm碰撞余量和0.2mm载荷余量保持。
+
+机械臂轨迹插值、段持续时间与额外20秒收敛预算统一使用仿真源时间。仿真低于实时速度时，墙钟不能提前判定物理轨迹未收敛。原0.012rad关节误差、0.05rad/s速度门槛和通信新鲜度保持；整项任务仍有独立360秒墙钟上限。未收敛提示包含段名、具体关节、残差和仿真时间。
+
+编码器先独立积分轮轴中心，再按编译模型固定偏移变换到base_footprint。原车轴中心为 `(-0.02,0,0.032)`，原地转向会移动车体原点；发布位置与twist包括这个刚体偏移。没有用真值修正编码器漂移或改动模型原点。
+
+物理状态同时发布完整 `qpos22`、`qvel20`、八个执行器的 `ctrl` 和 `time_s`，供独立规划克隆读取。车体、货物和托盘的速度使用 `mjOBJ_XBODY`，对应 `xpos` 所表示的刚体坐标原点。货物相对托盘速度包含该原点到货物位置的角速度项。
+
+执行世界保持500Hz积分。物理状态和clock采用标准SensorQoS的BEST_EFFORT、VOLATILE、KEEP_LAST1；订阅保持同语义，过期状态仍拒绝。逐阶段计时与最多32条慢事件只记录观测，不参与控制。每次50Hz状态发布前，`mj_forward` 刷新派生位姿、传感器和当前接触，不推进仿真时间或改写位置、速度与命令。当前接触与500Hz步骤累计计数分别记录。
+
+前端先创建任务UUID，再显式提交一次。`unknown` 只读取同一任务，不自动重发。每个 Nav2 请求分别持有原生目标及结果；晚到接受回执会取消对应目标，不能借其他目标的终态释放控制权。取消只有在该目标终态与连续物理静止均确认后才显示 `canceled`。
+
+如果6秒清理窗口内未确认原生终态与物理静止，任务保持 `unknown`。后续 GET 只读取原记录；迟到目标后来结束，也不会自动重新评分、改判任务终态或解锁控制权。当前网页没有人工对账解锁入口。
+
+首版恢复入口是显式结束旧 runtime，并确认其原生执行与物理世界已停止。保留旧任务账本和失败证据，再用新场景目录与新运行目录创建独立 episode。启动器和独立桥接入口在创建控制发布者前拒绝已有任务账本，包括损坏账本；拒绝启动不证明旧执行已停止。新 episode 初始化新货物，旧记录继续保留；重发旧 UUID 或清除前端 `sessionStorage` 不构成原任务恢复。
+
+首版每个合成回合运输一次。成功后货物留在交付点，开始按钮禁用并提示需要新回合。启动新的空闲世界会初始化新货物；当前任务内不会把货物传送回取货盘。
+
+## 近距离定位与原生停靠
+
+桥接器先读取新鲜工位观测。车辆已停稳，且位于最终停车朝向前侧0.2–0.9m、侧向偏差不超过0.06m、朝向偏差不超过0.15rad时，直接进入原生停靠捕获区。其他位置显式派发 `NavigateToPose` 到 manifest 的 `staging_pose`。默认场景的 staging 是 `(-1.1, -1.8, 0)`，机器人停靠目标是 `(-1.8, -1.8, 0)`。机器人停稳后，桥接器读取工位相对观测并等待 AMCL 近端定位对准。
+
+物理驱动复用已有相对信标数学，在距离工位不超过1米时发布10Hz `/detected_dock_pose`。消息使用 `base_footprint` 坐标系与原始仿真源时间戳。相对观测由当前物理车体真值和 manifest 中的固定工位姿态计算；来源绑定场景与 manifest SHA。
+
+桥接器校验唯一物理发布者、来源、范围和新鲜度。它把相对观测与已知工位地图姿态组合，向原生 AMCL 发布 `/initialpose`，保留信标原时间戳。前往staging的导航阶段一旦收到有效范围内的新鲜观测，即按原源时间辅助近端定位；范围外、未收到或过期的可选观测不更新AMCL。来源或坐标系错误仍拒绝。进入精停靠前执行一次停稳对准；`DockRobot` 运行期间必须持续获得有效新观测，继续修正近端定位。该校准不修改物理车体 `qpos`。
+
+随后派发原生 `DockRobot`，使用 `opennav_docking::SimpleNonChargingDock`。`navigate_to_staging_pose=false` 保留前述独立导航目标；`dock_backwards=true` 对应从东侧直线倒入工位。原生 dock 坐标系朝向与最终机器人朝向相反，二者共享同一个停车位置。
+
+停靠控制继续使用完整局部足迹和碰撞检测，`projection_time=1`、半径与 padding 保持。原生 1.3.13 [DockingServer](https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_docking/opennav_docking/src/docking_server.cpp)把控制目标外推到真实停靠点之后 0.25m；[Controller](https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_docking/opennav_docking/src/controller.cpp)按到这个虚拟目标的距离判断 `dock_collision_threshold`。因此设置0.25m：真实停靠点之前，包括插件2cm停车范围的入口，仍检查完整足迹；真实停靠点之后的不可执行预测段才被排除。原先0会把继续驶过工位的预测当成实际进站路径，I回合因此失败；失败记录保留，不能重算成成功。
+
+同一个阈值还会跳过原生 reset/undock 路径的起始段。为保留实际运动的检查边界，本合作设置 `max_retries=0`，原生停靠失败即停止并返回失败，不执行 `resetApproach`。当前流程只调用 `DockRobot` approach，车辆离站由原生 Nav2 执行；`UndockRobot` 不列为本合作的验收支持。原生停靠成功后，桥接器仍检查实际交接位置、朝向与连续停车反馈，再允许机械臂抓取；Collision Monitor 和独立物理接触门槛继续生效。
+
+上述证明限定碰撞检查的几何范围。[SimpleNonChargingDock](https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_docking/opennav_docking/src/simple_non_charging_dock.cpp)只按欧氏距离判断是否停靠；侧向误差过大时，它可能越过真实停靠平面而未命中2cm停车范围。因此实际执行启用前述500Hz plant 保护，读取实际车体原点并在平面前1cm将轮速度目标归零。原生未确认成功时取消并返回失败。接触与惯性仍正常积分，实际轨迹和停止余量须独立核对；该保护没有硬件验收。
+
+上述语义对应 Nav2 tag `1.3.13` 原始文件：`docking_server.cpp` SHA256 `9401e8fec77668e4d4ed3fd44707d4a423b350d45422ad59700b807279ef81ac`，`controller.cpp` SHA256 `8ff965a3dfd3ead0e576bab4b1d71a26cf494c36fbd8e9aea5fa7e7988d4e8bc`。准备器读取实际安装包版本；其他版本明确拒绝，要求重新验证目标与阈值语义。场景 manifest 记录原始来源与哈希。回归使用实际编译场景的碰撞栅格和完整 padding 足迹，按5mm步长验证真实停靠点之前没有 lethal overlap，停靠点之后的虚拟段确实碰到工位结构。
+
+当前近端定位与停靠属于理想仿真传感器辅助。页面实际相机用于观察；本轮未接入 RGB 或 AprilTag 识别。信标没有噪声、遮挡或丢检模型，也没有实车与硬件验收。
+
+## 定位图与避障图
+
+准备器从同一世界生成两张图。AMCL读取真实激光高度的几何切片；Nav2两张costmap通过第二个原生MapServer读取完整高度的碰撞投影。低台面不出现在定位图，仍出现在避障图。
+
+车体停靠目标在机械臂坐标中为 `(0.20, 0.20)`，托盘相对车体偏移为 `(0.04, -0.06, 0.067)`。绝对交接中心仍为机械臂坐标 `(0.24, 0.14)`。场景 manifest 输出 `base_footprint` 帧完整凸包，两张 costmap 使用相同非空足迹。
+
+凸包保留原半径0.13m圆外廓，并加入编译后托盘底与四面壁的全部角点。32边外切包络保留圆点之间的原半径；现有 `footprint_padding` 保持0.01m。新工位几何调整没有缩小车体范围，也没有关闭碰撞检查。
+
+首轮完整任务停在工位最后转向。独立212束重算排除了明显laser/TF错误，原地图却把低台面作为激光墙：一束2.512m实际回波在地图中提前到0.364m。切片修复恢复该回波；其他离散边缘误差仍存在。地图不一致得到证实，但不能单凭它宣称解释全部定位误差。实际停靠和运输须另行验证。
+
+第二轮只修地图仍失败。原 `likelihood_field` 对真值与10.63cm错位估计的得分优势只有约3.54%。按[Nav2 1.3.13概率模型](https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_amcl/src/sensors/laser/likelihood_field_model_prob.cpp)及本机原生距离场重放，`likelihood_field_prob` 能区分错位。协同场景选180束、`sigma_hit=0.05`、`z_hit=0.95`、`z_rand=0.05`，更新间隔为0.01m/0.01rad，未启用beam skipping。8种配置及1521个局部位姿的最佳匹配距真值2.83cm，朝向一致；这是离线依据，实际收敛另行验收。
+
+这些测量设置针对当前理想化激光和2cm合成栅格。AMCL运动噪声与交接物理门槛保持。当前实现已接入[Nav2原生停靠](https://docs.nav2.org/jazzy/tutorials/general_tutorials/using_docking/)和上述真值派生相对信标；近端校准结果应按该传感器边界解释。
+
+准备器复用项目的官方行为树组合，路径有效时保持，目标改变或原生IsPathValid失败时重算；原控制与恢复节点保持。
+
+准备器采用已安装的 `nav2_controller::PoseProgressChecker`，将旋转进展门槛设为0.1rad。原 `required_movement_radius=0.15m` 和 `movement_time_allowance=10s` 保持。取消后重新导航需要先转向时，原生进度检查可识别该旋转；没有删除进度检查或放宽其距离与时间门槛。
+
+## 验证
+
+普通反馈检查包含纯逻辑与任务所有权回归。
+
+```bash
+./fishbot.sh check-feedback
+```
+
+在已有 SO101 环境验证场景和物理适配；缺依赖不能算通过。
+
+```bash
+FISHBOT_SO101_PYTHON="$FISHBOT_COOP_PYTHON" \
+  "$FISHBOT_COOP_PYTHON" -B -m unittest \
+  tools.tests.test_cooperation_scene tools.tests.test_cooperation_sim
+```
+
+完整网页与原生验收须核对 DDS 物理状态、实际 `/clock`、`NavigateToPose` 与 `DockRobot` 终态及相机来源。静止工位探针与单元测试不能代替车辆停靠后的完整运输。
+
+2026-10-14 的 K 回合通过独立原生与物理验收。网页先取消实际运动中的原生停靠，同UUID到CANCELED，车臂连续静止1.10秒；随后同一世界执行新任务，原生停靠和载物导航均到SUCCEEDED。货物实际抬升约40.9mm并保持双指接触，松爪后实际托盘支撑与完整货物外廓留盘；机械臂先回位并静止1秒，车辆才启动。同一货物实际运输1.790841m，车货最终静止1秒，非预期接触与留盘违规均为0。
+
+独立物理记录12635帧，源时间最大间隔20ms、序号无缺失，车体和货物分别与独立ROS真值核对。墙钟接收最大间隔339.739ms仍保留；本轮不宣称连续墙钟无孔洞。停车平面最小采样余量14.214mm，正常原生停靠在保护触发前成功；保护触发的动态验收归属独立物理回归，不能编成本轮被触发。
+
+桌面入口、实际960px相机、390px手机、完成页与只读刷新通过。完整流程只有两次显式start和一次同任务cancel，无页面异常或自动重发。K的执行源码10项SHA在采集前后均一致；完整运输之后，只修正禁用超时后cleanup漏验实际ACK的异常分支，正常轨迹、物理和Nav2参数未改。两条对应负例与当前36项编排回归通过；不把K的源码哈希冒充这次异常修复后的哈希。
+
+本机验收资料位于 `~/.cache/fishbot/cooperation/session-20261014/`，含 `ui-k-result.json`、`oracle/run-1791919665149152720/score-1791920037922113535.json`、`oracle/k-native-guard-end-proof.json` 和 `runtime-k/accepted-source/`。场景、地图、逐帧记录与原相机仍私下保存，不进入Git。所有失败与最终检查见 [任务进度](../plans/fishbot-so101-cooperation-20261014/progress.md)。

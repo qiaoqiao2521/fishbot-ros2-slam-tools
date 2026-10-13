@@ -1,125 +1,286 @@
 Panels:
   - Class: rviz_common/Displays
+    Help Height: 70
     Name: Displays
+    Property Tree Widget:
+      Expanded: ~
+      Splitter Ratio: 0.5
+    Tree Height: 70
   - Class: nav2_rviz_plugins/Navigation 2
     Name: Navigation 2
   - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
     Name: Views
+    Splitter Ratio: 0.5
 Visualization Manager:
   Class: ""
   Displays:
-    - Class: rviz_default_plugins/Grid
-      Name: Grid
-      Enabled: true
+    - Alpha: 0.5
       Cell Size: 1
-      Plane Cell Count: 10
+      Class: rviz_default_plugins/Grid
       Color: 80; 85; 95
-    - Class: rviz_default_plugins/Map
-      Name: Map
       Enabled: true
-      Alpha: 1
+      Line Style:
+        Line Width: 0.029999999329447746
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 10
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Alpha: 1
+      Binary representation: false
+      Binary threshold: 100
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
       Draw Behind: true
-      Topic:
-        Value: /map
-        Reliability Policy: Reliable
-        Durability Policy: Transient Local
-        History Policy: Keep Last
-        Depth: 1
-      Use Timestamp: false
-    - Class: rviz_default_plugins/RobotModel
-      Name: FishBot
       Enabled: true
-      Visual Enabled: true
+      Name: Map
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map
+      Update Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map_updates
+      Use Timestamp: false
+      Value: true
+    - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
       Collision Enabled: false
+      Description File: ""
       Description Source: Topic
       Description Topic:
-        Value: /robot_description
-        Reliability Policy: Reliable
+        Depth: 1
         Durability Policy: Transient Local
         History Policy: Keep Last
-        Depth: 1
-    - Class: rviz_default_plugins/LaserScan
-      Name: Live Laser
+        Reliability Policy: Reliable
+        Value: /robot_description
       Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+        base_footprint:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        base_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        caster_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        imu_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        laser_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        left_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        right_wheel_link:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+      Mass Properties:
+        Inertia: false
+        Mass: false
+      Name: FishBot
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/LaserScan
+      Color: 30; 200; 255
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 4096
+      Min Color: 0; 0; 0
+      Min Intensity: 0
+      Name: Live Laser
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.009999999776482582
+      Style: Points
       Topic:
-        Value: /scan
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
         Reliability Policy: Best Effort
+        Value: /scan
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 0.3499999940395355
+      Binary representation: false
+      Binary threshold: 100
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: Global Costmap
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /global_costmap/costmap
+      Update Topic:
+        Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
-        Depth: 5
-      Color Transformer: FlatColor
-      Color: 30; 200; 255
-      Position Transformer: XYZ
-      Size (Pixels): 3
-      Style: Points
-      Decay Time: 0
-      Use Fixed Frame: true
-    - Class: rviz_default_plugins/Map
-      Name: Global Costmap
-      Enabled: true
-      Alpha: 0.35
-      Color Scheme: costmap
-      Topic:
-        Value: /global_costmap/costmap
         Reliability Policy: Reliable
-        Durability Policy: Transient Local
-        History Policy: Keep Last
-        Depth: 1
-      Update Topic:
         Value: /global_costmap/costmap_updates
       Use Timestamp: false
-    - Class: rviz_default_plugins/Map
-      Name: Local Costmap
-      Enabled: true
-      Alpha: 0.25
+      Value: true
+    - Alpha: 0.25
+      Binary representation: false
+      Binary threshold: 100
+      Class: rviz_default_plugins/Map
       Color Scheme: costmap
-      Topic:
-        Value: /local_costmap/costmap
-        Reliability Policy: Reliable
-        Durability Policy: Transient Local
-        History Policy: Keep Last
-        Depth: 1
-      Update Topic:
-        Value: /local_costmap/costmap_updates
-      Use Timestamp: false
-    - Class: rviz_default_plugins/Path
-      Name: Nav2 Plan
+      Draw Behind: false
       Enabled: true
+      Name: Local Costmap
       Topic:
-        Value: /plan
+        Depth: 1
+        Durability Policy: Transient Local
+        Filter size: 10
+        History Policy: Keep Last
         Reliability Policy: Reliable
+        Value: /local_costmap/costmap
+      Update Topic:
+        Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
-        Depth: 5
-      Color: 60; 255; 100
-      Line Style: Lines
-      Line Width: 0.04
+        Reliability Policy: Reliable
+        Value: /local_costmap/costmap_updates
+      Use Timestamp: false
+      Value: true
+    - Alpha: 1
       Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 60; 255; 100
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Lines
+      Line Width: 0.03999999910593033
+      Name: Nav2 Plan
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /plan
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 32; 36; 43
     Fixed Frame: map
     Frame Rate: 30
+  Name: root
   Tools:
     - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
     - Class: rviz_default_plugins/MoveCamera
     - Class: rviz_default_plugins/Select
     - Class: rviz_default_plugins/FocusCamera
     - Class: rviz_default_plugins/SetInitialPose
+      Covariance x: 0.25
+      Covariance y: 0.25
+      Covariance yaw: 0.06853891909122467
       Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
         Value: /initialpose
     - Class: nav2_rviz_plugins/GoalTool
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
   Views:
     Current:
+      Angle: 0
       Class: rviz_default_plugins/TopDownOrtho
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Invert Z Axis: false
       Name: Current View
-      Scale: 65
+      Near Clip Distance: 0.009999999776482582
+      Scale: 113.59306335449219
       Target Frame: map
+      Value: TopDownOrtho (rviz_default_plugins)
       X: 0
       Y: 0
-      Angle: 0
+    Saved: ~
 Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 947
+  Hide Left Dock: false
+  Hide Right Dock: false
+  Navigation 2:
+    collapsed: false
+  QMainWindow State: 000000ff00000000fd0000000100000000000001c900000359fc0200000003fb000000100044006900730070006c006100790073010000003d000000c9000000c900fffffffb00000018004e0061007600690067006100740069006f006e00200032010000010c000001e0000001cd00fffffffb0000000a0056006900650077007301000002f2000000a4000000a400ffffff000003310000035900000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Views:
+    collapsed: false
   Width: 1280
-  Height: 800
   X: 30
-  Y: 40
+  Y: 45

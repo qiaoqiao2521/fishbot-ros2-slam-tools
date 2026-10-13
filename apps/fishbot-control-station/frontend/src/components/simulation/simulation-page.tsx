@@ -14,7 +14,7 @@ import {
 } from '@/lib/simulation'
 import './simulation.css'
 
-export function SimulationPage({ onBack }: { onBack: () => void }) {
+export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; onCooperation?: () => void }) {
   const { state, map, connectionError, mapError, actionError, goalIssue, pending, missionRequestUnknown, act } = useSimulation()
   const rviz = useRviz()
   const mapStage = useRef<HTMLDivElement>(null)
@@ -162,6 +162,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
           <p>在地图上编辑通行规则、保存路线，再安排一圈巡逻。</p>
         </div>
         <div className="simulation-header-actions">
+          {onCooperation && <button type="button" className="simulation-button simulation-quiet" onClick={onCooperation}>固定工位 · 车臂协同</button>}
           <button type="button" className="simulation-button simulation-quiet" disabled={rviz.pending || rviz.status?.available === false}
             onClick={() => void rviz.open()}><Monitor size={16} />{rviz.pending ? '正在连接 RViz…' : rviz.unknown ? '确认 RViz 状态' : '打开 RViz'}</button>
           <button type="button" className="simulation-button simulation-quiet" onClick={onBack}><ArrowLeft size={16} />返回控制台</button>

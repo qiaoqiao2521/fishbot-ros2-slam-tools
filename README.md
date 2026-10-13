@@ -33,6 +33,7 @@ The simulation extensions reuse the same ROS 2 and MuJoCo stack:
 - [Random and continuous campaigns](docs/SIMULATION_CAMPAIGN.md): `./fishbot.sh sim-campaign --mode random` or `--mode soak`.
 - [Web runtime acceptance](docs/WEB_RUNTIME_ACCEPTANCE.md): isolated Goal dispatch, cancellation and observed Collision Monitor states.
 - [Map rules and route templates](docs/MAP_RULES.md): edit software keepouts, save routes, and inspect actual task records in `/simulation`.
+- [Fixed SO101 cooperation](docs/COOPERATION.md): share one physical world, dock, load a free payload, and transport it through `/cooperation`.
 
 ## Layout
 

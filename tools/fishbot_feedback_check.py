@@ -18,7 +18,8 @@ PYTHON_GROUPS = {
         'test_command_guard.py', 'test_passage_goal.py', 'test_passage_goal_runtime.py', 'test_passage_config.py',
         'test_passage_replay.py', 'test_passage_timing_tree.py',
         'test_sim_scan_relay.py', 'test_simulation_suite.py', 'test_simulation_report.py',
-        'test_simulation_campaign.py', 'test_sampling_trace.py', 'test_keepout_launch.py')),
+        'test_simulation_campaign.py', 'test_sampling_trace.py', 'test_keepout_launch.py',
+        'test_cooperation_core.py')),
     'mission': (ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests'
                 / 'test_mission_bridge.py', ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests/test_map_rules.py',
                 ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests/test_rviz_desktop.py'),
