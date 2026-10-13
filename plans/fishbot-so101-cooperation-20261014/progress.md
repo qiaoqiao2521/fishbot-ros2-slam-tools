@@ -128,8 +128,10 @@ M替换的是已完成且静止的owned L；L原件保持，并将用户task4120
 
 Knowledge closeout：updated。root已实际修订并读回知识库既有 `Wiki/ROS2 与 FishBot.md` 第19节，补显式新回合、连续时钟/odom、旧来源隔离、同ID对账及迟到POST不覆盖；同步 `Wiki/开发知识入口.md` 的再次开始/重置串回合触发词，并读回锚点。知识只存复用规则，阶段状态与原始证据继续回源项目。
 
-Remaining：实施、两轮实际验收、全部相关检查与新产物读回均完成；仅Git交付记录由root串行补齐。保留的固件release.sh阻碍、owner与最短离线入口仍见Retained work，不执行、不提交。
+Remaining：本补充实施、两轮实际验收、全部相关检查、新产物读回与源码交付均完成，无必需步骤遗留。保留的固件release.sh阻碍、owner与最短离线入口仍见Retained work，不执行、不提交。
 
 前端最终全套167/167，typecheck、完整lint和107 production build通过；产物index-DfHhNOF-.js已在用户IAB读回。最终桌面/390px新产物只读验收Start/Reset均可用、3条历史、960px相机、无横溢出、0POST/异常；报告final-ready-current-browser.json。两轮源码起止一致后，仅cooperation.ts增加迟到回执保护，post-acceptance-ui-source.json明确差异；后端、plant和场景源保持。
 
 旧QoS测试等待修复后，真实116域定向1/1通过，生产者与首恢复DDS帧源进度均0.14s/7序号；保留>.08与>2断言。证据oracle/qos-source-progress-test-1791929678050268128/，测试SHA24f1413725cc11715b54d97957ea828275a34788cd1ba7fe82d061562e1a8773。原174.361s首轮失败日志repeat-full-cooperation-tests.log保留。最终完整87/87通过，fail/error/skip均0，164.781s；日志repeat-full-cooperation-tests-final.log。命令级限制BLAS/OMP线程并保持本机ROS发现范围一致，未改系统配置、执行源或生产门限。
+
+重复回合Git交付：15个已审查文件提交8cc0d33db7698bad60cd328f9367e9380b768d1d，已推送qiaoqiao2521/fishbot-ros2-slam-tools main，并通过GitHub API读回同SHA。只有未验收固件release.sh保持未提交，原因及root接续入口见Retained work。此收尾记录是独立文档提交；执行源、运行日志和场景素材未再改动或入库。
