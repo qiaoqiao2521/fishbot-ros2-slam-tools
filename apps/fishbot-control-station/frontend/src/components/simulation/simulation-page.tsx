@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, Box, Check, Eye, Home, MapPin, Monitor, Play, RefreshCw, Route, Save, ShieldBan, Square, Trash2, Undo2, X } from 'lucide-react'
 
 import { SimulationMapView } from '@/components/simulation/simulation-map'
 import { useSimulation } from '@/hooks/use-simulation'
 import { useSimulationWorkspace } from '@/hooks/use-simulation-workspace'
 import { useRviz } from '@/hooks/use-rviz'
-import { mapRuleErrorMessage } from '@/lib/simulation-errors'
-import { MAX_MAP_ZONES, mapGeneration, routeDraft, rulesDirty, ruleStartBlock, zoneFromSelection, type MapEditMode, type SavedRoute } from '@/lib/simulation-workspace'
+import { goalDraftIdentity, goalIssueMatchesWaypoint, mapRuleErrorMessage } from '@/lib/simulation-errors'
+import { MAX_MAP_ZONES, mapGeneration, routeDraft, rulesDirty, ruleStartBlock, zoneFromSelection, zonesEqual, type MapEditMode, type SavedRoute } from '@/lib/simulation-workspace'
 import {
   MAX_WAYPOINTS, SIMULATION_DOMAIN, collisionMonitorText, isFreeWaypoint, missionCanRetryCancel,
   missionIsActive, missionLabel, missionProgressText,
@@ -15,10 +15,12 @@ import {
 import './simulation.css'
 
 export function SimulationPage({ onBack }: { onBack: () => void }) {
-  const { state, map, connectionError, mapError, actionError, pending, missionRequestUnknown, act } = useSimulation()
+  const { state, map, connectionError, mapError, actionError, goalIssue, pending, missionRequestUnknown, act } = useSimulation()
   const rviz = useRviz()
+  const mapStage = useRef<HTMLDivElement>(null)
   const [waypoints, setWaypoints] = useState<Pose[]>([])
   const [returnHome, setReturnHome] = useState(true)
+  const [attemptedDraft, setAttemptedDraft] = useState<string | null>(null)
   const [selectionMessage, setSelectionMessage] = useState('')
   const [editMode, setEditMode] = useState<MapEditMode>('waypoint')
   const [routeName, setRouteName] = useState('')
@@ -40,6 +42,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
     setReturnHome(true)
     setEditMode('waypoint')
     setRouteName('')
+    setAttemptedDraft(null)
     setSelectionMessage('地图已更换，旧路线和规则草稿已清除。')
   }, [generation])
   const displayedPoints = active ? state!.mission.waypoints : waypoints
@@ -48,7 +51,10 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
   const unknownAcceptance = mission?.status === 'canceling' && mission.dispatch_state === 'unavailable'
   const canRetryCancel = missionCanRetryCancel(mission)
   const collisionMonitor = state?.collision_monitor
-  const error = mapRuleErrorMessage(actionError, editor.zones) ?? connectionError ?? mapError
+  const issueSameMap = !!goalIssue && !!map?.map_id && goalIssue.map_id === map.map_id
+  const issueCurrent = issueSameMap && attemptedDraft === goalDraftIdentity(waypoints, returnHome)
+    && !!editor.saved && goalIssue!.rules_revision === editor.saved.revision && zonesEqual(editor.zones, editor.saved.zones)
+  const error = mapRuleErrorMessage(actionError, editor.zones, goalIssue) ?? connectionError ?? mapError
   const physical = state?.truth
   const obstacleLabel = {
     parked: '箱子已退回', moving: '箱子正在进入路面', blocking: '箱子挡在前方',
@@ -115,6 +121,17 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
     })
   }
 
+  function locateProblem() {
+    if (!issueSameMap) return
+    mapStage.current?.scrollIntoView({ block: 'center' })
+    mapStage.current?.focus({ preventScroll: true })
+  }
+
+  function startMission() {
+    setAttemptedDraft(goalDraftIdentity(waypoints, returnHome))
+    void act('mission', { waypoints, return_home: returnHome, issued_at: Date.now() / 1000, map_id: editor.mapId, rules_revision: editor.saved?.revision })
+  }
+
   const ruleStatus = editor.writeState === 'saving' ? '正在保存规则…' : editor.writeState === 'unknown' ? '保存结果未知'
     : !rulesReady ? '规则尚未接入或未读回' : editor.saved?.apply_state === 'applied' ? `导航已应用 · 版本 ${editor.saved.revision}`
       : editor.saved?.apply_state === 'published' ? '已发布，等待导航确认' : '规则未应用'
@@ -151,7 +168,11 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
       </div>
 
       {missionRequestUnknown && <div className="simulation-error" role="status">派发回执未知，正在读取原任务状态；暂不能重复派发或编辑。</div>}
-      {error && <div className="simulation-error" role="alert">{error}</div>}
+      {error && <div className="simulation-error" role="alert">
+        <p>{error}</p>
+        {goalIssue && !issueCurrent && <p className="simulation-issue-stale">此提示来自上一版路线或规则，重新派发前请检查。{!issueSameMap ? '地图已不同，不在当前地图标记。' : '地图中的琥珀色标记仅表示上次拒绝的坐标。'}</p>}
+        {issueSameMap && <button type="button" className="simulation-button simulation-locate-issue" onClick={locateProblem}><MapPin size={16} />{issueCurrent ? '在地图上定位问题' : '定位上次问题'}</button>}
+      </div>}
 
       <main className="simulation-layout">
         <section className="simulation-scene" aria-labelledby="simulation-map-title">
@@ -177,9 +198,9 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
             </div>
           </div>
           <p className="simulation-map-guidance" aria-live="polite">{selectionMessage || (editMode === 'wall' ? '选择墙的两个端点。' : editMode === 'no_go' ? '选择矩形的两个对角。' : editMode === 'observe' ? '只观察，不发送指令。' : '点击空旷处添加巡逻点。')}</p>
-          <div className="simulation-map-stage">
+          <div className="simulation-map-stage" ref={mapStage} tabIndex={-1} aria-label="巡逻地图视图">
             {map ? <SimulationMapView map={map} state={state} points={displayedPoints} editable={editable && editMode !== 'observe'} onSelect={selectPoint} mode={editMode}
-              zones={editor.zones} savedZones={editor.saved?.zones} anchor={editor.anchor} onCancelSelection={() => dispatch({ type: 'anchor', point: null })} />
+              zones={editor.zones} savedZones={editor.saved?.zones} anchor={editor.anchor} goalIssue={goalIssue} issueCurrent={issueCurrent} onCancelSelection={() => dispatch({ type: 'anchor', point: null })} />
               : <div className="simulation-map-empty"><MapPin size={34} /><strong>等待仿真地图</strong><p>地图发布后，就能在这里选点。</p></div>}
           </div>
 
@@ -208,7 +229,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
             {(rulesError || editor.error) && <p className="simulation-inline-error" role="alert">{editor.error || rulesError}</p>}
             {editor.saved?.message && <p className="simulation-panel-note">{editor.saved.message}</p>}
             {editor.saved && editor.baseRevision !== editor.saved.revision && <p className="simulation-inline-error" role="alert">规则版本已更新。请恢复最新规则，再重新编辑。</p>}
-            {editor.zones.length > 0 && <ul className="simulation-rule-list">{editor.zones.map((zone, index) => <li key={zone.id}>
+            {editor.zones.length > 0 && <ul className="simulation-rule-list">{editor.zones.map((zone, index) => <li key={zone.id} className={issueCurrent && goalIssue?.rule_id === zone.id ? 'simulation-rule-issue' : ''}>
               <span>{zone.kind === 'wall' ? '虚拟墙' : '禁区'} {index + 1}</span>
               <button type="button" aria-label={`移除${zone.kind === 'wall' ? '虚拟墙' : '禁区'} ${index + 1}`} disabled={!editable}
                 onClick={() => dispatch({ type: 'remove', id: zone.id })}><X size={16} /></button>
@@ -232,9 +253,10 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
                 const current = mission?.status === 'running' && !awaitingAcceptance && index === mission.current_index
                 const done = active && index < (mission?.current_index ?? 0)
                 const isHome = active && mission?.return_home && index === displayedPoints.length - 1
-                return <li key={`${index}-${point.x}-${point.y}`} className={current ? 'simulation-waypoint-current' : ''}>
+                const rejected = issueCurrent && !!goalIssue && goalIssueMatchesWaypoint(goalIssue, index, point)
+                return <li key={`${index}-${point.x}-${point.y}`} className={[current ? 'simulation-waypoint-current' : '', rejected ? 'simulation-waypoint-issue' : ''].filter(Boolean).join(' ')}>
                   <span className="simulation-waypoint-number">{done ? <Check size={14} /> : index + 1}</span>
-                  <div><strong>{isHome ? '返回起点' : `巡逻点 ${index + 1}`}</strong><span>({point.x.toFixed(2)}, {point.y.toFixed(2)}) 米</span></div>
+                  <div><strong>{isHome ? '返回起点' : `巡逻点 ${index + 1}`}</strong><span>({point.x.toFixed(2)}, {point.y.toFixed(2)}) 米</span>{rejected && <small className="simulation-rejected-point-label">此点被拒绝</small>}</div>
                   {current ? <span className="simulation-waypoint-tag">前往中</span> : editable && <div className="simulation-waypoint-edit">
                     <button type="button" aria-label={`上移巡逻点 ${index + 1}`} disabled={index === 0} onClick={() => reorderPoint(index, -1)}><ArrowUp size={14} /></button>
                     <button type="button" aria-label={`下移巡逻点 ${index + 1}`} disabled={index === displayedPoints.length - 1} onClick={() => reorderPoint(index, 1)}><ArrowDown size={14} /></button>
@@ -245,10 +267,10 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
             </ol> : <div className="simulation-queue-empty"><MapPin size={22} /><p>在地图上选择巡逻点，或载入已保存的路线。</p></div>}
 
             <p className="simulation-selection-message" aria-live="polite">{!active && startBlock}</p>
-            <label className="simulation-return-home"><input type="checkbox" checked={active ? !!mission?.return_home : returnHome} disabled={!editable} onChange={(event) => setReturnHome(event.target.checked)} /><Home size={16} /><span>巡逻结束后返回起点</span></label>
+            <label className={`simulation-return-home ${issueCurrent && goalIssue?.target === 'return_home' ? 'simulation-return-home-issue' : ''}`}><input type="checkbox" checked={active ? !!mission?.return_home : returnHome} disabled={!editable} onChange={(event) => setReturnHome(event.target.checked)} /><Home size={16} /><span>巡逻结束后返回起点</span>{issueCurrent && goalIssue?.target === 'return_home' && <small>返航起点被拒绝</small>}</label>
             <div className="simulation-mission-actions">
               <button type="button" className="simulation-button simulation-primary" disabled={!ready || !editable || waypoints.length === 0 || !!startBlock}
-                onClick={() => void act('mission', { waypoints, return_home: returnHome, issued_at: Date.now() / 1000, map_id: editor.mapId, rules_revision: editor.saved?.revision })}><Play size={17} />{pending === 'mission' ? '正在派发…' : '开始巡逻'}</button>
+                onClick={startMission}><Play size={17} />{pending === 'mission' ? '正在派发…' : '开始巡逻'}</button>
               <button type="button" className="simulation-button simulation-cancel" disabled={!active || !!pending || (mission?.status === 'canceling' && !canRetryCancel)} onClick={() => void act('cancel')}><Square size={15} />{unknownAcceptance ? '取消无法确认' : canRetryCancel ? '重试取消' : mission?.status === 'canceling' ? '正在取消…' : '取消任务'}</button>
             </div>
             <button type="button" className="simulation-clear-queue" disabled={!editable || waypoints.length === 0} onClick={() => { setWaypoints([]); setSelectionMessage('待派发巡逻点已清空。') }}><Trash2 size={14} />清空待派发点</button>

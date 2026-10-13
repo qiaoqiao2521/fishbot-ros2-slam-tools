@@ -70,10 +70,11 @@ def simulation_domain(environ=None):
 
 
 class APIError(Exception):
-    def __init__(self, message, status=400, outcome=None):
+    def __init__(self, message, status=400, outcome=None, issue=None):
         super().__init__(message)
         self.status = status
         self.outcome = outcome
+        self.issue = issue
 
 
 def finite_number(value, label):
@@ -100,7 +101,24 @@ def require_free_point(point, grid, radius=ROBOT_RADIUS):
     y = -math.sin(yaw)*dx + math.cos(yaw)*dy
     res, width, height = grid['resolution'], grid['width'], grid['height']
     if x < radius or y < radius or x > width*res-radius or y > height*res-radius:
-        raise APIError('Waypoint footprint is outside the map')
+        margins = [x, y, width*res-x, height*res-y]
+        edge = min(range(4), key=margins.__getitem__)
+        bx, by = max(0., min(x, width*res)), max(0., min(y, height*res))
+        if edge == 0:
+            bx = 0.
+        elif edge == 1:
+            by = 0.
+        elif edge == 2:
+            bx = width*res
+        else:
+            by = height*res
+        bx, by = grid_to_world(bx, by, grid)
+        issue = {'kind': 'map_boundary', 'point': dict(point),
+                 'blocking_point': {'x': bx, 'y': by}}
+        if margins[edge] >= 0.:
+            issue.update(clearance_m=margins[edge], required_clearance_m=radius,
+                         shortfall_m=max(0., radius-margins[edge]))
+        raise APIError('Waypoint footprint is outside the map', issue=issue)
     for row in range(max(0, math.floor((y-radius)/res)), min(height-1, math.floor((y+radius)/res))+1):
         for col in range(max(0, math.floor((x-radius)/res)), min(width-1, math.floor((x+radius)/res))+1):
             closest_x = max(col*res, min(x, (col+1)*res))
@@ -108,7 +126,13 @@ def require_free_point(point, grid, radius=ROBOT_RADIUS):
             if (closest_x-x)**2 + (closest_y-y)**2 <= radius**2:
                 occupancy = grid['data'][row*width+col]
                 if occupancy < 0 or occupancy >= 50:
-                    raise APIError('Waypoint footprint intersects an occupied or unknown cell')
+                    bx, by = grid_to_world(closest_x, closest_y, grid)
+                    clearance = math.hypot(closest_x-x, closest_y-y)
+                    raise APIError('Waypoint footprint intersects an occupied or unknown cell', issue={
+                        'kind': 'unknown_cell' if occupancy < 0 else 'occupied_cell',
+                        'point': dict(point), 'clearance_m': clearance,
+                        'required_clearance_m': radius, 'shortfall_m': max(0., radius-clearance),
+                        'blocking_point': {'x': bx, 'y': by}})
 
 
 def validate_mission(body, grid, now=None, zones=None):
@@ -131,12 +155,22 @@ def validate_mission(body, grid, now=None, zones=None):
         parsed = {name: finite_number(point.get(name, 0.0) if name == 'yaw' else point.get(name),
                                       f'waypoint {index+1} {name}') for name in ('x', 'y', 'yaw')}
         parsed['yaw'] = math.atan2(math.sin(parsed['yaw']), math.cos(parsed['yaw']))
-        require_free_point(parsed, grid)
-        require_outside_rules(parsed, zones or [], ROBOT_RADIUS)
+        try:
+            require_free_point(parsed, grid)
+            require_outside_rules(parsed, zones or [], ROBOT_RADIUS)
+        except (APIError, MapRulesError) as error:
+            if error.issue is not None:
+                error.issue.update(target='waypoint', waypoint_index=index+1, point=dict(parsed))
+            raise
         points.append(parsed)
     if return_home and any(abs(points[-1][axis]-HOME[axis]) > 1e-6 for axis in HOME):
-        require_free_point(HOME, grid)
-        require_outside_rules(HOME, zones or [], ROBOT_RADIUS)
+        try:
+            require_free_point(HOME, grid)
+            require_outside_rules(HOME, zones or [], ROBOT_RADIUS)
+        except (APIError, MapRulesError) as error:
+            if error.issue is not None:
+                error.issue.update(target='return_home', waypoint_index=None, point=dict(HOME))
+            raise
         points.append(dict(HOME))
     return points, return_home
 
@@ -900,6 +934,8 @@ class MissionBridge(Node):
                     payload = {'error': str(error)}
                     if getattr(error, 'outcome', None) is not None:
                         payload['outcome'] = error.outcome
+                    if error.issue is not None:
+                        payload['issue'] = error.issue
                     op.future.set_result((error.status, payload))
                 except Exception as error:
                     self.get_logger().error(f'HTTP operation failed: {error}')
@@ -909,6 +945,7 @@ class MissionBridge(Node):
 
     def prepare_mission(self, body):
         """All errors here precede dispatch and are authoritative rejections."""
+        rules = None
         try:
             if self.mission.value['status'] in ACTIVE_STATUSES:
                 raise APIError('A mission is already running or canceling', 409)
@@ -934,6 +971,11 @@ class MissionBridge(Node):
             return validate_mission(body, self.grid, zones=zones)
         except (APIError, MapRulesError) as error:
             error.outcome = 'rejected'
+            if error.issue is not None:
+                if rules is not None:
+                    error.issue.update(map_id=rules['map_id'], rules_revision=rules['revision'])
+                elif self.grid is not None:
+                    error.issue['map_id'] = map_identity(self.grid)
             raise
 
     def start_mission(self, body):
@@ -1313,6 +1355,8 @@ class Handler(BaseHTTPRequestHandler):
             payload = {'error': str(error)}
             if error.outcome is not None:
                 payload['outcome'] = error.outcome
+            if error.issue is not None:
+                payload['issue'] = error.issue
             self.reply(error.status, payload)
         except (ValueError, UnicodeError, TimeoutError):
             self.reply(400, {'error': 'Invalid or incomplete JSON body'})

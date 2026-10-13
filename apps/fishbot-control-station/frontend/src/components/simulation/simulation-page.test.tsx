@@ -2,9 +2,13 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SimulationPage } from '@/components/simulation/simulation-page'
+import { goalDraftIdentity } from '@/lib/simulation-errors'
+import type { SimulationGoalIssue } from '@/lib/simulation'
+import type { MapZone } from '@/lib/simulation-workspace'
 import { emptyRulesEditor, rulesReducer } from '@/lib/simulation-workspace'
 
-const fixture = vi.hoisted(() => ({ routeWrite: 'idle', seedDraft: false, draftConsumed: false }))
+const fixture = vi.hoisted(() => ({ routeWrite: 'idle', seedDraft: false, draftConsumed: false,
+  attemptedDraft: null as string | null, goalIssue: null as SimulationGoalIssue | null, zones: [] as MapZone[], revision: 2 }))
 vi.mock('react', async (original) => {
   const actual = await original<typeof import('react')>()
   return { ...actual, useState: (initial: unknown) => {
@@ -12,6 +16,7 @@ vi.mock('react', async (original) => {
       fixture.draftConsumed = true
       return actual.useState([{ x: 1, y: 1, yaw: 0 }])
     }
+    if (initial === null && fixture.attemptedDraft) return actual.useState(fixture.attemptedDraft)
     return actual.useState(initial)
   } }
 })
@@ -22,7 +27,7 @@ vi.mock('@/hooks/use-simulation', () => ({
       path: [], mission: { id: null, status: 'idle', current_index: 0, waypoints: [], return_home: false, message: '等待巡逻任务' },
       obstacle: { state: 'parked', x: null, y: null, size: 0.36 }, home: { x: 0, y: 0, yaw: 0 } },
     map: { map_id: 'map-a', width: 4, height: 4, resolution: 1, origin: [0, 0, 0], data: new Array(16).fill(0) },
-    connectionError: null, mapError: null, actionError: null, pending: null, missionRequestUnknown: false, act: vi.fn(),
+    connectionError: null, mapError: null, actionError: fixture.goalIssue ? 'rejected' : null, goalIssue: fixture.goalIssue, pending: null, missionRequestUnknown: false, act: vi.fn(),
   }),
 }))
 vi.mock('@/hooks/use-rviz', () => ({
@@ -31,8 +36,8 @@ vi.mock('@/hooks/use-rviz', () => ({
 }))
 vi.mock('@/hooks/use-simulation-workspace', () => ({
   useSimulationWorkspace: () => ({
-    editor: rulesReducer(emptyRulesEditor(), { type: 'received', value: { map_id: 'map-a', revision: 2,
-      zones: [], apply_state: 'applied', message: '已确认' } }),
+    editor: rulesReducer(emptyRulesEditor(), { type: 'received', value: { map_id: 'map-a', revision: fixture.revision,
+      zones: fixture.zones, apply_state: 'applied', message: '已确认' } }),
     dispatch: vi.fn(), rulesError: null, routes: [], routesError: null,
     runs: [{ id: 'interrupted-run', status: 'unknown', map_id: 'map-a', rules_revision: 1,
       message: '桥接重启，旧任务实际终态未知；不会恢复或重发', stop_reason: '扫描断流' }],
@@ -41,7 +46,14 @@ vi.mock('@/hooks/use-simulation-workspace', () => ({
   }),
 }))
 
-afterEach(() => { fixture.routeWrite = 'idle'; fixture.seedDraft = false; fixture.draftConsumed = false })
+afterEach(() => { fixture.routeWrite = 'idle'; fixture.seedDraft = false; fixture.draftConsumed = false;
+  fixture.attemptedDraft = null; fixture.goalIssue = null; fixture.zones = []; fixture.revision = 2 })
+
+const issue: SimulationGoalIssue = { kind: 'map_rule', target: 'waypoint', waypoint_index: 1,
+  point: { x: 1, y: 1, yaw: 0 }, rule_id: 'wall-a', rule_kind: 'wall', rule_index: 1,
+  clearance_m: 0.04, required_clearance_m: 0.13, shortfall_m: 0.09,
+  map_id: 'map-a', rules_revision: 2 }
+const wall: MapZone = { id: 'wall-a', kind: 'wall', points: [{ x: 0, y: 0 }, { x: 1, y: 0 }], width: 0.02 }
 
 describe('simulation historical task record presentation', () => {
   it('exposes a separate native RViz launcher and explains where its window appears', () => {
@@ -76,5 +88,52 @@ describe('simulation historical task record presentation', () => {
     expect(records).not.toContain('<strong>等待连接</strong>')
     expect(records).not.toContain('<strong>等待任务</strong>')
     expect(records).not.toContain('<strong>巡逻完成</strong>')
+  })
+
+  it('links a current rejection to the exact map marker, rule and unchanged draft waypoint', () => {
+    fixture.seedDraft = true
+    fixture.goalIssue = issue
+    fixture.zones = [wall]
+    fixture.attemptedDraft = goalDraftIdentity([issue.point], true)
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('巡逻点 1（1.00, 1.00）米')
+    expect(html).toContain('在地图上定位问题')
+    expect(html).toContain('simulation-waypoint-issue')
+    expect(html).toContain('simulation-rule-issue')
+    expect(html).toContain('data-goal-issue-current="true"')
+    expect(html).not.toContain('此提示来自上一版路线或规则')
+  })
+
+  it('downgrades an edited route to a historical coordinate without marking another draft point', () => {
+    fixture.seedDraft = true
+    fixture.goalIssue = issue
+    fixture.zones = [wall]
+    fixture.attemptedDraft = goalDraftIdentity([{ x: 2, y: 2, yaw: 0 }], true)
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('此提示来自上一版路线或规则')
+    expect(html).toContain('定位上次问题')
+    expect(html).toContain('上次拒绝点：巡逻点 1')
+    expect(html).not.toContain('simulation-waypoint-issue')
+    expect(html).not.toContain('simulation-rule-issue')
+  })
+
+  it('does not accuse a current rule when its backend snapshot revision has changed', () => {
+    fixture.seedDraft = true
+    fixture.goalIssue = issue
+    fixture.zones = [wall]
+    fixture.attemptedDraft = goalDraftIdentity([issue.point], true)
+    fixture.revision = 3
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('此提示来自上一版路线或规则')
+    expect(html).not.toContain('simulation-rule-issue')
+    expect(html).not.toContain('simulation-waypoint-issue')
+  })
+
+  it('does not offer map location for a diagnostic belonging to another map', () => {
+    fixture.goalIssue = { ...issue, map_id: 'old-map' }
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('地图已不同，不在当前地图标记')
+    expect(html).not.toContain('定位上次问题')
+    expect(html).not.toContain('simulation-goal-issue-overlay')
   })
 })

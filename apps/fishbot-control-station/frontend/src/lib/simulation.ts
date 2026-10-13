@@ -179,11 +179,58 @@ export function missionProgressText(mission?: SimulationState['mission']): strin
   return '选点后派发，小车会依次前往。'
 }
 
+export type SimulationGoalIssue = {
+  kind: 'map_rule' | 'occupied_cell' | 'unknown_cell' | 'map_boundary'
+  target: 'waypoint' | 'return_home'
+  waypoint_index: number | null
+  point: Pose
+  rule_id?: string
+  rule_kind?: 'wall' | 'no_go'
+  rule_index?: number
+  clearance_m?: number
+  required_clearance_m?: number
+  shortfall_m?: number
+  blocking_point?: Point
+  map_id?: string
+  rules_revision?: number
+}
+
+/** Invalid optional diagnostics must not erase an authoritative HTTP rejection. */
+export function parseSimulationGoalIssue(value: unknown): SimulationGoalIssue | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  if (typeof raw.kind !== 'string' || !['map_rule', 'occupied_cell', 'unknown_cell', 'map_boundary'].includes(raw.kind)
+    || typeof raw.target !== 'string' || !['waypoint', 'return_home'].includes(raw.target) || !finitePose(raw.point as Pose)
+    || (raw.target === 'return_home' ? raw.waypoint_index !== null
+      : !Number.isInteger(raw.waypoint_index) || Number(raw.waypoint_index) < 1 || Number(raw.waypoint_index) > MAX_WAYPOINTS)) return null
+  if (raw.rule_id !== undefined && (typeof raw.rule_id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(raw.rule_id))) return null
+  if (raw.rule_kind !== undefined && (typeof raw.rule_kind !== 'string' || !['wall', 'no_go'].includes(raw.rule_kind))) return null
+  if (raw.rule_index !== undefined && (!Number.isInteger(raw.rule_index) || Number(raw.rule_index) < 1 || Number(raw.rule_index) > 64)) return null
+  for (const key of ['clearance_m', 'required_clearance_m', 'shortfall_m']) {
+    if (raw[key] !== undefined && (typeof raw[key] !== 'number' || !Number.isFinite(raw[key]) || Number(raw[key]) < 0)) return null
+  }
+  if (raw.blocking_point !== undefined && !finitePoint(raw.blocking_point as Point)) return null
+  if (raw.map_id !== undefined && (typeof raw.map_id !== 'string' || !raw.map_id)) return null
+  if (raw.rules_revision !== undefined && (!Number.isSafeInteger(raw.rules_revision) || Number(raw.rules_revision) < 0)) return null
+  const point = raw.point as Pose
+  const result: SimulationGoalIssue = { kind: raw.kind as SimulationGoalIssue['kind'], target: raw.target as SimulationGoalIssue['target'],
+    waypoint_index: raw.waypoint_index as number | null, point: { x: point.x, y: point.y, yaw: point.yaw } }
+  for (const key of ['rule_id', 'rule_kind', 'rule_index', 'clearance_m', 'required_clearance_m', 'shortfall_m', 'map_id', 'rules_revision'] as const) {
+    if (raw[key] !== undefined) Object.assign(result, { [key]: raw[key] })
+  }
+  if (raw.blocking_point !== undefined) {
+    const point = raw.blocking_point as Point
+    result.blocking_point = { x: point.x, y: point.y }
+  }
+  return result
+}
+
 export class SimulationRejectedRequest extends Error {
   readonly status: number
   readonly outcome: 'rejected' | null
-  constructor(message: string, status: number, outcome: 'rejected' | null = null) {
-    super(message); this.status = status; this.outcome = outcome; this.name = 'SimulationRejectedRequest'
+  readonly issue: SimulationGoalIssue | null
+  constructor(message: string, status: number, outcome: 'rejected' | null = null, issue: SimulationGoalIssue | null = null) {
+    super(message); this.status = status; this.outcome = outcome; this.issue = issue; this.name = 'SimulationRejectedRequest'
   }
 }
 
@@ -226,7 +273,8 @@ export async function requestSimulation<T>(path: string, body?: object, signal?:
   if (!response.ok) {
     const error = value && typeof value === 'object' && 'error' in value ? String(value.error) : `仿真请求失败（${response.status}）`
     const outcome = value && typeof value === 'object' && 'outcome' in value && value.outcome === 'rejected' ? 'rejected' : null
-    throw new SimulationRejectedRequest(error, response.status, outcome)
+    const issue = value && typeof value === 'object' && 'issue' in value ? parseSimulationGoalIssue(value.issue) : null
+    throw new SimulationRejectedRequest(error, response.status, outcome, issue)
   }
   return value as T
 }

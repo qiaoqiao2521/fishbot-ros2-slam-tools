@@ -3,11 +3,12 @@ import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
 
 import {
   mapToWorld, worldToMap,
-  type Point, type Pose, type SimulationMap, type SimulationState,
+  type Point, type Pose, type SimulationGoalIssue, type SimulationMap, type SimulationState,
 } from '@/lib/simulation'
+import { goalIssueTarget } from '@/lib/simulation-errors'
 import { mapGeneration, rectanglePoints, zonesEqual, type MapEditMode, type MapZone } from '@/lib/simulation-workspace'
 
-export function SimulationMapView({ map, state, points, editable, onSelect, mode = 'waypoint', zones = [], savedZones = [], anchor = null, onCancelSelection }: {
+export function SimulationMapView({ map, state, points, editable, onSelect, mode = 'waypoint', zones = [], savedZones = [], anchor = null, onCancelSelection, goalIssue = null, issueCurrent = false }: {
   map: SimulationMap
   state: SimulationState | null
   points: Pose[]
@@ -18,6 +19,8 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
   savedZones?: MapZone[]
   anchor?: Point | null
   onCancelSelection?: () => void
+  goalIssue?: SimulationGoalIssue | null
+  issueCurrent?: boolean
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const svg = useRef<SVGSVGElement>(null)
@@ -103,6 +106,10 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
     && typeof obstacle.y === 'number' && Number.isFinite(obstacle.y)
     ? worldToMap({ x: obstacle.x, y: obstacle.y }, map) : null
   const cursorPixel = worldToMap(cursor, map)
+  const issue = map.map_id && goalIssue?.map_id === map.map_id ? goalIssue : null
+  const issuePixel = issue ? worldToMap(issue.point, map) : null
+  const issueColor = issueCurrent ? '#b32d2b' : '#9b7029'
+  const issueLabel = issue ? `${issueCurrent ? '拒绝点' : '上次拒绝点'}：${goalIssueTarget(issue)}` : ''
 
   return (
     <div className="simulation-map-frame" style={{ aspectRatio: `${map.width} / ${map.height}` }}>
@@ -128,12 +135,13 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
         <rect width={map.width} height={map.height} fill="url(#simulation-grid)" pointerEvents="none" />
         {zones.map((zone) => {
           const persisted = savedZones.some((saved) => zonesEqual([saved], [zone]))
+          const blocked = issueCurrent && issue?.kind === 'map_rule' && issue.rule_id === zone.id
           const zonePoints = polyline(zone.points)
-          return zone.kind === 'wall' ? <polyline key={zone.id} points={zonePoints} fill="none" stroke="#b26120"
-            strokeWidth={(zone.width ?? 0.02) * unit} strokeLinecap="round" strokeDasharray={persisted ? undefined : '2 1'}>
+          return zone.kind === 'wall' ? <polyline key={zone.id} points={zonePoints} fill="none" stroke={blocked ? '#b32d2b' : '#b26120'}
+            data-rule-issue={blocked || undefined} strokeWidth={blocked ? Math.max((zone.width ?? 0.02) * unit, 1.5) : (zone.width ?? 0.02) * unit} strokeLinecap="round" strokeDasharray={persisted ? undefined : '2 1'}>
             <title>{`${persisted ? '已保存虚拟墙' : '虚拟墙草稿'}：${zone.id}`}</title>
-          </polyline> : <polygon key={zone.id} points={zonePoints} fill="#b14255" fillOpacity=".20" stroke="#b14255"
-            strokeWidth=".8" strokeDasharray={persisted ? undefined : '2 1'}><title>{`${persisted ? '已保存禁区' : '禁区草稿'}：${zone.id}`}</title></polygon>
+          </polyline> : <polygon key={zone.id} points={zonePoints} fill={blocked ? '#b32d2b' : '#b14255'} fillOpacity={blocked ? '.30' : '.20'} stroke={blocked ? '#b32d2b' : '#b14255'}
+            data-rule-issue={blocked || undefined} strokeWidth={blocked ? '1.5' : '.8'} strokeDasharray={persisted ? undefined : '2 1'}><title>{`${persisted ? '已保存禁区' : '禁区草稿'}：${zone.id}`}</title></polygon>
         })}
         {anchor && mode === 'wall' && <polyline points={polyline([anchor, cursor])} fill="none" stroke="#b26120" strokeWidth="1" strokeDasharray="2 1" />}
         {anchor && mode === 'no_go' && <polygon points={polyline(rectanglePoints(anchor, cursor))} fill="#b14255" fillOpacity=".12" stroke="#b14255" strokeWidth=".8" strokeDasharray="2 1" />}
@@ -169,6 +177,19 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
           <circle r={0.13 * unit} fill="#2780b2" stroke="#154d70" strokeWidth=".45" />
           <path d={`M${0.20 * unit} 0 L${0.04 * unit} ${-0.065 * unit} L${0.04 * unit} ${0.065 * unit}Z`} fill="#f5fbff" stroke="#154d70" strokeWidth=".25" />
           <title>小鱼位置，尖端为车头方向</title>
+        </g>}
+        {issue && issuePixel && <g className="simulation-goal-issue-overlay" data-goal-issue-current={issueCurrent} pointerEvents="none">
+          {issue.blocking_point && <>
+            <line x1={issuePixel.x} y1={issuePixel.y} x2={worldToMap(issue.blocking_point, map).x} y2={worldToMap(issue.blocking_point, map).y}
+              stroke={issueColor} strokeWidth=".6" strokeDasharray="1 1" />
+            <circle cx={worldToMap(issue.blocking_point, map).x} cy={worldToMap(issue.blocking_point, map).y} r="1.1" fill={issueColor} />
+          </>}
+          <circle cx={issuePixel.x} cy={issuePixel.y} r={issue.required_clearance_m !== undefined ? issue.required_clearance_m * unit : 1.5}
+            fill={issueColor} fillOpacity=".10" stroke={issueColor} strokeWidth=".8" strokeDasharray={issueCurrent ? undefined : '1.5 1'} />
+          <path d={`M ${issuePixel.x - 1.2} ${issuePixel.y - 1.2} l 2.4 2.4 m -2.4 0 l 2.4 -2.4`} stroke={issueColor} strokeWidth=".7" />
+          <text x={Math.max(1, Math.min(map.width - 1, issuePixel.x))} y={Math.max(3, Math.min(map.height - 2, issuePixel.y - (issue.required_clearance_m ?? 0) * unit - 2))}
+            textAnchor={issuePixel.x > map.width / 2 ? 'end' : 'start'} fontSize={Math.max(4, map.width / 70)} fontWeight="700" fill={issueColor} stroke="#fffaf0" strokeWidth=".6" paintOrder="stroke">{issueLabel}</text>
+          <title>{`${issueLabel}（${issue.point.x.toFixed(2)}, ${issue.point.y.toFixed(2)}）米；${issue.required_clearance_m !== undefined ? '圈线为服务端检查所需的车体范围' : '标记为被拒绝的坐标'}${issueCurrent ? '' : '，对应上一版路线或规则'}`}</title>
         </g>}
         {focused && editable && <g transform={`translate(${cursorPixel.x} ${cursorPixel.y})`} stroke="#713f9f" strokeWidth=".6">
           <path d="M-4 0H4M0-4V4" />

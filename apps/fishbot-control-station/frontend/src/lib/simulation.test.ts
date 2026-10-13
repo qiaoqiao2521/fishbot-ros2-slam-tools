@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   collisionMonitorText, isFreeWaypoint, mapToWorld, missionCanRetryCancel,
   missionIsActive, missionLabel, missionProgressText, missionReceiptResolved, requestSimulation, simulationDomain, simulationRequestRejected, SimulationRejectedRequest,
-  validateSimulationMap, validateSimulationState, worldToMap,
+  parseSimulationGoalIssue, validateSimulationMap, validateSimulationState, worldToMap,
   type SimulationMap, type SimulationState,
 } from '@/lib/simulation'
 import { resolveAppRoute } from '@/lib/app-route'
@@ -50,6 +50,48 @@ describe('simulation map coordinates', () => {
 })
 
 describe('simulation server responses', () => {
+
+  it('retains authoritative target, rule snapshot and distance details from a rejected mission', async () => {
+    const issue = { kind: 'map_rule', target: 'return_home', waypoint_index: null,
+      point: { x: 0, y: 0, yaw: 0 }, rule_id: 'wall-a', rule_kind: 'wall', rule_index: 5,
+      clearance_m: 0.04217, required_clearance_m: 0.13, shortfall_m: 0.08783,
+      blocking_point: { x: 0.01, y: -0.04 }, map_id: 'map-a', rules_revision: 24 }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'rule overlap', outcome: 'rejected', issue }), { status: 400 })))
+    try { await requestSimulation('mission', {}) } catch (error) {
+      expect(error).toBeInstanceOf(SimulationRejectedRequest)
+      expect(simulationRequestRejected(error)).toBe(true)
+      expect((error as SimulationRejectedRequest).issue).toEqual(issue)
+      return
+    }
+    throw new Error('Expected a rejected mission')
+  })
+
+  it('ignores malformed optional diagnostics without turning a definite rejection into unknown delivery', async () => {
+    const base = { kind: 'map_rule', target: 'waypoint', waypoint_index: 2, point: { x: 1, y: 2, yaw: 0 } }
+    for (const patch of [{ waypoint_index: 0 }, { target: 'return_home' }, { kind: { toString: 17 } }, { target: {} }, { rule_kind: { toString: null } }, { point: { x: null, y: 2, yaw: 0 } },
+      { clearance_m: -1 }, { rule_index: 65 }, { rules_revision: 1.5 }, { blocking_point: { x: 1, y: '2' } }]) {
+      expect(parseSimulationGoalIssue({ ...base, ...patch })).toBeNull()
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'rule overlap', outcome: 'rejected', issue: { ...base, waypoint_index: 0 } }), { status: 400 })))
+    try { await requestSimulation('mission', {}) } catch (error) {
+      expect(simulationRequestRejected(error)).toBe(true)
+      expect((error as SimulationRejectedRequest).issue).toBeNull()
+      expect((error as Error).message).toBe('rule overlap')
+      return
+    }
+    throw new Error('Expected a rejected mission')
+  })
+
+  it('accepts an exact indexed target but preserves compatibility with legacy error receipts', () => {
+    const input = { kind: 'unknown_cell', target: 'waypoint', waypoint_index: 2, point: { x: 1, y: 2, yaw: 0 },
+      blocking_point: { x: 1.1, y: 2.1 } }
+    const parsed = parseSimulationGoalIssue(input)
+    expect(parsed?.waypoint_index).toBe(2)
+    input.point.x = 9
+    expect(parsed?.point.x).toBe(1)
+    expect(new SimulationRejectedRequest('legacy error', 400).issue).toBeNull()
+    expect(parseSimulationGoalIssue(undefined)).toBeNull()
+  })
 
   it('does not unlock an unknown dispatch from an old or unrelated task readback', () => {
     const receipt = { previousId: state.mission.id, waypoints: state.mission.waypoints, returnHome: false }

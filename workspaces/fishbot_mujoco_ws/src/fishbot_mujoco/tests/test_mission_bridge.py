@@ -120,6 +120,71 @@ class GoalBoundaryTests(unittest.TestCase):
             require_free_point({'x': -0.05, 'y': 0.05}, self.grid)
         require_free_point({'x': 1.0, 'y': -1.0}, self.grid)
 
+    def test_rotated_cell_diagnostic_marks_nearest_world_point_and_cell_kind(self):
+        self.grid['origin'] = [2., -2., math.pi/2]
+        for occupancy, kind in ((100, 'occupied_cell'), (-1, 'unknown_cell')):
+            self.grid['data'][20*40+21] = occupancy
+            with self.subTest(occupancy=occupancy), self.assertRaises(APIError) as caught:
+                require_free_point({'x': -.05, 'y': .05, 'yaw': 0.}, self.grid)
+            issue = caught.exception.issue
+            self.assertEqual(issue['kind'], kind)
+            self.assertEqual(str(caught.exception), 'Waypoint footprint intersects an occupied or unknown cell')
+            self.assertAlmostEqual(issue['blocking_point']['x'], -.05)
+            self.assertAlmostEqual(issue['blocking_point']['y'], .1)
+            self.assertAlmostEqual(issue['clearance_m'], .05)
+            self.assertAlmostEqual(issue['shortfall_m'], .08)
+
+    def test_rotated_boundary_diagnostic_marks_actual_limiting_map_edge(self):
+        self.grid['origin'] = [2., -2., math.pi/2]
+        with self.assertRaises(APIError) as caught:
+            require_free_point({'x': 0., 'y': -1.95, 'yaw': 0.}, self.grid)
+        issue = caught.exception.issue
+        self.assertEqual(issue['kind'], 'map_boundary')
+        self.assertAlmostEqual(issue['blocking_point']['x'], 0.)
+        self.assertAlmostEqual(issue['blocking_point']['y'], -2.)
+        self.assertAlmostEqual(issue['clearance_m'], .05)
+        self.assertAlmostEqual(issue['shortfall_m'], .08)
+
+    def test_center_already_outside_map_omits_misleading_distance_to_move(self):
+        with self.assertRaises(APIError) as caught:
+            require_free_point({'x': 2.1, 'y': 0., 'yaw': 0.}, self.grid)
+        self.assertEqual(caught.exception.issue['blocking_point'], {'x': 2., 'y': 0.})
+        self.assertNotIn('clearance_m', caught.exception.issue)
+        self.assertNotIn('shortfall_m', caught.exception.issue)
+
+    def test_second_user_waypoint_rejection_names_point_and_one_based_index(self):
+        self.body['waypoints'].append({'x': .05, 'y': .05, 'yaw': 2*math.pi})
+        self.grid['data'][20*40+20] = -1
+        with self.assertRaises(APIError) as caught:
+            validate_mission(self.body, self.grid, now=100.)
+        issue = caught.exception.issue
+        self.assertEqual((issue['target'], issue['waypoint_index']), ('waypoint', 2))
+        self.assertEqual(issue['kind'], 'unknown_cell')
+        self.assertAlmostEqual(issue['point']['yaw'], 0.)
+        self.assertEqual((issue['point']['x'], issue['point']['y']), (.05, .05))
+
+    def test_automatic_home_and_explicit_home_are_distinct_rejections(self):
+        wall = {'id': 'near_home', 'kind': 'wall', 'width': .02,
+                'points': [{'x': .1, 'y': -.4}, {'x': .1, 'y': .4}]}
+        with self.assertRaises(MapRulesError) as automatic:
+            validate_mission(self.body, self.grid, now=100., zones=[wall])
+        issue = automatic.exception.issue
+        self.assertEqual((issue['target'], issue['waypoint_index']), ('return_home', None))
+        self.assertEqual(issue['point'], {'x': 0., 'y': 0., 'yaw': 0.})
+        self.body['waypoints'].append({'x': 0., 'y': 0.})
+        with self.assertRaises(MapRulesError) as explicit:
+            validate_mission(self.body, self.grid, now=100., zones=[wall])
+        self.assertEqual((explicit.exception.issue['target'], explicit.exception.issue['waypoint_index']),
+                         ('waypoint', 2))
+
+    def test_automatic_home_map_rejection_has_no_user_waypoint_index(self):
+        self.grid['data'][20*40+20] = 100
+        with self.assertRaises(APIError) as caught:
+            validate_mission(self.body, self.grid, now=100.)
+        self.assertEqual(caught.exception.issue['kind'], 'occupied_cell')
+        self.assertEqual((caught.exception.issue['target'], caught.exception.issue['waypoint_index']),
+                         ('return_home', None))
+
     def test_twelve_user_points_can_append_home_as_thirteenth(self):
         self.body['waypoints'] *= 12
         points, returning = validate_mission(self.body, self.grid, now=100)
@@ -659,6 +724,66 @@ class MapRulesIntegrationBoundaryTests(unittest.TestCase):
         legacy = {key: value for key, value in body.items() if key not in {'map_id', 'rules_revision'}}
         self.assertEqual(len(MissionBridge.prepare_mission(bridge, legacy)[0]), 1)
 
+    def test_rule_rejection_binds_actual_snapshot_without_begin_or_dispatch(self):
+        bridge, _canceled = self.healthy_bridge()
+        self.store.update_rules({'map_id': self.store.map_id, 'base_revision': 0,
+                                 'zones': [self.rectangle]})
+        bridge.mission = MissionRecord()
+        bridge.ready, bridge.rules_apply_state, bridge.rules_published_revision = True, 'applied', 1
+        bridge.client.send_goal_async = lambda *_args, **_kwargs: self.fail('Rejected goal must not dispatch')
+        body = {'waypoints': [{'x': 1., 'y': 1.}, {'x': .25, 'y': 0.}],
+                'issued_at': time.time(), 'map_id': self.store.map_id, 'rules_revision': 1}
+        with self.assertRaises(MapRulesError) as caught:
+            MissionBridge.start_mission(bridge, body)
+        self.assertEqual(caught.exception.outcome, 'rejected')
+        issue = caught.exception.issue
+        self.assertEqual(issue['map_id'], self.store.map_id)
+        self.assertEqual(issue['rules_revision'], 1)
+        self.assertEqual((issue['target'], issue['waypoint_index']), ('waypoint', 2))
+        self.assertEqual(issue['rule_id'], self.rectangle['id'])
+        self.assertEqual(bridge.mission.value['status'], 'idle')
+        self.assertIsNone(bridge.mission.value['id'])
+
+    def test_queue_preserves_authoritative_issue_for_rule_and_occupancy_rejections(self):
+        bridge, _canceled = self.healthy_bridge()
+        bridge.mission = MissionRecord()
+        bridge.ready, bridge.rules_apply_state = True, 'applied'
+        bridge.start_mission = MethodType(MissionBridge.start_mission, bridge)
+        bridge.client.send_goal_async = lambda *_args, **_kwargs: self.fail('Rejected goal must not dispatch')
+        bridge.get_logger = lambda: SimpleNamespace(error=lambda message: self.fail(message))
+        # The real operation queue must carry the structured issue, not only its error text.
+        for occupancy, kind in ((100, 'occupied_cell'), (-1, 'unknown_cell')):
+            bridge.grid['data'][20*40+20] = occupancy
+            request = SimpleNamespace(kind='mission', body={'waypoints': [{'x': .05, 'y': .05}],
+                'issued_at': time.time()}, deadline=102., future=Future())
+            bridge.operations.put(request)
+            with patch('mission_bridge.time.monotonic', return_value=100.):
+                MissionBridge.tick(bridge)
+            status, result = request.future.result()
+            self.assertEqual(status, 400)
+            self.assertEqual(result['outcome'], 'rejected')
+            self.assertEqual(result['issue']['kind'], kind)
+            self.assertEqual(result['issue']['map_id'], self.store.map_id)
+            self.assertEqual(result['issue']['rules_revision'], 0)
+            self.assertEqual(result['issue']['waypoint_index'], 1)
+            self.assertEqual(bridge.mission.value['status'], 'idle')
+        bridge.grid['data'][20*40+20] = 0
+        self.store.update_rules({'map_id': self.store.map_id, 'base_revision': 0,
+                                 'zones': [self.rectangle]})
+        bridge.rules_published_revision = 1
+        request = SimpleNamespace(kind='mission', body={'waypoints': [{'x': .25, 'y': 0.}],
+            'issued_at': time.time()}, deadline=102., future=Future())
+        bridge.operations.put(request)
+        with patch('mission_bridge.time.monotonic', return_value=100.):
+            MissionBridge.tick(bridge)
+        status, result = request.future.result()
+        self.assertEqual(status, 400)
+        self.assertEqual(result['outcome'], 'rejected')
+        self.assertEqual(result['issue']['kind'], 'map_rule')
+        self.assertEqual(result['issue']['rules_revision'], 1)
+        self.assertEqual(result['issue']['rule_id'], self.rectangle['id'])
+        self.assertEqual(bridge.mission.value['status'], 'idle')
+
     def test_active_and_unknown_mission_cannot_edit_rules_through_operation_queue(self):
         bridge, _canceled = self.healthy_bridge()
         bridge.publish_rules = lambda: self.fail('Active rules must not be published')
@@ -770,6 +895,21 @@ class MapRulesIntegrationBoundaryTests(unittest.TestCase):
         self.assertEqual(replies[0][0], 503)
         self.assertEqual(replies[0][1]['outcome'], 'rejected')
         self.assertEqual(operations.qsize(), 1)
+
+    def test_http_direct_api_error_preserves_issue_and_rejection(self):
+        issue = {'kind': 'map_boundary', 'target': 'waypoint', 'waypoint_index': 3,
+                 'point': {'x': 2.1, 'y': 0., 'yaw': 0.}, 'blocking_point': {'x': 2., 'y': 0.}}
+        def reject(_kind, _body):
+            raise APIError('Waypoint footprint is outside the map', outcome='rejected', issue=issue)
+        replies = []
+        encoded = json.dumps({'waypoints': [{'x': 2.1, 'y': 0.}], 'issued_at': time.time()}).encode()
+        handler = SimpleNamespace(path='/sim-api/mission', allowed=lambda: True,
+            server=SimpleNamespace(bridge=SimpleNamespace(enqueue=reject)), rfile=io.BytesIO(encoded),
+            headers={'Content-Type': 'application/json', 'Content-Length': str(len(encoded))},
+            reply=lambda status, body: replies.append((status, body)))
+        Handler.do_POST(handler)
+        self.assertEqual(replies, [(400, {'error': 'Waypoint footprint is outside the map',
+                                        'outcome': 'rejected', 'issue': issue})])
 
     def test_expired_queue_request_is_rejected_without_dispatch(self):
         bridge, _canceled = self.healthy_bridge()

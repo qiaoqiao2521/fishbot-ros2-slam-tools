@@ -126,3 +126,17 @@ Knowledge: already_covered。采用既有Obsidian `Wiki/ROS2 与 FishBot.md`“3
 全前端97项、类型/构建及定点lint通过。浏览器桌面与390px检查移除按钮和中文拒绝提示：受控400与空闲任务读回，仅用于UI验证，零请求转发至导航API，不宣称新增导航验收。首次QA开始按钮禁用，选点/空闲前提未记录完整，保留失败；修正测试视口和受控空闲前提后复验。缓存沿用session根的route-ux/，不入Git。不重启ROS或RViz。
 
 Knowledge: already_covered。沿用Obsidian FishBot第18节的完整车体与规则语义，以及项目USER_FEEDBACK的拒绝原因契约；本次只改入口和提示，没有新的通用几何结论。release.sh保留项、root owner及阻碍沿用本页。
+
+## 精确目标诊断（2026-10-13）
+
+按用户要求，原几何判定失败处产生结构化issue：显式航点one-based编号或自动返航null、米制point、规则ID/类型/当时编号、到规则边缘净距、所需半径、差额与blocking_point。地图格/未知格/边界也给出具体位置；旋转地图坐标转换正确，首个命中顺序与所有判定门限保留。prepare_mission绑定实际地图和规则版本，HTTP透传而不改变rejected。可选诊断损坏不抹掉明确拒绝。
+
+网页显示明确航点或返航、坐标、规则与距离；定位按钮只滚动聚焦地图。红色点位/规则和列表提示绑定提交时草稿及规则快照；改序/返航设置/规则编辑后旧坐标变为琥珀色历史标记，不错指新对象；不同地图隐藏标记。旧错误响应仍可概括显示。
+
+472反馈回归通过（209/131/61/71），零跳过/缺依赖；全前端113项、类型/构建与定点lint通过。真实HTTP两项拒绝确认精确规则点1与越界点2，原mission身份/终态不变。请求最后包含必定越界的校验点，保证即使并发编辑规则也不可能成为运动任务。自动返航数据另由原生产validate_mission直接只读生成，没有Nav2派发。
+
+实际网页四项通过：真实HTTP点2拒绝、规则5与距离4.2/13.0/8.8厘米、红色点位/规则；定位只聚焦不重发；改序后去除当前标红；390px自动返航提示/标记、44px定位、取消返航后历史标记。返航UI使用前述生产validator的受控拒绝回执，不能称为一次真实导航任务。零其他POST、无页面异常/溢出，实际mission不变且真值静止。UI截图、native-rejections.json、auto-home-validation.json、ui-result.json、feedback.json与runtime.json保存在session根precise-issues/，不入Git。
+
+当前空闲bridge原PID737778已正常更新，同owned unit的PID805462；旧launch626695、controller627039、RViz741185保持运行。规则revision24及六项用户规则、模板、历史任务保留，没有重启仿真或派发运动。release.sh仍由root接续，沿用具体阻碍，不执行。
+
+Knowledge: updated。根修订既有Obsidian `Wiki/ROS2 与 FishBot.md`第18节，追加服务端具体诊断、墙边净距、草稿/规则快照与历史标记；同步 `Wiki/开发知识入口.md`的空间拒绝触发词。保留原dirty内容，实际读回两段和锚点；不复制运行日志，当前状态只留项目。

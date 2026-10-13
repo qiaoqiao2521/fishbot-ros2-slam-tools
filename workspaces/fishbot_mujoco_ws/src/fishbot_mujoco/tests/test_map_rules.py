@@ -103,6 +103,45 @@ class GeometryTests(unittest.TestCase):
                 require_outside_rules(point, zones)
         require_outside_rules({'x': 0., 'y': .3}, zones)
 
+    def test_wall_diagnostic_measures_rule_edge_and_snapshot_index(self):
+        far = {**wall(), 'id': 'far', 'points': [{'x': -1., 'y': -1.}, {'x': 1., 'y': -1.}]}
+        point = {'x': 0., 'y': .1, 'yaw': .4}
+        with self.assertRaises(MapRulesError) as caught:
+            require_outside_rules(point, [far, wall()])
+        issue = caught.exception.issue
+        self.assertEqual(str(caught.exception), 'Waypoint footprint intersects map rule wall_1')
+        self.assertEqual(issue['kind'], 'map_rule')
+        self.assertEqual((issue['rule_id'], issue['rule_kind'], issue['rule_index']),
+                         ('wall_1', 'wall', 2))
+        self.assertEqual(issue['point'], point)
+        self.assertAlmostEqual(issue['clearance_m'], .09)
+        self.assertAlmostEqual(issue['required_clearance_m'], .13)
+        self.assertAlmostEqual(issue['shortfall_m'], .04)
+        self.assertEqual(issue['blocking_point'], {'x': 0., 'y': .01})
+
+    def test_wall_cap_diagnostic_nearest_point_includes_half_width(self):
+        with self.assertRaises(MapRulesError) as caught:
+            require_outside_rules({'x': .62, 'y': 0.}, [wall()])
+        issue = caught.exception.issue
+        self.assertAlmostEqual(issue['clearance_m'], .11)
+        self.assertEqual(issue['blocking_point'], {'x': .51, 'y': 0.})
+
+    def test_rectangle_corner_diagnostic_uses_exact_existing_distance(self):
+        with self.assertRaises(MapRulesError) as caught:
+            require_outside_rules({'x': .55, 'y': .55}, [rectangle()])
+        issue = caught.exception.issue
+        self.assertAlmostEqual(issue['clearance_m'], math.sqrt(2)*.05)
+        self.assertEqual(issue['blocking_point'], {'x': .5, 'y': .5})
+        self.assertEqual(issue['rule_kind'], 'no_go')
+
+    def test_diagnostic_inside_rule_retains_zero_clearance(self):
+        for point, zone in (({'x': .2, 'y': .2}, rectangle()), ({'x': .2, 'y': .005}, wall())):
+            with self.subTest(zone=zone['kind']), self.assertRaises(MapRulesError) as caught:
+                require_outside_rules(point, [zone])
+            self.assertEqual(caught.exception.issue['clearance_m'], 0.)
+            self.assertEqual(caught.exception.issue['blocking_point'], point)
+            self.assertEqual(caught.exception.issue['shortfall_m'], .13)
+
     def test_mask_is_software_only_and_conservative(self):
         original = grid()
         snapshot = copy.deepcopy(original)

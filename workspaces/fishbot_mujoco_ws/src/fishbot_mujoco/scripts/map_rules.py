@@ -26,9 +26,10 @@ ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
 
 
 class MapRulesError(Exception):
-    def __init__(self, message, status=400):
+    def __init__(self, message, status=400, issue=None):
         super().__init__(message)
         self.status = status
+        self.issue = issue
 
 
 def number(value, label):
@@ -131,9 +132,31 @@ def distance_to_zone(x, y, zone):
 
 
 def require_outside_rules(point, zones, radius=ROBOT_RADIUS):
-    for zone in zones:
-        if distance_to_zone(point['x'], point['y'], zone) <= radius+1e-9:
-            raise MapRulesError(f'Waypoint footprint intersects map rule {zone["id"]}')
+    for index, zone in enumerate(zones):
+        clearance = distance_to_zone(point['x'], point['y'], zone)
+        if clearance <= radius+1e-9:
+            # Describe the existing rejection; do not change its geometry or threshold.
+            x, y = point['x'], point['y']
+            if zone['kind'] == 'no_go':
+                xs, ys = [p['x'] for p in zone['points']], [p['y'] for p in zone['points']]
+                blocking = {'x': max(min(xs), min(x, max(xs))),
+                            'y': max(min(ys), min(y, max(ys)))}
+            else:
+                a, b = zone['points']
+                dx, dy = b['x']-a['x'], b['y']-a['y']
+                fraction = max(0., min(1., ((x-a['x'])*dx+(y-a['y'])*dy)/(dx*dx+dy*dy)))
+                bx, by = a['x']+fraction*dx, a['y']+fraction*dy
+                distance = math.hypot(x-bx, y-by)
+                if distance <= zone['width']/2:
+                    blocking = {'x': x, 'y': y}
+                else:
+                    scale = zone['width']/2/distance
+                    blocking = {'x': bx+(x-bx)*scale, 'y': by+(y-by)*scale}
+            issue = {'kind': 'map_rule', 'point': dict(point), 'rule_id': zone['id'],
+                     'rule_kind': zone['kind'], 'rule_index': index+1,
+                     'clearance_m': clearance, 'required_clearance_m': radius,
+                     'shortfall_m': max(0., radius-clearance), 'blocking_point': blocking}
+            raise MapRulesError(f'Waypoint footprint intersects map rule {zone["id"]}', issue=issue)
 
 
 def build_mask(grid, zones, radius=0.0):
