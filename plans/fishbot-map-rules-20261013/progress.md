@@ -2,7 +2,7 @@
 
 ## Current
 
-第一阶段实现、离线回归、原生导航和桌面/触屏验收已完成。Git提交推送待根串行执行。无实体车操作；没有训练策略权重。
+第一阶段实现、离线回归、原生导航、桌面/触屏验收及功能源码交付已完成。无实体车操作；没有训练策略权重。
 
 ## Delivered behavior
 
@@ -58,3 +58,7 @@ Owned units（root Codex）：
 ## Knowledge closeout
 
 updated：Obsidian既有 `Wiki/ROS2 与 FishBot.md` 第18节“软件禁区与实体障碍分开，规则确认绑定版本”，并同步 `Wiki/开发知识入口.md` 触发词。根追加局部段落，保留既有dirty内容；实际读回段落与入口锚点通过。原始材料留在本机，当前验收状态回源项目。
+
+## Git delivery
+
+功能提交 `422e26fb2995e7ad612f912b23aae937c007bf5c` 已推送既有 `qiaoqiao2521/fishbot-ros2-slam-tools` 的main；GitHub API读回一致。操作前验证新账户ID238822818、目标owner和fetch/push URL，保持公开可见性。只提交29份已审查代码/测试/文档；最终收尾文档另行提交。不上传缓存、运行日志、地图、凭据或固件保留项。最终运行关键源与当前frontend SHA再次读回一致，规则revision10已applied，真值静止。根为保留项及后续接续owner。
