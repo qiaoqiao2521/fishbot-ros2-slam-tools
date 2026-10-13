@@ -46,6 +46,7 @@ from tf2_ros import Buffer, TransformListener
 from wait_ready import validate_sim_domain
 from map_rules import (MapRulesError, MapRulesStore, build_mask, costmap_matches_mask,
                        grid_to_world, grid_value_at, integer, map_identity, require_outside_rules)
+from rviz_desktop import RvizDesktop, RvizDesktopError
 
 
 HOME = {'x': 0.0, 'y': 0.0, 'yaw': 0.0}
@@ -1182,6 +1183,7 @@ class LocalHTTPServer(ThreadingHTTPServer):
 
     def __init__(self, port, bridge, ui_port=5173):
         self.bridge = bridge
+        self.rviz = RvizDesktop(bridge.domain)
         self.ui_ports = {5173, 5174, 5175, 5176, 5177, ui_port}
         super().__init__(('127.0.0.1', port), Handler)
         self.port = self.server_address[1]
@@ -1246,6 +1248,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == '/sim-api/state':
             self.reply(200, self.server.bridge.state())
+        elif path == '/sim-api/rviz':
+            self.reply(200, self.server.rviz.status())
         elif path == '/sim-api/map':
             with self.server.bridge.lock:
                 grid = copy.deepcopy(self.server.bridge.grid)
@@ -1273,7 +1277,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         paths = {'/sim-api/mission': 'mission', '/sim-api/cancel': 'cancel',
                  '/sim-api/obstacle': 'obstacle', '/sim-api/map-rules': 'map-rules',
-                 '/sim-api/routes': 'routes'}
+                 '/sim-api/routes': 'routes', '/sim-api/rviz': 'rviz'}
         kind = paths.get(urlsplit(self.path).path)
         if kind is None:
             self.reply(404, {'error': 'Unknown endpoint'})
@@ -1289,6 +1293,15 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(length))
             if not isinstance(body, dict):
                 raise APIError('JSON body must be an object')
+            if kind == 'rviz':
+                if body:
+                    raise APIError('RViz endpoint accepts only an empty object')
+                try:
+                    status, result = self.server.rviz.open()
+                except RvizDesktopError as error:
+                    raise APIError(str(error), error.status) from error
+                self.reply(status, result)
+                return
             future = self.server.bridge.enqueue(kind, body)
             status, result = future.result(timeout=3.0)
             self.reply(status, result)

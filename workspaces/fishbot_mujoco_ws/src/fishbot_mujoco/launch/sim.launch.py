@@ -61,8 +61,7 @@ def generate_launch_description():
             actions = [LogInfo(msg='FishBot sensors/navigation ready; desktop view may now open.')]
             if show_rviz:
                 actions.append(Node(package='rviz2', executable='rviz2',
-                    arguments=['-d', os.path.join(get_package_share_directory('nav2_bringup'),
-                                                 'rviz', 'nav2_default_view.rviz')],
+                    arguments=['-d', os.path.join(share, 'config', 'simulation.rviz')],
                     parameters=[{'use_sim_time': True}]))
             return actions
         return [RegisterEventHandler(OnProcessExit(target_action=ready, on_exit=after_ready)), ready]

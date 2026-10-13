@@ -104,3 +104,17 @@ UI终态补充读回3项通过：同ui-strict-f原ID的记录实际显示“巡�
 Strict Git delivery: 修复与可复用CLI提交 `f37e326b9841261faf873a007603bf893f9fbf3d` 已推送新账户既有main；git ls-remote与GitHub API两路均读回该SHA。只包含9份已验证代码/测试/文档。最终收尾表随独立文档提交同步；模型、网络和实际地图未修改。仓库唯一未跟踪项仍为原release.sh，owner和具体阻碍保持本页保留项记录。
 
 QA来源：ui-strict-f的执行版cjs已按报告SHA重建归档为executed-browser-source.cjs，SHA `0d8db4e42798f61491071221e7cf71005cb458f4fff21274b0874947e652e5f6` 严格匹配。当前源码额外等待UI同ID记录终态和applied，terminalVisible共享断言已由同一任务只读补验收3项验证，不新增动作。该补充不被写成另一次完整路线重跑。
+
+## 原生 RViz 补充（2026-10-13）
+
+用户要求直接看原生ROS，并在网页增加打开入口。`/simulation`标题旁提供“打开 RViz”；独立HTTP线程调用用户systemd的固定同域GUI服务，不进入ROS任务队列。GET读状态，POST仅接受空对象。默认视图与`rviz:=true`共用`config/simulation.rviz`；真实地图、激光、车体、代价地图与路径来自ROS DDS，MuJoCo只模拟车与传感器。没有GUI依赖时导航仍可用；未知启动回执只读对账。
+
+已验证：浏览器先点击复用PID730635，关闭自有窗口后再次点击启动PID741185；只出现两次`/sim-api/rviz` POST，零导航/规则写入。桌面与390px页面无异常或横向溢出，触屏按钮44px。原生窗口截图显示Global Status OK、Navigation/Localization active；新rclpy观察者证实RViz直接订阅七个上述ROS话题，`use_sim_time=true`。独立三秒DDS采样收到30帧激光、90帧odom、1502帧clock；FollowWaypoints实际服务端为waypoint_follower，控制器加载真实RPP与Fast DDS。静止窗口没有新plan/cmd_vel，不冒充新导航运动验收。
+
+439反馈回归通过（control209、mission118、autonomy61、frontend51），零跳过/缺依赖；全前端93项、类型/构建与相关lint通过。选定workspace构建通过；新增21项覆盖固定命令、域、重复启动、超时未知与HTTP隔离。当前窗口和ROS订阅由独立运行证据确认，单元测试不代替原生GUI验收。
+
+运行变更仅在实际任务`12d9a7b296f54a0c995a00dfa44f5c31`已succeeded且真值静止后进行。原bridge PID626730已正常退出，新API由`fishbot-map-rules-mission-107-rviz.service`承接，PID737778；原launch PID626695、控制器PID627039及其他Nav2/MuJoCo保持运行。当前规则revision23为用户本轮编辑，保留全部四项；持久化模板/任务未清除。原unit曾拥有的bridge不再运行，新unit需单独管理。GUI unit为`fishbot-rviz-domain-107.service`；使用精确unit名停止，不按名称批量杀进程。
+
+本机证据在既有session根`rviz-button/`：ui-result.json、rviz-ros-readback.json、rviz-live.png、web-desktop.png、web-phone.png、before-bridge-update.json、feedback.json与runtime.json。根目录ros-proof-motion-live.json、ros-graph-proof-live.json、ros-process-proof-live.json保存独立ROS证据。初始Nav2通用配置窗口位置不适配，已换固定FishBot视图。验收停止初始自有RViz时遇到5秒退出超时，systemd仅结束该GUI进程；保留journal事实，未影响Nav2或把它记为优雅退出通过。关闭再开与新视图本轮正常显示均单独读回。
+
+Knowledge: already_covered。采用既有Obsidian `Wiki/ROS2 与 FishBot.md`“3. 仿真优先”及第12节：区分仿真硬件和真实执行链；回执未知只读确认。已核对适用段落，没有新增通用结论，当前GUI入口与运行状态只留项目。原release.sh继续保留，具体阻碍与root owner沿用本页记录。

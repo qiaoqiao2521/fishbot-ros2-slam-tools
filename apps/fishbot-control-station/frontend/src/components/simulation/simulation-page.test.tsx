@@ -25,6 +25,10 @@ vi.mock('@/hooks/use-simulation', () => ({
     connectionError: null, mapError: null, actionError: null, pending: null, missionRequestUnknown: false, act: vi.fn(),
   }),
 }))
+vi.mock('@/hooks/use-rviz', () => ({
+  useRviz: () => ({ status: { available: true, running: false, domain: 107, message: '可打开' },
+    pending: false, unknown: false, message: '可打开', open: vi.fn() }),
+}))
 vi.mock('@/hooks/use-simulation-workspace', () => ({
   useSimulationWorkspace: () => ({
     editor: rulesReducer(emptyRulesEditor(), { type: 'received', value: { map_id: 'map-a', revision: 2,
@@ -40,6 +44,11 @@ vi.mock('@/hooks/use-simulation-workspace', () => ({
 afterEach(() => { fixture.routeWrite = 'idle'; fixture.seedDraft = false; fixture.draftConsumed = false })
 
 describe('simulation historical task record presentation', () => {
+  it('exposes a separate native RViz launcher and explains where its window appears', () => {
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('打开 RViz')
+    expect(html).toContain('窗口显示在控制站电脑，手机可发起打开。')
+  })
   it('allows explicit start of a valid local draft while an unrelated route-template save remains unknown', () => {
     fixture.routeWrite = 'unknown'
     fixture.seedDraft = true

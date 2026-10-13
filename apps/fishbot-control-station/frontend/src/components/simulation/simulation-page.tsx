@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowLeft, ArrowUp, Box, Check, Eye, Home, MapPin, Play, RefreshCw, Route, Save, ShieldBan, Square, Trash2, Undo2, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Box, Check, Eye, Home, MapPin, Monitor, Play, RefreshCw, Route, Save, ShieldBan, Square, Trash2, Undo2, X } from 'lucide-react'
 
 import { SimulationMapView } from '@/components/simulation/simulation-map'
 import { useSimulation } from '@/hooks/use-simulation'
 import { useSimulationWorkspace } from '@/hooks/use-simulation-workspace'
+import { useRviz } from '@/hooks/use-rviz'
 import { MAX_MAP_ZONES, mapGeneration, routeDraft, rulesDirty, ruleStartBlock, zoneFromSelection, type MapEditMode, type SavedRoute } from '@/lib/simulation-workspace'
 import {
   DEMO_WAYPOINTS, MAX_WAYPOINTS, SIMULATION_DOMAIN, collisionMonitorText, isFreeWaypoint, missionCanRetryCancel,
@@ -14,6 +15,7 @@ import './simulation.css'
 
 export function SimulationPage({ onBack }: { onBack: () => void }) {
   const { state, map, connectionError, mapError, actionError, pending, missionRequestUnknown, act } = useSimulation()
+  const rviz = useRviz()
   const [waypoints, setWaypoints] = useState<Pose[]>([])
   const [returnHome, setReturnHome] = useState(true)
   const [selectionMessage, setSelectionMessage] = useState('')
@@ -142,8 +144,14 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
           <h1>小鱼巡逻</h1>
           <p>在地图上编辑通行规则、保存路线，再安排一圈巡逻。</p>
         </div>
-        <button type="button" className="simulation-button simulation-quiet" onClick={onBack}><ArrowLeft size={16} />返回控制台</button>
+        <div className="simulation-header-actions">
+          <button type="button" className="simulation-button simulation-quiet" disabled={rviz.pending || rviz.status?.available === false}
+            onClick={() => void rviz.open()}><Monitor size={16} />{rviz.pending ? '正在连接 RViz…' : rviz.unknown ? '确认 RViz 状态' : '打开 RViz'}</button>
+          <button type="button" className="simulation-button simulation-quiet" onClick={onBack}><ArrowLeft size={16} />返回控制台</button>
+        </div>
       </header>
+
+      <p className="simulation-rviz-status" role="status">{rviz.message} 窗口显示在控制站电脑，手机可发起打开。</p>
 
       <div className={`simulation-readiness ${ready ? 'simulation-ready' : 'simulation-waiting'}`} role="status">
         <span className="simulation-status-dot" aria-hidden="true" />

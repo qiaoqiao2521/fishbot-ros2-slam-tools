@@ -14,6 +14,14 @@
 
 桌面支持方向键移动选点十字、回车或空格选择；手机使用触屏选点。观察模式不创建草稿或发送动作。规则没有应用、存在未保存规则草稿或规则回执未知时不能开始新任务。模板保存回执未知只阻止重复保存模板；已确认的巡逻草稿仍可显式派发。
 
+## 原生 RViz
+
+`/simulation` 标题旁的“打开 RViz”在控制站电脑打开原生窗口。窗口直接读取同一 ROS 域的 `/map`、`/scan`、`/robot_description`、global/local costmap 和 `/plan`，使用 `/clock` 的仿真时间。MuJoCo 模拟车体与传感器，ROS 2、DDS、Nav2 和 RViz 为本机真实进程。
+
+GET `/sim-api/rviz` 读取本机可用性、进程和域；POST 仅接受 `{}`。服务端固定域、可执行文件和视图配置，不接收网页命令或路径。复用 Linux 用户 systemd 的 `fishbot-rviz-domain-{domain}.service`；同域重复点击复用进程，关闭后可再开。没有桌面、RViz 或配置时明确显示不可用，导航接口仍可用。启动回执未知只 GET 确认，不自动重复 POST。
+
+`rviz:=true` 和网页按钮使用同一 `config/simulation.rviz`。查看窗口本身不派发任务；RViz 的 Nav2 Goal 和初位姿工具由用户显式操作。实际窗口截图与独立 ROS 订阅证据留在本机，见本次进度。
+
 ## 数据与坐标
 
 规则包含 `id/kind/points`。`kind=wall` 为两点线段，声明宽度默认0.02米；`kind=no_go` 为四点矩形。形状与用途明确保存，不依赖点数猜测用途。所有坐标均为 `map` frame 的米制世界坐标。地图内容SHA绑定尺寸、分辨率、原点和栅格，地图变更清除旧编辑草稿，存储按地图标识隔离。
