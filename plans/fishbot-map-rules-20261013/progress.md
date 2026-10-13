@@ -78,7 +78,7 @@ updated：Obsidian既有 `Wiki/ROS2 与 FishBot.md` 第18节“软件禁区与�
 | 3. 两costmap实际禁区与独立绕行 | PASS | 新版acceptance-strict-d 7/7，原参数和0.144142米保守外接圆；593帧，终点1.713厘米，最小净距23.592厘米，扫掠下界22.790厘米。 |
 | 4. 删除后costmap及路线实际恢复 | PASS | native点0→254→0；ui-strict-f两点实际完成，252帧进入原x0.45～0.75/y±0.3区域，前后两图与实际mask测试点均为0。该轮临时软件规则位于原生81点确认空旷区，未覆盖实体障碍。 |
 | 5. 原确认/取消/未知/时间保护 | PASS | 当前405回归零跳过；native行驶取消同ID终态并完整停稳；UI真实模板保存转发后丢回执，只有一次保存POST，同ID读回对账；全程仅一次mission POST。 |
-| 6. app、执行源与既有远端交付 | PENDING | 页面HTTP/真实UI可用，6个关键启动源+54个frontend源SHA核对；固定生成参数SHA；功能与本次修复均由根交付既有新账户main，远端读回另由Git确认。 |
+| 6. app、执行源与既有远端交付 | PASS | 页面HTTP/真实UI可用，6个关键启动源+54个frontend源SHA核对；固定生成参数SHA；功能与本次修复均由根交付既有新账户main，远端读回另由Git确认。 |
 
 ui-strict-f总12项（9 UI+3独立物理）通过，零页面异常或横向溢出。920帧，最大接收间隙0.047107秒、源间隙0.040秒，源年龄0～0.006秒；终点误差0.059990米、偏航0.167429弧度。按保存模板实际触屏坐标(.61,0)、(.15,.40)评分，顺序经过两点、同ID成功/记录与完整0.7秒新鲜停稳通过。触屏像素取整允许目标选点至多3厘米差异；保存→载入→真实派发的坐标/yaw/返航开关必须完全相同，未放宽物理评分。
 
@@ -99,4 +99,8 @@ ui-strict-f总12项（9 UI+3独立物理）通过，零页面异常或横向溢�
 
 Knowledge strict closeout: updated。根修订原Obsidian FishBot第18节，追加删除版本事务、软代价及同一UI任务链验收；同步原问题入口触发词。两处文本与锚点实际读回通过，保留既有dirty内容，未复制原始日志。当前进度只留项目。
 
-UI终态补充读回3项通过：同ui-strict-f原ID的记录实际显示“巡逻完成”；规则显示导航已应用，载入同模板后开始可用；零POST。使用可复用terminalVisible等待资源异步刷新，再保存06-phone-confirmed-terminal-and-applied.png。此为同一任务继续只读验收，不新增任务或重跑。运行关键6源与54前端源再次匹配，规则22 applied、同ID succeeded、真值静止。第6项只剩本轮Git提交/推送，根串行收尾。
+UI终态补充读回3项通过：同ui-strict-f原ID的记录实际显示“巡逻完成”；规则显示导航已应用，载入同模板后开始可用；零POST。使用可复用terminalVisible等待资源异步刷新，再保存06-phone-confirmed-terminal-and-applied.png。此为同一任务继续只读验收，不新增任务或重跑。运行关键6源与54前端源再次匹配，规则22 applied、同ID succeeded、真值静止。第6项本轮提交/推送已完成；根通过Git ref与GitHub API双读回确认。
+
+Strict Git delivery: 修复与可复用CLI提交 `f37e326b9841261faf873a007603bf893f9fbf3d` 已推送新账户既有main；git ls-remote与GitHub API两路均读回该SHA。只包含9份已验证代码/测试/文档。最终收尾表随独立文档提交同步；模型、网络和实际地图未修改。仓库唯一未跟踪项仍为原release.sh，owner和具体阻碍保持本页保留项记录。
+
+QA来源：ui-strict-f的执行版cjs已按报告SHA重建归档为executed-browser-source.cjs，SHA `0d8db4e42798f61491071221e7cf71005cb458f4fff21274b0874947e652e5f6` 严格匹配。当前源码额外等待UI同ID记录终态和applied，terminalVisible共享断言已由同一任务只读补验收3项验证，不新增动作。该补充不被写成另一次完整路线重跑。
