@@ -124,3 +124,46 @@
   .simulation-obstacle { padding: 16px; background: #f8f1e4; border: 1px solid hsl(var(--border)); border-radius: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { .simulation-button { transition: none; } }
+.simulation-map-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 12px 18px 8px; }
+.simulation-map-tools .simulation-button { min-height: 42px; padding: 8px 10px; justify-content: center; font-size: 12px; }
+.simulation-map-tools .simulation-tool-selected { background: #e9ddc7; border-color: #8e7043; color: #553b1d; }
+.simulation-rule-strip { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 18px 8px; }
+.simulation-rule-strip > span { font-size: 12px; color: #6b5b43; }
+.simulation-rule-strip > div { display: flex; gap: 6px; }
+.simulation-rule-strip button { min-height: 36px; padding: 7px 10px; font-size: 12px; }
+.simulation-map-guidance { padding: 0 18px 10px; margin: 0; min-height: 28px; font-size: 12px; color: #6b5b43; }
+.simulation-legend-wall { height: 3px !important; width: 16px !important; background: #b26120; }
+.simulation-legend-zone { background: #d59eaa; border: 1px solid #b14255; }
+.simulation-panel-note { font-size: 12px; line-height: 1.6; color: hsl(var(--muted-foreground)); margin: 10px 0; }
+.simulation-inline-error { font-size: 12px; line-height: 1.6; color: #9f352c; margin: 10px 0; overflow-wrap: anywhere; }
+.simulation-rule-list, .simulation-template-list { list-style: none; margin: 8px 0; padding: 0; max-height: 170px; overflow-y: auto; }
+.simulation-rule-list li, .simulation-template-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid #e1d8c6; padding: 5px 0; font-size: 12px; }
+.simulation-rule-list button { display: grid; place-items: center; min-width: 36px; min-height: 36px; border: 0; background: none; color: #756851; }
+.simulation-resource-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.simulation-resource-actions button { font-size: 12px; min-height: 40px; padding: 8px 10px; }
+.simulation-waypoints .simulation-waypoint-edit { display: flex; flex: 0; gap: 1px; }
+.simulation-waypoint-edit button { min-height: 36px; min-width: 28px; }
+.simulation-route-name { display: grid; gap: 6px; font-size: 12px; }
+.simulation-route-name input { width: 100%; min-height: 42px; background: #fffdf8; border: 1px solid #bbaa8d; border-radius: 7px; padding: 8px 10px; color: inherit; }
+.simulation-route-name input:focus-visible { outline: 3px solid #297fb1; outline-offset: 2px; }
+.simulation-save-route { width: 100%; margin: 10px 0 4px; }
+.simulation-template-list li > div { display: grid; gap: 3px; min-width: 0; }
+.simulation-template-list strong { overflow-wrap: anywhere; }
+.simulation-template-list span { color: hsl(var(--muted-foreground)); }
+.simulation-template-list button { flex-shrink: 0; font-size: 11px; min-height: 40px; padding: 8px; }
+.simulation-runs summary { cursor: pointer; font-size: 15px; font-weight: 600; }
+.simulation-runs summary > span { float: right; font-size: 12px; color: hsl(var(--muted-foreground)); }
+.simulation-runs ol { padding-left: 18px; max-height: 280px; overflow-y: auto; }
+.simulation-runs li { padding: 9px 0; border-bottom: 1px solid #e1d8c6; font-size: 12px; }
+.simulation-runs li > span, .simulation-runs small { display: block; font-size: 11px; margin-top: 4px; color: hsl(var(--muted-foreground)); overflow-wrap: anywhere; }
+.simulation-runs p { line-height: 1.5; margin: 6px 0; }
+@media (max-width: 760px) {
+  .simulation-map-tools { gap: 5px; padding: 10px 10px 8px; }
+  .simulation-map-tools .simulation-button { gap: 4px; padding: 8px 3px; font-size: 11px; min-height: 44px; }
+  .simulation-rule-strip { align-items: flex-start; flex-direction: column; padding: 0 10px 8px; gap: 8px; }
+  .simulation-rule-strip > div { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+  .simulation-rule-strip button { min-height: 42px; justify-content: center; }
+  .simulation-map-guidance { padding: 0 10px 8px; font-size: 11px; }
+  .simulation-map-stage { min-height: 220px; }
+  .simulation-waypoint-edit button { min-width: 32px; min-height: 42px; }
+}

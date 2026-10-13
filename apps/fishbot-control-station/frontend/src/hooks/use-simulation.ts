@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
 import {
-  requestSimulation, validateSimulationMap, validateSimulationState,
-  type SimulationMap, type SimulationState,
+  missionReceiptResolved, requestSimulation, simulationRequestRejected, validateSimulationMap, validateSimulationState,
+  type Pose, type SimulationMap, type SimulationState, type UnknownMissionReceipt,
 } from '@/lib/simulation'
 
 export function useSimulation() {
@@ -11,6 +11,10 @@ export function useSimulation() {
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [missionRequestUnknown, setMissionRequestUnknown] = useState(false)
+  const unknownMission = useRef<UnknownMissionReceipt | null>(null)
+  const stateRef = useRef<SimulationState | null>(null)
+  stateRef.current = state
   const [pending, setPending] = useState<string | null>(null)
   const requestSequence = useRef(0)
   const acceptedSequence = useRef(0)
@@ -21,7 +25,13 @@ export function useSimulation() {
   function acceptState(value: SimulationState, sequence: number) {
     if (!mounted.current || sequence < acceptedSequence.current) return
     acceptedSequence.current = sequence
-    setState(validateSimulationState(value))
+    const validated = validateSimulationState(value)
+    if (unknownMission.current && missionReceiptResolved(unknownMission.current, validated)) {
+      unknownMission.current = null
+      setMissionRequestUnknown(false)
+      setActionError(null)
+    }
+    setState(validated)
     setConnectionError(null)
   }
 
@@ -91,11 +101,12 @@ export function useSimulation() {
   }, [])
 
   async function act(action: 'mission' | 'cancel' | 'obstacle', body: object = {}) {
-    if (busy.current) return
+    if (busy.current || (action === 'mission' && unknownMission.current)) return
     busy.current = true
     setPending(action)
     setActionError(null)
     const sequence = ++requestSequence.current
+    const previousMissionId = stateRef.current?.mission.id ?? null
     acceptedSequence.current = sequence
     const controller = new AbortController()
     controllers.current.add(controller)
@@ -104,8 +115,15 @@ export function useSimulation() {
       const value = await requestSimulation<SimulationState>(action, body, controller.signal)
       acceptState(value, sequence)
     } catch (error) {
-      if (mounted.current) setActionError(error instanceof Error && error.name !== 'AbortError'
-        ? error.message : '请求超时，请查看当前任务状态后重试。')
+      if (mounted.current) {
+        if (action === 'mission' && !simulationRequestRejected(error)) {
+          const requested = body as { waypoints?: Pose[]; return_home?: boolean }
+          unknownMission.current = { previousId: previousMissionId, waypoints: requested.waypoints?.map((point) => ({ ...point })) ?? [], returnHome: !!requested.return_home }
+          setMissionRequestUnknown(true)
+          setActionError('派发回执未知，正在读取原任务状态；不能重复派发。')
+        } else setActionError(error instanceof Error && error.name !== 'AbortError'
+          ? error.message : '请求超时，请查看当前任务状态。')
+      }
     } finally {
       clearTimeout(timeout)
       controllers.current.delete(controller)
@@ -114,5 +132,5 @@ export function useSimulation() {
     }
   }
 
-  return { state, map, connectionError, mapError, actionError, pending, act }
+  return { state, map, connectionError, mapError, actionError, pending, missionRequestUnknown, act }
 }

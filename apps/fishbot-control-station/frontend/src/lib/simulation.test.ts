@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   collisionMonitorText, isFreeWaypoint, mapToWorld, missionCanRetryCancel,
-  missionIsActive, missionLabel, missionProgressText, requestSimulation, simulationDomain,
+  missionIsActive, missionLabel, missionProgressText, missionReceiptResolved, requestSimulation, simulationDomain, simulationRequestRejected, SimulationRejectedRequest,
   validateSimulationMap, validateSimulationState, worldToMap,
   type SimulationMap, type SimulationState,
 } from '@/lib/simulation'
@@ -50,6 +50,39 @@ describe('simulation map coordinates', () => {
 })
 
 describe('simulation server responses', () => {
+
+  it('does not unlock an unknown dispatch from an old or unrelated task readback', () => {
+    const receipt = { previousId: state.mission.id, waypoints: state.mission.waypoints, returnHome: false }
+    expect(missionReceiptResolved(receipt, state)).toBe(false)
+    expect(missionReceiptResolved(receipt, { ...state, mission: { ...state.mission, id: 'unrelated', waypoints: [{ x: 3, y: 4, yaw: 0 }] } })).toBe(false)
+    expect(missionReceiptResolved(receipt, { ...state, mission: { ...state.mission, id: 'new' } })).toBe(true)
+    const returning = { ...receipt, returnHome: true, waypoints: [{ x: 2, y: 1, yaw: Math.PI * 2 }] }
+    expect(missionReceiptResolved(returning, { ...state, mission: { ...state.mission, id: 'new', return_home: true, waypoints: [...state.mission.waypoints, state.home] } })).toBe(true)
+    const alreadyHome = { previousId: 'old', waypoints: [state.home], returnHome: true }
+    expect(missionReceiptResolved(alreadyHome, { ...state, mission: { ...state.mission, id: 'new', return_home: true, waypoints: [state.home] } })).toBe(true)
+  })
+
+  it('distinguishes explicit pre-dispatch expiry from transport and server uncertainty', () => {
+    expect(simulationRequestRejected(new SimulationRejectedRequest('expired before dispatch', 408))).toBe(true)
+    expect(simulationRequestRejected(new SimulationRejectedRequest('conflict', 409))).toBe(true)
+    expect(simulationRequestRejected(new SimulationRejectedRequest('poll actual state', 504))).toBe(false)
+    expect(simulationRequestRejected(new SimulationRejectedRequest('readiness unavailable before dispatch', 503, 'rejected'))).toBe(true)
+    expect(simulationRequestRejected(new SimulationRejectedRequest('storage unavailable', 503))).toBe(false)
+    expect(simulationRequestRejected(new Error('connection reset'))).toBe(false)
+  })
+
+
+  it('reads a definite pre-dispatch rejection without confusing it with an uncertain server failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ error: '规则尚未应用', outcome: 'rejected' }), { status: 503 }))))
+    try { await requestSimulation('mission', {}) } catch (error) {
+      expect(simulationRequestRejected(error)).toBe(true)
+      expect(error).toBeInstanceOf(SimulationRejectedRequest)
+      expect((error as SimulationRejectedRequest).outcome).toBe('rejected')
+      return
+    }
+    throw new Error('Missing expected rejection')
+  })
+
   it('requires a matching explicitly selected nonzero simulation domain', () => {
     expect(simulationDomain()).toBe(93)
     expect(simulationDomain('100')).toBe(100)

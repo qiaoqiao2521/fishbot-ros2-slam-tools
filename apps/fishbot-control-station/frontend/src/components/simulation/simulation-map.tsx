@@ -1,17 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent, MouseEvent } from 'react'
+import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
 
 import {
   mapToWorld, worldToMap,
   type Point, type Pose, type SimulationMap, type SimulationState,
 } from '@/lib/simulation'
+import { mapGeneration, rectanglePoints, zonesEqual, type MapEditMode, type MapZone } from '@/lib/simulation-workspace'
 
-export function SimulationMapView({ map, state, points, editable, onSelect }: {
+export function SimulationMapView({ map, state, points, editable, onSelect, mode = 'waypoint', zones = [], savedZones = [], anchor = null, onCancelSelection }: {
   map: SimulationMap
   state: SimulationState | null
   points: Pose[]
   editable: boolean
   onSelect: (point: Point) => void
+  mode?: MapEditMode
+  zones?: MapZone[]
+  savedZones?: MapZone[]
+  anchor?: Point | null
+  onCancelSelection?: () => void
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const svg = useRef<SVGSVGElement>(null)
@@ -19,6 +25,14 @@ export function SimulationMapView({ map, state, points, editable, onSelect }: {
   const [focused, setFocused] = useState(false)
   const [trace, setTrace] = useState<Point[]>([])
   const robot = state?.truth ?? state?.pose
+  const generation = mapGeneration(map)
+
+  useEffect(() => {
+    setTrace([])
+    setCursor(mapToWorld({ x: map.width / 2, y: map.height / 2 }, map))
+    // Map content identity, rather than each polling object, owns the local trace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generation])
 
   useEffect(() => {
     const context = canvas.current?.getContext('2d')
@@ -45,19 +59,24 @@ export function SimulationMapView({ map, state, points, editable, onSelect }: {
     })
   }, [state?.truth])
 
-  function select(event: MouseEvent<SVGSVGElement>) {
-    if (!editable) return
+  function eventPosition(event: MouseEvent<SVGSVGElement> | PointerEvent<SVGSVGElement>) {
     const rect = event.currentTarget.getBoundingClientRect()
-    const position = mapToWorld({
+    return mapToWorld({
       x: (event.clientX - rect.left) / rect.width * map.width,
       y: (event.clientY - rect.top) / rect.height * map.height,
     }, map)
+  }
+
+  function select(event: MouseEvent<SVGSVGElement>) {
+    if (!editable || mode === 'observe') return
+    const position = eventPosition(event)
     setCursor(position)
     onSelect(position)
   }
 
   function keySelect(event: KeyboardEvent<SVGSVGElement>) {
-    if (!editable) return
+    if (!editable || mode === 'observe') return
+    if (event.key === 'Escape') { event.preventDefault(); onCancelSelection?.(); return }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       onSelect(cursor)
@@ -91,11 +110,12 @@ export function SimulationMapView({ map, state, points, editable, onSelect }: {
       <svg
         ref={svg}
         viewBox={`0 0 ${map.width} ${map.height}`}
-        aria-label="巡逻地图，使用方向键移动选点十字，按回车添加巡逻点"
+        aria-label={`巡逻地图，当前${{ waypoint: '巡逻点', wall: '虚拟墙', no_go: '禁区', observe: '观察' }[mode]}模式，方向键移动十字，回车选点，Escape取消选择`}
         role="application"
         tabIndex={editable ? 0 : -1}
         className={editable ? 'simulation-map-editable' : ''}
         onClick={select}
+        onPointerMove={(event) => { if (editable && anchor) setCursor(eventPosition(event)) }}
         onKeyDown={keySelect}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -106,6 +126,18 @@ export function SimulationMapView({ map, state, points, editable, onSelect }: {
           </pattern>
         </defs>
         <rect width={map.width} height={map.height} fill="url(#simulation-grid)" pointerEvents="none" />
+        {zones.map((zone) => {
+          const persisted = savedZones.some((saved) => zonesEqual([saved], [zone]))
+          const zonePoints = polyline(zone.points)
+          return zone.kind === 'wall' ? <polyline key={zone.id} points={zonePoints} fill="none" stroke="#b26120"
+            strokeWidth={(zone.width ?? 0.02) * unit} strokeLinecap="round" strokeDasharray={persisted ? undefined : '2 1'}>
+            <title>{`${persisted ? '已保存虚拟墙' : '虚拟墙草稿'}：${zone.id}`}</title>
+          </polyline> : <polygon key={zone.id} points={zonePoints} fill="#b14255" fillOpacity=".20" stroke="#b14255"
+            strokeWidth=".8" strokeDasharray={persisted ? undefined : '2 1'}><title>{`${persisted ? '已保存禁区' : '禁区草稿'}：${zone.id}`}</title></polygon>
+        })}
+        {anchor && mode === 'wall' && <polyline points={polyline([anchor, cursor])} fill="none" stroke="#b26120" strokeWidth="1" strokeDasharray="2 1" />}
+        {anchor && mode === 'no_go' && <polygon points={polyline(rectanglePoints(anchor, cursor))} fill="#b14255" fillOpacity=".12" stroke="#b14255" strokeWidth=".8" strokeDasharray="2 1" />}
+        {anchor && <g transform={`translate(${worldToMap(anchor, map).x} ${worldToMap(anchor, map).y})`}><circle r="1.4" fill="#713f9f" /><title>已选第一个点，继续选择第二个点</title></g>}
         {trace.length > 1 && <polyline points={polyline(trace)} fill="none" stroke="#297fb1" strokeOpacity=".42" strokeWidth=".7" strokeDasharray="1.5 1.5" />}
         {state && state.path.length > 1 && <polyline points={polyline(state.path)} fill="none" stroke="#577636" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />}
         {points.length > 1 && <polyline points={polyline(points)} fill="none" stroke="#a77637" strokeOpacity=".6" strokeDasharray="2 2" strokeWidth=".5" />}

@@ -22,11 +22,12 @@ from urllib.parse import urlsplit
 
 import rclpy
 from action_msgs.msg import GoalStatus
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from lifecycle_msgs.srv import GetState
 from mujoco_ros2_control_msgs.msg import FreeJointStateArray
 from nav2_msgs.action import FollowWaypoints
-from nav2_msgs.msg import CollisionMonitorState
+from nav2_msgs.msg import CollisionMonitorState, CostmapFilterInfo
+from nav2_msgs.srv import GetCostmap
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from rclpy.action import ActionClient
 from rclpy.clock import Clock, ClockType
@@ -35,12 +36,16 @@ from rclpy.node import Node
 from rclpy.qos import (DurabilityPolicy, QoSProfile, ReliabilityPolicy,
                       qos_profile_sensor_data)
 from rclpy.signals import SignalHandlerOptions
+from rcl_interfaces.srv import GetParameters
+from rcl_interfaces.msg import ParameterType
 from rosgraph_msgs.msg import Clock as ClockMessage
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformListener
 from wait_ready import validate_sim_domain
+from map_rules import (MapRulesError, MapRulesStore, build_mask, costmap_matches_mask,
+                       grid_to_world, grid_value_at, integer, map_identity, require_outside_rules)
 
 
 HOME = {'x': 0.0, 'y': 0.0, 'yaw': 0.0}
@@ -51,6 +56,8 @@ CLEANUP_ATTEMPTS = 3
 CLEANUP_RETRY_SECONDS = 1.0
 CLEANUP_RESPONSE_SECONDS = 3.0
 CM_ACTIONS = {0: 'do_nothing', 1: 'stop', 2: 'slowdown', 3: 'approach', 4: 'limit'}
+RULES_GRAPH_FAILURE_SECONDS = 3.0
+RULES_GRAPH_MAX_SAMPLE_GAP = 1.5
 
 
 def simulation_domain(environ=None):
@@ -62,9 +69,10 @@ def simulation_domain(environ=None):
 
 
 class APIError(Exception):
-    def __init__(self, message, status=400):
+    def __init__(self, message, status=400, outcome=None):
         super().__init__(message)
         self.status = status
+        self.outcome = outcome
 
 
 def finite_number(value, label):
@@ -102,7 +110,7 @@ def require_free_point(point, grid, radius=ROBOT_RADIUS):
                     raise APIError('Waypoint footprint intersects an occupied or unknown cell')
 
 
-def validate_mission(body, grid, now=None):
+def validate_mission(body, grid, now=None, zones=None):
     if not isinstance(body, dict) or set(body)-{'waypoints', 'return_home', 'issued_at'}:
         raise APIError('Expected waypoints, return_home and issued_at')
     issued = finite_number(body.get('issued_at'), 'issued_at')
@@ -123,9 +131,11 @@ def validate_mission(body, grid, now=None):
                                       f'waypoint {index+1} {name}') for name in ('x', 'y', 'yaw')}
         parsed['yaw'] = math.atan2(math.sin(parsed['yaw']), math.cos(parsed['yaw']))
         require_free_point(parsed, grid)
+        require_outside_rules(parsed, zones or [], ROBOT_RADIUS)
         points.append(parsed)
     if return_home and any(abs(points[-1][axis]-HOME[axis]) > 1e-6 for axis in HOME):
         require_free_point(HOME, grid)
+        require_outside_rules(HOME, zones or [], ROBOT_RADIUS)
         points.append(dict(HOME))
     return points, return_home
 
@@ -193,6 +203,26 @@ class MissionBridge(Node):
         self.path = []
         self.trajectory = []
         self.last_trace = 0.0
+        self.command = None
+        self.scan_summary = None
+        cache = os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache'))
+        self.rules_store = MapRulesStore(os.environ.get('FISHBOT_MAP_RULES_DIR',
+            os.path.join(cache, 'fishbot', 'map-rules', f'domain-{domain}')))
+        self.rules_mask = self.previous_rules_mask = None
+        self.rules_epoch = 0
+        self.rules_publish_stamp = 0.0
+        self.rules_published_map_id = ''
+        self.rules_published_revision = None
+        self.rules_refresh_wall = 0.0
+        self.rules_apply_state = 'unavailable'
+        self.rules_apply_message = '等待地图与禁区过滤器'
+        self.rules_hard_failure = False
+        self.rules_graph_missing_since = self.rules_graph_missing_last = None
+        self.rules_check_wall = 0.0
+        self.rules_run = None
+        self.rules_run_store = None
+        self.rules_run_signature = None
+        self.rules_run_sample_wall = self.rules_run_save_wall = 0.0
         self.obstacle = {'state': 'unknown', 'x': None, 'y': None, 'size': 0.36}
         self.obstacle_truth = None
         self.obstacle_truth_wall = None
@@ -209,7 +239,8 @@ class MissionBridge(Node):
         self.last_lifecycle_poll = 0.0
         self.lifecycle = {name: {'active': False, 'wall': 0.0, 'future': None}
                           for name in ('amcl', 'controller_server', 'bt_navigator',
-                                       'collision_monitor', 'waypoint_follower')}
+                                       'collision_monitor', 'waypoint_follower',
+                                       'global_costmap/global_costmap', 'local_costmap/local_costmap')}
         self.lifecycle_clients = {name: self.create_client(GetState, f'/{name}/get_state')
                                   for name in self.lifecycle}
         self.obstacle_clients = {
@@ -219,12 +250,27 @@ class MissionBridge(Node):
         self.client = ActionClient(self, FollowWaypoints, '/follow_waypoints')
         self.buffer = Buffer()
         self.listener = TransformListener(self.buffer, self)
+        rules_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                               durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.rules_mask_publisher = self.create_publisher(OccupancyGrid, '/keepout_filter_mask', rules_qos)
+        self.rules_info_publisher = self.create_publisher(CostmapFilterInfo,
+                                                        '/keepout_costmap_filter_info', rules_qos)
+        self.rules_checks = {}
+        for name in ('global', 'local'):
+            self.rules_checks[name] = {'params_ok': False, 'config_invalid': False, 'config_reason': '',
+                'costmap_ok': False,
+                'mismatch_since': None, 'mismatch_last': None,
+                'wall': 0.0, 'params_future': None, 'costmap_future': None,
+                'params_client': self.create_client(GetParameters,
+                    f'/{name}_costmap/{name}_costmap/get_parameters'),
+                'costmap_client': self.create_client(GetCostmap, f'/{name}_costmap/get_costmap')}
         self.create_subscription(ClockMessage, '/clock', self.on_clock, qos_profile_sensor_data)
         self.create_subscription(LaserScan, '/scan', self.on_scan, qos_profile_sensor_data)
         self.create_subscription(Odometry, '/odom', self.on_odom, qos_profile_sensor_data)
         self.create_subscription(FreeJointStateArray, '/ground_truth/free_joint_states',
                                  self.on_truth, qos_profile_sensor_data)
         self.create_subscription(Path, '/plan', self.on_path, 10)
+        self.create_subscription(TwistStamped, '/cmd_vel', self.on_command, 10)
         self.create_subscription(String, '/sim/obstacle/state', self.on_obstacle, 10)
         # Jazzy CM publishes a volatile change event, not a timestamped heartbeat.
         self.create_subscription(CollisionMonitorState, '/collision_monitor_state',
@@ -277,6 +323,7 @@ class MissionBridge(Node):
     def on_clock(self, msg):
         with self.lock:
             current = stamp_seconds(msg.clock)
+            rolled_back = self.clock_last is not None and current < self.clock_last
             if self.clock_last is not None and current > self.clock_last:
                 self.clock_advance_wall = time.monotonic()
             elif self.clock_last is not None and current < self.clock_last:
@@ -284,12 +331,25 @@ class MissionBridge(Node):
                 self.cm_report = None
             self.clock_last = current
             self.sample('clock', msg.clock)
+            if rolled_back and hasattr(self, 'rules_store') and self.rules_mask is not None:
+                # A simulator reset starts a new verification epoch. This is not
+                # periodic republication and does not replay the old mission.
+                self.publish_rules()
 
     def on_scan(self, msg):
         if not any(math.isfinite(v) and msg.range_min <= v <= msg.range_max for v in msg.ranges):
             return
         with self.lock:
             self.sample('scan', msg.header.stamp)
+            values = [v for v in msg.ranges if math.isfinite(v) and msg.range_min <= v <= msg.range_max]
+            self.scan_summary = {'stamp_sim': stamp_seconds(msg.header.stamp),
+                'count': len(msg.ranges), 'valid_count': len(values), 'nearest_m': min(values)}
+
+    def on_command(self, msg):
+        if math.isfinite(msg.twist.linear.x) and math.isfinite(msg.twist.angular.z):
+            with self.lock:
+                self.command = {'linear_x': msg.twist.linear.x, 'angular_z': msg.twist.angular.z,
+                                'received_at': time.time(), 'stamp_sim': stamp_seconds(msg.header.stamp)}
 
     def on_odom(self, msg):
         p, q, t = msg.pose.pose.position, msg.pose.pose.orientation, msg.twist.twist
@@ -356,6 +416,312 @@ class MissionBridge(Node):
             self.grid = {'width': info.width, 'height': info.height,
                          'resolution': info.resolution,
                          'origin': [p.x, p.y, quaternion_yaw(q)], 'data': list(msg.data)}
+            if self.rules_store.map_id and self.rules_store.map_id != map_identity(self.grid):
+                # Keep an active old-map run's original store until its real
+                # terminal result; never write it into the new map document.
+                self.rules_store = MapRulesStore(self.rules_store.directory)
+            if self.rules_store.bind(self.grid):
+                if self.mission.value['status'] in ACTIVE_STATUSES:
+                    self.request_cancel('地图版本变更，取消旧地图任务')
+                self.publish_rules()
+                # A previous bridge may have disappeared while Nav2 still owned a
+                # goal. Keep unknown ownership visible; never replay that mission.
+                if not self.rules_store.error:
+                    unknown = next((r for r in self.rules_store.document['runs']
+                                    if r['status'] == 'unknown'), None)
+                    if unknown and self.mission.value['status'] == 'idle':
+                        self.mission.value.update(id=unknown['id'], status='canceling',
+                            waypoints=unknown['waypoints'], return_home=unknown['return_home'],
+                            current_index=unknown['current_index'], dispatch_state='unavailable',
+                            cleanup_state='unresolved', stop_reason=unknown.get('stop_reason'),
+                            message=unknown['message'])
+
+    def rules_state(self):
+        with self.lock:
+            if self.rules_store.error or not self.rules_store.map_id:
+                return {'map_id': self.rules_store.map_id, 'revision': 0, 'zones': [],
+                        'apply_state': 'unavailable',
+                        'message': self.rules_store.error or '等待地图'}
+            rules = self.rules_store.rules()
+            if not MissionBridge.published_rules_current(self):
+                return {**rules, 'apply_state': 'unavailable',
+                        'message': '已保存规则版本尚未发布，等待执行线程同步'}
+            return {**rules, 'apply_state': self.rules_apply_state, 'message': self.rules_apply_message}
+
+    def published_rules_current(self):
+        doc = self.rules_store.document
+        return (doc is not None and self.rules_published_map_id == doc['map_id']
+                and self.rules_published_revision == doc['revision'])
+
+    def synchronize_rules(self, wall):
+        if not self.rules_store.map_id or self.rules_store.error:
+            return
+        try:
+            if wall-self.rules_refresh_wall >= .75:
+                self.rules_refresh_wall = wall
+                self.rules_store.refresh()
+            if not self.published_rules_current():
+                if self.mission.value['status'] in ACTIVE_STATUSES:
+                    self.request_cancel('地图规则版本变更，取消旧规则任务')
+                self.publish_rules()
+        except MapRulesError as error:
+            self.rules_apply_state, self.rules_apply_message = 'unavailable', str(error)
+            self.get_logger().error(f'Rules refresh unavailable: {error}')
+
+    def publish_rules(self):
+        self.rules_epoch += 1
+        for check in self.rules_checks.values():
+            check.update(params_ok=False, config_invalid=False, config_reason='', costmap_ok=False, wall=0.,
+                         mismatch_since=None, mismatch_last=None)
+        self.rules_hard_failure = False
+        self.rules_graph_missing_since = self.rules_graph_missing_last = None
+        if self.rules_store.error or not self.rules_store.map_id:
+            self.rules_apply_state = 'unavailable'
+            self.rules_apply_message = self.rules_store.error or '等待地图'
+            return
+        self.previous_rules_mask = self.rules_mask
+        try:
+            self.rules_mask = build_mask(self.grid, self.rules_store.document['zones'])
+            mask = OccupancyGrid()
+            mask.header.frame_id = 'map'
+            mask.header.stamp = self.get_clock().now().to_msg()
+            self.rules_publish_stamp = stamp_seconds(mask.header.stamp)
+            mask.info.map_load_time = mask.header.stamp
+            mask.info.width, mask.info.height = self.rules_mask['width'], self.rules_mask['height']
+            mask.info.resolution = self.rules_mask['resolution']
+            mask.info.origin.position.x, mask.info.origin.position.y = self.rules_mask['origin'][:2]
+            mask.info.origin.orientation.w = 1.
+            mask.data = self.rules_mask['data']
+            info = CostmapFilterInfo()
+            info.header = mask.header
+            info.type = 0  # KEEP_OUT; base + multiplier * occupancy yields the mask cost.
+            info.filter_mask_topic = '/keepout_filter_mask'
+            info.base, info.multiplier = 0., 1.
+            self.rules_mask_publisher.publish(mask)
+            self.rules_info_publisher.publish(info)
+            self.rules_published_map_id = self.rules_store.map_id
+            self.rules_published_revision = self.rules_store.document['revision']
+            self.rules_apply_state = 'published'
+            self.rules_apply_message = '规则已保存并发布，等待全局与局部代价地图读回确认'
+        except Exception as error:
+            self.rules_mask = None
+            self.rules_apply_state = 'unavailable'
+            self.rules_apply_message = f'禁区发布失败：{error}'
+
+    def rules_subscribers_present(self):
+        required = {'/global_costmap/global_costmap', '/local_costmap/local_costmap'}
+        for topic in ('/keepout_filter_mask', '/keepout_costmap_filter_info'):
+            names = {f'{item.node_namespace.rstrip("/")}/{item.node_name}'
+                     for item in self.get_subscriptions_info_by_topic(topic)}
+            if not required <= names:
+                return False
+        return True
+
+    def poll_rules(self, wall):
+        if wall-self.rules_check_wall < .75 or self.rules_mask is None or self.rules_store.error:
+            return
+        self.rules_check_wall = wall
+        epoch = self.rules_epoch
+        for name, check in self.rules_checks.items():
+            for kind in ('params', 'costmap'):
+                future = check[f'{kind}_future']
+                if future is not None:
+                    if wall-check[f'{kind}_sent'] > 3.:
+                        check[f'{kind}_client'].remove_pending_request(future)
+                        check[f'{kind}_future'] = None
+                        check[f'{kind}_ok'] = False
+                        if kind == 'costmap':
+                            check.update(mismatch_since=None, mismatch_last=None)
+                        future.cancel()
+                    else:
+                        continue
+                client = check[f'{kind}_client']
+                if not client.service_is_ready():
+                    check[f'{kind}_ok'] = False
+                    if kind == 'costmap':
+                        check.update(mismatch_since=None, mismatch_last=None)
+                    continue
+                request = GetParameters.Request() if kind == 'params' else GetCostmap.Request()
+                if kind == 'params':
+                    request.names = ['filters', 'keepout_filter.plugin', 'keepout_filter.enabled',
+                                     'keepout_filter.filter_info_topic', 'robot_radius']
+                check[f'{kind}_sent'] = wall
+                future = client.call_async(request)
+                check[f'{kind}_future'] = future
+                future.add_done_callback(lambda f, n=name, k=kind, e=epoch: self.rules_result(n, k, e, f))
+        try:
+            healthy = self.rules_subscribers_present()
+            graph_missing = not healthy
+        except Exception:
+            healthy = False
+            graph_missing = False  # A graph query exception is not proof of missing consumers.
+            self.rules_graph_missing_since = self.rules_graph_missing_last = None
+        if graph_missing:
+            # Nav2 clearing recovery resets and recreates filter subscriptions.
+            # Only successive observations of a persistent disappearance can
+            # invalidate an already-running mission's same rules revision.
+            if (self.rules_graph_missing_since is None or self.rules_graph_missing_last is None
+                    or wall-self.rules_graph_missing_last > RULES_GRAPH_MAX_SAMPLE_GAP):
+                self.rules_graph_missing_since = wall
+            self.rules_graph_missing_last = wall
+        else:
+            self.rules_graph_missing_since = self.rules_graph_missing_last = None
+        graph_failed = (graph_missing and self.rules_graph_missing_since is not None
+                        and wall-self.rules_graph_missing_since >= RULES_GRAPH_FAILURE_SECONDS)
+        for name, check in self.rules_checks.items():
+            lifecycle = self.lifecycle[f'{name}_costmap/{name}_costmap']
+            healthy = (healthy and lifecycle['active'] and wall-lifecycle['wall'] <= 3.
+                       and check['params_ok'] and check['costmap_ok'] and wall-check['wall'] <= 3.)
+        self.rules_apply_state = 'applied' if healthy else 'published'
+        invalid = [(name, check.get('config_reason', '')) for name, check in self.rules_checks.items()
+                   if check['config_invalid']]
+        mismatched = [name for name, check in self.rules_checks.items()
+            if check.get('mismatch_since') is not None and check.get('mismatch_last') is not None
+            and check['mismatch_last']-check['mismatch_since'] >= RULES_GRAPH_FAILURE_SECONDS
+            and wall-check['mismatch_last'] <= RULES_GRAPH_MAX_SAMPLE_GAP]
+        self.rules_hard_failure = bool(invalid) or graph_failed or bool(mismatched)
+        if invalid:
+            self.rules_apply_message = '禁区过滤器配置失配：'+', '.join(
+                f'{name}: {reason}' for name, reason in invalid)
+        elif graph_failed:
+            self.rules_apply_message = '禁区过滤器订阅连续缺失至少3秒，无法维持规则执行确认'
+        elif mismatched:
+            self.rules_apply_message = '禁区格连续读回未生效至少3秒：'+', '.join(mismatched)
+        elif healthy:
+            self.rules_apply_message = '全局与局部禁区过滤器及代价地图已读回确认'
+        else:
+            self.rules_apply_message = '禁区确认暂缺，现有任务继续等待恢复；新任务需等待读回确认'
+
+    def observe_rules_mismatch(self, name, wall, missing):
+        check = self.rules_checks[name]
+        if not missing:
+            check.update(mismatch_since=None, mismatch_last=None)
+            return
+        if (check.get('mismatch_since') is None or check.get('mismatch_last') is None
+                or wall-check['mismatch_last'] > RULES_GRAPH_MAX_SAMPLE_GAP):
+            check['mismatch_since'] = wall
+        check['mismatch_last'] = wall
+
+    def rules_result(self, name, kind, epoch, future):
+        with self.lock:
+            check = self.rules_checks[name]
+            if check[f'{kind}_future'] is not future:
+                return
+            check[f'{kind}_future'] = None
+            if epoch != self.rules_epoch:
+                return
+            try:
+                response = future.result()
+                if kind == 'params':
+                    values = response.values
+                    types = (ParameterType.PARAMETER_STRING_ARRAY, ParameterType.PARAMETER_STRING,
+                             ParameterType.PARAMETER_BOOL, ParameterType.PARAMETER_STRING,
+                             ParameterType.PARAMETER_DOUBLE)
+                    if len(values) != 5 or tuple(value.type for value in values) != types:
+                        # Not-yet-declared parameters during lifecycle recovery
+                        # are unavailable evidence, not an explicit disable.
+                        check.update(params_ok=False, config_invalid=False, config_reason='')
+                        return
+                    matches = ('keepout_filter' in values[0].string_array_value,
+                        values[1].string_value == 'nav2_costmap_2d::KeepoutFilter', values[2].bool_value,
+                        values[3].string_value == '/keepout_costmap_filter_info',
+                        abs(values[4].double_value-ROBOT_RADIUS) < 1e-6)
+                    labels = ('filters', 'plugin', 'enabled', 'filter_info_topic', 'robot_radius')
+                    check.update(params_ok=all(matches), config_invalid=not all(matches),
+                                 config_reason=', '.join(label for label, match in zip(labels, matches) if not match))
+                    return
+                msg = response.map
+                metadata = msg.metadata
+                ros_now = self.get_clock().now().nanoseconds*1e-9
+                if (stamp_seconds(metadata.update_time) <= self.rules_publish_stamp
+                        or not -.15 <= ros_now-stamp_seconds(metadata.update_time) <= 1.5
+                        or not 0 < metadata.size_x*metadata.size_y <= 4_000_000
+                        or len(msg.data) != metadata.size_x*metadata.size_y
+                        or not 0 < metadata.resolution <= 1.):
+                    check['costmap_ok'] = False
+                    MissionBridge.observe_rules_mismatch(self, name, time.monotonic(), False)
+                    return
+                origin = metadata.origin
+                ox, oy, yaw = origin.position.x, origin.position.y, quaternion_yaw(origin.orientation)
+                if msg.header.frame_id != 'map':
+                    transform = self.buffer.lookup_transform('map', msg.header.frame_id,
+                        rclpy.time.Time.from_msg(metadata.update_time))
+                    p, q = transform.transform.translation, transform.transform.rotation
+                    theta = quaternion_yaw(q)
+                    ox, oy = p.x+math.cos(theta)*ox-math.sin(theta)*oy, p.y+math.sin(theta)*ox+math.cos(theta)*oy
+                    yaw += theta
+                if not all(math.isfinite(v) for v in (ox, oy, yaw)):
+                    raise ValueError('Invalid costmap origin')
+                grid = {'width': metadata.size_x, 'height': metadata.size_y,
+                        'resolution': metadata.resolution, 'origin': [ox, oy, yaw], 'data': list(msg.data)}
+                matches, _marked, _cleared = costmap_matches_mask(grid, self.rules_mask,
+                                                               self.previous_rules_mask, self.grid)
+                # Global costmap must cover all forbidden cells; local rolling
+                # costmap checks only cells currently inside its window.
+                known_missing = False
+                if name == 'global':
+                    for index, value in enumerate(self.rules_mask['data']):
+                        if value == 100:
+                            x, y = grid_to_world((index % self.rules_mask['width']+.5)*self.rules_mask['resolution'],
+                                (index // self.rules_mask['width']+.5)*self.rules_mask['resolution'], self.rules_mask)
+                            observed = grid_value_at(x, y, grid)
+                            if observed != 254:
+                                matches = False
+                                if observed is not None and 0 <= observed < 254:
+                                    known_missing = True
+                # Global map-frame cells provide comparable negative evidence.
+                # Local TF failures or edge differences remain pending rather
+                # than using a latest transform as proof that a rule disappeared.
+                MissionBridge.observe_rules_mismatch(self, name, time.monotonic(),
+                    known_missing and msg.header.frame_id == 'map')
+                check.update(costmap_ok=matches, wall=time.monotonic())
+            except Exception as error:
+                check[f'{kind}_ok'] = False
+                if kind == 'costmap':
+                    MissionBridge.observe_rules_mismatch(self, name, time.monotonic(), False)
+                self.get_logger().debug(f'Keepout {name} {kind} readback pending: {error}')
+
+    def record_run(self, force=False):
+        if self.rules_run is None:
+            return
+        wall = time.monotonic()
+        mission = self.mission.value
+        if mission['id'] != self.rules_run['id']:
+            return
+        signature = tuple(mission.get(key) for key in ('status', 'current_index', 'dispatch_state',
+                                                       'cleanup_state', 'stop_reason', 'message'))
+        changed = signature != self.rules_run_signature
+        self.rules_run.update({key: copy.deepcopy(mission.get(key)) for key in
+                               ('status', 'current_index', 'dispatch_state', 'cleanup_state',
+                                'stop_reason', 'message', 'missed_waypoints')})
+        self.rules_run['truth'] = copy.deepcopy(self.truth)
+        if changed:
+            self.rules_run['events'].append({'time_unix': time.time(), 'sim_time': self.clock_last,
+                'type': 'mission_state', 'status': mission['status'], 'current_index': mission['current_index'],
+                'dispatch_state': mission.get('dispatch_state'), 'cleanup_state': mission.get('cleanup_state'),
+                'stop_reason': mission.get('stop_reason'), 'message': mission['message']})
+            self.rules_run['events'] = self.rules_run['events'][-300:]
+            self.rules_run_signature = signature
+        if mission['status'] not in ACTIVE_STATUSES:
+            if self.rules_run['finished_at'] is None:
+                self.rules_run['finished_at'] = time.time()
+                self.rules_run['observations'] = self.rules_run['observations'][-60:]
+                force = True
+        elif wall-self.rules_run_sample_wall >= 1.:
+            self.rules_run['observations'].append({'time_unix': time.time(), 'sim_time': self.clock_last,
+                'pose': copy.deepcopy(self.pose), 'truth': copy.deepcopy(self.truth),
+                'scan_summary': copy.deepcopy(self.scan_summary), 'command': copy.deepcopy(self.command),
+                'path': copy.deepcopy(self.path[:32]), 'current_index': mission['current_index']})
+            self.rules_run['observations'] = self.rules_run['observations'][-300:]
+            self.rules_run_sample_wall = wall
+        if changed or force or (mission['status'] in ACTIVE_STATUSES and wall-self.rules_run_save_wall >= 5.):
+            try:
+                self.rules_run_store.save_run(self.rules_run)
+                self.rules_run_save_wall = wall
+            except MapRulesError as error:
+                self.rules_apply_state = 'unavailable'
+                self.rules_apply_message = str(error)
+                self.get_logger().error(f'Run persistence failed: {error}')
 
     def fresh(self, name, ros_now, wall_now, age=0.8):
         sample = self.samples.get(name)
@@ -412,6 +778,8 @@ class MissionBridge(Node):
                 return False, f'{name} 缺失或过期'
         if self.grid is None:
             return False, '等待地图'
+        if hasattr(self, 'rules_store') and self.rules_hard_failure:
+            return False, self.rules_apply_message
         for name, state in self.lifecycle.items():
             if not state['active'] or wall-state['wall'] > 3:
                 return False, f'{name} 未处于 ACTIVE 状态'
@@ -448,6 +816,7 @@ class MissionBridge(Node):
                 'truth': self.truth if clock_fresh and self.fresh('truth', ros_now, wall) else None,
                 'path': self.path, 'trajectory': self.trajectory,
                 'mission': self.mission.value, 'obstacle': obstacle, 'home': HOME,
+                'map_rules': self.rules_state() if hasattr(self, 'rules_store') else None,
                 'collision_monitor': self.collision_monitor_state(wall)})
 
     def enqueue(self, kind, body):
@@ -455,7 +824,7 @@ class MissionBridge(Node):
         try:
             self.operations.put_nowait(op)
         except queue.Full:
-            raise APIError('Bridge request queue is full', 503)
+            raise APIError('Bridge request queue is full', 503, outcome='rejected')
         return op.future
 
     def tick(self):
@@ -463,6 +832,9 @@ class MissionBridge(Node):
             wall = time.monotonic()
             self.poll_lifecycle(wall)
             self.poll_collision_monitor(wall)
+            if hasattr(self, 'rules_store'):
+                self.synchronize_rules(wall)
+                self.poll_rules(wall)
             self.ready, self.reason = self.evaluate_ready(wall)
             if (self.mission.value['status'] == 'running' and not self.ready
                     and self.goal_sent_wall is not None and wall-self.goal_sent_wall > 1):
@@ -485,7 +857,8 @@ class MissionBridge(Node):
                 if not op.future.set_running_or_notify_cancel():
                     continue
                 if wall > op.deadline:
-                    op.future.set_result((408, {'error': 'Request expired before ROS dispatch'}))
+                    op.future.set_result((408, {'error': 'Request expired before ROS dispatch',
+                                               'outcome': 'rejected'}))
                     continue
                 try:
                     if op.kind == 'mission':
@@ -501,20 +874,63 @@ class MissionBridge(Node):
                         op.future.set_result((202, self.state()))
                     elif op.kind == 'obstacle':
                         self.request_obstacle(op)
+                    elif op.kind == 'map-rules':
+                        self.rules_store.update_rules(op.body,
+                            active=self.mission.value['status'] in ACTIVE_STATUSES)
+                        self.publish_rules()
+                        op.future.set_result((200, self.rules_state()))
+                    elif op.kind == 'routes':
+                        body = op.body
+                        if not isinstance(body, dict):
+                            raise APIError('Route must be an object')
+                        points, returning = validate_mission({'waypoints': body.get('waypoints'),
+                            'return_home': body.get('return_home', False), 'issued_at': time.time()}, self.grid)
+                        body = {**body, 'waypoints': points[:len(body['waypoints'])], 'return_home': returning}
+                        op.future.set_result((200, self.rules_store.save_route(body)))
                     else:
                         raise APIError('Unknown operation', 404)
-                except APIError as error:
-                    op.future.set_result((error.status, {'error': str(error)}))
+                except (APIError, MapRulesError) as error:
+                    payload = {'error': str(error)}
+                    if getattr(error, 'outcome', None) is not None:
+                        payload['outcome'] = error.outcome
+                    op.future.set_result((error.status, payload))
                 except Exception as error:
                     self.get_logger().error(f'HTTP operation failed: {error}')
                     op.future.set_result((500, {'error': 'ROS operation failed'}))
+            if hasattr(self, 'rules_store'):
+                self.record_run()
+
+    def prepare_mission(self, body):
+        """All errors here precede dispatch and are authoritative rejections."""
+        try:
+            if self.mission.value['status'] in ACTIVE_STATUSES:
+                raise APIError('A mission is already running or canceling', 409)
+            if not self.ready:
+                raise APIError(self.reason, 503)
+            zones = []
+            if hasattr(self, 'rules_store'):
+                self.rules_store.refresh()
+                if not MissionBridge.published_rules_current(self):
+                    raise APIError('Saved rules version is not yet published; wait for synchronization', 409)
+                if self.rules_apply_state != 'applied':
+                    raise APIError(self.rules_apply_message, 503)
+                rules = self.rules_store.rules()
+                if not isinstance(body, dict):
+                    raise APIError('Mission must be an object')
+                if 'map_id' in body and body['map_id'] != rules['map_id']:
+                    raise APIError('Mission map identity changed; reload before sending', 409)
+                if ('rules_revision' in body
+                        and integer(body['rules_revision'], 'rules_revision') != rules['revision']):
+                    raise APIError('Mission rules revision changed; reload before sending', 409)
+                body = {key: value for key, value in body.items() if key not in {'map_id', 'rules_revision'}}
+                zones = rules['zones']
+            return validate_mission(body, self.grid, zones=zones)
+        except (APIError, MapRulesError) as error:
+            error.outcome = 'rejected'
+            raise
 
     def start_mission(self, body):
-        if self.mission.value['status'] in ACTIVE_STATUSES:
-            raise APIError('A mission is already running or canceling', 409)
-        if not self.ready:
-            raise APIError(self.reason, 503)
-        points, return_home = validate_mission(body, self.grid)
+        points, return_home = MissionBridge.prepare_mission(self, body)
         goal = FollowWaypoints.Goal()
         goal.number_of_loops = 0
         goal.goal_index = 0
@@ -526,7 +942,30 @@ class MissionBridge(Node):
             pose.pose.orientation.z = math.sin(point['yaw']/2)
             pose.pose.orientation.w = math.cos(point['yaw']/2)
             goal.poses.append(pose)
+        previous_mission = copy.deepcopy(self.mission.value)
         mission_id = self.mission.begin(points, return_home)
+        if hasattr(self, 'rules_store'):
+            self.rules_run_store = self.rules_store
+            self.rules_run = {'id': mission_id, 'map_id': self.rules_store.map_id,
+                'rules_revision': self.rules_store.document['revision'], 'started_at': time.time(),
+                'finished_at': None, 'status': 'running', 'current_index': 0,
+                'waypoints': copy.deepcopy(points), 'return_home': return_home,
+                'stop_reason': None, 'message': self.mission.value['message'],
+                'dispatch_state': 'pending', 'cleanup_state': None,
+                'events': [], 'observations': [], 'truth': copy.deepcopy(self.truth)}
+            self.mission.value.update(map_id=self.rules_store.map_id,
+                                      rules_revision=self.rules_store.document['revision'])
+            self.rules_run_signature = None
+            try:
+                # Record ownership before dispatch; a write failure sends no goal.
+                self.rules_store.save_run(self.rules_run,
+                    expected_rules_revision=self.mission.value['rules_revision'])
+            except MapRulesError as error:
+                self.mission.value = previous_mission
+                self.rules_run = None
+                # Persistence may be ambiguous, but this goal has not been sent.
+                error.outcome = 'rejected'
+                raise
         self.goal_handle = None
         self.cancel_requested = self.cancel_sent = False
         self.reset_cleanup()
@@ -559,6 +998,8 @@ class MissionBridge(Node):
                 if not handle.accepted:
                     self.mission.value.update(status='failed', dispatch_state='rejected',
                                               message='Nav2 拒绝了巡逻任务')
+                    if hasattr(self, 'rules_store'):
+                        self.record_run(force=True)
                     return
                 self.goal_handle = handle
                 self.mission.value['dispatch_state'] = 'accepted'
@@ -609,6 +1050,8 @@ class MissionBridge(Node):
                           for m in response.result.missed_waypoints]
                 self.mission.finish(response.status, response.result.error_code, missed,
                                     response.result.error_msg)
+                if hasattr(self, 'rules_store'):
+                    self.record_run(force=True)
             except Exception as error:
                 self.result_future = None
                 self.result_retry_wall = time.monotonic()+CLEANUP_RETRY_SECONDS
@@ -800,7 +1243,21 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/sim-api/map':
             with self.server.bridge.lock:
                 grid = copy.deepcopy(self.server.bridge.grid)
+                if grid and hasattr(self.server.bridge, 'rules_store'):
+                    grid['map_id'] = self.server.bridge.rules_store.map_id
             self.reply(200, grid) if grid else self.reply(503, {'error': 'Map is not available'})
+        elif path in {'/sim-api/map-rules', '/sim-api/routes', '/sim-api/runs'}:
+            try:
+                with self.server.bridge.lock:
+                    if path == '/sim-api/map-rules':
+                        result = self.server.bridge.rules_state()
+                    elif path == '/sim-api/routes':
+                        result = self.server.bridge.rules_store.routes()
+                    else:
+                        result = self.server.bridge.rules_store.runs()
+                self.reply(200, result)
+            except MapRulesError as error:
+                self.reply(error.status, {'error': str(error)})
         else:
             self.reply(404, {'error': 'Unknown endpoint'})
 
@@ -809,7 +1266,8 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(403, {'error': 'Local browser origin required'})
             return
         paths = {'/sim-api/mission': 'mission', '/sim-api/cancel': 'cancel',
-                 '/sim-api/obstacle': 'obstacle'}
+                 '/sim-api/obstacle': 'obstacle', '/sim-api/map-rules': 'map-rules',
+                 '/sim-api/routes': 'routes'}
         kind = paths.get(urlsplit(self.path).path)
         if kind is None:
             self.reply(404, {'error': 'Unknown endpoint'})
@@ -819,8 +1277,9 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get('Content-Type', '').split(';')[0].strip().lower() != 'application/json':
                 raise APIError('Content-Type must be application/json', 415)
             length = int(self.headers.get('Content-Length', '0'))
-            if not 0 < length <= 8192:
-                raise APIError('JSON body must be between 1 and 8192 bytes', 413)
+            maximum = 65536 if kind in {'map-rules', 'routes'} else 8192
+            if not 0 < length <= maximum:
+                raise APIError(f'JSON body must be between 1 and {maximum} bytes', 413)
             body = json.loads(self.rfile.read(length))
             if not isinstance(body, dict):
                 raise APIError('JSON body must be an object')
@@ -832,7 +1291,10 @@ class Handler(BaseHTTPRequestHandler):
                 future.cancel()  # Prevent a queued request executing after the HTTP timeout.
             self.reply(504, {'error': 'ROS bridge response timed out; poll actual state'})
         except APIError as error:
-            self.reply(error.status, {'error': str(error)})
+            payload = {'error': str(error)}
+            if error.outcome is not None:
+                payload['outcome'] = error.outcome
+            self.reply(error.status, payload)
         except (ValueError, UnicodeError, TimeoutError):
             self.reply(400, {'error': 'Invalid or incomplete JSON body'})
 

@@ -1,6 +1,7 @@
 export type Point = { x: number; y: number }
 export type Pose = Point & { yaw: number }
 export type SimulationMap = {
+  map_id?: string
   width: number
   height: number
   resolution: number
@@ -26,7 +27,7 @@ export type SimulationState = {
   truth: (Pose & { linear_speed: number; angular_speed: number }) | null
   path: Point[]
   mission: {
-    id: string
+    id: string | null
     status: MissionStatus
     current_index: number
     waypoints: Pose[]
@@ -94,7 +95,7 @@ export function isFreeWaypoint(point: Point, map: SimulationMap, clearance = 0.1
 }
 
 export function validateSimulationMap(value: SimulationMap): SimulationMap {
-  if (!value || !Number.isInteger(value.width) || !Number.isInteger(value.height) || value.width < 1 || value.height < 1
+  if (!value || (value.map_id !== undefined && (typeof value.map_id !== 'string' || !value.map_id)) || !Number.isInteger(value.width) || !Number.isInteger(value.height) || value.width < 1 || value.height < 1
     || value.width > 4096 || value.height > 4096
     || !Number.isFinite(value.resolution) || value.resolution <= 0 || !Array.isArray(value.origin)
     || value.origin.length !== 3 || !value.origin.every(Number.isFinite) || !Array.isArray(value.data)
@@ -107,6 +108,7 @@ export function validateSimulationMap(value: SimulationMap): SimulationMap {
 export function validateSimulationState(value: SimulationState, expectedDomain = SIMULATION_DOMAIN): SimulationState {
   if (!value || value.mode !== 'mujoco' || value.domain !== expectedDomain || !Number.isInteger(value.domain)
     || value.domain < 1 || value.domain > 232 || typeof value.ready !== 'boolean' || !value.mission
+    || (value.mission.id !== null && typeof value.mission.id !== 'string')
     || !['idle', 'running', 'canceling', 'canceled', 'succeeded', 'failed'].includes(value.mission.status)
     || (value.mission.dispatch_state != null && !['pending', 'accepted', 'rejected', 'unavailable'].includes(value.mission.dispatch_state))
     || (value.mission.stop_reason != null && typeof value.mission.stop_reason !== 'string')
@@ -183,6 +185,37 @@ export function missionProgressText(mission?: SimulationState['mission']): strin
   return '选点后派发，小车会依次前往。'
 }
 
+export class SimulationRejectedRequest extends Error {
+  readonly status: number
+  readonly outcome: 'rejected' | null
+  constructor(message: string, status: number, outcome: 'rejected' | null = null) {
+    super(message); this.status = status; this.outcome = outcome; this.name = 'SimulationRejectedRequest'
+  }
+}
+
+export function simulationRequestRejected(error: unknown): boolean {
+  // The bridge uses 4xx only for rejection before dispatch, including its 408 deadline.
+  return error instanceof SimulationRejectedRequest && (error.outcome === 'rejected' || (error.status >= 400 && error.status < 500))
+}
+
+export type UnknownMissionReceipt = { previousId: string | null; waypoints: Pose[]; returnHome: boolean }
+export function missionReceiptResolved(receipt: UnknownMissionReceipt, value: SimulationState): boolean {
+  const mission = value.mission
+  return !!mission.id && mission.id !== receipt.previousId && mission.return_home === receipt.returnHome
+    && (mission.waypoints.length === receipt.waypoints.length
+      || (receipt.returnHome && mission.waypoints.length === receipt.waypoints.length + 1
+        && posesEquivalent(mission.waypoints.at(-1)!, value.home)))
+    && receipt.waypoints.every((point, index) => {
+      const actual = mission.waypoints[index]
+      return posesEquivalent(point, actual)
+    })
+}
+
+export function posesEquivalent(left: Pose, right: Pose): boolean {
+  return Math.abs(left.x - right.x) < 1e-8 && Math.abs(left.y - right.y) < 1e-8
+    && Math.abs(Math.atan2(Math.sin(left.yaw - right.yaw), Math.cos(left.yaw - right.yaw))) < 1e-8
+}
+
 export async function requestSimulation<T>(path: string, body?: object, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`/sim-api/${path}`, {
     method: body ? 'POST' : 'GET',
@@ -198,7 +231,8 @@ export async function requestSimulation<T>(path: string, body?: object, signal?:
   }
   if (!response.ok) {
     const error = value && typeof value === 'object' && 'error' in value ? String(value.error) : `仿真请求失败（${response.status}）`
-    throw new Error(error)
+    const outcome = value && typeof value === 'object' && 'outcome' in value && value.outcome === 'rejected' ? 'rejected' : null
+    throw new SimulationRejectedRequest(error, response.status, outcome)
   }
   return value as T
 }

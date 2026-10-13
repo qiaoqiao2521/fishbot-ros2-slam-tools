@@ -18,9 +18,9 @@ PYTHON_GROUPS = {
         'test_command_guard.py', 'test_passage_goal.py', 'test_passage_goal_runtime.py', 'test_passage_config.py',
         'test_passage_replay.py', 'test_passage_timing_tree.py',
         'test_sim_scan_relay.py', 'test_simulation_suite.py', 'test_simulation_report.py',
-        'test_simulation_campaign.py', 'test_sampling_trace.py')),
+        'test_simulation_campaign.py', 'test_sampling_trace.py', 'test_keepout_launch.py')),
     'mission': (ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests'
-                / 'test_mission_bridge.py',),
+                / 'test_mission_bridge.py', ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests/test_map_rules.py'),
     'autonomy': tuple(ROOT / 'tools/tests' / name for name in (
         'test_localization_recovery.py', 'test_localization_timing_tree.py',
         'test_object_inspection.py')),
@@ -96,6 +96,10 @@ def frontend_group():
     with tempfile.TemporaryDirectory(prefix='fishbot-feedback-vitest-') as temporary:
         output_file = Path(temporary) / 'result.json'
         command = [npm, 'test', '--', 'src/lib/simulation.test.ts',
+                   'src/lib/simulation-workspace.test.ts',
+                   'src/components/simulation/simulation-map.test.tsx',
+                   'src/components/simulation/simulation-page.test.tsx',
+                   'src/hooks/use-simulation-workspace.test.ts',
                    '--reporter=json', '--outputFile=' + str(output_file)]
         try:
             result = subprocess.run(command, cwd=directory, capture_output=True,

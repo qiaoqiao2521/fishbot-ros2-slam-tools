@@ -1,8 +1,11 @@
 """Wheel contact physics; AMCL alone owns map->odom when navigation is enabled."""
+import importlib.util
+import json
 import os
+from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, LogInfo, OpaqueFunction, RegisterEventHandler, SetEnvironmentVariable, Shutdown, TimerAction
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, LogInfo, OpaqueFunction, RegisterEventHandler, SetEnvironmentVariable, SetLaunchConfiguration, Shutdown, TimerAction
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -16,6 +19,22 @@ def check_sim_domain(context):
     if not domain.isdigit() or not 1 <= int(domain) <= 232:
         raise RuntimeError('Simulation requires ROS domain 1..232; domain 0 is reserved for the real car')
     return []
+
+
+def prepare_navigation_parameters(context):
+    value = LaunchConfiguration('map_rules').perform(context).lower()
+    if value not in ('true', 'false'):
+        raise RuntimeError('map_rules must be true or false')
+    helper_path = Path(__file__).with_name('keepout_parameters.py')
+    spec = importlib.util.spec_from_file_location('fishbot_keepout_parameters', helper_path)
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    provenance = helper.prepare_keepout_parameters(
+        LaunchConfiguration('params_file').perform(context), value == 'true')
+    return [
+        SetLaunchConfiguration('resolved_params_file', provenance['params_path']),
+        LogInfo(msg='FishBot navigation parameters: ' + json.dumps(provenance, sort_keys=True)),
+    ]
 
 
 def generate_launch_description():
@@ -59,6 +78,8 @@ def generate_launch_description():
         DeclareLaunchArgument('nav', default_value='true'),
         DeclareLaunchArgument('rviz', default_value='false'),
         DeclareLaunchArgument('bridge', default_value='false'),
+        DeclareLaunchArgument('map_rules', default_value=LaunchConfiguration('bridge'),
+                              description='Enable costmap keepout filters; defaults to bridge'),
         DeclareLaunchArgument('bridge_port', default_value='9070'),
         DeclareLaunchArgument('web_port', default_value='5173'),
         DeclareLaunchArgument('obstacle', default_value='true'),
@@ -66,6 +87,7 @@ def generate_launch_description():
         DeclareLaunchArgument('scene_path', default_value=os.path.join(share, 'mjcf', 'arena.xml')),
         DeclareLaunchArgument('map', default_value=os.path.join(share, 'config', 'arena.yaml')),
         DeclareLaunchArgument('params_file', default_value=os.path.join(share, 'config', 'nav2.yaml')),
+        OpaqueFunction(function=prepare_navigation_parameters),
         Node(package='robot_state_publisher', executable='robot_state_publisher',
              parameters=[{'robot_description': description, 'use_sim_time': True}]),
         Node(package='mujoco_ros2_control', executable='ros2_control_node',
@@ -87,7 +109,7 @@ def generate_launch_description():
         IncludeLaunchDescription(PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('nav2_bringup'), 'launch', 'bringup_launch.py')),
             launch_arguments={'map': LaunchConfiguration('map'),
-                              'params_file': LaunchConfiguration('params_file'),
+                              'params_file': LaunchConfiguration('resolved_params_file'),
                               'use_sim_time': 'True', 'use_composition': 'False',
                               'autostart': 'True'}.items(), condition=IfCondition(LaunchConfiguration('nav')))])]),
     ])

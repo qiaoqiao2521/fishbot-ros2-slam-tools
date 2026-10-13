@@ -32,6 +32,7 @@ The simulation extensions reuse the same ROS 2 and MuJoCo stack:
 - [Object inspection](docs/OBJECT_INSPECTION.md): `./fishbot.sh object-inspection <new-directory>`.
 - [Random and continuous campaigns](docs/SIMULATION_CAMPAIGN.md): `./fishbot.sh sim-campaign --mode random` or `--mode soak`.
 - [Web runtime acceptance](docs/WEB_RUNTIME_ACCEPTANCE.md): isolated Goal dispatch, cancellation and observed Collision Monitor states.
+- [Map rules and route templates](docs/MAP_RULES.md): edit software keepouts, save routes, and inspect actual task records in `/simulation`.
 
 ## Layout
 

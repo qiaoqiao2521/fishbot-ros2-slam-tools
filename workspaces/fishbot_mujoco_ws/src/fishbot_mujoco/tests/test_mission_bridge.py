@@ -1,9 +1,12 @@
 """Boundary tests; real ROS action/physical acceptance is a separate integration run."""
 import copy
+import io
+import json
 import math
 import queue
 import sys
 import threading
+import tempfile
 import time
 import unittest
 from concurrent.futures import Future
@@ -13,6 +16,7 @@ from unittest.mock import patch
 from rclpy.task import Future as ROSFuture
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+from map_rules import MapRulesError, MapRulesStore, build_mask, validate_zones
 from mission_bridge import (APIError, GoalStatus, MissionBridge, MissionRecord,
                             Handler, require_free_point, simulation_domain, validate_mission)
 
@@ -565,6 +569,426 @@ class LifecycleRetryTests(unittest.TestCase):
         MissionBridge.poll_lifecycle(bridge, wall=2.0)
         self.assertIs(bridge.lifecycle['collision_monitor']['future'], old)
         self.assertEqual(removed, [])
+
+
+class MapRulesIntegrationBoundaryTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.store = MapRulesStore(self.directory.name)
+        self.store.bind(fixture_grid())
+        self.rectangle = {'id': 'home_forbidden', 'kind': 'no_go', 'points': [
+            {'x': -.2, 'y': -.2}, {'x': .2, 'y': -.2}, {'x': .2, 'y': .2}, {'x': -.2, 'y': .2}]}
+
+    def test_explicit_goal_and_automatic_home_check_the_same_footprint_rules(self):
+        zones = validate_zones([self.rectangle], fixture_grid())
+        body = {'waypoints': [{'x': 1., 'y': 1., 'yaw': 0.}], 'return_home': False, 'issued_at': 100.}
+        points, _returning = validate_mission(body, fixture_grid(), now=100., zones=zones)
+        self.assertEqual(len(points), 1)
+        for altered in ({**body, 'return_home': True},
+                        {**body, 'waypoints': [{'x': .25, 'y': 0., 'yaw': 0.}]}):
+            with self.assertRaises(MapRulesError):
+                validate_mission(altered, fixture_grid(), now=100., zones=zones)
+
+    def healthy_bridge(self):
+        from builtin_interfaces.msg import Time
+        record = MissionRecord()
+        record.begin([{'x': 1., 'y': 1., 'yaw': 0.}], False)
+        canceled = []
+        bridge = SimpleNamespace(lock=threading.RLock(), mission=record,
+            rules_store=self.store, rules_apply_state='published', rules_apply_message='读回暂缺',
+            rules_hard_failure=False, rules_run=None, rules_mask=build_mask(fixture_grid(), []),
+            rules_published_map_id=self.store.map_id, rules_published_revision=0,
+            grid=fixture_grid(), lifecycle={'amcl': {'active': True, 'wall': 100.}},
+            get_clock=lambda: SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=100_000_000_000)),
+            clock_fresh=lambda _ros, _wall: True, fresh=lambda *_args: True,
+            client=SimpleNamespace(server_is_ready=lambda: True),
+            buffer=SimpleNamespace(lookup_transform=lambda *_args: SimpleNamespace(
+                header=SimpleNamespace(stamp=Time(sec=100)),
+                transform=SimpleNamespace(translation=SimpleNamespace(x=0., y=0.),
+                    rotation=SimpleNamespace(x=0., y=0., z=0., w=1.)))),
+            poll_lifecycle=lambda _wall: None, poll_collision_monitor=lambda _wall: None,
+            poll_rules=lambda _wall: None, retry_cleanup=lambda _wall: None,
+            synchronize_rules=lambda _wall: None,
+            goal_sent_wall=98., goal_send_future=None, pending_services=[], operations=queue.Queue(),
+            request_cancel=canceled.append, pose=None)
+        bridge.evaluate_ready = lambda wall: MissionBridge.evaluate_ready(bridge, wall)
+        bridge.record_run = lambda: MissionBridge.record_run(bridge)
+        return bridge, canceled
+
+    def test_readback_temporary_gap_does_not_cancel_existing_same_revision_mission(self):
+        bridge, canceled = self.healthy_bridge()
+        with patch('mission_bridge.time.monotonic', return_value=100.):
+            MissionBridge.tick(bridge)
+        self.assertTrue(bridge.ready)
+        self.assertEqual(canceled, [])
+        self.assertEqual(bridge.mission.value['status'], 'running')
+
+    def test_confirmed_filter_loss_uses_existing_cancel_path(self):
+        bridge, canceled = self.healthy_bridge()
+        bridge.rules_hard_failure = True
+        with patch('mission_bridge.time.monotonic', return_value=100.):
+            MissionBridge.tick(bridge)
+        self.assertFalse(bridge.ready)
+        self.assertEqual(canceled, ['仿真未就绪：读回暂缺'])
+
+    def test_new_mission_requires_actual_applied_state(self):
+        bridge, _canceled = self.healthy_bridge()
+        bridge.mission = MissionRecord()
+        bridge.ready = True
+        with self.assertRaises(APIError) as caught:
+            MissionBridge.start_mission(bridge, {'waypoints': [{'x': 1., 'y': 1.}], 'issued_at': time.time()})
+        self.assertEqual(caught.exception.status, 503)
+        self.assertEqual(caught.exception.outcome, 'rejected')
+        self.assertEqual(bridge.mission.value['status'], 'idle')
+
+    def test_map_and_rules_metadata_accept_current_and_reject_stale_before_dispatch(self):
+        bridge, _canceled = self.healthy_bridge()
+        bridge.mission = MissionRecord()
+        bridge.ready, bridge.rules_apply_state = True, 'applied'
+        body = {'waypoints': [{'x': 1., 'y': 1.}], 'issued_at': time.time(),
+                'map_id': self.store.map_id, 'rules_revision': 0}
+        self.assertEqual(len(MissionBridge.prepare_mission(bridge, body)[0]), 1)
+        for changes, status in (({'map_id': 'other'}, 409), ({'rules_revision': 1}, 409),
+                                ({'rules_revision': True}, 400), ({'rules_revision': math.nan}, 400),
+                                ({'rules_revision': .5}, 400), ({'rules_revision': -1}, 400)):
+            with self.subTest(changes=changes), self.assertRaises((APIError, MapRulesError)) as caught:
+                MissionBridge.prepare_mission(bridge, {**body, **changes})
+            self.assertEqual(caught.exception.status, status)
+            self.assertEqual(caught.exception.outcome, 'rejected')
+        legacy = {key: value for key, value in body.items() if key not in {'map_id', 'rules_revision'}}
+        self.assertEqual(len(MissionBridge.prepare_mission(bridge, legacy)[0]), 1)
+
+    def test_active_and_unknown_mission_cannot_edit_rules_through_operation_queue(self):
+        bridge, _canceled = self.healthy_bridge()
+        bridge.publish_rules = lambda: self.fail('Active rules must not be published')
+        bridge.rules_state = lambda: self.fail('Active edit must not succeed')
+        for status, cleanup in (('running', None), ('canceling', 'unresolved')):
+            bridge.mission.value.update(status=status, cleanup_state=cleanup)
+            op = SimpleNamespace(kind='map-rules', body={'map_id': self.store.map_id,
+                'base_revision': 0, 'zones': [self.rectangle]}, deadline=102., future=Future())
+            bridge.operations.put(op)
+            with patch('mission_bridge.time.monotonic', return_value=100.):
+                MissionBridge.tick(bridge)
+            self.assertEqual(op.future.result()[0], 409)
+            self.assertEqual(self.store.document['revision'], 0)
+
+    def test_old_revision_query_callback_cannot_confirm_new_mask(self):
+        future = Future()
+        future.set_result(SimpleNamespace(values=[]))
+        check = {'params_future': future, 'params_ok': False, 'config_invalid': False}
+        bridge = SimpleNamespace(lock=threading.RLock(), rules_checks={'global': check}, rules_epoch=2)
+        MissionBridge.rules_result(bridge, 'global', 'params', 1, future)
+        self.assertFalse(check['params_ok'])
+        self.assertFalse(check['config_invalid'])
+        self.assertIsNone(check['params_future'])
+
+    def test_real_terminal_is_persisted_with_rule_version_and_independent_truth(self):
+        bridge, _canceled = self.healthy_bridge()
+        bridge.rules_run_store = self.store
+        bridge.rules_run = {'id': bridge.mission.value['id'], 'map_id': self.store.map_id,
+            'rules_revision': 0, 'started_at': 100., 'finished_at': None,
+            'status': 'running', 'current_index': 0, 'waypoints': bridge.mission.value['waypoints'],
+            'return_home': False, 'message': '等待', 'events': [], 'observations': []}
+        bridge.rules_run_signature = None
+        bridge.rules_run_sample_wall = bridge.rules_run_save_wall = 0.
+        bridge.truth = {'x': 1.1, 'y': 1., 'yaw': .1}
+        bridge.clock_last = 100.
+        bridge.path, bridge.command, bridge.scan_summary = [], None, None
+        bridge.mission.finish(GoalStatus.STATUS_SUCCEEDED, 0, [])
+        MissionBridge.record_run(bridge, force=True)
+        persisted = self.store.runs()['runs'][0]
+        self.assertEqual(persisted['status'], 'succeeded')
+        self.assertIsNotNone(persisted['finished_at'])
+        self.assertEqual(persisted['truth']['x'], 1.1)
+        self.assertEqual(persisted['rules_revision'], 0)
+        self.assertNotIn('physical_score', persisted)
+        self.assertEqual(persisted['events'][-1]['status'], 'succeeded')
+
+    def test_other_writer_rules_refreshed_by_route_save_are_never_falsely_applied(self):
+        from builtin_interfaces.msg import Time
+        bridge, _canceled = self.healthy_bridge()
+        bridge.mission = MissionRecord()
+        self.store.update_rules({'map_id': self.store.map_id, 'base_revision': 0, 'zones': []})
+        bridge.rules_published_revision = 1
+        bridge.rules_apply_state, bridge.ready = 'applied', True
+        other = MapRulesStore(self.directory.name)
+        other.bind(fixture_grid())
+        other.update_rules({'map_id': other.map_id, 'base_revision': 1, 'zones': [self.rectangle]})
+        self.store.save_route({'map_id': self.store.map_id, 'name': '保存路线',
+            'waypoints': [{'x': 1., 'y': 1., 'yaw': 0.}], 'return_home': False})
+        self.assertEqual(self.store.document['revision'], 2)
+        state = MissionBridge.rules_state(bridge)
+        self.assertEqual(state['revision'], 2)
+        self.assertEqual(state['apply_state'], 'unavailable')
+        self.assertEqual(bridge.rules_published_revision, 1)
+        with self.assertRaises(APIError) as caught:
+            MissionBridge.prepare_mission(bridge,
+                {'waypoints': [{'x': 1., 'y': 1.}], 'issued_at': time.time()})
+        self.assertEqual(caught.exception.status, 409)
+        self.assertEqual(caught.exception.outcome, 'rejected')
+        masks, infos = [], []
+        bridge.rules_epoch, bridge.rules_checks, bridge.rules_refresh_wall = 1, {}, 0.
+        bridge.rules_mask_publisher, bridge.rules_info_publisher = (
+            SimpleNamespace(publish=masks.append), SimpleNamespace(publish=infos.append))
+        bridge.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: Time(sec=100)))
+        bridge.published_rules_current = MethodType(MissionBridge.published_rules_current, bridge)
+        bridge.publish_rules = MethodType(MissionBridge.publish_rules, bridge)
+        MissionBridge.synchronize_rules(bridge, 100.)
+        self.assertEqual(bridge.rules_published_revision, 2)
+        self.assertEqual(bridge.rules_epoch, 2)
+        self.assertEqual(len(masks), 1)
+        self.assertEqual(len(infos), 1)
+        self.assertEqual(MissionBridge.rules_state(bridge)['apply_state'], 'published')
+
+    def test_external_rules_change_is_detected_before_new_goal_without_an_intervening_write(self):
+        bridge, _canceled = self.healthy_bridge()
+        bridge.mission = MissionRecord()
+        bridge.rules_apply_state, bridge.ready = 'applied', True
+        other = MapRulesStore(self.directory.name)
+        other.bind(fixture_grid())
+        other.update_rules({'map_id': other.map_id, 'base_revision': 0, 'zones': [self.rectangle]})
+        with self.assertRaises(APIError) as caught:
+            MissionBridge.prepare_mission(bridge,
+                {'waypoints': [{'x': 1., 'y': 1.}], 'issued_at': time.time()})
+        self.assertEqual(caught.exception.status, 409)
+        self.assertEqual(self.store.document['revision'], 1)
+        self.assertEqual(bridge.rules_published_revision, 0)
+
+    def test_full_queue_http_response_is_authoritatively_rejected(self):
+        operations = queue.Queue(maxsize=1)
+        operations.put(object())
+        bridge = SimpleNamespace(operations=operations)
+        bridge.enqueue = lambda kind, body: MissionBridge.enqueue(bridge, kind, body)
+        replies = []
+        encoded = json.dumps({'waypoints': [{'x': 1., 'y': 1.}], 'issued_at': time.time()}).encode()
+        handler = SimpleNamespace(path='/sim-api/mission', allowed=lambda: True,
+            server=SimpleNamespace(bridge=bridge), rfile=io.BytesIO(encoded),
+            headers={'Content-Type': 'application/json', 'Content-Length': str(len(encoded))},
+            reply=lambda status, body: replies.append((status, body)))
+        Handler.do_POST(handler)
+        self.assertEqual(replies[0][0], 503)
+        self.assertEqual(replies[0][1]['outcome'], 'rejected')
+        self.assertEqual(operations.qsize(), 1)
+
+    def test_expired_queue_request_is_rejected_without_dispatch(self):
+        bridge, _canceled = self.healthy_bridge()
+        request = SimpleNamespace(kind='mission', body={}, deadline=99., future=Future())
+        bridge.operations.put(request)
+        with patch('mission_bridge.time.monotonic', return_value=100.):
+            MissionBridge.tick(bridge)
+        self.assertEqual(request.future.result()[0], 408)
+        self.assertEqual(request.future.result()[1]['outcome'], 'rejected')
+
+
+class MapRulesFilterRecoveryTests(unittest.TestCase):
+    def harness(self):
+        bridge = SimpleNamespace(lock=threading.RLock(), rules_store=SimpleNamespace(error=None),
+            rules_mask=build_mask(fixture_grid(), []), rules_check_wall=0., rules_epoch=1,
+            rules_hard_failure=False, rules_graph_missing_since=None, rules_graph_missing_last=None,
+            rules_checks={}, lifecycle={}, rules_subscribers_present=lambda: True,
+            get_logger=lambda: SimpleNamespace(debug=lambda _message: None))
+        for name in ('global', 'local'):
+            bridge.rules_checks[name] = {'params_ok': True, 'config_invalid': False,
+                'config_reason': '', 'costmap_ok': True, 'wall': 0.,
+                'mismatch_since': None, 'mismatch_last': None,
+                'params_future': Future(), 'costmap_future': Future(),
+                'params_sent': 0., 'costmap_sent': 0.}
+            bridge.lifecycle[f'{name}_costmap/{name}_costmap'] = {'active': True, 'wall': 0.}
+        return bridge
+
+    def poll(self, bridge, wall, present):
+        if isinstance(present, Exception):
+            def query():
+                raise present
+            bridge.rules_subscribers_present = query
+        else:
+            bridge.rules_subscribers_present = lambda: present
+        # Keep independent parameter/costmap replies current while exercising
+        # only the graph evidence. Pending slots avoid unrelated RPC creation.
+        for name, check in bridge.rules_checks.items():
+            check.update(wall=wall, params_sent=wall, costmap_sent=wall)
+            for kind in ('params', 'costmap'):
+                if check[kind+'_future'] is None:
+                    check[kind+'_future'] = Future()
+            bridge.lifecycle[f'{name}_costmap/{name}_costmap']['wall'] = wall
+        MissionBridge.poll_rules(bridge, wall)
+
+    def values(self, enabled=True):
+        from rcl_interfaces.msg import ParameterType, ParameterValue
+        return [ParameterValue(type=ParameterType.PARAMETER_STRING_ARRAY,
+                               string_array_value=['keepout_filter', 'keepout_inflation']),
+            ParameterValue(type=ParameterType.PARAMETER_STRING, string_value='nav2_costmap_2d::KeepoutFilter'),
+            ParameterValue(type=ParameterType.PARAMETER_BOOL, bool_value=enabled),
+            ParameterValue(type=ParameterType.PARAMETER_STRING, string_value='/keepout_costmap_filter_info'),
+            ParameterValue(type=ParameterType.PARAMETER_DOUBLE, double_value=.13)]
+
+    def params_result(self, bridge, values=None, error=None):
+        future = Future()
+        if error:
+            future.set_exception(error)
+        else:
+            future.set_result(SimpleNamespace(values=values))
+        bridge.rules_checks['global']['params_future'] = future
+        MissionBridge.rules_result(bridge, 'global', 'params', 1, future)
+        bridge.rules_checks['global']['params_future'] = Future()
+
+    def test_clear_recovery_short_subscription_gap_does_not_become_hard_failure(self):
+        bridge = self.harness()
+        for wall in (100., 100.75, 101.5, 102.25):
+            self.poll(bridge, wall, False)
+            self.assertFalse(bridge.rules_hard_failure)
+            self.assertEqual(bridge.rules_apply_state, 'published')
+        self.poll(bridge, 103., True)
+        self.assertFalse(bridge.rules_hard_failure)
+        self.assertEqual(bridge.rules_apply_state, 'applied')
+        self.assertIsNone(bridge.rules_graph_missing_since)
+
+    def test_successive_missing_observations_for_three_seconds_are_hard_failure(self):
+        bridge = self.harness()
+        for wall in (100., 100.75, 101.5, 102.25):
+            self.poll(bridge, wall, False)
+            self.assertFalse(bridge.rules_hard_failure)
+        self.poll(bridge, 103., False)
+        self.assertTrue(bridge.rules_hard_failure)
+        self.assertIn('连续缺失至少3秒', bridge.rules_apply_message)
+        self.poll(bridge, 103.75, True)
+        self.assertFalse(bridge.rules_hard_failure)
+        self.assertEqual(bridge.rules_apply_state, 'applied')
+
+    def test_query_exception_breaks_missing_evidence_instead_of_extending_it(self):
+        bridge = self.harness()
+        self.poll(bridge, 100., False)
+        self.poll(bridge, 100.75, False)
+        self.poll(bridge, 101.5, RuntimeError('DDS graph temporarily unavailable'))
+        self.assertIsNone(bridge.rules_graph_missing_since)
+        self.poll(bridge, 102.25, False)
+        self.poll(bridge, 103., False)
+        self.assertFalse(bridge.rules_hard_failure)
+        self.assertEqual(bridge.rules_graph_missing_since, 102.25)
+
+    def test_unobserved_long_gap_cannot_prove_continuous_disappearance(self):
+        bridge = self.harness()
+        self.poll(bridge, 100., False)
+        self.poll(bridge, 104., False)
+        self.assertFalse(bridge.rules_hard_failure)
+        self.assertEqual(bridge.rules_graph_missing_since, 104.)
+
+    def test_complete_explicit_disable_is_hard_and_has_priority_over_graph(self):
+        bridge = self.harness()
+        self.params_result(bridge, self.values(enabled=False))
+        self.poll(bridge, 100., False)
+        self.assertTrue(bridge.rules_hard_failure)
+        self.assertIn('配置失配', bridge.rules_apply_message)
+        self.assertIn('enabled', bridge.rules_apply_message)
+        self.params_result(bridge, self.values())
+        self.poll(bridge, 100.75, True)
+        self.assertFalse(bridge.rules_hard_failure)
+        self.assertEqual(bridge.rules_apply_state, 'applied')
+
+    def test_undeclared_parameters_and_service_loss_are_unknown_not_disabled(self):
+        from rcl_interfaces.msg import ParameterValue
+        bridge = self.harness()
+        for values in ([], [ParameterValue() for _ in range(5)]):
+            self.params_result(bridge, values)
+            self.poll(bridge, 100.+bridge.rules_check_wall, True)
+            self.assertFalse(bridge.rules_checks['global']['params_ok'])
+            self.assertFalse(bridge.rules_checks['global']['config_invalid'])
+            self.assertFalse(bridge.rules_hard_failure)
+            self.assertEqual(bridge.rules_apply_state, 'published')
+        self.params_result(bridge, error=RuntimeError('response lost'))
+        self.poll(bridge, bridge.rules_check_wall+.75, True)
+        self.assertFalse(bridge.rules_hard_failure)
+        self.assertEqual(bridge.rules_apply_state, 'published')
+
+
+    def costmap_result(self, bridge, wall, value, frame='map', stamp=None, error=None):
+        from builtin_interfaces.msg import Time
+        from nav2_msgs.msg import Costmap
+        stamp = wall if stamp is None else stamp
+        bridge.grid = fixture_grid()
+        bridge.rules_mask = build_mask(bridge.grid, [{'id': 'test_zone', 'kind': 'no_go', 'points': [
+            {'x': 0., 'y': 0.}, {'x': .5, 'y': 0.}, {'x': .5, 'y': .5}, {'x': 0., 'y': .5}]}])
+        bridge.previous_rules_mask = None
+        bridge.rules_publish_stamp = 99.
+        bridge.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=int(wall*1e9)))
+        msg = Costmap()
+        msg.header.frame_id = frame
+        msg.metadata.size_x, msg.metadata.size_y, msg.metadata.resolution = 40, 40, .1
+        msg.metadata.origin.position.x, msg.metadata.origin.position.y = -2., -2.
+        msg.metadata.origin.orientation.w = 1.
+        msg.metadata.update_time = Time(sec=int(stamp), nanosec=int((stamp-int(stamp))*1e9))
+        msg.data = [value if cell == 100 else 0 for cell in bridge.rules_mask['data']]
+        future = Future()
+        if error:
+            future.set_exception(error)
+        else:
+            future.set_result(SimpleNamespace(map=msg))
+        bridge.rules_checks['global']['costmap_future'] = future
+        with patch('mission_bridge.time.monotonic', return_value=wall):
+            MissionBridge.rules_result(bridge, 'global', 'costmap', 1, future)
+        return msg
+
+    def test_short_valid_costmap_counterevidence_then_match_does_not_cancel_recovery(self):
+        bridge = self.harness()
+        for wall in (100., 100.75, 101.5, 102.25):
+            self.costmap_result(bridge, wall, 0)
+            self.poll(bridge, wall, True)
+            self.assertFalse(bridge.rules_hard_failure)
+            self.assertEqual(bridge.rules_apply_state, 'published')
+        self.costmap_result(bridge, 103., 254)
+        self.poll(bridge, 103., True)
+        self.assertFalse(bridge.rules_hard_failure)
+        self.assertEqual(bridge.rules_apply_state, 'applied')
+        self.assertIsNone(bridge.rules_checks['global']['mismatch_since'])
+
+    def test_successive_valid_native_missing_cells_for_three_seconds_are_hard_failure(self):
+        bridge = self.harness()
+        for wall in (100., 100.75, 101.5, 102.25):
+            self.costmap_result(bridge, wall, 0)
+            self.poll(bridge, wall, True)
+            self.assertFalse(bridge.rules_hard_failure)
+        self.costmap_result(bridge, 103., 0)
+        self.poll(bridge, 103., True)
+        self.assertTrue(bridge.rules_hard_failure)
+        self.assertIn('禁区格连续读回未生效', bridge.rules_apply_message)
+        self.costmap_result(bridge, 103.75, 254)
+        self.poll(bridge, 103.75, True)
+        self.assertFalse(bridge.rules_hard_failure)
+
+    def test_unknown_invalid_stale_and_error_replies_break_counterevidence(self):
+        for value, stamp, error in ((255, None, None), (0, 99., None),
+                                    (0, 90., None), (0, None, RuntimeError('reply lost'))):
+            with self.subTest(value=value, stamp=stamp, error=error):
+                bridge = self.harness()
+                self.costmap_result(bridge, 100., 0)
+                self.costmap_result(bridge, 100.75, 0)
+                self.costmap_result(bridge, 101.5, value, stamp=stamp, error=error)
+                self.assertIsNone(bridge.rules_checks['global']['mismatch_since'])
+                self.costmap_result(bridge, 102.25, 0)
+                self.poll(bridge, 102.25, True)
+                self.assertFalse(bridge.rules_hard_failure)
+                self.assertEqual(bridge.rules_checks['global']['mismatch_since'], 102.25)
+
+    def test_long_unobserved_costmap_gap_does_not_prove_continuous_failure(self):
+        bridge = self.harness()
+        self.costmap_result(bridge, 100., 0)
+        self.costmap_result(bridge, 104., 0)
+        self.poll(bridge, 104., True)
+        self.assertFalse(bridge.rules_hard_failure)
+        self.assertEqual(bridge.rules_checks['global']['mismatch_since'], 104.)
+
+    def test_non_map_frame_uses_snapshot_time_tf_and_does_not_accumulate_hard_counterevidence(self):
+        bridge = self.harness()
+        requested = []
+        def transform(_target, _source, stamp):
+            requested.append(stamp.nanoseconds)
+            return SimpleNamespace(transform=SimpleNamespace(
+                translation=SimpleNamespace(x=0., y=0.), rotation=SimpleNamespace(x=0., y=0., z=0., w=1.)))
+        bridge.buffer = SimpleNamespace(lookup_transform=transform)
+        self.costmap_result(bridge, 100.75, 0, frame='odom')
+        self.assertEqual(requested, [100_750_000_000])
+        self.assertIsNone(bridge.rules_checks['global']['mismatch_since'])
 
 
 if __name__ == '__main__':

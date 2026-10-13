@@ -14,5 +14,5 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/arena.pgm DESTINATION share/${PROJECT_
 install(DIRECTORY docs DESTINATION share/${PROJECT_NAME})
 install(FILES README.md DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS scripts/verify_stack.py scripts/mission_bridge.py
-  scripts/obstacle_controller.py scripts/wait_ready.py DESTINATION lib/${PROJECT_NAME})
+  scripts/obstacle_controller.py scripts/wait_ready.py scripts/map_rules.py DESTINATION lib/${PROJECT_NAME})
 ament_package()
