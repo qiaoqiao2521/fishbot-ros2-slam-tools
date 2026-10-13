@@ -5,9 +5,10 @@ import { SimulationMapView } from '@/components/simulation/simulation-map'
 import { useSimulation } from '@/hooks/use-simulation'
 import { useSimulationWorkspace } from '@/hooks/use-simulation-workspace'
 import { useRviz } from '@/hooks/use-rviz'
+import { mapRuleErrorMessage } from '@/lib/simulation-errors'
 import { MAX_MAP_ZONES, mapGeneration, routeDraft, rulesDirty, ruleStartBlock, zoneFromSelection, type MapEditMode, type SavedRoute } from '@/lib/simulation-workspace'
 import {
-  DEMO_WAYPOINTS, MAX_WAYPOINTS, SIMULATION_DOMAIN, collisionMonitorText, isFreeWaypoint, missionCanRetryCancel,
+  MAX_WAYPOINTS, SIMULATION_DOMAIN, collisionMonitorText, isFreeWaypoint, missionCanRetryCancel,
   missionIsActive, missionLabel, missionProgressText,
   type Point, type Pose,
 } from '@/lib/simulation'
@@ -47,7 +48,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
   const unknownAcceptance = mission?.status === 'canceling' && mission.dispatch_state === 'unavailable'
   const canRetryCancel = missionCanRetryCancel(mission)
   const collisionMonitor = state?.collision_monitor
-  const error = actionError ?? connectionError ?? mapError
+  const error = mapRuleErrorMessage(actionError, editor.zones) ?? connectionError ?? mapError
   const physical = state?.truth
   const obstacleLabel = {
     parked: '箱子已退回', moving: '箱子正在进入路面', blocking: '箱子挡在前方',
@@ -80,16 +81,6 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
     }
     setWaypoints((current) => [...current, { x: Number(point.x.toFixed(2)), y: Number(point.y.toFixed(2)), yaw: 0 }])
     setSelectionMessage(`已添加第 ${waypoints.length + 1} 个点。`)
-  }
-
-  function loadDemo() {
-    if (!map || !editable) return
-    if (!DEMO_WAYPOINTS.every((point) => isFreeWaypoint(point, map))) {
-      setSelectionMessage('当前地图不适用这条演示路线，请直接在地图上选点。')
-      return
-    }
-    setWaypoints(DEMO_WAYPOINTS.map((point) => ({ ...point })))
-    setSelectionMessage('三点路线已载入，点击“开始巡逻”派发。')
   }
 
   function changeMode(mode: MapEditMode) {
@@ -169,7 +160,6 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
               <h2 id="simulation-map-title">{sceneTitle}</h2>
               <p>{active ? '蓝色是小鱼，绿色线是当前导航路径。' : '点击空旷处添加巡逻点，编号就是前往的顺序。'}</p>
             </div>
-            <button type="button" className="simulation-button simulation-quiet" disabled={!map || !editable} onClick={loadDemo}><Route size={16} />载入三点路线</button>
           </div>
 
           <div className="simulation-map-tools" aria-label="地图编辑模式">
@@ -252,7 +242,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
                   </div>}
                 </li>
               })}
-            </ol> : <div className="simulation-queue-empty"><MapPin size={22} /><p>地图上选几个点，或载入三点路线。</p></div>}
+            </ol> : <div className="simulation-queue-empty"><MapPin size={22} /><p>在地图上选择巡逻点，或载入已保存的路线。</p></div>}
 
             <p className="simulation-selection-message" aria-live="polite">{!active && startBlock}</p>
             <label className="simulation-return-home"><input type="checkbox" checked={active ? !!mission?.return_home : returnHome} disabled={!editable} onChange={(event) => setReturnHome(event.target.checked)} /><Home size={16} /><span>巡逻结束后返回起点</span></label>

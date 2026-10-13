@@ -118,3 +118,11 @@ QA来源：ui-strict-f的执行版cjs已按报告SHA重建归档为executed-brow
 本机证据在既有session根`rviz-button/`：ui-result.json、rviz-ros-readback.json、rviz-live.png、web-desktop.png、web-phone.png、before-bridge-update.json、feedback.json与runtime.json。根目录ros-proof-motion-live.json、ros-graph-proof-live.json、ros-process-proof-live.json保存独立ROS证据。初始Nav2通用配置窗口位置不适配，已换固定FishBot视图。验收停止初始自有RViz时遇到5秒退出超时，systemd仅结束该GUI进程；保留journal事实，未影响Nav2或把它记为优雅退出通过。关闭再开与新视图本轮正常显示均单独读回。
 
 Knowledge: already_covered。采用既有Obsidian `Wiki/ROS2 与 FishBot.md`“3. 仿真优先”及第12节：区分仿真硬件和真实执行链；回执未知只读确认。已核对适用段落，没有新增通用结论，当前GUI入口与运行状态只留项目。原release.sh继续保留，具体阻碍与root owner沿用本页记录。
+
+## 路线反馈补充（2026-10-13）
+
+按用户要求移除“载入三点路线”、固定DEMO_WAYPOINTS与过时空状态文案；保留地图选点、保存路线、模板载入和显式开始。地图规则拒绝在界面显示当前列表中的虚拟墙/禁区名称，并解释车体范围与自动返航起点校验；后端几何、原诊断ID与派发拒绝行为保留。实际只读核对发现本轮用户虚拟墙与固定返航起点的车体范围重叠；没有替用户移动、删除或停用规则。
+
+全前端97项、类型/构建及定点lint通过。浏览器桌面与390px检查移除按钮和中文拒绝提示：受控400与空闲任务读回，仅用于UI验证，零请求转发至导航API，不宣称新增导航验收。首次QA开始按钮禁用，选点/空闲前提未记录完整，保留失败；修正测试视口和受控空闲前提后复验。缓存沿用session根的route-ux/，不入Git。不重启ROS或RViz。
+
+Knowledge: already_covered。沿用Obsidian FishBot第18节的完整车体与规则语义，以及项目USER_FEEDBACK的拒绝原因契约；本次只改入口和提示，没有新的通用几何结论。release.sh保留项、root owner及阻碍沿用本页。

@@ -97,6 +97,7 @@ def frontend_group():
     with tempfile.TemporaryDirectory(prefix='fishbot-feedback-vitest-') as temporary:
         output_file = Path(temporary) / 'result.json'
         command = [npm, 'test', '--', 'src/lib/simulation.test.ts',
+                   'src/lib/simulation-errors.test.ts',
                    'src/lib/simulation-workspace.test.ts',
                    'src/components/simulation/simulation-map.test.tsx',
                    'src/components/simulation/simulation-page.test.tsx',

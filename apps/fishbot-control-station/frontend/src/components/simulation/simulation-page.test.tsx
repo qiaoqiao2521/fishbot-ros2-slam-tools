@@ -49,6 +49,12 @@ describe('simulation historical task record presentation', () => {
     expect(html).toContain('打开 RViz')
     expect(html).toContain('窗口显示在控制站电脑，手机可发起打开。')
   })
+  it('guides an empty route to map selection or saved routes without a fixed demo action', () => {
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('在地图上选择巡逻点，或载入已保存的路线。')
+    expect(html).toContain('路线模板')
+    expect(html).not.toContain('载入三点路线')
+  })
   it('allows explicit start of a valid local draft while an unrelated route-template save remains unknown', () => {
     fixture.routeWrite = 'unknown'
     fixture.seedDraft = true

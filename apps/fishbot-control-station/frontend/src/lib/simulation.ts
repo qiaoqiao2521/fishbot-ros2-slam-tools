@@ -50,12 +50,6 @@ export function simulationDomain(value = '93'): number {
   return Number(value)
 }
 export const SIMULATION_DOMAIN = simulationDomain(import.meta.env.VITE_FISHBOT_SIM_DOMAIN)
-export const DEMO_WAYPOINTS: Pose[] = [
-  { x: 2, y: 1, yaw: 0 },
-  { x: 2, y: 2, yaw: Math.PI },
-  { x: -0.5, y: 2, yaw: -Math.PI / 2 },
-]
-
 /** OccupancyGrid rows begin at the lower-left; the SVG begins at the upper-left. */
 export function worldToMap(point: Point, map: SimulationMap): Point {
   const dx = point.x - map.origin[0]
