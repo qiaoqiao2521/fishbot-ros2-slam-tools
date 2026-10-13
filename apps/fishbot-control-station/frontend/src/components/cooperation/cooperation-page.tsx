@@ -3,7 +3,7 @@ import { ArrowLeft, Box, Camera, CircleCheck, MapPin, Play, RefreshCw, Square, T
 
 import {
   COOPERATION_DOMAIN, COOPERATION_POLL_MS, COOPERATION_STAGES, CooperationController,
-  cooperationCanCancel, cooperationCanStart, cooperationConnected, cooperationFrameLabel,
+  cooperationCanCancel, cooperationCanReset, cooperationCanStart, cooperationConnected, cooperationFrameLabel, cooperationFrameSourceKey,
   cooperationStageLabel, cooperationStatusLabel,
   type CooperationFrameObservation, type CooperationSnapshot,
 } from '@/lib/cooperation'
@@ -22,7 +22,8 @@ export function CooperationPage({ onBack, controller: suppliedController }: { on
   const [frame, setFrame] = useState<CooperationFrameObservation | null>(null)
   const [displayedFrameSrc, setDisplayedFrameSrc] = useState<string | null>(null)
   const frameStamp = snapshot.state?.frame.available ? snapshot.state.frame.stamp : null
-  const frameScene = snapshot.state?.source?.scene_sha ?? null
+  const frameScene = cooperationFrameSourceKey(snapshot.state)
+  const episodeId = snapshot.state?.episode_id
   const frameBuffer = useRef<CooperationFrameBuffer | null>(null)
 
   useEffect(() => {
@@ -47,10 +48,11 @@ export function CooperationPage({ onBack, controller: suppliedController }: { on
     frameBuffer.current = buffer
     return () => { buffer.dispose(); frameBuffer.current = null }
   }, [])
-  useEffect(() => { frameBuffer.current?.request(frameScene, frameStamp) }, [frameScene, frameStamp])
+  useEffect(() => { frameBuffer.current?.request(frameScene, frameStamp, episodeId) }, [frameScene, frameStamp, episodeId])
 
   return <CooperationView snapshot={snapshot} now={now} frame={frame} onBack={onBack}
     onStart={() => { void controller.act('start') }} onCancel={() => { void controller.act('cancel') }}
+    onReset={() => { void controller.reset() }}
     onRefresh={() => { void controller.refresh() }} displayedFrameSrc={displayedFrameSrc} />
 }
 
@@ -61,6 +63,7 @@ type CooperationViewProps = {
   onBack: () => void
   onStart: () => void
   onCancel: () => void
+  onReset?: () => void
   onRefresh: () => void
   displayedFrameSrc?: string | null
 }
@@ -69,29 +72,36 @@ function metric(value: number | undefined, digits = 3): string {
   return value === undefined ? '未收到' : value.toFixed(digits)
 }
 
-export function CooperationView({ snapshot, now, frame, onBack, onStart, onCancel, onRefresh, displayedFrameSrc }: CooperationViewProps) {
-  const { state, pending, receipt, actionError, connectionError } = snapshot
+export function CooperationView({ snapshot, now, frame, onBack, onStart, onCancel, onReset, onRefresh, displayedFrameSrc }: CooperationViewProps) {
+  const { state, pending, receipt, resetReceipt, actionError, connectionError } = snapshot
   const connected = cooperationConnected(snapshot, now)
   const ready = connected && !!state?.ready
   const physics = state?.physics
   const frameStamp = state?.frame.available ? state.frame.stamp : null
   const frameLabel = cooperationFrameLabel(state, frame, connected, now)
   const frameLive = frameLabel === '相机画面持续更新'
-  const frameMatchesSource = !!frame && frame.scene === state?.source?.scene_sha
+  const frameMatchesSource = !!frame && frame.scene === cooperationFrameSourceKey(state)
     && (frame.loadedStamp === null || frameStamp === null || frame.loadedStamp <= frameStamp)
   const imageSrc = !frameMatchesSource ? null : displayedFrameSrc === undefined && frameStamp !== null
-    ? `/coop-api/frame.jpg?stamp=${encodeURIComponent(frame?.loadedStamp ?? frameStamp)}` : displayedFrameSrc
+    ? `/coop-api/frame.jpg?stamp=${encodeURIComponent(frame?.loadedStamp ?? frameStamp)}${state?.episode_id ? `&episode_id=${encodeURIComponent(state.episode_id)}` : ''}` : displayedFrameSrc
   const task = state?.task
   const stageLabel = cooperationStageLabel(task?.stage)
   const canStart = cooperationCanStart(snapshot, now)
   const canCancel = cooperationCanCancel(snapshot, now)
+  const canReset = cooperationCanReset(snapshot, now)
+  const resetSupported = !!state?.reset && !!state.episode_id
   const events = [...new Map((state?.events ?? []).map((event) => [event.sequence, event])).values()]
     .sort((first, second) => first.sequence - second.sequence)
   const carStopped = !!physics && Math.abs(physics.car.linear_speed) < 0.01 && Math.abs(physics.car.angular_speed) < 0.03
   const stageRole = COOPERATION_STAGES.find((item) => item.key === task?.stage)?.role
   const armPhase = stageRole === 'arm' ? stageLabel : task?.status === 'succeeded' ? '机械臂已退出' : '等待机械臂阶段反馈'
-  const startReason = receipt ? '正在核对原任务，暂不能重复派发。' : !connected ? '等待有效的协同服务状态。'
+  const startReason = resetReceipt || state?.reset?.pending ? '正在核对场景重置，暂不能派发新任务。'
+    : receipt ? '正在核对原任务，暂不能重复派发。' : !connected ? '等待有效的协同服务状态。'
     : !state?.ready ? state?.reason : !canStart ? '当前任务尚未结束。' : '小车到固定工位装货，再驶向交付点。'
+  const resetReason = resetReceipt ? '只读取原重置请求，请勿重复重置。' : !connected ? '等待有效的协同服务状态。'
+    : state?.reset?.reason || '当前场景暂不能重置。'
+  const resetCompleted = !resetReceipt && task?.status === 'idle' && state?.reset?.last?.status === 'succeeded'
+    && state.reset.last.to_episode === state.episode_id
 
   return <main className="cooperation-page">
     <header className="cooperation-header">
@@ -114,6 +124,10 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
     {receipt && <div className="cooperation-receipt" role="status">
       <strong>{receipt.unknown ? '操作回执未知' : '已收到操作回执，正在核对任务状态'}</strong>
       <p>只读取任务 {receipt.taskId}。{receipt.action === 'cancel' ? '等待原任务取消或结束的反馈。' : '等待原任务接收或结束的反馈。'}</p>
+    </div>}
+    {resetReceipt && <div className="cooperation-receipt" role="status">
+      <strong>{resetReceipt.unknown ? '场景重置回执未知' : '正在核对场景重置'}</strong>
+      <p>只读取重置请求 {resetReceipt.requestId}，原回合 {resetReceipt.fromEpisode}。不重复重置，不自动开始运输。</p>
     </div>}
 
     <div className="cooperation-layout">
@@ -147,16 +161,21 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
         <section className="cooperation-task" aria-labelledby="cooperation-task-heading">
           <div className="cooperation-section-heading"><h2 id="cooperation-task-heading">装货运输任务</h2><Truck size={20} aria-hidden="true" /></div>
           <div className={`cooperation-task-state cooperation-task-${task?.status ?? 'idle'}`} role="status">
-            <strong>{pending === 'start' ? '正在派发任务' : pending === 'cancel' ? '正在发送取消' : cooperationStatusLabel(task?.status)}</strong>
+            <strong>{pending === 'reset' ? '正在提交场景重置' : pending === 'start' ? '正在派发任务' : pending === 'cancel' ? '正在发送取消' : cooperationStatusLabel(task?.status)}</strong>
             <p>{task?.message || '开始后，小车先驶向固定 SO101 工位。'}</p>
             {task?.id && <small>任务 {task.id}</small>}
+            {state?.episode_id && <small>当前回合 {state.episode_id}</small>}
           </div>
           {task?.stop_reason && <p className="cooperation-stop-reason">停止原因：{task.stop_reason}</p>}
           <div className="cooperation-task-actions">
             <button type="button" className="cooperation-button cooperation-primary" disabled={!canStart} onClick={onStart} title={startReason}><Play size={16} aria-hidden="true" />开始装货运输</button>
+            {resetSupported && <button type="button" className="cooperation-button cooperation-quiet" disabled={!canReset || !onReset} onClick={onReset} title={resetReason}><RefreshCw size={16} aria-hidden="true" />重置场景</button>}
             <button type="button" className="cooperation-button cooperation-cancel" disabled={!canCancel} onClick={onCancel}><Square size={15} aria-hidden="true" />取消当前任务</button>
           </div>
           <p className="cooperation-action-help">{startReason}</p>
+          {resetSupported && <p className="cooperation-action-help">重置只创建新的合成回合，并保留历史记录。重置完成后，请再点击“开始装货运输”。{!canReset && !resetCompleted ? ` ${resetReason}` : ''}</p>}
+          {resetCompleted && <p className="cooperation-action-help" role="status">{ready ? '新回合已就绪，请点击开始装货运输。' : '新回合已创建，等待共享物理世界与导航就绪。'}</p>}
+          {!resetSupported && task?.status === 'succeeded' && <p className="cooperation-action-help">当前协同服务不支持网页重置；需要启动新的合成回合。</p>}
           {task?.status === 'running' && snapshot.ownedTaskId !== task.id && <p className="cooperation-action-help">当前任务由另一页面发起。这里只读取反馈。</p>}
           <div className="cooperation-stations">
             <div><MapPin size={15} aria-hidden="true" /><span>固定工位</span><strong>{state?.stations ? `${metric(state.stations.dock.x, 2)}, ${metric(state.stations.dock.y, 2)} m` : '等待坐标'}</strong></div>
@@ -170,6 +189,21 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
             <p>{event.message}</p>
           </li>)}</ol> : <div className="cooperation-dialogue-empty"><p>尚未收到合作消息。</p><span>开始任务后，这里记录小车和机械臂的实际回应。</span></div>}
         </section>
+        {!!state?.history?.length && <section className="cooperation-dialogue" aria-labelledby="cooperation-history-heading">
+          <div className="cooperation-section-heading"><div><h2 id="cooperation-history-heading">历史回合</h2><p>以下记录由协同服务保存，场景重置不会删除已完成记录。</p></div><span>{state.history.length} 条</span></div>
+          <ol>{[...state.history].reverse().map((entry) => <li key={`${entry.episode_id}-${entry.task.id}`}>
+            <details>
+              <summary>{cooperationStatusLabel(entry.task.status)} · 记录时间 {new Date(typeof entry.completed_at === 'number' ? entry.completed_at * 1000 : entry.completed_at).toLocaleString('zh-CN')}</summary>
+              <p>回合 {entry.episode_id}{entry.task.id ? `，任务 ${entry.task.id}` : ''}</p>
+              <p>{entry.task.message}</p>
+              {entry.task.stop_reason && <p>停止原因：{entry.task.stop_reason}</p>}
+              <ol>{[...new Map(entry.events.map((event) => [event.sequence, event])).values()].sort((a, b) => a.sequence - b.sequence).map((event) => <li key={event.sequence}>
+                <div><strong>{{ car: 'FishBot', arm: 'SO101', system: '协同服务' }[event.role]}</strong><time>{event.time_s.toFixed(2)} s</time></div>
+                <p>{event.message}</p>
+              </li>)}</ol>
+            </details>
+          </li>)}</ol>
+        </section>}
       </aside>
     </div>
 

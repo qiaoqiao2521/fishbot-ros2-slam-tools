@@ -33,3 +33,14 @@ J的approach源起点223.68，同源seed0规划路径长度3.706839rad、段dura
 K统一插值、dwell与收敛预算的源时间，保留整项360s墙钟与原通信/碰撞门槛。以后诊断需同时保留当时参考、最终目标、真实状态和两种时间；cleanup冻结后的参考不能作为失败前跟踪证据。
 
 只读审查发现正常保护禁用超时后的cleanup路径可能因本地active=False漏验实际ACK。K源码全程冻结，完整运输PASS后停止该episode，再修复此异常分支。当前cleanup总验实际enabled/tripped；迟到ACK与完全丢失ACK两条具体回归通过。正常轨迹与物理不变，K原始源码快照与10项SHA保存；不把旧快照冒充修复后源码。完整运输与最终检查回源progress。
+
+## 重复运行缺口
+`Bridge.state`因货物离开pickup盘使ready=false；旧服务没有reset API，截图按钮禁用是状态正确但流程不完整。原进程L和completed任务4120b147仍物理静止，现要求新episode可显式恢复。
+
+采用既有知识第19节的旧任务/原生终态与时间边界；新回合明确body reset，保留连续ROS时间、encoderodom、发布sequence。不能用单纯解锁ready替代真实复位。回合ACK及相机文件均带新episode ID；不把XML SHA伪装成会变化的session身份。
+
+前端POST与轮询GET可能并发。GET已确认exact请求与新回合后，迟到POST的成功或超时均不得重建receipt或覆盖已确认状态；当前出口按requestId+fromEpisode仍持有判断，两个deferred回归通过。
+
+两轮实际任务已成功，私有观察器评分均PASS，但原UI编排分别在12s和60s退出等待超时。第二轮原K评分约39s，wrapper再次解析349MB记录约63s，总评分约103s；文件名生成早于最终落盘，不是完成时间。保留两份失败报告，再按同一任务的已落盘原评分核对，未重跑任务。未来可复用已解析records减少二次读取；本轮不再改观察器或扩展运动验收。
+
+旧latest-only物理测试暂停reader固定0.3墙秒；高负载时仅推进0.06源秒，sequence跳跃已通过而源间隔断言失败。测试应先从执行端已flush记录确认物理推进，再恢复reader并核对最新帧，保留原帧间隔门槛。此结论只修测试的等待条件，不放宽生产TTL或新鲜度。

@@ -149,10 +149,11 @@ class BridgeRaceTests(unittest.TestCase):
         class Thread:
             def __init__(self,**kwargs):self.kwargs=kwargs
             def start(self):test.threads.append(self.kwargs)
+            def is_alive(self):return False
         self.namespace={**vars(core),'copy':copy,'json':json,'math':math,
             'np':np,
             'time':NS(monotonic=lambda:self.clock,time=lambda:self.epoch+self.clock-100.,sleep=self.sleep),
-            'threading':NS(Thread=Thread),'manifest':{'station_offset':[0.,0.,0.],'dock_pose':[0.,0.,0.],
+            'threading':NS(Thread=Thread), 'String':lambda **kw:NS(**kw), 'ClearEntireCostmap':NS(Request=lambda:NS()),'manifest':{'station_offset':[0.,0.,0.],'dock_pose':[0.,0.,0.],
                 'staging_pose':[.7,0.,0.],'native_dock_pose':[0.,0.,math.pi],
                 'native_docking':{'dock_id':'so101_station'},
                 'arm_home_qpos6':[0.]*6,'arm_joint_names':['joint']*6},
@@ -166,6 +167,7 @@ class BridgeRaceTests(unittest.TestCase):
             'PoseStamped':lambda:NS(header=NS(),pose=NS(position=NS(),orientation=NS()))}
         exec(compile(ast.fix_missing_locations(extracted),'<current-cooperation-bridge>','exec'),self.namespace)
         self.bridge=self.namespace['BridgeProbe']();p=self.bridge
+        p.episode_id=None;p.history=[];p.task_worker=None;p.reset_worker=None;p.reset_clearers=[];p.reset_records={};p.reset_acks={};p.reset_runtime={};p.last_reset_id=None
         p.lock=threading.RLock();p.worker=threading.local();p.execution_token=('task-a',1);p.worker.token=p.execution_token
         p.task_epoch=1;p.dispatch_epoch=0;p.dispatches=[];p.cancel_event=threading.Event();p.abort_event=threading.Event()
         p.abort_reason=None;p.observation_error=None;p.last_ref=[0.]*6;p.raw=measurement();p.received=self.clock;p.wall_deadline=1000.
@@ -195,6 +197,95 @@ class BridgeRaceTests(unittest.TestCase):
         if self.on_sleep:self.on_sleep()
 
     def goal(self):return {'x':0.,'y':0.,'yaw':0.}
+
+    def reset_probe(self):
+        folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)
+        p=self.bridge;p.history_dir=Path(folder.name)
+        p.episode_id=str(uuid.uuid4());p.raw['episode_id']=p.episode_id;p.raw['source']['episode_id']=p.episode_id
+        p.task.update(status='succeeded');p.raw['car_hold']=True;p.raw['car']['hold']=True
+        p.raw['cargo']['velocity_world_angular_linear']=[0.]*6
+        p.localized=lambda:core.car_pose(p.raw)
+        p.reset_requests=[];p.clear_requests=[]
+        p.reset_pub=NS(publish=lambda value:p.reset_requests.append(json.loads(value.data)))
+        def clear(value):
+            p.clear_requests.append(value)
+            return ControlledFuture(NS(),True)
+        p.reset_clearers=[NS(service_is_ready=lambda:True,call_async=clear)]
+        return p,{'request_id':str(uuid.uuid4()),'episode_id':p.episode_id,'issued_at':self.epoch}
+
+    def reset_ack(self,p,request,status='succeeded'):
+        episode=str(uuid.uuid4()) if status=='succeeded' else None
+        result={'request_id':request['request_id'],'episode_id':request['episode_id'],'status':status,
+                'new_episode_id':episode,'reset_stamp':p.raw['stamp'] if episode else None,'message':'new round' if episode else 'busy'}
+        p.observe_reset(NS(data=json.dumps(result)))
+        if episode:
+            p.raw['episode_id']=episode;p.raw['source']['episode_id']=episode
+        return result
+
+    def test_reset_rejects_running_unknown_and_live_native_action_without_mutation(self):
+        p,body=self.reset_probe()
+        for status in ('running','canceling','unknown'):
+            p.task['status']=status
+            with self.assertRaises(core.Rejected):p.reset_episode(body)
+        p.task['status']='succeeded';handle=ControlledHandle()
+        p.dispatches=[{'received':True,'handle':handle,'result':handle.result_future,'error':None}]
+        with self.assertRaises(core.Rejected):p.reset_episode(body)
+        self.assertEqual(p.reset_requests,[]);self.assertEqual(p.history,[])
+
+    def test_reset_preserves_history_then_confirms_new_episode_and_never_repeats_same_request(self):
+        p,body=self.reset_probe();old=p.episode_id;old_task=copy.deepcopy(p.task)
+        p.reset_episode(body)
+        self.assertEqual(p.history[0]['task'],old_task)
+        self.assertTrue((p.history_dir/'task-a.json').is_file())
+        p.reset_pub=NS(publish=lambda value:(p.reset_requests.append(json.loads(value.data)),self.reset_ack(p,body)))
+        p.execute_reset(body['request_id'])
+        receipt=p.reset_record(body['request_id'])
+        self.assertEqual(receipt['status'],'succeeded');self.assertNotEqual(p.episode_id,old)
+        self.assertEqual(p.task['status'],'idle');self.assertEqual(p.reset_state(p.raw)['last']['to_episode'],p.episode_id)
+        self.assertEqual(p.reset_state(p.raw)['last']['from_episode'],old)
+        self.assertEqual(len(p.reset_requests),1);self.assertEqual(len(p.clear_requests),1)
+        body['issued_at']-=100
+        self.assertEqual(p.reset_episode(body)['status'],'succeeded')
+        self.assertEqual(len(p.reset_requests),1)
+        with self.assertRaises(core.Rejected):p.start({'task_id':str(uuid.uuid4()),'issued_at':self.epoch,'episode_id':old})
+        p.start({'task_id':str(uuid.uuid4()),'issued_at':self.epoch,'episode_id':p.episode_id})
+        self.assertEqual(p.task['status'],'running');self.assertEqual(len(p.history),1)
+
+    def test_reset_unknown_late_ack_is_reconciled_without_second_physics_request(self):
+        p,body=self.reset_probe();p.reset_episode(body)
+        p.execute_reset(body['request_id'])
+        self.assertEqual(p.reset_record(body['request_id'])['status'],'unknown')
+        self.assertFalse(p.reset_state(p.raw)['available'])
+        self.reset_ack(p,body)
+        p.reset_record(body['request_id']);p.execute_reset(body['request_id'])
+        self.assertEqual(p.reset_record(body['request_id'])['status'],'succeeded')
+        self.assertEqual(len(p.reset_requests),1);self.assertEqual(len(p.clear_requests),1)
+
+    def test_reset_failed_plant_receipt_keeps_old_task_and_episode(self):
+        p,body=self.reset_probe();old=p.episode_id;p.reset_episode(body)
+        p.reset_pub=NS(publish=lambda value:self.reset_ack(p,body,'failed'))
+        p.execute_reset(body['request_id'])
+        self.assertEqual(p.reset_record(body['request_id'])['status'],'failed')
+        self.assertEqual(p.episode_id,old);self.assertEqual(p.task['status'],'succeeded')
+        self.assertEqual(p.clear_requests,[]);self.assertEqual(p.poses,[])
+
+    def test_reset_stale_episode_and_wrong_ack_cannot_admit_or_finish(self):
+        p,body=self.reset_probe();wrong={**body,'episode_id':str(uuid.uuid4())}
+        with self.assertRaises(core.Rejected):p.reset_episode(wrong)
+        p.reset_episode(body)
+        self.reset_ack(p,{**body,'request_id':str(uuid.uuid4())})
+        self.assertEqual(p.reset_acks,{})
+        p.raw['episode_id']=p.episode_id;p.raw['source']['episode_id']=p.episode_id
+        p.execute_reset(body['request_id'])
+        self.assertEqual(p.reset_record(body['request_id'])['status'],'unknown')
+        self.assertEqual(p.task['status'],'succeeded')
+
+    def test_frame_path_is_bound_to_current_episode(self):
+        p,body=self.reset_probe()
+        self.assertEqual(p.frame_image({'episode_id':p.episode_id,'image_file':p.episode_id+'.jpg'}).name,p.episode_id+'.jpg')
+        for info in ({'episode_id':str(uuid.uuid4()),'image_file':'latest.jpg'},
+                     {'episode_id':p.episode_id,'image_file':'../other.jpg'}):
+            with self.assertRaises(ValueError):p.frame_image(info)
 
     def test_cancel_between_acceptance_and_release_never_releases_car_hold(self):
         p=self.bridge;handle=ControlledHandle();handle.result_future.resolve(NS(status=4))

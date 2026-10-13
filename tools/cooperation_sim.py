@@ -7,19 +7,22 @@ commands. Only reset initializes state; runtime never teleports any body.
 from __future__ import annotations
 
 import argparse
-from collections import deque
+from collections import deque, OrderedDict
 import copy
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
+import shutil
 import threading
 import time
+import uuid
 from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 
 from fishbot_sim_power import BEACON_LABEL, BEACON_TOPIC, PowerModel, Truth
+from cooperation_core import ContinuousEvidence
 
 ARM_JOINTS = ('shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex',
               'wrist_roll', 'gripper')
@@ -28,6 +31,68 @@ WHEEL_RADIUS = .032
 WHEEL_SEPARATION = .20
 COMMAND_TIMEOUT = .5
 BEACON_RANGE_M = 1.
+RESET_REQUEST_TOPIC = '/cooperation/reset_request'
+RESET_RESULT_TOPIC = '/cooperation/reset_result'
+
+
+def reset_request(payload):
+    """Admit one recent, explicitly identified new-episode request."""
+    if not isinstance(payload, dict) or set(payload) != {'request_id', 'episode_id', 'issued_at'}:
+        raise ValueError('reset request requires request_id, episode_id and issued_at')
+    for key in ('request_id', 'episode_id'):
+        if not isinstance(payload[key], str):
+            raise ValueError(f'{key} must be a UUID string')
+    try:
+        request_id, episode_id = (str(uuid.UUID(payload[key])) for key in ('request_id', 'episode_id'))
+    except (ValueError, TypeError, AttributeError) as error:
+        raise ValueError('reset request identifiers must be UUIDs') from error
+    issued = payload['issued_at']
+    if isinstance(issued, bool) or not isinstance(issued, (float, int)) or not math.isfinite(issued):
+        raise ValueError('reset request issued_at must be finite wall time')
+    return {'request_id': request_id, 'episode_id': episode_id, 'issued_at': float(issued)}
+
+
+def reset_result(request, *, episode_id=None, reset_stamp=None, message=''):
+    return {'request_id': request['request_id'], 'episode_id': request['episode_id'],
+            'status': 'succeeded' if episode_id is not None else 'failed',
+            'new_episode_id': episode_id, 'reset_stamp': reset_stamp, 'message': str(message)}
+
+
+class ResetRequests:
+    """Bounded request mailbox and receipts; callbacks never reset MuJoCo."""
+    def __init__(self):
+        self.pending = deque()
+        self.pending_ids = set()
+        self.results = OrderedDict()
+
+    def offer(self, payload, now=None):
+        request = reset_request(payload)
+        identity = request['request_id']
+        if identity in self.results:
+            return dict(self.results[identity])
+        if identity in self.pending_ids:
+            return None
+        now = time.time() if now is None else now
+        if not 0 <= now-request['issued_at'] <= 5:
+            return self.finish(request, reset_result(request, message='reset request expired or in the future'))
+        if len(self.pending) >= 4:
+            return self.finish(request, reset_result(request, message='reset request queue is busy'))
+        self.pending.append(request)
+        self.pending_ids.add(identity)
+        return None
+
+    def take(self):
+        if not self.pending:
+            return None
+        request = self.pending.popleft()
+        self.pending_ids.discard(request['request_id'])
+        return request
+
+    def finish(self, request, result):
+        self.results[request['request_id']] = dict(result)
+        while len(self.results) > 64:
+            self.results.popitem(last=False)
+        return dict(result)
 
 
 def latest_sensor_qos():
@@ -155,9 +220,13 @@ class WheelCommands:
         self.hold = True
         self.last_received = None
         self.linear = self.angular = 0.
+        self.source_floor = None
 
     def accept(self, linear, angular, now, *, source_stamp=None, sim_now=None):
         linear, angular, now = finite_vector((linear, angular, now), 3, 'car command')
+        if self.source_floor is not None and (source_stamp is None or source_stamp <= self.source_floor):
+            self.stop()
+            raise ValueError('car command belongs to a previous episode')
         if source_stamp is not None:
             source_stamp, sim_now = finite_vector((source_stamp, sim_now), 2, 'stamp')
             if source_stamp <= 0 or sim_now - source_stamp > COMMAND_TIMEOUT or source_stamp - sim_now > .10:
@@ -175,6 +244,10 @@ class WheelCommands:
         # Release requires a newly received command; queued motion cannot resume.
         self.hold = bool(hold)
         self.stop()
+
+    def begin_episode(self, source_stamp):
+        self.source_floor, = finite_vector((source_stamp,), 1, 'episode command floor')
+        self.set_hold(True)
 
     def velocities(self, now):
         if self.hold or self.last_received is None or not 0 <= now-self.last_received <= COMMAND_TIMEOUT:
@@ -330,6 +403,8 @@ class Physics:
         angles = np.arange(360)*math.pi/180
         self.ray_directions = np.column_stack((np.cos(angles), np.sin(angles), np.zeros(360)))
         self.identity = source_identity(self.scene)
+        self.episode_id = str(uuid.uuid4())
+        self.identity['episode_id'] = self.episode_id
         self.station_beacon = StationBeacon(self.identity, self.scene)
         self.docking_guard = DockApproachGuard(self.identity['manifest']['dock_pose'])
         mujoco.mj_resetData(self.model, self.data)
@@ -341,6 +416,8 @@ class Physics:
         self.reference = tuple(float(self.data.qpos[i]) for i in self.arm_q)
         self.data.ctrl[self.arm_a] = self.reference
         mujoco.mj_forward(self.model, self.data)
+        self.initial_qpos = self.data.qpos.copy()
+        self.initial_reference = self.reference
         self.wheels = WheelCommands()
         self.encoder_axle_offset = compiled_axle_offset(self.model)
         self.odom = EncoderOdometry(*(float(self.data.qpos[i]) for i in self.wheel_q),
@@ -354,10 +431,80 @@ class Physics:
         self.last_wall = time.time()
         self.steps = 0
         self.scan_sequence = self.state_sequence = 0
+        self.reset_count = 0
+        self.reset_stamp = None
+        self.native_actions_busy = False
+        self.reset_quiet = ContinuousEvidence(.7)
+        self.reset_ready = False
 
-    def set_arm_reference(self, names, positions):
+    def set_arm_reference(self, names, positions, *, source_stamp=None):
+        if self.reset_stamp is not None:
+            if (source_stamp is None or not math.isfinite(source_stamp)
+                    or source_stamp <= self.reset_stamp
+                    or not -.1 <= float(self.data.time)-source_stamp <= COMMAND_TIMEOUT):
+                raise ValueError('arm reference belongs to a previous episode or has an invalid stamp')
         validated = arm_reference(names, positions, self.arm_limits)
         self.reference = validated
+
+    def reset_physical_quiet(self):
+        car, cargo = self.body_velocity(self.car_body), self.body_velocity(self.cargo_body)
+        quiet = (self.wheels.hold and not self.docking_guard.enabled and not self.docking_guard.tripped
+                 and not self.native_actions_busy
+                 and math.hypot(*car[3:5]) < .01 and abs(car[2]) < .01
+                 and self.np.linalg.norm(self.data.qvel[self.arm_v]) < .05
+                 and self.np.linalg.norm(cargo[3:]) < .005 and self.np.linalg.norm(cargo[:3]) < .05
+                 and self.np.max(self.np.abs(self.data.ctrl[self.wheel_a])) < 1e-9)
+        return bool(quiet)
+
+    def observe_reset_quiet(self):
+        self.reset_ready = self.reset_quiet.update(float(self.data.time), self.reset_physical_quiet())
+
+    def reset_episode(self, expected_episode_id):
+        """Initialize an explicit, authorized episode boundary, never a task step.
+
+        The unique coordinator supplies terminal-task admission. Independent
+        native status plus physical hold/quiet remain plant-side requirements.
+        Source time, encoder pose, sequence and global step count do not rewind.
+        """
+        if expected_episode_id != self.episode_id:
+            raise ValueError('reset expected episode does not match the current world')
+        if (not self.reset_ready or self.native_actions_busy or not self.wheels.hold
+                or self.docking_guard.enabled or self.docking_guard.tripped):
+            self.reset_ready = False
+            self.reset_quiet = ContinuousEvidence(.7)
+            raise ValueError('reset requires held, native-terminal, continuously quiet physics')
+        # Recheck the current plant, even if readiness was earned earlier.
+        self.refresh_snapshot()
+        if not self.reset_physical_quiet():
+            self.reset_ready = False
+            self.reset_quiet = ContinuousEvidence(.7)
+            raise ValueError('physical reset readiness changed')
+        preserved_time = float(self.data.time)
+        self.mj.mj_resetData(self.model, self.data)
+        self.data.qpos[:] = self.initial_qpos
+        self.data.time = preserved_time
+        self.reference = self.initial_reference
+        self.data.ctrl[self.arm_a] = self.reference
+        self.data.ctrl[self.wheel_a] = 0.
+        self.wheels.begin_episode(preserved_time)
+        self.docking_guard.set_enabled(False)
+        # Wheel positions restart with the model. Rebase only the encoder's
+        # wheel-reading baseline; preserve its independent integrated pose.
+        self.odom.left, self.odom.right = (float(self.data.qpos[i]) for i in self.wheel_q)
+        self.odom.lateral_velocity = self.odom_linear = self.odom_angular = 0.
+        self.total_forbidden_steps = self.total_forbidden_contacts = 0
+        self.total_car_forbidden_steps = self.total_car_forbidden_contacts = 0
+        self.max_normal_forces = {name: 0. for name in self.finger_geoms}
+        self.episode_id = str(uuid.uuid4())
+        self.identity = {**self.identity, 'episode_id': self.episode_id}
+        self.reset_count += 1
+        self.reset_stamp = preserved_time
+        self.reset_quiet = ContinuousEvidence(.7)
+        self.reset_ready = False
+        self.last_wall = time.time()
+        self.refresh_snapshot()
+        self.docking_guard.update(self.data.qpos[self.car_free_q:self.car_free_q+2])
+        return self.episode_id, preserved_time
 
     def step(self):
         self.data.ctrl[self.arm_a] = self.reference
@@ -381,6 +528,7 @@ class Physics:
         self.odom_linear, self.odom_angular = self.odom.update(
             *(float(self.data.qpos[i]) for i in self.wheel_q), float(self.model.opt.timestep))
         self.contacts = self.contact_state()
+        self.observe_reset_quiet()
 
     def body_velocity(self, body):
         velocity = self.np.zeros(6)
@@ -471,6 +619,10 @@ class Physics:
             self.np.array(cargo_velocity[3:])-self.np.array(tray_velocity[3:])
             -self.np.cross(self.np.array(tray_velocity[:3]), cargo_offset))
         payload = {'schema': 1, 'stamp': float(self.data.time), 'wall_time': self.last_wall,
+                   'episode_id': self.episode_id,
+                   'episode_reset': {'count': self.reset_count, 'stamp': self.reset_stamp,
+                       'ready': self.reset_ready, 'native_actions_busy': self.native_actions_busy,
+                       'source_clock_continuous': True, 'encoder_odometry_continuous': True},
                    'sequence': self.state_sequence, 'physics_steps': self.steps, 'physics_hz': 500,
                    'q6': self.data.qpos[self.arm_q].tolist(), 'qvel6': self.data.qvel[self.arm_v].tolist(),
                    'qpos22': self.data.qpos.tolist(), 'qvel20': self.data.qvel.tolist(),
@@ -545,14 +697,42 @@ class FrameWriter:
         self.thread.start()
 
     def offer(self):
-        snapshot = (self.physics.data.qpos.copy(), float(self.physics.data.time), time.time())
+        snapshot = (self.physics.data.qpos.copy(), float(self.physics.data.time), time.time(),
+                    self.physics.episode_id)
         with self.lock:
             self.pending = snapshot
+
+    def reset_episode(self, expected_episode_id):
+        # The explicit episode boundary and render commits share this lock.
+        # Rendering itself remains outside the lock and uses isolated data.
+        with self.lock:
+            result = self.physics.reset_episode(expected_episode_id)
+            self.pending = None
+            return result
+
+    def commit(self, pixels, snapshot):
+        from PIL import Image
+        _, stamp, wall_time, episode_id = snapshot
+        with self.lock:
+            if episode_id != self.physics.episode_id:
+                return False
+            image_file = f'{episode_id}.jpg'
+            Image.fromarray(pixels).save(self.directory/'frame-next.jpg', quality=85)
+            (self.directory/'frame-next.jpg').replace(self.directory/image_file)
+            # Keep the compatibility name, but metadata-aware consumers use
+            # the immutable episode basename and cannot cross a reset fence.
+            shutil.copyfile(self.directory/image_file, self.directory/'frame-next.jpg')
+            (self.directory/'frame-next.jpg').replace(self.directory/'latest.jpg')
+            metadata = {'stamp': stamp, 'sim_stamp': stamp, 'wall_time': wall_time,
+                        'scene_sha256': self.physics.identity['scene_sha256'], 'episode_id': episode_id,
+                        'image_file': image_file}
+            (self.directory/'frame-next.json').write_text(json.dumps(metadata))
+            (self.directory/'frame-next.json').replace(self.directory/'latest.json')
+            return True
 
     def run(self):
         try:
             import mujoco
-            from PIL import Image
             model = mujoco.MjModel.from_xml_path(str(self.physics.scene))
             data = mujoco.MjData(model)
             renderer = mujoco.Renderer(model, height=540, width=960)
@@ -565,17 +745,12 @@ class FrameWriter:
                         snapshot, self.pending = self.pending, None
                     if snapshot is None:
                         continue
-                    qpos, stamp, wall_time = snapshot
+                    qpos, _, _, _ = snapshot
                     # This is an isolated render-only model, never the physics data.
                     data.qpos[:] = qpos
                     mujoco.mj_forward(model, data)
                     renderer.update_scene(data, camera=self.camera, scene_option=options)
-                    Image.fromarray(renderer.render()).save(self.directory/'frame-next.jpg', quality=85)
-                    (self.directory/'frame-next.jpg').replace(self.directory/'latest.jpg')
-                    metadata = {'stamp': stamp, 'sim_stamp': stamp, 'wall_time': wall_time,
-                                'scene_sha256': self.physics.identity['scene_sha256']}
-                    (self.directory/'frame-next.json').write_text(json.dumps(metadata))
-                    (self.directory/'frame-next.json').replace(self.directory/'latest.json')
+                    self.commit(renderer.render(), snapshot)
             finally:
                 renderer.close()
         except Exception as error:
@@ -597,6 +772,7 @@ def run_ros(args):
     from rosgraph_msgs.msg import Clock
     from sensor_msgs.msg import Imu, JointState, LaserScan
     from std_msgs.msg import Bool, String
+    from action_msgs.msg import GoalStatusArray
     from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
 
     physics = Physics(args.scene)
@@ -636,6 +812,11 @@ def run_ros(args):
             self.cargo_pub = self.create_publisher(PoseStamped, '/cooperation/cargo_pose', 10)
             self.beacon_pub = self.create_publisher(PoseStamped, BEACON_TOPIC, 1)
             self.state_pub = self.create_publisher(String, '/cooperation/physics_state', self.latest_qos)
+            reset_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                  durability=DurabilityPolicy.VOLATILE)
+            self.reset_pub = self.create_publisher(String, RESET_RESULT_TOPIC, reset_qos)
+            self.reset_requests = ResetRequests()
+            self.create_subscription(String, RESET_REQUEST_TOPIC, self.reset_command, reset_qos)
             from rclpy.utilities import get_rmw_implementation_identifier
             self.runtime_observation = {'rmw': get_rmw_implementation_identifier(),
                 'ephemeral_qos': {topic: {'depth': pub.qos_profile.depth,
@@ -652,11 +833,53 @@ def run_ros(args):
             hold_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
             self.create_subscription(Bool, '/cooperation/car_hold', self.car_hold, hold_qos)
             self.create_subscription(Bool, '/cooperation/docking_guard', self.guard_command, hold_qos)
+            self.native_busy = {}
+            action_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                   durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            for topic in ('/navigate_to_pose/_action/status', '/dock_robot/_action/status'):
+                self.create_subscription(GoalStatusArray, topic,
+                    lambda message, topic=topic: self.native_status(topic, message), action_qos)
             self.last_rejected = None
             self.publish_static_tf()
 
         def car_hold(self, message):
             physics.wheels.set_hold(message.data)
+
+        def native_status(self, topic, message):
+            self.native_busy[topic] = any(item.status not in (4, 5, 6) for item in message.status_list)
+            physics.native_actions_busy = any(self.native_busy.values())
+
+        def reset_command(self, message):
+            try:
+                unique_arm_publisher(self.get_publishers_info_by_topic(RESET_REQUEST_TOPIC),
+                                     args.arm_publisher_node)
+                reply = self.reset_requests.offer(json.loads(message.data))
+                if reply is not None:
+                    self.reset_pub.publish(String(data=json.dumps(reply, allow_nan=False)))
+            except (ValueError, TypeError, OverflowError) as error:
+                self.reject('episode_reset', error)
+
+        def process_reset(self):
+            request = self.reset_requests.take()
+            if request is None:
+                return
+            try:
+                unique_arm_publisher(self.get_publishers_info_by_topic(RESET_REQUEST_TOPIC),
+                                     args.arm_publisher_node)
+                if not args.stamped_cmd_vel:
+                    raise ValueError('new episodes require stamped cmd_vel to reject old commands')
+                if not 0 <= time.time()-request['issued_at'] <= 5:
+                    raise ValueError('reset request expired before the physics boundary')
+                begin = frames.reset_episode if frames else physics.reset_episode
+                episode_id, reset_stamp = begin(request['episode_id'])
+                reply = reset_result(request, episode_id=episode_id, reset_stamp=reset_stamp,
+                                     message='new synthetic episode initialized; previous records retained')
+                self.last_rejected = None
+            except (ValueError, TypeError, OverflowError) as error:
+                reply = reset_result(request, message=error)
+                self.reject('episode_reset', error)
+            reply = self.reset_requests.finish(request, reply)
+            self.reset_pub.publish(String(data=json.dumps(reply, allow_nan=False)))
 
         def guard_command(self, message):
             try:
@@ -686,7 +909,8 @@ def run_ros(args):
                                      args.arm_publisher_node)
                 if message.velocity or message.effort:
                     raise ValueError('arm interface accepts positions only')
-                physics.set_arm_reference(message.name, message.position)
+                source_stamp = message.header.stamp.sec + message.header.stamp.nanosec*1e-9
+                physics.set_arm_reference(message.name, message.position, source_stamp=source_stamp)
             except (ValueError, TypeError, OverflowError) as error:
                 physics.wheels.set_hold(True)
                 self.reject('arm', error)
@@ -800,6 +1024,7 @@ def run_ros(args):
     try:
         while rclpy.ok() and (args.duration is None or time.monotonic()-started < args.duration):
             timing.measure('spin_once', rclpy.spin_once, node, timeout_sec=0.)
+            node.process_reset()
             timing.measure('mj_step', physics.step)
             # 50 Hz state/odom and 10 Hz synchronous rays; physics stays single-owner.
             if physics.steps % 10 == 0:

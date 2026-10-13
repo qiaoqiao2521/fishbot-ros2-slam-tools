@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
 import { CooperationPage, CooperationView } from '@/components/cooperation/cooperation-page'
-import { COOPERATION_STALE_MS, EMPTY_COOPERATION_SNAPSHOT, type CooperationController, type CooperationSnapshot, type CooperationState, type CooperationFrameObservation } from '@/lib/cooperation'
+import { COOPERATION_STALE_MS, EMPTY_COOPERATION_SNAPSHOT, cooperationFrameSourceKey, type CooperationController, type CooperationSnapshot, type CooperationState, type CooperationFrameObservation } from '@/lib/cooperation'
 
 const hooks = vi.hoisted(() => ({ active: false, cursor: 0, values: [] as unknown[], effects: [] as Array<() => (() => void) | undefined>,
   frames: null as null | { display: (url: string | null) => void; observe: (frame: CooperationFrameObservation | null) => void },
@@ -46,7 +46,7 @@ const state: CooperationState = {
 function render(patch: Partial<CooperationSnapshot> = {}, loaded = true) {
   return renderToStaticMarkup(<CooperationView snapshot={{ ...EMPTY_COOPERATION_SNAPSHOT, state, receivedAt: 10000, ownedTaskId: 'task-a', ...patch }}
     now={10000} frame={{ scene: 'actual-scene-sha-123', stamp: 12.5, changedAt: 10000, loadedStamp: loaded ? 12.5 : null, error: !loaded }}
-    onBack={() => {}} onStart={() => {}} onCancel={() => {}} onRefresh={() => {}} />)
+    onBack={() => {}} onStart={() => {}} onCancel={() => {}} onReset={() => {}} onRefresh={() => {}} />)
 }
 
 describe('cooperation page evidence rendering', () => {
@@ -124,6 +124,54 @@ describe('cooperation page evidence rendering', () => {
     expect(html).toContain('需重置合成场景')
     expect(html.match(/disabled=""/g)).toHaveLength(2)
     expect(html).not.toContain('当前任务尚未结束')
+    expect(html).toContain('当前协同服务不支持网页重置')
+  })
+
+  it('offers a distinct reset action after delivery and explains the next explicit start', () => {
+    const html = render({ state: { ...state, episode_id: 'episode-a', ready: false, reason: '本回合已交付',
+      reset: { available: true, reason: '可恢复到新回合', pending: false, last: null },
+      task: { ...state.task, status: 'succeeded', message: '旧任务装货运输完成' } } })
+    const resetButton = html.match(/<button\b[^>]*>(?:(?!<\/button>).)*重置场景<\/button>/s)?.[0]
+    expect(resetButton).toBeDefined(); expect(resetButton).not.toContain('disabled=')
+    const startButton = html.match(/<button\b[^>]*>(?:(?!<\/button>).)*开始装货运输<\/button>/s)?.[0]
+    expect(startButton).toContain('disabled=')
+    expect(html).toContain('旧任务装货运输完成')
+    expect(html).toContain('重置完成后，请再点击')
+  })
+
+  it('keeps reset receipts visible and blocks every mutation while their result is unknown', () => {
+    const html = render({ resetReceipt: { requestId: 'reset-a', fromEpisode: 'episode-a', unknown: true },
+      state: { ...state, episode_id: 'episode-a', reset: { available: true, reason: '可重置', pending: false, last: null },
+        task: { ...state.task, status: 'succeeded' } } })
+    expect(html).toContain('场景重置回执未知')
+    expect(html).toContain('只读取重置请求 reset-a，原回合 episode-a')
+    expect(html).toContain('不重复重置，不自动开始运输')
+    expect(html.match(/disabled=""/g)).toHaveLength(3)
+  })
+
+  it('preserves server history and presents a ready new episode without replaying its old task', () => {
+    const html = render({ state: { ...state, episode_id: 'episode-b',
+      task: { id: null, status: 'idle', stage: 'idle', message: '等待本轮开始' }, events: [],
+      reset: { available: true, reason: '可重置', pending: false,
+        last: { request_id: 'reset-a', status: 'succeeded', from_episode: 'episode-a', to_episode: 'episode-b', message: '已重置' } },
+      history: [{ episode_id: 'episode-a', task: { id: 'archived-task', status: 'succeeded', stage: 'delivery_stopped', message: '历史运输已完成' },
+        events: [{ sequence: 1, time_s: 40, role: 'car', message: '历史实际交付反馈' }], completed_at: 10000 }] } })
+    expect(html).toContain('新回合已就绪，请点击开始装货运输')
+    expect(html).toContain('由协同服务保存')
+    expect(html).toContain('archived-task'); expect(html).toContain('episode-a'); expect(html).toContain('episode-b')
+    expect(html).toContain('历史运输已完成'); expect(html).toContain('历史实际交付反馈')
+    const startButton = html.match(/<button\b[^>]*>(?:(?!<\/button>).)*开始装货运输<\/button>/s)?.[0]
+    expect(startButton).toBeDefined(); expect(startButton).not.toContain('disabled=')
+  })
+
+  it('rejects an old episode frame on the first render even with the same scene SHA and stamp', () => {
+    const oldState = { ...state, episode_id: 'episode-a' }
+    const html = renderToStaticMarkup(<CooperationView snapshot={{ ...EMPTY_COOPERATION_SNAPSHOT, state: { ...oldState, episode_id: 'episode-b' }, receivedAt: 10000 }}
+      now={10000} frame={{ scene: cooperationFrameSourceKey(oldState)!, stamp: 12.5, changedAt: 10000, loadedStamp: 12.5, error: false }}
+      displayedFrameSrc="blob:old-episode" onBack={() => {}} onStart={() => {}} onCancel={() => {}} onRefresh={() => {}} />)
+    expect(html).not.toContain('<img'); expect(html).toContain('data-frame-live="false"')
+    expect(html).toContain('画面来源已变化'); expect(html).toContain('相机仿真时间 未收到')
+    expect(html).toContain('actual-scene-sha-123')
   })
 
   it('expires the real rendered frame and readiness while the next GET remains hung', async () => {

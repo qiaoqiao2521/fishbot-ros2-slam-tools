@@ -1,6 +1,6 @@
 import { COOPERATION_STALE_MS, type CooperationFrameObservation } from './cooperation'
 
-type Target = { scene: string; stamp: number }
+type Target = { scene: string; stamp: number; episodeId?: string }
 type Decoded = Target & { url: string; requestedAt: number }
 type Options = {
   display: (url: string | null) => void
@@ -38,12 +38,12 @@ export class CooperationFrameBuffer {
     this.now = options.now ?? Date.now
   }
 
-  request(scene: string | null, stamp: number | null): void {
+  request(scene: string | null, stamp: number | null, episodeId?: string): void {
     if (this.disposed) return
-    if (scene !== this.target?.scene || (stamp !== null && this.target && stamp < this.target.stamp)) this.reset()
+    if (scene !== this.target?.scene || episodeId !== this.target?.episodeId || (stamp !== null && this.target && stamp < this.target.stamp)) this.reset()
     if (!scene || stamp === null) return
     const changed = this.target?.stamp !== stamp
-    this.target = { scene, stamp }
+    this.target = { scene, stamp, episodeId }
     if (changed && !this.active) void this.load()
   }
 
@@ -76,7 +76,7 @@ export class CooperationFrameBuffer {
     if (!this.displayed) this.options.observe({ scene: target.scene, stamp: target.stamp, changedAt: requestedAt, loadedStamp: null, error: false })
     let url: string | null = null
     try {
-      const response = await Promise.race([this.fetcher(`/coop-api/frame.jpg?stamp=${encodeURIComponent(target.stamp)}`, { cache: 'no-store', signal: controller.signal }), interrupted])
+      const response = await Promise.race([this.fetcher(`/coop-api/frame.jpg?stamp=${encodeURIComponent(target.stamp)}${target.episodeId ? `&episode_id=${encodeURIComponent(target.episodeId)}` : ''}`, { cache: 'no-store', signal: controller.signal }), interrupted])
       if (!response.ok) throw new Error(`Camera HTTP ${response.status}`)
       const blob = await Promise.race([response.blob(), interrupted])
       if (controller.signal.aborted || generation !== this.generation) return

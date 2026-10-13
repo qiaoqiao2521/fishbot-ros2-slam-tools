@@ -46,6 +46,12 @@ def validate_physics(raw, scene_sha, manifest_sha=None):
         raise ValueError('共享物理反馈场景SHA与当前manifest不匹配')
     if manifest_sha is not None and source.get('manifest_sha256') != manifest_sha:
         raise ValueError('共享物理反馈manifest SHA不匹配')
+    if 'episode_id' in raw:
+        try:
+            if str(uuid.UUID(raw['episode_id'])) != raw['episode_id'] or source.get('episode_id') != raw['episode_id']:
+                raise ValueError('共享物理反馈回合身份不一致')
+        except (ValueError, TypeError, AttributeError):
+            raise ValueError('共享物理反馈回合身份无效')
     for key in ('stamp', 'wall_time'):
         if finite_number(raw[key], key) < 0:
             raise ValueError(f'{key}不可为负数')
@@ -154,10 +160,14 @@ class Rejected(ValueError):
         self.status = status
 
 
-def request_identity(body, *, cancel=False, now=None):
+def request_identity(body, *, cancel=False, now=None, episode_id=None):
     expected = {'task_id', 'issued_at'}
+    if episode_id is not None:
+        expected.add('episode_id')
     if not isinstance(body, dict) or set(body) != expected:
         raise Rejected('请求须包含 task_id 和 issued_at')
+    if episode_id is not None and body['episode_id'] != episode_id:
+        raise Rejected('场景回合已变化，请读取最新状态后重新开始', 409)
     try:
         task_id = str(uuid.UUID(body['task_id']))
     except (ValueError, TypeError, AttributeError):
@@ -169,6 +179,17 @@ def request_identity(body, *, cancel=False, now=None):
     if not -2 <= now-issued <= 5:
         raise Rejected('请求已过期，请确认当前状态后重新操作', 409)
     return task_id
+
+
+def reset_request_identity(body, now=None):
+    if not isinstance(body, dict) or set(body) != {'request_id', 'episode_id', 'issued_at'}:
+        raise Rejected('重置请求须包含 request_id、episode_id 和 issued_at')
+    try:
+        episode = str(uuid.UUID(body['episode_id']))
+    except (ValueError, TypeError, AttributeError):
+        raise Rejected('场景回合编号无效')
+    request = request_identity({'task_id': body['request_id'], 'issued_at': body['issued_at']}, now=now)
+    return request, episode
 
 
 def station_robot_pose(relative, station):

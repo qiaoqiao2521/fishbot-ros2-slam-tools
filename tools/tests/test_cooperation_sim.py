@@ -9,9 +9,11 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from types import SimpleNamespace
 import unittest
+import uuid
 
 TOOLS = Path(__file__).resolve().parents[1]
 if str(TOOLS) not in sys.path:
@@ -29,6 +31,60 @@ sim = load('cooperation_sim', TOOLS/'cooperation_sim.py')
 
 
 class ReferencesTest(unittest.TestCase):
+    def test_reset_mailbox_is_bounded_fresh_and_idempotent(self):
+        mailbox = sim.ResetRequests()
+        request = {'request_id': str(uuid.uuid4()), 'episode_id': str(uuid.uuid4()), 'issued_at': 10.}
+        self.assertIsNone(mailbox.offer(request, now=10.))
+        self.assertIsNone(mailbox.offer(request, now=10.1))
+        self.assertEqual(len(mailbox.pending), 1)
+        taken = mailbox.take()
+        result = sim.reset_result(taken, episode_id=str(uuid.uuid4()), reset_stamp=25., message='new episode')
+        mailbox.finish(taken, result)
+        reply = mailbox.offer(request, now=100.)
+        self.assertEqual(reply, result)  # Replay a receipt, never a second reset.
+        reply['status'] = 'changed'
+        self.assertEqual(mailbox.offer(request, now=100.), result)
+        self.assertIsNone(mailbox.take())
+        for stamp in (4.99, 10.01):
+            stale = dict(request, request_id=str(uuid.uuid4()), issued_at=stamp)
+            self.assertEqual(mailbox.offer(stale, now=10.)['status'], 'failed')
+        for index in range(4):
+            self.assertIsNone(mailbox.offer(dict(request, request_id=str(uuid.uuid4())), now=10.))
+        overflow = mailbox.offer(dict(request, request_id=str(uuid.uuid4())), now=10.)
+        self.assertEqual(overflow['status'], 'failed')
+        self.assertEqual(len(mailbox.pending), 4)
+        for index in range(100):
+            item = dict(request, request_id=str(uuid.uuid4()))
+            mailbox.finish(item, sim.reset_result(item, message='negative'))
+        self.assertEqual(len(mailbox.results), 64)
+
+    def test_reset_protocol_rejects_malformed_requests_without_queueing(self):
+        mailbox = sim.ResetRequests()
+        valid = {'request_id': str(uuid.uuid4()), 'episode_id': str(uuid.uuid4()), 'issued_at': 10.}
+        for payload in (None, {}, dict(valid, extra=True), dict(valid, request_id='bad'),
+                        dict(valid, episode_id=4), dict(valid, issued_at=True),
+                        dict(valid, issued_at=math.nan)):
+            with self.assertRaises(ValueError):
+                mailbox.offer(payload, now=10.)
+        self.assertEqual(len(mailbox.pending), 0)
+        self.assertEqual(len(mailbox.results), 0)
+        self.assertEqual(set(sim.reset_result(valid, message='denied')),
+                         {'request_id','episode_id','status','new_episode_id','reset_stamp','message'})
+
+    def test_new_episode_rejects_pre_boundary_wheel_commands(self):
+        wheels = sim.WheelCommands()
+        wheels.set_hold(False)
+        wheels.accept(.2, 0., 1., source_stamp=10., sim_now=10.)
+        wheels.begin_episode(10.)
+        self.assertTrue(wheels.hold)
+        wheels.set_hold(False)
+        for stamp in (None, 9.99, 10.):
+            with self.assertRaises(ValueError):
+                wheels.accept(.2, 0., 2., source_stamp=stamp, sim_now=10.01)
+            self.assertEqual(wheels.velocities(2.), (0., 0.))
+        wheels.accept(.1, 0., 2., source_stamp=10.01, sim_now=10.01)
+        self.assertNotEqual(wheels.velocities(2.1), (0., 0.))
+
     def test_arm_reference_requires_one_named_coordinator(self):
         publisher = SimpleNamespace(node_name='fishbot_so101_cooperation')
         sim.unique_arm_publisher([publisher], 'fishbot_so101_cooperation')
@@ -233,6 +289,113 @@ class SharedWorldTest(unittest.TestCase):
     def physics(self):
         return sim.Physics(self.manifest['world_xml'])
 
+    def test_episode_reset_restores_model_preserves_clock_and_encoder_and_rejects_old_references(self):
+        import numpy as np
+        physics = self.physics()
+        old_episode = physics.episode_id
+        physics.wheels.set_hold(False)
+        for index in range(500):
+            physics.wheels.accept(.1, 0., time.monotonic())
+            physics.step()
+        physics.wheels.set_hold(True)
+        for index in range(1000):physics.step()
+        self.assertTrue(physics.reset_ready)
+        self.assertGreater(abs(physics.odom.x), .05)
+        before = physics.state()
+        # Explicit terminal-fixture mutation in this private model: a carried
+        # object at delivery. It is never a live-world movement command.
+        cargo_joint = physics.model.joint('target_free').id
+        cargo_q = int(physics.model.jnt_qposadr[cargo_joint])
+        physics.data.qpos[cargo_q:cargo_q+3] = physics.data.xpos[physics.tray_body]+[0.,0.,.011]
+        physics.data.qvel[:] = 0.
+        for index in range(1000):physics.step()
+        self.assertTrue(physics.reset_ready)
+        odom = (physics.odom.x, physics.odom.y, physics.odom.yaw,
+                physics.odom.axle_x, physics.odom.axle_y)
+        clock = float(physics.data.time);steps = physics.steps;sequence = physics.state_sequence
+        new_episode, stamp = physics.reset_episode(old_episode)
+        self.assertNotEqual(new_episode, old_episode)
+        self.assertEqual(stamp, clock)
+        self.assertEqual(physics.data.time, clock)
+        self.assertEqual(physics.steps, steps)
+        self.assertEqual(physics.state_sequence, sequence)
+        np.testing.assert_array_equal(physics.data.qpos, physics.initial_qpos)
+        np.testing.assert_array_equal(physics.data.qvel, np.zeros(physics.model.nv))
+        np.testing.assert_array_equal(physics.data.ctrl[physics.wheel_a], [0.,0.])
+        self.assertEqual((physics.odom.x,physics.odom.y,physics.odom.yaw,
+                          physics.odom.axle_x,physics.odom.axle_y),odom)
+        self.assertEqual((physics.odom.left,physics.odom.right),tuple(physics.data.qpos[physics.wheel_q]))
+        raw = physics.state()
+        self.assertEqual(raw['episode_id'], raw['source']['episode_id'])
+        self.assertEqual(raw['episode_id'], new_episode)
+        self.assertEqual(raw['source']['scene_sha256'],before['source']['scene_sha256'])
+        self.assertEqual(raw['episode_reset']['count'],1)
+        self.assertTrue(raw['car_hold'])
+        self.assertFalse(raw['docking_guard']['enabled'])
+        self.assertFalse(raw['episode_reset']['ready'])
+        for source in (None,stamp-.01,stamp):
+            with self.assertRaises(ValueError):
+                physics.set_arm_reference(sim.ARM_JOINTS,physics.initial_reference,source_stamp=source)
+        physics.step()
+        physics.set_arm_reference(sim.ARM_JOINTS,physics.initial_reference,
+                                  source_stamp=float(physics.data.time))
+        self.assertGreater(physics.data.time,clock)
+        self.assertLess(abs(physics.odom.x-odom[0]),1e-5)  # No wheel-baseline jump.
+
+    def test_episode_reset_refuses_active_native_motion_and_unheld_or_guarded_world(self):
+        import numpy as np
+        physics = self.physics()
+        for index in range(1000):physics.step()
+        self.assertTrue(physics.reset_ready)
+        before=physics.data.qpos.copy();episode=physics.episode_id
+        for change,restore in [(lambda: setattr(physics,'native_actions_busy',True),
+                                lambda: setattr(physics,'native_actions_busy',False)),
+                               (lambda: physics.wheels.set_hold(False),lambda: physics.wheels.set_hold(True)),
+                               (lambda: physics.docking_guard.set_enabled(True),
+                                lambda: physics.docking_guard.set_enabled(False))]:
+            change()
+            with self.assertRaises(ValueError):physics.reset_episode(episode)
+            np.testing.assert_array_equal(physics.data.qpos,before)
+            self.assertEqual(physics.episode_id,episode)
+            restore()
+        with self.assertRaises(ValueError):physics.reset_episode(str(uuid.uuid4()))
+        physics.data.qvel[physics.arm_v[0]]=.1
+        with self.assertRaises(ValueError):physics.reset_episode(episode)
+        self.assertFalse(physics.reset_ready)
+        self.assertEqual(physics.episode_id,episode)
+        physics.data.qvel[:]=0.
+        for index in range(300):physics.step()
+        self.assertFalse(physics.reset_ready)  # A new .7s dwell is mandatory.
+        for index in range(500):physics.step()
+        self.assertTrue(physics.reset_ready)
+
+    def test_render_commit_fences_old_episode_and_boundary_clears_pending(self):
+        import numpy as np
+        physics=self.physics()
+        for index in range(1000):physics.step()
+        with tempfile.TemporaryDirectory() as directory:
+            writer=sim.FrameWriter.__new__(sim.FrameWriter)
+            writer.physics,writer.directory=physics,Path(directory)
+            writer.lock=threading.Lock();writer.pending=None
+            writer.offer();old=writer.pending
+            pixels=np.zeros((8,8,3),dtype=np.uint8)
+            self.assertTrue(writer.commit(pixels,old))
+            old_metadata=json.loads((writer.directory/'latest.json').read_text())
+            self.assertEqual(old_metadata['episode_id'],physics.episode_id)
+            self.assertEqual(old_metadata['image_file'],physics.episode_id+'.jpg')
+            old_image=(writer.directory/old_metadata['image_file']).read_bytes()
+            new_episode,_=writer.reset_episode(physics.episode_id)
+            self.assertIsNone(writer.pending)
+            self.assertFalse(writer.commit(pixels,old))
+            self.assertEqual(json.loads((writer.directory/'latest.json').read_text()),old_metadata)
+            writer.offer()
+            self.assertTrue(writer.commit(pixels,writer.pending))
+            new_metadata=json.loads((writer.directory/'latest.json').read_text())
+            self.assertEqual(new_metadata['episode_id'],new_episode)
+            self.assertEqual(new_metadata['image_file'],new_episode+'.jpg')
+            self.assertEqual((writer.directory/old_metadata['image_file']).read_bytes(),old_image)
+            self.assertTrue((writer.directory/new_metadata['image_file']).is_file())
+
     def test_actual_adapter_qos_and_latest_only_reception_after_reader_pause(self):
         try:
             import rclpy
@@ -286,7 +449,30 @@ class SharedWorldTest(unittest.TestCase):
                         self.assertEqual(profile.history, HistoryPolicy.KEEP_LAST)
                     self.assertEqual(profile.durability, DurabilityPolicy.VOLATILE)
                 before = received[-1]
-                time.sleep(.3)  # Reader deliberately misses intermediate samples.
+                # Keep the reader paused until the actual flushed producer
+                # has progressed. Wall time does not imply a real-time factor.
+                logged = None
+                until = time.monotonic()+2
+                while time.monotonic()<until:
+                    if state_path.exists():
+                        with state_path.open('rb') as source:
+                            source.seek(0, 2)
+                            offset = max(0, source.tell()-131072)
+                            source.seek(offset)
+                            tail = source.read(131072)
+                        complete = tail.rsplit(b'\n', 1)[0].split(b'\n') if b'\n' in tail else []
+                        if offset:complete = complete[1:]
+                        if complete and complete[-1]:
+                            logged = json.loads(complete[-1])
+                    if (logged is not None and logged['stamp']-before['stamp'] > .12
+                            and logged['sequence']-before['sequence'] > 6):
+                        break
+                    if child.poll() is not None:break
+                    time.sleep(.02)
+                self.assertIsNotNone(logged, 'producer supplied no flushed progress evidence')
+                self.assertGreater(logged['stamp']-before['stamp'], .12,
+                                   'producer failed to advance while the DDS reader was paused')
+                self.assertGreater(logged['sequence']-before['sequence'], 6)
                 count = len(received)
                 until = time.monotonic()+1
                 while len(received)==count and time.monotonic()<until:

@@ -2,7 +2,7 @@
 
 ## Current
 
-共享物理世界、ROS薄适配、原生Nav2和网页已实现。静止工位的抓放探针通过；完整网页运输尚未通过，不能算闭环完成。
+共享物理世界、ROS薄适配、原生Nav2和网页已完成K完整运输验收。重复回合补充现已在同一M进程通过两轮实际运输评分；第三回合ready/idle，等待用户显式开始。历史失败和诊断边界保留。
 
 ## Done
 
@@ -104,3 +104,32 @@ updated：root已修订并再次读回知识库既有 `Wiki/ROS2 与 FishBot.md`
 最新141项前端测试全部通过、无skip/pending/todo；类型、lint与107生产构建通过，产物index-_eZUicZy.js。旧帧保持、加载失败、fetch/decode永挂后恢复、迟到旧source、首render来源切换/clock回退和过期提示均有回归。生产延迟验收持续换帧且0闪暗/空白/notice/节点替换，0POST/页面异常；4.5秒挂起请求后恢复、390px无横溢出另验。当前IAB已reload并读回同产物：60样本、2帧、0闪暗/空白/节点替换、全部live，用户原任务4120b147-fdd9-4758-aa81-acd0d13fb15b仍succeeded。
 
 没有重启或修改ROS、MuJoCo、任务桥/控制目标；用户运输在修复期间正常完成。诊断和截图私存~/.cache/fishbot/cooperation/flicker-20261014/，不入Git。knowledge closeout=no_reusable_delta：没有新增机器人领域结论，相机显示约束已写回既有COOPERATION文档，本轮不改共享知识页。固件release.sh继续按原阻碍保留。
+
+## 2026-10-14 重复回合实施与实际验收
+
+已新增“重置场景”与独立重置回执。只在任务线程退出、全部原生动作终态、hold、保护禁用及连续quiet后恢复编译初态；保持clock、encoder累计积分、steps及sequence连续。旧回合命令、机械臂参考、JPEG和网页在途图片隔离。重置后确认原生初位姿/定位与两项costmap清理，再开放Start；没有自动开始或unknown重发。历史记录持久保存，网页展示最近10条。
+
+M替换的是已完成且静止的owned L；L原件保持，并将用户task4120b147-fdd9-4758-aa81-acd0d13fb15b及20条事件导入新runtime历史。M两轮在同一unit/PID/invocation下执行，11项执行/前端源起止一致；SO101、场景XML与107/网络/地图规则不改。
+
+| 实际网页任务 | 回合 | 原K独立物理评分 | 货物/车辆位移 |
+|---|---|---|---|
+| 03dd50a8-ac21-4c42-a4b2-5ddc9684fffb | d0b3c5ef-e3a2-4b1b-a003-9576f08d7f9f | PASS | 1.790412m / 1.791039m |
+| 36389e16-e700-4fd4-8dd6-9d484fc4b992 | ff376834-2b1d-4632-b6dc-9c1807f592c3 | PASS | 1.789532m / 1.790801m |
+
+两轮原生staging/Dock/delivery UUID均终态4，真实停靠误差分别16.93mm和16.00mm。实际双指与lift、完整托盘支撑/松爪/相对静止、arm home后才运动、最后车货quiet均通过，禁止接触/托盘外廓违规/独立位姿核对错误均0。每轮episode/reset_count固定、clock/sequence/steps单调，没有任务内重置。缺失physics序号分别1、2，首轮初始未匹配帧1；最大source间隔40ms，最大wall物理接收间隔158.74ms/169.50ms，未宣称零丢帧或生产稳定性。第二轮实际墙钟353.754s，源552.48→711.58；慢实时因子保留。
+
+网页只发4个写请求：Start1、Reset1、Start2、Reset2。两次重置分别由ROS确切ACK与HTTP同ID回执、新episode/定位/idle交叉确认，后续1.8秒均没有auto-start。最终episode d03e4ac7-3c61-4535-a8aa-7caaf90676e2，三条成功历史保留；1440/390px实际页面与手机无横溢出检查通过。用户IAB已读回Start可用、Reset可见、3条历史及新回合相机。
+
+私有编排失败保留：第一轮12s、第二轮60s observer-stop等待超时，任务没有失败或重跑。评分随后实际落盘；第二轮原评分约39s加wrapper二次解析约63s，总约103s。文件名时间早于落盘，不作为完成证明。最终在读取两份原评分后仅显式Reset2，留下第三回合，不补造新运输或改旧失败报告。
+
+源码冻结后审查另修一个前端提示竞态：GET已确认同ID成功时，迟到POST不得重新写unknown错误或复建receipt；仅cooperation.ts变化，物理/桥/场景不变，新增2个deferred回归。最终前端167项通过，fail/pending/todo均0；类型/lint/build检查接续记录如下。全协同首轮87项86通过/1失败/0skip：旧QoS test以0.3墙秒假设至少0.08源秒，高负载仅0.06，测试等待修复与最终87项结果接续如下；不改执行门限。
+
+本机证据根：`~/.cache/fishbot/cooperation/session-20261014/runtime-m-repeat-4fee1ea1/`。两轮分别为round-1/score-1791928698029833505.json、round-2/score-1791929273680536854.json，原native/physics/clock/truth/cargo记录均保留。重复源和进程绑定见repeat-source-and-process-proof.json；原两份诊断报告与最终repeat-ui-report.json分别保留。当前unit fishbot-cooperation-114-repeat-4fee1ea1.service，PID1467776，invocation208ccc5e476942148b077ceef4dc6d4a；无观察器进程残留。
+
+Knowledge closeout：updated。root已实际修订并读回知识库既有 `Wiki/ROS2 与 FishBot.md` 第19节，补显式新回合、连续时钟/odom、旧来源隔离、同ID对账及迟到POST不覆盖；同步 `Wiki/开发知识入口.md` 的再次开始/重置串回合触发词，并读回锚点。知识只存复用规则，阶段状态与原始证据继续回源项目。
+
+Remaining：实施、两轮实际验收、全部相关检查与新产物读回均完成；仅Git交付记录由root串行补齐。保留的固件release.sh阻碍、owner与最短离线入口仍见Retained work，不执行、不提交。
+
+前端最终全套167/167，typecheck、完整lint和107 production build通过；产物index-DfHhNOF-.js已在用户IAB读回。最终桌面/390px新产物只读验收Start/Reset均可用、3条历史、960px相机、无横溢出、0POST/异常；报告final-ready-current-browser.json。两轮源码起止一致后，仅cooperation.ts增加迟到回执保护，post-acceptance-ui-source.json明确差异；后端、plant和场景源保持。
+
+旧QoS测试等待修复后，真实116域定向1/1通过，生产者与首恢复DDS帧源进度均0.14s/7序号；保留>.08与>2断言。证据oracle/qos-source-progress-test-1791929678050268128/，测试SHA24f1413725cc11715b54d97957ea828275a34788cd1ba7fe82d061562e1a8773。原174.361s首轮失败日志repeat-full-cooperation-tests.log保留。最终完整87/87通过，fail/error/skip均0，164.781s；日志repeat-full-cooperation-tests-final.log。命令级限制BLAS/OMP线程并保持本机ROS发现范围一致，未改系统配置、执行源或生产门限。

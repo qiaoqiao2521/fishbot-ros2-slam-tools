@@ -11,10 +11,12 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
+from urllib.parse import parse_qs
 
 from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, car_pose,
                               cargo_retained, dispatch_terminal, finite_vector,
                               physical_quiet, quaternion, request_identity,
+                              reset_request_identity,
                               settled_cargo, stopped, tip_forces, validate_physics)
 from cooperation_core import station_robot_pose, within_station_capture
 
@@ -35,6 +37,7 @@ def run(args):
     from rclpy.time import Time
     from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
     from nav2_msgs.action import NavigateToPose, DockRobot
+    from nav2_msgs.srv import ClearEntireCostmap
     from sensor_msgs.msg import JointState
     from std_msgs.msg import Bool, String
     from tf2_ros import Buffer, TransformListener
@@ -63,6 +66,14 @@ def run(args):
             self.events = []
             self.known_ids = set()
             self.loaded = False
+            self.episode_id = None
+            self.task_worker = None
+            self.reset_worker = None
+            self.reset_records = {}
+            self.reset_acks = {}
+            self.reset_runtime = {}
+            self.last_reset_id = None
+            self.history = []
             self.buffer = Buffer()
             self.listener = TransformListener(self.buffer, self)
             self.nav = ActionClient(self, NavigateToPose, '/navigate_to_pose')
@@ -76,23 +87,46 @@ def run(args):
             self.dock_guard_pub = self.create_publisher(Bool, '/cooperation/docking_guard', hold_qos)
             self.dock_guard_active = False
             self.arm_pub = self.create_publisher(JointState, '/cooperation/arm_reference', 1)
+            reset_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                   durability=DurabilityPolicy.VOLATILE)
+            self.reset_pub = self.create_publisher(String, '/cooperation/reset_request', reset_qos)
+            self.create_subscription(String, '/cooperation/reset_result', self.observe_reset, reset_qos)
+            self.reset_clearers = [self.create_client(ClearEntireCostmap, path) for path in (
+                '/global_costmap/clear_entirely_global_costmap', '/local_costmap/clear_entirely_local_costmap')]
             latest_state_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT,
                                          durability=DurabilityPolicy.VOLATILE)
             self.create_subscription(String, '/cooperation/physics_state', self.observe, latest_state_qos)
             args.output.mkdir(parents=True, exist_ok=True)
             self.ledger = args.output/'task.json'
+            self.history_dir = args.output/'history'
+            self.history_dir.mkdir(exist_ok=True)
+            for path in sorted(self.history_dir.glob('*.json')):
+                record = json.loads(path.read_text())
+                if record['task']['status'] in ACTIVE:
+                    raise RuntimeError('历史任务终态未知，不能通过新回合接管')
+                self.history.append(record)
+                if record['task'].get('id'): self.known_ids.add(record['task']['id'])
             self.hold(True)
             self.dock_guard_pub.publish(Bool(data=False))
 
         def persist(self):
             path = self.ledger.with_suffix('.tmp')
-            path.write_text(json.dumps({'task': self.task, 'events': self.events, 'known_ids': sorted(self.known_ids)}, ensure_ascii=False, indent=2)+'\n')
+            path.write_text(json.dumps({'task': self.task, 'events': self.events, 'known_ids': sorted(self.known_ids),
+                'episode_id': self.episode_id, 'reset_records': self.reset_records}, ensure_ascii=False, indent=2)+'\n')
             path.replace(self.ledger)
 
         def observe(self, message):
             try:
                 value = validate_physics(json.loads(message.data), scene_sha, manifest_sha)
                 with self.lock:
+                    episode = value.get('episode_id')
+                    if episode is not None:
+                        if value['source'].get('episode_id') != episode:
+                            raise ValueError('物理回合来源不一致')
+                        if self.episode_id is None:
+                            self.episode_id = episode
+                        if episode != self.episode_id:
+                            return
                     self.raw, self.received = value, time.monotonic()
                     self.observation_error = None
             except (ValueError, KeyError, TypeError, IndexError) as error:
@@ -110,6 +144,8 @@ def run(args):
                 if self.raw is None or time.monotonic()-self.received > .5:
                     raise RuntimeError(self.observation_error or '共享物理反馈中断')
                 validate_physics(self.raw, scene_sha, manifest_sha)
+                if self.episode_id is not None and self.raw.get('episode_id') != self.episode_id:
+                    raise RuntimeError('等待新回合的物理反馈')
                 now = self.get_clock().now().nanoseconds*1e-9
                 if not -.1 <= now-self.raw['stamp'] <= .25:
                     raise RuntimeError('共享物理反馈时间失效')
@@ -569,6 +605,223 @@ def run(args):
                     self.task.update(status=terminal,stop_reason=str(error))
                     self.persist()
 
+        def archive_current(self):
+            if not self.task.get('id') or self.task['status'] in ACTIVE:
+                return
+            if any(item['task'].get('id') == self.task['id'] for item in self.history):
+                return
+            record = {'episode_id': self.episode_id, 'task': copy.deepcopy(self.task),
+                      'events': copy.deepcopy(self.events), 'completed_at': time.time()}
+            path = self.history_dir/(self.task['id']+'.json')
+            with path.open('x') as stream:
+                json.dump(record, stream, ensure_ascii=False, allow_nan=False, indent=2)
+                stream.write('\n')
+            self.history.append(record)
+
+        def reset_in_progress(self):
+            return any(item['status'] in ('pending', 'unknown') for item in self.reset_records.values())
+
+        def reset_admission(self, raw):
+            if not self.episode_id or raw.get('episode_id') != self.episode_id:
+                return '等待带回合编号的物理反馈'
+            if self.task['status'] in ACTIVE:
+                return '任务仍在执行或终态未知，不能重置'
+            if self.task_worker is not None and self.task_worker.is_alive():
+                return '任务清理尚未结束'
+            if self.reset_in_progress():
+                return '正在核对原重置请求，请勿重复操作'
+            if not all(dispatch_terminal(item) for item in self.dispatches):
+                return '原生导航动作尚未确认结束'
+            guard = raw.get('docking_guard', {})
+            if raw['car_hold'] is not True or guard.get('enabled') is not False:
+                return '等待车辆保持停车及停靠保护退出'
+            if not self.reset_quiet(raw):
+                return '等待车辆、机械臂和货物停稳'
+            if not all(client.service_is_ready() for client in self.reset_clearers):
+                return '等待原生代价地图服务'
+            return None
+
+        def reset_quiet(self, raw):
+            velocity = raw['cargo']['velocity_world_angular_linear']
+            return physical_quiet(raw) and math.sqrt(sum(value*value for value in velocity[3:])) < .03
+
+        def reset_state(self, raw):
+            reason = self.reset_admission(raw) if raw is not None else '等待有效物理反馈'
+            record = self.reset_records.get(self.last_reset_id)
+            last = None if record is None else {
+                'request_id': record['request_id'], 'status': record['status'],
+                'from_episode': record['episode_id'], 'to_episode': record['new_episode_id'],
+                'message': record['message']}
+            return {'available': reason is None, 'reason': reason or '可恢复到新合成回合',
+                    'pending': self.reset_in_progress(),
+                    'last': last}
+
+        def observe_reset(self, message):
+            try:
+                value = json.loads(message.data)
+                if not isinstance(value, dict) or set(value) != {
+                    'request_id', 'episode_id', 'status', 'new_episode_id', 'reset_stamp', 'message'}:
+                    raise ValueError('重置执行回执结构无效')
+                import uuid
+                if (str(uuid.UUID(value['request_id'])) != value['request_id']
+                        or str(uuid.UUID(value['episode_id'])) != value['episode_id']
+                        or value['status'] not in ('succeeded', 'failed') or not isinstance(value['message'], str)):
+                    raise ValueError('重置执行回执身份无效')
+                if value['status'] == 'succeeded':
+                    if (str(uuid.UUID(value['new_episode_id'])) != value['new_episode_id']
+                            or value['new_episode_id'] == value['episode_id']):
+                        raise ValueError('重置回执未提供新回合')
+                    finite_vector([value['reset_stamp']], 1, '重置源时刻')
+                with self.lock:
+                    record = self.reset_records.get(value['request_id'])
+                    if record is None or record['episode_id'] != value['episode_id']:
+                        return
+                    existing = self.reset_acks.get(value['request_id'])
+                    if existing is not None and existing != value:
+                        raise ValueError('同一重置编号收到冲突回执')
+                    self.reset_acks[value['request_id']] = value
+            except (ValueError, KeyError, TypeError, AttributeError) as error:
+                self.get_logger().warning(f'忽略无效重置回执：{error}')
+
+        def reset_episode(self, body):
+            # An old duplicate only reads its receipt. It never repeats a reset.
+            known = isinstance(body, dict) and body.get('request_id') in self.reset_records
+            request_id, episode = reset_request_identity(body, now=body.get('issued_at') if known else None)
+            with self.lock:
+                if request_id in self.reset_records:
+                    record = self.reset_records[request_id]
+                    if record['episode_id'] != episode:
+                        raise Rejected('重置编号已用于另一回合', 409)
+                    return copy.deepcopy(record)
+                if episode != self.episode_id:
+                    raise Rejected('场景回合已变化，请读取最新状态', 409)
+                raw = self.fresh()
+                reason = self.reset_admission(raw)
+                if reason:
+                    raise Rejected(reason, 409)
+                self.archive_current()
+                record = {'request_id': request_id, 'episode_id': episode, 'status': 'pending',
+                          'new_episode_id': None, 'message': '正在确认停稳并重置合成场景'}
+                self.reset_records[request_id] = record
+                self.last_reset_id = request_id
+                self.reset_runtime[request_id] = {'published': False, 'pose_published': False, 'clear_futures': []}
+                self.persist()
+                self.launch_reset_worker(request_id)
+                return copy.deepcopy(record)
+
+        def launch_reset_worker(self, request_id):
+            if self.reset_worker is not None and self.reset_worker.is_alive():
+                return
+            self.reset_worker = threading.Thread(target=self.execute_reset, args=(request_id,),
+                                                 daemon=True, name='cooperation-reset')
+            self.reset_worker.start()
+
+        def reset_record(self, request_id):
+            with self.lock:
+                record = self.reset_records.get(request_id)
+                if record is None:
+                    raise Rejected('未找到该重置编号；未执行或重发重置', 404)
+                if record['status'] == 'unknown' and request_id in self.reset_acks:
+                    # Reconcile a late ACK without sending the mutation again.
+                    self.launch_reset_worker(request_id)
+                return copy.deepcopy(record)
+
+        def wait_reset_condition(self, condition, *, duration=.7, timeout=12.):
+            gate = ContinuousEvidence(duration)
+            end = time.monotonic()+timeout
+            while time.monotonic() < end:
+                try:
+                    raw = self.fresh()
+                    if gate.update(raw['stamp'], bool(condition(raw))):
+                        return raw
+                except (RuntimeError, ValueError, KeyError, TypeError):
+                    gate = ContinuousEvidence(duration)
+                time.sleep(.02)
+            raise RuntimeError('新回合尚未取得连续物理/定位确认')
+
+        def publish_reset_pose(self, raw):
+            pose = car_pose(raw)
+            message = PoseWithCovarianceStamped()
+            message.header.frame_id = 'map'
+            message.header.stamp = self.get_clock().now().to_msg()
+            message.pose.pose.position.x, message.pose.pose.position.y = pose['x'], pose['y']
+            message.pose.pose.orientation.z, message.pose.pose.orientation.w = math.sin(pose['yaw']/2), math.cos(pose['yaw']/2)
+            message.pose.covariance[0] = message.pose.covariance[7] = .0025
+            message.pose.covariance[35] = .0025
+            self.pose_pub.publish(message)
+
+        def execute_reset(self, request_id):
+            with self.lock:
+                record = self.reset_records[request_id]
+                runtime = self.reset_runtime[request_id]
+            try:
+                if not runtime['published']:
+                    self.hold(True)
+                    self.wait_reset_condition(lambda raw: self.reset_quiet(raw) and raw['car_hold']
+                        and not raw['docking_guard']['enabled'])
+                    with self.lock:
+                        if self.task['status'] in ACTIVE or not all(dispatch_terminal(item) for item in self.dispatches):
+                            raise RuntimeError('重置前原动作终态变化，保留原回合')
+                        runtime['published'] = True
+                        self.reset_pub.publish(String(data=json.dumps({'request_id': request_id,
+                            'episode_id': record['episode_id'], 'issued_at': time.time()})))
+                end = time.monotonic()+12.
+                ack = None
+                while time.monotonic() < end:
+                    with self.lock:
+                        ack = self.reset_acks.get(request_id)
+                    if ack is not None: break
+                    time.sleep(.02)
+                if ack is None:
+                    raise RuntimeError('重置执行回执未知，仅核对原编号，不重复重置')
+                if ack['status'] == 'failed':
+                    with self.lock:
+                        record.update(status='failed', message=ack['message'])
+                        self.persist()
+                    return
+                with self.lock:
+                    self.episode_id = ack['new_episode_id']
+                    self.execution_token = None
+                    self.beacon = None
+                    self.last_station_pose_stamp = -math.inf
+                    record['new_episode_id'] = self.episode_id
+                raw = self.wait_reset_condition(lambda raw: raw['episode_id'] == self.episode_id
+                    and raw['stamp'] > ack['reset_stamp'] and raw['car_hold'] and self.reset_quiet(raw))
+                if not runtime['pose_published']:
+                    self.publish_reset_pose(raw)
+                    runtime['pose_published'] = True
+                def localized_reset(value):
+                    measured = self.localized()
+                    expected = car_pose(value)
+                    angle = math.atan2(math.sin(measured['yaw']-expected['yaw']), math.cos(measured['yaw']-expected['yaw']))
+                    return (value['car_hold'] and self.reset_quiet(value)
+                        and math.hypot(measured['x']-expected['x'], measured['y']-expected['y']) < .1
+                        and abs(angle) < .12)
+                self.wait_reset_condition(localized_reset, duration=.3)
+                if not runtime['clear_futures']:
+                    runtime['clear_futures'] = [client.call_async(ClearEntireCostmap.Request()) for client in self.reset_clearers]
+                end = time.monotonic()+8.
+                for future in runtime['clear_futures']:
+                    while not future.done() and time.monotonic() < end:
+                        time.sleep(.02)
+                    if not future.done() or future.result() is None:
+                        raise RuntimeError('新回合代价地图清理回执未知')
+                raw = self.wait_reset_condition(localized_reset, duration=.3)
+                with self.lock:
+                    self.last_ref = list(raw['arm_reference_q6'])
+                    self.loaded = False
+                    self.task_epoch += 1
+                    self.dispatches = []
+                    self.task = {'id': None, 'status': 'idle', 'stage': 'idle', 'message': '新回合已就绪，可以开始装货运输', 'stop_reason': None}
+                    self.events = []
+                    record.update(status='succeeded', message='场景已重置，新回合已就绪')
+                    self.persist()
+            except Exception as error:
+                with self.lock:
+                    record.update(status='unknown' if runtime['published'] else 'failed', message=str(error))
+                    self.hold(True)
+                    self.persist()
+
         def stations(self):
             dock=manifest['dock_pose']
             return {'dock':dict(zip(('x','y','yaw'),dock)),
@@ -596,12 +849,15 @@ def run(args):
                            for body in ('arm','car') for kind in ('count','total')):
                         ready=False;reason='存在非预期物理接触，请查看本回合诊断'
                     if self.task['status'] in ACTIVE: ready=False;reason='当前任务持有车臂控制权'
+                    if self.reset_in_progress(): ready=False;reason='正在重置或核对新回合，请等待明确反馈'
                 except Exception as error:
                     ready=False;nav_ready=False;reason=str(error)
                 frame=self.frame_state(raw)
                 return {'mode':'mujoco','domain':args.domain,'ready':ready,'reason':reason,'task':copy.deepcopy(self.task),
                     'events':copy.deepcopy(self.events),'physics':physics,'frame':frame,'source':{'scene_sha':raw['source']['scene_sha256']} if raw else None,
-                    'nav':{'ready':nav_ready,'pose':pose},'stations':self.stations()}
+                    'nav':{'ready':nav_ready,'pose':pose},'stations':self.stations(),
+                    **({'episode_id': self.episode_id} if self.episode_id else {}),
+                    'reset': self.reset_state(raw), 'history': copy.deepcopy(self.history[-10:])}
 
         def frame_state(self, raw=None):
             try:
@@ -609,21 +865,30 @@ def run(args):
                 info=json.loads((args.frame_dir/'latest.json').read_text())
                 stamp, wall=info['stamp'],info['wall_time']
                 finite_vector([stamp,wall],2,'相机帧时间')
-                if (info['scene_sha256'] != scene_sha or not 0 <= time.time()-wall <= 3.5
-                        or not -.1 <= raw['stamp']-stamp <= 1.5 or not (args.frame_dir/'latest.jpg').is_file()):
+                if (info['scene_sha256'] != scene_sha or (self.episode_id is not None and info.get('episode_id') != self.episode_id)
+                        or not 0 <= time.time()-wall <= 3.5
+                        or not -.1 <= raw['stamp']-stamp <= 1.5 or not self.frame_image(info).is_file()):
                     raise ValueError('相机帧来源或新鲜度无效')
                 return {'available':True,'stamp':stamp}
             except (OSError,ValueError,KeyError,TypeError,RuntimeError):
                 return {'available':False,'stamp':None}
 
+        def frame_image(self, info):
+            if self.episode_id is None:
+                return args.frame_dir/'latest.jpg'
+            if info.get('episode_id') != self.episode_id or info.get('image_file') != self.episode_id+'.jpg':
+                raise ValueError('相机文件与当前回合不匹配')
+            return args.frame_dir/info['image_file']
+
         def start(self, body):
-            task_id=request_identity(body)
             with self.lock:
+                task_id=request_identity(body, episode_id=self.episode_id)
                 if task_id in self.known_ids:
                     if task_id!=self.task['id']: raise Rejected('该任务编号已使用；请读取原任务记录',409)
                     return {'task_id':task_id,'task':copy.deepcopy(self.task)}
                 current=self.state()
                 if not current['ready']: raise Rejected(current['reason'],409)
+                self.archive_current()
                 self.known_ids.add(task_id)
                 self.cancel_event.clear();self.abort_event.clear();self.abort_reason=None;self.loaded=False
                 self.task_epoch+=1
@@ -631,7 +896,8 @@ def run(args):
                 self.dispatches=[]
                 self.task={'id':task_id,'status':'running','stage':'submitted','message':'任务已提交，等待原生执行','stop_reason':None}
                 self.events=[];self.persist()
-                threading.Thread(target=self.execute,args=(self.execution_token,),daemon=True,name='cooperation-task').start()
+                self.task_worker = threading.Thread(target=self.execute,args=(self.execution_token,),daemon=True,name='cooperation-task')
+                self.task_worker.start()
                 return {'task_id':task_id,'task':copy.deepcopy(self.task)}
 
         def cancel(self, body):
@@ -656,11 +922,22 @@ def run(args):
         def do_GET(self):
             path=urlsplit(self.path).path
             if path=='/coop-api/state':self.send_json(200,bridge.state());return
+            if path.startswith('/coop-api/reset/'):
+                try:self.send_json(200,bridge.reset_record(path.rsplit('/',1)[1]))
+                except Rejected as error:self.send_json(error.status,{'error':str(error),'outcome':'rejected'})
+                return
             if path=='/coop-api/frame.jpg':
-                if not bridge.frame_state()['available']:
-                    self.send_json(503,{'error':'共享相机帧缺失、过期或来源不匹配'});return
-                try:content=(args.frame_dir/'latest.jpg').read_bytes()
-                except OSError:self.send_json(503,{'error':'尚无共享物理世界画面'});return
+                try:
+                    with bridge.lock:
+                        episode=parse_qs(urlsplit(self.path).query).get('episode_id',[None])[0]
+                        if episode is not None and episode != bridge.episode_id:
+                            self.send_json(409,{'error':'相机回合已变化'});return
+                        if not bridge.frame_state()['available']:
+                            self.send_json(503,{'error':'共享相机帧缺失、过期或来源不匹配'});return
+                        info=json.loads((args.frame_dir/'latest.json').read_text())
+                        content=bridge.frame_image(info).read_bytes()
+                except (OSError, ValueError, KeyError, TypeError):
+                    self.send_json(503,{'error':'尚无当前回合共享物理世界画面'});return
                 self.send_response(200);self.send_header('Content-Type','image/jpeg');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content);return
             self.send_json(404,{'error':'未知接口'})
         def do_POST(self):
@@ -671,6 +948,7 @@ def run(args):
                 path=urlsplit(self.path).path
                 if path=='/coop-api/start':result=bridge.start(body)
                 elif path=='/coop-api/cancel':result=bridge.cancel(body)
+                elif path=='/coop-api/reset':result=bridge.reset_episode(body)
                 else:raise Rejected('未知接口',404)
                 self.send_json(200,result)
             except (Rejected,ValueError,TypeError) as error:self.send_json(getattr(error,'status',400),{'error':str(error),'outcome':'rejected'})
