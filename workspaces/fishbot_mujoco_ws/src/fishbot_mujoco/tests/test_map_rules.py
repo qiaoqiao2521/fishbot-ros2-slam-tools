@@ -306,6 +306,33 @@ class PersistenceTests(unittest.TestCase):
         self.assertEqual(restored['events'][-1]['type'], 'bridge_restart')
         self.assertEqual(other.routes()['routes'], [])
 
+    def test_interrupted_run_keeps_nonzero_start_snapshot_and_old_records_remain_valid(self):
+        record = self.run_record(status='running')
+        record['start_pose'] = {'x': -.8, 'y': .6, 'yaw': .7}
+        self.store.save_run(record)
+        other = MapRulesStore(self.temporary.name)
+        other.bind(grid())
+        restored = other.runs()['runs'][0]
+        self.assertEqual(restored['status'], 'unknown')
+        self.assertEqual(restored['start_pose'], record['start_pose'])
+        self.assertEqual(restored['waypoints'], record['waypoints'])
+        self.assertEqual(restored['id'], record['id'])
+
+    def test_malformed_stored_start_snapshot_is_rejected_without_origin_fallback(self):
+        self.store.save_run(self.run_record())
+        original = json.loads(self.store.filename.read_text())
+        for start in ({'x': 0., 'y': 0.}, {'x': 0., 'y': 0., 'yaw': 'invalid'},
+                      {'x': 0., 'y': 0., 'yaw': 0., 'frame': 'map'}, [0., 0., 0.]):
+            with self.subTest(start=start):
+                altered = copy.deepcopy(original)
+                altered['runs'][0]['start_pose'] = start
+                self.store.filename.write_text(json.dumps(altered))
+                other = MapRulesStore(self.temporary.name)
+                other.bind(grid())
+                self.assertIsNotNone(other.error)
+                with self.assertRaises(MapRulesError):
+                    other.runs()
+
     def test_new_map_has_separate_routes_rules_and_runs(self):
         self.store.update_rules(self.request())
         old_filename = self.store.filename

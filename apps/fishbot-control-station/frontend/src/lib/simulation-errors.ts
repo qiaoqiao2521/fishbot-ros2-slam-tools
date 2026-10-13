@@ -2,7 +2,7 @@ import type { MapZone } from '@/lib/simulation-workspace'
 import type { Pose, SimulationGoalIssue } from '@/lib/simulation'
 
 export function goalIssueTarget(issue: SimulationGoalIssue): string {
-  return issue.target === 'return_home' ? '返航起点' : `巡逻点 ${issue.waypoint_index}`
+  return issue.target === 'return_home' ? '返航点（本次出发点）' : `巡逻点 ${issue.waypoint_index}`
 }
 
 function coordinates(point: { x: number; y: number }): string {
@@ -49,7 +49,7 @@ export function mapRuleErrorMessage(message: string | null, zones: MapZone[], is
       reason = `${target}的车体范围碰到${issue.kind === 'unknown_cell' ? '地图未知格' : '地图占用格'}${blocker}。`
     }
     const action = issue.target === 'return_home'
-      ? '请检查返航起点附近的规则或障碍，或取消“巡逻结束后返回起点”。'
+      ? '请检查本次出发点附近的规则或障碍，或取消“巡逻结束后返回本次出发点”。'
       : '请将该点移离标出的规则或障碍，再重新派发。'
     return `${reason}${clearanceText(issue)}${action}`
   }
@@ -58,5 +58,5 @@ export function mapRuleErrorMessage(message: string | null, zones: MapZone[], is
   if (!match) return message
   const index = zones.findIndex((zone) => zone.id === match[1])
   const rule = index < 0 ? '地图中的虚拟墙或禁区' : `${zones[index].kind === 'wall' ? '虚拟墙' : '禁区'} ${index + 1}`
-  return `某个巡逻点或返航起点的车体范围与${rule}重叠。请将点位移远，或调整该规则；若是返航起点冲突，可取消“巡逻结束后返回起点”。`
+  return `某个巡逻点或返航点的车体范围与${rule}重叠。请将点位移远，或调整该规则；若是返航点冲突，可取消“巡逻结束后返回本次出发点”。`
 }

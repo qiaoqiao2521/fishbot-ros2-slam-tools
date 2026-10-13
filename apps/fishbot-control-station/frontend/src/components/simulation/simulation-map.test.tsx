@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { SimulationMapView } from '@/components/simulation/simulation-map'
-import type { SimulationGoalIssue, SimulationMap } from '@/lib/simulation'
+import type { SimulationGoalIssue, SimulationMap, SimulationState } from '@/lib/simulation'
 import type { MapZone } from '@/lib/simulation-workspace'
 
 const map: SimulationMap = { map_id: 'map-a', width: 40, height: 40, resolution: 0.1, origin: [-2, -2, 0], data: new Array(1600).fill(0) }
@@ -13,6 +13,21 @@ const issue: SimulationGoalIssue = { kind: 'map_rule', target: 'waypoint', waypo
   required_clearance_m: 0.13, blocking_point: { x: -1, y: 0 }, map_id: 'map-a', rules_revision: 2 }
 
 describe('simulation software constraint overlay', () => {
+  it('keeps a nonzero departure point visible above the robot and diagnostic overlays at the same exact anchor', () => {
+    const home = { x: 0.5, y: -0.5, yaw: 0.3 }
+    const state: SimulationState = { mode: 'mujoco', domain: 107, ready: true, reason: '', pose: home,
+      truth: { ...home, linear_speed: 0, angular_speed: 0 }, path: [],
+      mission: { id: null, status: 'idle', current_index: 0, waypoints: [], return_home: false, message: '' },
+      obstacle: { state: 'parked', x: null, y: null, size: 0.36 }, home }
+    const html = renderToStaticMarkup(<SimulationMapView map={map} state={state} points={[]} editable onSelect={() => {}} goalIssue={issue} issueCurrent homeEmphasized />)
+    expect(html).toContain('left:62.5%;top:62.5%')
+    expect(html).toContain('本次出发点（0.50, -0.50）米')
+    expect(html).toContain('data-home-emphasized="true"')
+    expect(html.indexOf('simulation-home-marker')).toBeGreaterThan(html.indexOf('</svg>'))
+    expect(html).toContain('data-goal-issue-current="true"')
+    expect(html).not.toContain('本轮仿真起点')
+  })
+
   it('renders saved walls and unsaved rectangles as software overlays with actual world coordinates', () => {
     const html = renderToStaticMarkup(<SimulationMapView map={map} state={null} points={[]} editable onSelect={() => {}} mode="no_go" zones={[wall, zone]} savedZones={[wall]} />)
     expect(html).toContain('points="10,20 30,20"')

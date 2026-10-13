@@ -99,9 +99,22 @@ describe('simulation server responses', () => {
     expect(missionReceiptResolved(receipt, { ...state, mission: { ...state.mission, id: 'unrelated', waypoints: [{ x: 3, y: 4, yaw: 0 }] } })).toBe(false)
     expect(missionReceiptResolved(receipt, { ...state, mission: { ...state.mission, id: 'new' } })).toBe(true)
     const returning = { ...receipt, returnHome: true, waypoints: [{ x: 2, y: 1, yaw: Math.PI * 2 }] }
-    expect(missionReceiptResolved(returning, { ...state, mission: { ...state.mission, id: 'new', return_home: true, waypoints: [...state.mission.waypoints, state.home] } })).toBe(true)
-    const alreadyHome = { previousId: 'old', waypoints: [state.home], returnHome: true }
-    expect(missionReceiptResolved(alreadyHome, { ...state, mission: { ...state.mission, id: 'new', return_home: true, waypoints: [state.home] } })).toBe(true)
+    expect(missionReceiptResolved(returning, { ...state, mission: { ...state.mission, id: 'new', return_home: true, waypoints: [...state.mission.waypoints, state.home!] } })).toBe(true)
+    const alreadyHome = { previousId: 'old', waypoints: [state.home!], returnHome: true }
+    expect(missionReceiptResolved(alreadyHome, { ...state, mission: { ...state.mission, id: 'new', return_home: true, waypoints: [state.home!] } })).toBe(true)
+  })
+
+  it('reconciles a dynamic return target from the captured start even when the current pose has changed', () => {
+    const start = { x: 1, y: -1, yaw: 0.3 }
+    const points = [{ x: 2, y: 1, yaw: 0 }]
+    const receipt = { previousId: 'old', waypoints: points, returnHome: true }
+    const value = { ...state, home: { x: 8, y: 8, yaw: 0 }, mission: { ...state.mission,
+      id: 'new', start_pose: start, return_home: true, waypoints: [...points, start] } }
+    expect(missionReceiptResolved(receipt, value)).toBe(true)
+    expect(missionReceiptResolved(receipt, { ...value, home: null })).toBe(true)
+    expect(missionReceiptResolved(receipt, { ...value, mission: { ...value.mission, start_pose: null }, home: null })).toBe(false)
+    expect(validateSimulationState({ ...state, home: null }, 93).home).toBeNull()
+    expect(() => validateSimulationState({ ...state, mission: { ...state.mission, start_pose: { x: 1, y: 2 } } } as unknown as SimulationState, 93)).toThrow()
   })
 
   it('distinguishes explicit pre-dispatch expiry from transport and server uncertainty', () => {

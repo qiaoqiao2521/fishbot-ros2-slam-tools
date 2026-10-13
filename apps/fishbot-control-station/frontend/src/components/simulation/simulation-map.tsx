@@ -8,7 +8,7 @@ import {
 import { goalIssueTarget } from '@/lib/simulation-errors'
 import { mapGeneration, rectanglePoints, zonesEqual, type MapEditMode, type MapZone } from '@/lib/simulation-workspace'
 
-export function SimulationMapView({ map, state, points, editable, onSelect, mode = 'waypoint', zones = [], savedZones = [], anchor = null, onCancelSelection, goalIssue = null, issueCurrent = false }: {
+export function SimulationMapView({ map, state, points, editable, onSelect, mode = 'waypoint', zones = [], savedZones = [], anchor = null, onCancelSelection, goalIssue = null, issueCurrent = false, homeEmphasized = false }: {
   map: SimulationMap
   state: SimulationState | null
   points: Pose[]
@@ -21,6 +21,7 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
   onCancelSelection?: () => void
   goalIssue?: SimulationGoalIssue | null
   issueCurrent?: boolean
+  homeEmphasized?: boolean
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const svg = useRef<SVGSVGElement>(null)
@@ -101,6 +102,7 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
 
   const unit = 1 / map.resolution
   const home = state?.home ? worldToMap(state.home, map) : null
+  const homeLabel = state?.mission.return_home && ['running', 'canceling'].includes(state.mission.status) ? '出发点／返航点' : '本次出发点'
   const obstacle = state?.obstacle
   const obstaclePosition = obstacle && typeof obstacle.x === 'number' && Number.isFinite(obstacle.x)
     && typeof obstacle.y === 'number' && Number.isFinite(obstacle.y)
@@ -149,10 +151,6 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
         {trace.length > 1 && <polyline points={polyline(trace)} fill="none" stroke="#297fb1" strokeOpacity=".42" strokeWidth=".7" strokeDasharray="1.5 1.5" />}
         {state && state.path.length > 1 && <polyline points={polyline(state.path)} fill="none" stroke="#577636" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />}
         {points.length > 1 && <polyline points={polyline(points)} fill="none" stroke="#a77637" strokeOpacity=".6" strokeDasharray="2 2" strokeWidth=".5" />}
-        {home && <g transform={`translate(${home.x} ${home.y})`}>
-          <path d="M-2 1V-1L0-3L2-1V1Z" fill="#faf8eb" stroke="#77694d" strokeWidth=".45" />
-          <title>本轮仿真起点</title>
-        </g>}
         {obstacle && obstaclePosition && <g transform={`translate(${obstaclePosition.x} ${obstaclePosition.y})`}>
           <rect x={-obstacle.size * unit / 2} y={-obstacle.size * unit / 2} width={obstacle.size * unit} height={obstacle.size * unit}
             rx=".5" fill={obstacle.state === 'parked' ? '#a6aaa2' : '#ce731d'} stroke="#794518" strokeWidth=".5" />
@@ -196,6 +194,13 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
           <circle r="2.4" fill="none" />
         </g>}
       </svg>
+      {home && state?.home && <div className={`simulation-home-marker ${home.y < map.height / 4 ? 'simulation-home-marker-below' : ''} ${home.x < map.width / 4 ? 'simulation-home-marker-left' : home.x > map.width * 3 / 4 ? 'simulation-home-marker-right' : ''}`}
+        style={{ left: `${home.x / map.width * 100}%`, top: `${home.y / map.height * 100}%` }} data-home-emphasized={homeEmphasized}
+        aria-label={`${homeLabel}（${state.home.x.toFixed(2)}, ${state.home.y.toFixed(2)}）米`}>
+        <i className="simulation-home-anchor" aria-hidden="true" />
+        <span className="simulation-home-leader" aria-hidden="true" />
+        <span className="simulation-home-callout"><strong>{homeLabel}</strong><span>({state.home.x.toFixed(2)}, {state.home.y.toFixed(2)}) 米</span></span>
+      </div>}
     </div>
   )
 }

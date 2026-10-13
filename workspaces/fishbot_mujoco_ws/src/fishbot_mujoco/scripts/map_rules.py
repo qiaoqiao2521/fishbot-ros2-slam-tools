@@ -352,6 +352,12 @@ class MapRulesStore:
                     raise MapRulesError('Malformed stored run waypoint', 503)
                 for key in point:
                     number(point[key], f'run waypoint {key}')
+            if run.get('start_pose') is not None:
+                start = run['start_pose']
+                if not isinstance(start, dict) or set(start) != {'x', 'y', 'yaw'}:
+                    raise MapRulesError('Malformed stored run start_pose', 503)
+                for key in start:
+                    number(start[key], f'run start_pose {key}')
             for key in ('events', 'observations'):
                 if key in run and (not isinstance(run[key], list) or len(run[key]) > 300
                                    or any(not isinstance(item, dict) for item in run[key])):

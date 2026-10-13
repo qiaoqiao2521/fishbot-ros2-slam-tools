@@ -8,7 +8,8 @@ import type { MapZone } from '@/lib/simulation-workspace'
 import { emptyRulesEditor, rulesReducer } from '@/lib/simulation-workspace'
 
 const fixture = vi.hoisted(() => ({ routeWrite: 'idle', seedDraft: false, draftConsumed: false,
-  attemptedDraft: null as string | null, goalIssue: null as SimulationGoalIssue | null, zones: [] as MapZone[], revision: 2 }))
+  attemptedDraft: null as string | null, goalIssue: null as SimulationGoalIssue | null, zones: [] as MapZone[], revision: 2,
+  home: { x: 0, y: 0, yaw: 0 } }))
 vi.mock('react', async (original) => {
   const actual = await original<typeof import('react')>()
   return { ...actual, useState: (initial: unknown) => {
@@ -25,7 +26,7 @@ vi.mock('@/hooks/use-simulation', () => ({
   useSimulation: () => ({
     state: { mode: 'mujoco', domain: 93, ready: true, reason: '就绪', pose: null, truth: null,
       path: [], mission: { id: null, status: 'idle', current_index: 0, waypoints: [], return_home: false, message: '等待巡逻任务' },
-      obstacle: { state: 'parked', x: null, y: null, size: 0.36 }, home: { x: 0, y: 0, yaw: 0 } },
+      obstacle: { state: 'parked', x: null, y: null, size: 0.36 }, home: fixture.home },
     map: { map_id: 'map-a', width: 4, height: 4, resolution: 1, origin: [0, 0, 0], data: new Array(16).fill(0) },
     connectionError: null, mapError: null, actionError: fixture.goalIssue ? 'rejected' : null, goalIssue: fixture.goalIssue, pending: null, missionRequestUnknown: false, act: vi.fn(),
   }),
@@ -47,7 +48,8 @@ vi.mock('@/hooks/use-simulation-workspace', () => ({
 }))
 
 afterEach(() => { fixture.routeWrite = 'idle'; fixture.seedDraft = false; fixture.draftConsumed = false;
-  fixture.attemptedDraft = null; fixture.goalIssue = null; fixture.zones = []; fixture.revision = 2 })
+  fixture.attemptedDraft = null; fixture.goalIssue = null; fixture.zones = []; fixture.revision = 2;
+  fixture.home = { x: 0, y: 0, yaw: 0 } })
 
 const issue: SimulationGoalIssue = { kind: 'map_rule', target: 'waypoint', waypoint_index: 1,
   point: { x: 1, y: 1, yaw: 0 }, rule_id: 'wall-a', rule_kind: 'wall', rule_index: 1,
@@ -56,6 +58,14 @@ const issue: SimulationGoalIssue = { kind: 'map_rule', target: 'waypoint', waypo
 const wall: MapZone = { id: 'wall-a', kind: 'wall', points: [{ x: 0, y: 0 }, { x: 1, y: 0 }], width: 0.02 }
 
 describe('simulation historical task record presentation', () => {
+  it('shows the prospective departure coordinate and location action before any waypoint is drafted', () => {
+    fixture.home = { x: 0.75, y: 0.25, yaw: 0.3 }
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('本次出发点（按当前定位）')
+    expect(html).toContain('(0.75, 0.25) 米')
+    expect(html).toContain('定位本次出发点')
+    expect(html).toContain('开始巡逻时记录当前定位，任务中保持不变。这里不是最后一个巡逻点。')
+  })
   it('exposes a separate native RViz launcher and explains where its window appears', () => {
     const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
     expect(html).toContain('打开 RViz')

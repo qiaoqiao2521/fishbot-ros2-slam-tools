@@ -20,6 +20,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
   const mapStage = useRef<HTMLDivElement>(null)
   const [waypoints, setWaypoints] = useState<Pose[]>([])
   const [returnHome, setReturnHome] = useState(true)
+  const [homeEmphasized, setHomeEmphasized] = useState(false)
   const [attemptedDraft, setAttemptedDraft] = useState<string | null>(null)
   const [selectionMessage, setSelectionMessage] = useState('')
   const [editMode, setEditMode] = useState<MapEditMode>('waypoint')
@@ -43,6 +44,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
     setEditMode('waypoint')
     setRouteName('')
     setAttemptedDraft(null)
+    setHomeEmphasized(false)
     setSelectionMessage('地图已更换，旧路线和规则草稿已清除。')
   }, [generation])
   const displayedPoints = active ? state!.mission.waypoints : waypoints
@@ -60,6 +62,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
     parked: '箱子已退回', moving: '箱子正在进入路面', blocking: '箱子挡在前方',
     returning: '箱子正在退出路面', error: '障碍箱控制异常',
   }[state?.obstacle.state ?? ''] ?? '等待障碍箱状态'
+  const showReturnHome = active ? !!mission?.return_home : returnHome
 
   function selectPoint(point: Point) {
     if (!map || !editable || editMode === 'observe') return
@@ -123,6 +126,12 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
 
   function locateProblem() {
     if (!issueSameMap) return
+    mapStage.current?.scrollIntoView({ block: 'center' })
+    mapStage.current?.focus({ preventScroll: true })
+  }
+
+  function locateReturnHome() {
+    setHomeEmphasized(true)
     mapStage.current?.scrollIntoView({ block: 'center' })
     mapStage.current?.focus({ preventScroll: true })
   }
@@ -200,7 +209,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
           <p className="simulation-map-guidance" aria-live="polite">{selectionMessage || (editMode === 'wall' ? '选择墙的两个端点。' : editMode === 'no_go' ? '选择矩形的两个对角。' : editMode === 'observe' ? '只观察，不发送指令。' : '点击空旷处添加巡逻点。')}</p>
           <div className="simulation-map-stage" ref={mapStage} tabIndex={-1} aria-label="巡逻地图视图">
             {map ? <SimulationMapView map={map} state={state} points={displayedPoints} editable={editable && editMode !== 'observe'} onSelect={selectPoint} mode={editMode}
-              zones={editor.zones} savedZones={editor.saved?.zones} anchor={editor.anchor} goalIssue={goalIssue} issueCurrent={issueCurrent} onCancelSelection={() => dispatch({ type: 'anchor', point: null })} />
+              zones={editor.zones} savedZones={editor.saved?.zones} anchor={editor.anchor} goalIssue={goalIssue} issueCurrent={issueCurrent} homeEmphasized={homeEmphasized} onCancelSelection={() => dispatch({ type: 'anchor', point: null })} />
               : <div className="simulation-map-empty"><MapPin size={34} /><strong>等待仿真地图</strong><p>地图发布后，就能在这里选点。</p></div>}
           </div>
 
@@ -256,7 +265,7 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
                 const rejected = issueCurrent && !!goalIssue && goalIssueMatchesWaypoint(goalIssue, index, point)
                 return <li key={`${index}-${point.x}-${point.y}`} className={[current ? 'simulation-waypoint-current' : '', rejected ? 'simulation-waypoint-issue' : ''].filter(Boolean).join(' ')}>
                   <span className="simulation-waypoint-number">{done ? <Check size={14} /> : index + 1}</span>
-                  <div><strong>{isHome ? '返回起点' : `巡逻点 ${index + 1}`}</strong><span>({point.x.toFixed(2)}, {point.y.toFixed(2)}) 米</span>{rejected && <small className="simulation-rejected-point-label">此点被拒绝</small>}</div>
+                  <div><strong>{isHome ? '返回本次出发点' : `巡逻点 ${index + 1}`}</strong><span>({point.x.toFixed(2)}, {point.y.toFixed(2)}) 米</span>{rejected && <small className="simulation-rejected-point-label">此点被拒绝</small>}</div>
                   {current ? <span className="simulation-waypoint-tag">前往中</span> : editable && <div className="simulation-waypoint-edit">
                     <button type="button" aria-label={`上移巡逻点 ${index + 1}`} disabled={index === 0} onClick={() => reorderPoint(index, -1)}><ArrowUp size={14} /></button>
                     <button type="button" aria-label={`下移巡逻点 ${index + 1}`} disabled={index === displayedPoints.length - 1} onClick={() => reorderPoint(index, 1)}><ArrowDown size={14} /></button>
@@ -267,7 +276,13 @@ export function SimulationPage({ onBack }: { onBack: () => void }) {
             </ol> : <div className="simulation-queue-empty"><MapPin size={22} /><p>在地图上选择巡逻点，或载入已保存的路线。</p></div>}
 
             <p className="simulation-selection-message" aria-live="polite">{!active && startBlock}</p>
-            <label className={`simulation-return-home ${issueCurrent && goalIssue?.target === 'return_home' ? 'simulation-return-home-issue' : ''}`}><input type="checkbox" checked={active ? !!mission?.return_home : returnHome} disabled={!editable} onChange={(event) => setReturnHome(event.target.checked)} /><Home size={16} /><span>巡逻结束后返回起点</span>{issueCurrent && goalIssue?.target === 'return_home' && <small>返航起点被拒绝</small>}</label>
+            <label className={`simulation-return-home ${issueCurrent && goalIssue?.target === 'return_home' ? 'simulation-return-home-issue' : ''}`}><input type="checkbox" checked={showReturnHome} disabled={!editable} onChange={(event) => setReturnHome(event.target.checked)} /><Home size={16} /><span>巡逻结束后返回本次出发点</span>{issueCurrent && goalIssue?.target === 'return_home' && <small>返航起点被拒绝</small>}</label>
+            {showReturnHome && <div className="simulation-home-details">
+              <strong>{active ? '本次出发点／返航点' : '本次出发点（按当前定位）'}</strong>
+              <span>{state?.home ? `(${state.home.x.toFixed(2)}, ${state.home.y.toFixed(2)}) 米` : '等待定位'}</span>
+              <p>开始巡逻时记录当前定位，任务中保持不变。这里不是最后一个巡逻点。</p>
+              <button type="button" className="simulation-button simulation-quiet" disabled={!map || !state?.home} onClick={locateReturnHome}><MapPin size={15} />定位本次出发点</button>
+            </div>}
             <div className="simulation-mission-actions">
               <button type="button" className="simulation-button simulation-primary" disabled={!ready || !editable || waypoints.length === 0 || !!startBlock}
                 onClick={startMission}><Play size={17} />{pending === 'mission' ? '正在派发…' : '开始巡逻'}</button>

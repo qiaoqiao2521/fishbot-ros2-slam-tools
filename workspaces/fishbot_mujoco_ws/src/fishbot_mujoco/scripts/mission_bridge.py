@@ -49,7 +49,6 @@ from map_rules import (MapRulesError, MapRulesStore, build_mask, costmap_matches
 from rviz_desktop import RvizDesktop, RvizDesktopError
 
 
-HOME = {'x': 0.0, 'y': 0.0, 'yaw': 0.0}
 ROBOT_RADIUS = 0.13
 MAX_WAYPOINTS = 12  # User-selected points; an optional home point is additional.
 ACTIVE_STATUSES = {'running', 'canceling'}
@@ -135,7 +134,7 @@ def require_free_point(point, grid, radius=ROBOT_RADIUS):
                         'blocking_point': {'x': bx, 'y': by}})
 
 
-def validate_mission(body, grid, now=None, zones=None):
+def validate_mission(body, grid, now=None, zones=None, return_point=None):
     if not isinstance(body, dict) or set(body)-{'waypoints', 'return_home', 'issued_at'}:
         raise APIError('Expected waypoints, return_home and issued_at')
     issued = finite_number(body.get('issued_at'), 'issued_at')
@@ -163,31 +162,46 @@ def validate_mission(body, grid, now=None, zones=None):
                 error.issue.update(target='waypoint', waypoint_index=index+1, point=dict(parsed))
             raise
         points.append(parsed)
-    if return_home and any(abs(points[-1][axis]-HOME[axis]) > 1e-6 for axis in HOME):
+    if return_home:
+        if return_point is None:
+            raise APIError('Current mission start pose is not available', 503)
+        start = {name: finite_number(return_point.get(name), f'mission start {name}')
+                 for name in ('x', 'y', 'yaw')}
+        start['yaw'] = math.atan2(math.sin(start['yaw']), math.cos(start['yaw']))
+    if return_home and any(abs(points[-1][axis]-start[axis]) > 1e-6 for axis in start):
         try:
-            require_free_point(HOME, grid)
-            require_outside_rules(HOME, zones or [], ROBOT_RADIUS)
+            require_free_point(start, grid)
+            require_outside_rules(start, zones or [], ROBOT_RADIUS)
         except (APIError, MapRulesError) as error:
             if error.issue is not None:
-                error.issue.update(target='return_home', waypoint_index=None, point=dict(HOME))
+                error.issue.update(target='return_home', waypoint_index=None, point=dict(start))
             raise
-        points.append(dict(HOME))
+        points.append(start)
     return points, return_home
+
+
+class PreparedMission(tuple):
+    """Keep the two-value preparation API while carrying one immutable-source snapshot."""
+    def __new__(cls, points, return_home, start_pose):
+        prepared = super().__new__(cls, (points, return_home))
+        prepared.start_pose = copy.deepcopy(start_pose)
+        return prepared
 
 
 class MissionRecord:
     """Only terminal action results can produce a successful/canceled mission."""
     def __init__(self):
         self.value = {'id': None, 'status': 'idle', 'current_index': 0, 'waypoints': [],
-                      'return_home': False, 'message': '等待巡逻任务', 'missed_waypoints': [],
+                      'return_home': False, 'start_pose': None, 'message': '等待巡逻任务', 'missed_waypoints': [],
                       'dispatch_state': None, 'stop_reason': None, 'cleanup_state': None}
 
-    def begin(self, points, return_home):
+    def begin(self, points, return_home, start_pose=None):
         if self.value['status'] in ACTIVE_STATUSES:
             raise APIError('A mission is already running or canceling', 409)
         # Keep the legacy active-status contract; dispatch_state carries the Nav2 receipt.
         self.value = {'id': uuid.uuid4().hex, 'status': 'running', 'current_index': 0,
                       'waypoints': points, 'return_home': return_home,
+                      'start_pose': copy.deepcopy(start_pose),
                       'message': '任务已提交，等待 Nav2 接收回执', 'missed_waypoints': [],
                       'dispatch_state': 'pending', 'stop_reason': None, 'cleanup_state': None}
         return self.value['id']
@@ -467,6 +481,8 @@ class MissionBridge(Node):
                     if unknown and self.mission.value['status'] == 'idle':
                         self.mission.value.update(id=unknown['id'], status='canceling',
                             waypoints=unknown['waypoints'], return_home=unknown['return_home'],
+                            start_pose=copy.deepcopy(unknown.get('start_pose')),
+                            map_id=unknown['map_id'], rules_revision=unknown['rules_revision'],
                             current_index=unknown['current_index'], dispatch_state='unavailable',
                             cleanup_state='unresolved', stop_reason=unknown.get('stop_reason'),
                             message=unknown['message'])
@@ -827,17 +843,33 @@ class MissionBridge(Node):
         if not self.client.server_is_ready():
             return False, 'FollowWaypoints 服务未就绪'
         try:
+            self.pose = MissionBridge.localized_pose(self, ros_now)
+        except APIError as error:
+            return False, str(error)
+        return True, '仿真传感器、定位和 Nav2 已就绪'
+
+    def localized_pose(self, ros_now):
+        """Use the same fresh Nav2 localization source for readiness and dispatch."""
+        try:
             transform = self.buffer.lookup_transform('map', 'base_footprint', rclpy.time.Time())
             # AMCL transform_tolerance may intentionally stamp map->odom in the future.
             if not -1.2 <= ros_now-stamp_seconds(transform.header.stamp) <= 0.8:
-                return False, '定位 TF 已过期'
+                raise APIError('定位 TF 已过期', 503)
             p, q = transform.transform.translation, transform.transform.rotation
             if not all(math.isfinite(v) for v in (p.x, p.y, q.x, q.y, q.z, q.w)):
-                return False, '定位 TF 包含无效值'
-            self.pose = {'x': p.x, 'y': p.y, 'yaw': quaternion_yaw(q)}
+                raise APIError('定位 TF 包含无效值', 503)
+            return {'x': p.x, 'y': p.y, 'yaw': quaternion_yaw(q)}
+        except APIError:
+            raise
         except Exception:
-            return False, '等待 map → base_footprint 定位'
-        return True, '仿真传感器、定位和 Nav2 已就绪'
+            raise APIError('等待 map → base_footprint 定位', 503)
+
+    def capture_start_pose(self):
+        wall = time.monotonic()
+        ros_now = self.get_clock().now().nanoseconds*1e-9
+        if not self.clock_fresh(ros_now, wall):
+            raise APIError('仿真时钟未就绪或已暂停', 503)
+        return MissionBridge.localized_pose(self, ros_now)
 
     def state(self):
         with self.lock:
@@ -851,12 +883,20 @@ class MissionBridge(Node):
                 obstacle.update(self.obstacle_truth)
             else:
                 obstacle.update(x=None, y=None)
+            active = self.mission.value['status'] in ACTIVE_STATUSES
+            home = self.mission.value.get('start_pose') if active else self.pose if self.ready else None
+            if active and self.mission.value.get('map_id'):
+                current_map = (self.rules_store.map_id if hasattr(self, 'rules_store') else
+                               map_identity(self.grid) if self.grid is not None else None)
+                if self.mission.value['map_id'] != current_map:
+                    home = None
             return copy.deepcopy({'mode': 'mujoco', 'domain': self.domain,
                 'ready': self.ready, 'reason': self.reason,
                 'pose': self.pose if self.ready else None,
                 'truth': self.truth if clock_fresh and self.fresh('truth', ros_now, wall) else None,
                 'path': self.path, 'trajectory': self.trajectory,
-                'mission': self.mission.value, 'obstacle': obstacle, 'home': HOME,
+                'mission': self.mission.value, 'obstacle': obstacle,
+                'home': home,
                 'map_rules': self.rules_state() if hasattr(self, 'rules_store') else None,
                 'collision_monitor': self.collision_monitor_state(wall)})
 
@@ -924,9 +964,12 @@ class MissionBridge(Node):
                         body = op.body
                         if not isinstance(body, dict):
                             raise APIError('Route must be an object')
-                        points, returning = validate_mission({'waypoints': body.get('waypoints'),
-                            'return_home': body.get('return_home', False), 'issued_at': time.time()}, self.grid)
-                        body = {**body, 'waypoints': points[:len(body['waypoints'])], 'return_home': returning}
+                        returning = body.get('return_home', False)
+                        if not isinstance(returning, bool):
+                            raise APIError('return_home must be a boolean')
+                        points, _ = validate_mission({'waypoints': body.get('waypoints'),
+                            'return_home': False, 'issued_at': time.time()}, self.grid)
+                        body = {**body, 'waypoints': points, 'return_home': returning}
                         op.future.set_result((200, self.rules_store.save_route(body)))
                     else:
                         raise APIError('Unknown operation', 404)
@@ -968,7 +1011,9 @@ class MissionBridge(Node):
                     raise APIError('Mission rules revision changed; reload before sending', 409)
                 body = {key: value for key, value in body.items() if key not in {'map_id', 'rules_revision'}}
                 zones = rules['zones']
-            return validate_mission(body, self.grid, zones=zones)
+            start_pose = MissionBridge.capture_start_pose(self)
+            points, returning = validate_mission(body, self.grid, zones=zones, return_point=start_pose)
+            return PreparedMission(points, returning, start_pose)
         except (APIError, MapRulesError) as error:
             error.outcome = 'rejected'
             if error.issue is not None:
@@ -979,7 +1024,8 @@ class MissionBridge(Node):
             raise
 
     def start_mission(self, body):
-        points, return_home = MissionBridge.prepare_mission(self, body)
+        prepared = MissionBridge.prepare_mission(self, body)
+        points, return_home = prepared
         goal = FollowWaypoints.Goal()
         goal.number_of_loops = 0
         goal.goal_index = 0
@@ -992,13 +1038,15 @@ class MissionBridge(Node):
             pose.pose.orientation.w = math.cos(point['yaw']/2)
             goal.poses.append(pose)
         previous_mission = copy.deepcopy(self.mission.value)
-        mission_id = self.mission.begin(points, return_home)
+        mission_id = self.mission.begin(points, return_home, prepared.start_pose)
+        self.mission.value['map_id'] = map_identity(self.grid)
         if hasattr(self, 'rules_store'):
             self.rules_run_store = self.rules_store
             self.rules_run = {'id': mission_id, 'map_id': self.rules_store.map_id,
                 'rules_revision': self.rules_store.document['revision'], 'started_at': time.time(),
                 'finished_at': None, 'status': 'running', 'current_index': 0,
                 'waypoints': copy.deepcopy(points), 'return_home': return_home,
+                'start_pose': copy.deepcopy(prepared.start_pose),
                 'stop_reason': None, 'message': self.mission.value['message'],
                 'dispatch_state': 'pending', 'cleanup_state': None,
                 'events': [], 'observations': [], 'truth': copy.deepcopy(self.truth)}
@@ -1019,7 +1067,8 @@ class MissionBridge(Node):
         self.cancel_requested = self.cancel_sent = False
         self.reset_cleanup()
         self.goal_sent_wall = time.monotonic()
-        self.trajectory = [dict(self.truth and {'x': self.truth['x'], 'y': self.truth['y']} or HOME)]
+        self.trajectory = [dict(self.truth and {'x': self.truth['x'], 'y': self.truth['y']}
+                                or {key: prepared.start_pose[key] for key in ('x', 'y')})]
         self.path = []
         try:
             self.goal_send_future = self.client.send_goal_async(

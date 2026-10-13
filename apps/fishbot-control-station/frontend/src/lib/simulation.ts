@@ -36,10 +36,11 @@ export type SimulationState = {
     dispatch_state?: MissionDispatchState | null
     stop_reason?: string | null
     cleanup_state?: 'retrying' | 'unresolved' | null
+    start_pose?: Pose | null
   }
   collision_monitor?: CollisionMonitorReport
   obstacle: { state: string; x: number | null; y: number | null; size: number }
-  home: Pose
+  home: Pose | null
 }
 
 export const MAX_WAYPOINTS = 12
@@ -107,10 +108,11 @@ export function validateSimulationState(value: SimulationState, expectedDomain =
     || (value.mission.dispatch_state != null && !['pending', 'accepted', 'rejected', 'unavailable'].includes(value.mission.dispatch_state))
     || (value.mission.stop_reason != null && typeof value.mission.stop_reason !== 'string')
     || (value.mission.cleanup_state != null && !['retrying', 'unresolved'].includes(value.mission.cleanup_state))
+    || (value.mission.start_pose != null && !finitePose(value.mission.start_pose))
     || (value.collision_monitor != null && !validCollisionMonitor(value.collision_monitor))
     || !Number.isInteger(value.mission.current_index) || value.mission.current_index < 0
     || !Array.isArray(value.mission.waypoints) || !value.mission.waypoints.every(finitePose)
-    || !Array.isArray(value.path) || !value.path.every(finitePoint) || !finitePose(value.home)
+    || !Array.isArray(value.path) || !value.path.every(finitePoint) || (value.home !== null && !finitePose(value.home))
     || (value.pose !== null && !finitePose(value.pose)) || (value.truth !== null && (!finitePose(value.truth)
       || !Number.isFinite(value.truth.linear_speed) || !Number.isFinite(value.truth.angular_speed)))
     || !value.obstacle || !((value.obstacle.x === null && value.obstacle.y === null)
@@ -166,7 +168,7 @@ export function missionProgressText(mission?: SimulationState['mission']): strin
   if (mission?.status === 'running') {
     if (mission.dispatch_state === 'pending') return '任务已提交，尚未收到 Nav2 接收回执。'
     return mission.return_home && mission.current_index === mission.waypoints.length - 1
-      ? '正在返回起点' : `正在前往第 ${mission.current_index + 1} / ${mission.waypoints.length} 个点`
+      ? '正在返回本次出发点' : `正在前往第 ${mission.current_index + 1} / ${mission.waypoints.length} 个点`
   }
   if (mission?.status === 'succeeded') return `已完成 ${mission.waypoints.length} 个导航点`
   if (mission?.status === 'canceling') {
@@ -242,10 +244,11 @@ export function simulationRequestRejected(error: unknown): boolean {
 export type UnknownMissionReceipt = { previousId: string | null; waypoints: Pose[]; returnHome: boolean }
 export function missionReceiptResolved(receipt: UnknownMissionReceipt, value: SimulationState): boolean {
   const mission = value.mission
+  const returnPoint = mission.start_pose ?? value.home
   return !!mission.id && mission.id !== receipt.previousId && mission.return_home === receipt.returnHome
     && (mission.waypoints.length === receipt.waypoints.length
       || (receipt.returnHome && mission.waypoints.length === receipt.waypoints.length + 1
-        && posesEquivalent(mission.waypoints.at(-1)!, value.home)))
+        && !!returnPoint && posesEquivalent(mission.waypoints.at(-1)!, returnPoint)))
     && receipt.waypoints.every((point, index) => {
       const actual = mission.waypoints[index]
       return posesEquivalent(point, actual)

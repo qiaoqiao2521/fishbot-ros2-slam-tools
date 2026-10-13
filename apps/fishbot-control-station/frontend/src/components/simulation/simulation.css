@@ -49,6 +49,17 @@
 .simulation-map-frame svg { touch-action: manipulation; }
 .simulation-map-frame svg:focus-visible { outline: 3px solid #297fb1; outline-offset: 3px; }
 .simulation-map-editable { cursor: crosshair; }
+.simulation-home-marker { position: absolute; width: 0; height: 0; pointer-events: none; z-index: 1; color: #174b66; }
+.simulation-home-anchor { position: absolute; width: 10px; height: 10px; top: -5px; left: -5px; border-radius: 50%; border: 2px solid #174b66; background: #fffdf7; box-shadow: 0 0 0 2px #fffdf7; }
+.simulation-home-leader { position: absolute; top: -44px; left: 0; height: 38px; border-left: 1px solid #174b66; }
+.simulation-home-callout { position: absolute; bottom: 44px; left: 0; transform: translateX(-50%); display: grid; gap: 2px; padding: 5px 8px; width: max-content; max-width: 160px; border: 1px solid #668c9a; border-radius: 5px; background: #fffdf7; box-shadow: 0 1px 3px #223b4326; font-size: 12px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.simulation-home-callout strong { font-size: 12px; font-weight: 650; }
+.simulation-home-marker-left .simulation-home-callout { transform: translateX(0); }
+.simulation-home-marker-right .simulation-home-callout { transform: translateX(-100%); }
+.simulation-home-marker-below .simulation-home-leader { top: 6px; }
+.simulation-home-marker-below .simulation-home-callout { top: 44px; bottom: auto; }
+.simulation-home-marker[data-home-emphasized="true"] .simulation-home-anchor { box-shadow: 0 0 0 2px #fffdf7, 0 0 0 9px #277fa25c; }
+.simulation-home-marker[data-home-emphasized="true"] .simulation-home-callout { border: 2px solid #174b66; background: #e9f5f9; }
 .simulation-map-empty { display: grid; justify-items: center; gap: 10px; text-align: center; color: #676b60; }
 .simulation-map-empty p { font-size: 14px; }
 .simulation-map-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 22px 10px; font-size: 12px; color: hsl(var(--muted-foreground)); }
@@ -92,6 +103,10 @@
 .simulation-return-home input { width: 16px; height: 16px; accent-color: #655234; }
 .simulation-return-home input:focus-visible { outline: 3px solid #297fb1; outline-offset: 3px; }
 .simulation-return-home svg { color: #7b694e; }
+.simulation-home-details { display: grid; gap: 6px; margin: -8px 0 16px; padding: 12px; background: #edf4f3; border: 1px solid #b4cbce; border-radius: 8px; font-size: 12px; color: #244d5b; }
+.simulation-home-details > span { font-variant-numeric: tabular-nums; }
+.simulation-home-details p { margin: 0; line-height: 1.6; }
+.simulation-home-details button { min-height: 44px; margin-top: 3px; font-size: 12px; }
 .simulation-mission-actions { display: grid; gap: 8px; }
 .simulation-clear-queue { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 12px 0 0; background: none; border: 0; font-size: 12px; color: #756851; }
 .simulation-obstacle { border-top: 1px solid #bbaa8d; padding: 17px 4px 0; }

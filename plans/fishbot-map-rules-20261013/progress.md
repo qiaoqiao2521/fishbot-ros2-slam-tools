@@ -4,6 +4,8 @@
 
 当前第一阶段六项Acceptance均已实现并逐项验证。严格复审补齐手机完整保存/载入、UI模板派发以及删除后实际路线恢复；修复已确认删除被新观测撤销的状态错误。既有与新增失败记录全部保留；根串行提交推送本轮修复与可复用验收入口。无实体车操作，没有训练策略权重。
 
+后续反馈已落实动态任务出发点、可见地图标签和侧栏定位。当前489反馈回归、116全前端测试、隔离原生动态返航与页面验收通过；运行与首次启动失败边界见末节。浏览器当前已由用户手动恢复；生产包规避已观察开发版路径，长期稳定性仍待观察。
+
 ## Delivered behavior
 
 - `/simulation` 增加虚拟墙、矩形禁区、观察、撤销、移除和显式保存。
@@ -140,3 +142,25 @@ Knowledge: already_covered。沿用Obsidian FishBot第18节的完整车体与规
 当前空闲bridge原PID737778已正常更新，同owned unit的PID805462；旧launch626695、controller627039、RViz741185保持运行。规则revision24及六项用户规则、模板、历史任务保留，没有重启仿真或派发运动。release.sh仍由root接续，沿用具体阻碍，不执行。
 
 Knowledge: updated。根修订既有Obsidian `Wiki/ROS2 与 FishBot.md`第18节，追加服务端具体诊断、墙边净距、草稿/规则快照与历史标记；同步 `Wiki/开发知识入口.md`的空间拒绝触发词。保留原dirty内容，实际读回两段和锚点；不复制运行日志，当前状态只留项目。
+
+## 动态出发点与页面恢复（2026-10-13）
+
+原固定HOME=(0,0)已移除。派发准备从新鲜map→base_footprint捕获一次位置和朝向，同一快照用于返航校验、实际FollowWaypoints目标、mission.start_pose和run.start_pose。readiness仍独立查询定位；“一次”指派发快照。活动/取消任务冻结起点；空闲预览当前有效定位，失效为null；跨地图隐藏旧标记。模板仅保存用户点与返航开关，执行时重新解析起点。旧记录不猜出发位置；未知回执优先核对原任务快照。后端拒绝、规则与时钟门限保留。
+
+地图常驻12px出发点标签、坐标、精确锚点与引线，覆盖在SVG上层；侧栏显示当前预览或已捕获任务起点。“定位本次出发点”仅滚动、聚焦和突出标签，零导航请求。勾选项与活动列表明确写“返回本次出发点”。
+
+489反馈回归通过（control209、mission145、autonomy61、frontend74），零跳过/缺依赖；全前端116项、类型、相关lint、domain107生产构建、布局与diff检查通过。独立只读补丁审查未发现阻塞，后端124项及前端相关31项再次通过。只用合成场景，不新增实车或训练验收。
+
+隔离domain109/API9084第二次启动的实际Nav2验收11/11：先到(.6,.9)，再前往(-.4,1.5)并返回第二次任务快照(.599833,.874225,-.034642)。341次active读回、238次明显运动样本的home漂移为0；独立真值返航误差2.530厘米，连续0.7秒全帧停稳。1547帧最大接收间隙52.280毫秒、源48毫秒、源年龄-4～12毫秒。两个原生FollowWaypoints UUID均status4，第二次feedback序号0→1。原生Nav2日志独立确认去程与返程目标至两位小数；全精度由稳定实际封装源码、任务与持久化记录确认，未抓全精度wire payload。
+
+首轮native-ca9635d1在route_server lifecycle配置响应超时后未通过45秒ready，无任务派发，launch自行退出。确认全部21个PID退出、unit MainPID=0与ControlGroup为空后，native-c64abdcb沿用相同域、模型、源码和门限重新启动；两条运动任务各执行一次。失败报告不改写为通过。最后成功/静止读回后，仅停止自有109 unit，inactive/dead；没有碰107。启动稳定性不是本轮新增通过声明，后续接续owner=root Codex，入口为首轮journal与startup-failure.json。
+
+隔离Playwright页面验收4项通过：真实107当前定位与精确锚点；受控active非零快照与390px标签/44px定位按钮；受控定位失效显示等待；生产资源/原代理正常、零POST、原任务/规则不变且真值静止。active/失效UI使用受控GET，只证明呈现，真实运动由前述原生验收证明。初次QA错误等待零尺寸锚点本身可见；第二次要求CSS百分比比序列化精度更高。保留a/b报告，改为检查可见子标签及1e-4百分比序列化误差；实际最大差0.000024%，未改产品几何或物理评分。最终截图由根实际查看。
+
+崩溃只读证据：23:31:55的5179 React开发bundle报Performance.measure/DataCloneError；23:32:01 ChatGPT进程invalid opcode；23:32:02同页面renderer crashed/exit132。没有同期OOM killer证据，不能据此确定全部内存来源。用户手动重新加载后确认恢复；工具对崩溃内部页的安全拒绝未绕过。当前自有frontend改为现有Vite preview提供domain107生产构建；生成包不含对应开发profiling路径，HTTP和隔离真实资源读回确认。不能声称浏览器长期不再崩溃；用户原IAB需刷新才加载新包。
+
+运行只更新空闲bridge805462→868642、frontend487852→869856；simulation626695、controller627039、RViz741185保持。规则revision24全部六项、模板与历史任务保留，导航已应用。当前动态出发位置仍与用户虚拟墙5的车体范围重叠；动态起点不豁免几何规则，未自动移除墙或取消返航。固件release.sh继续保留，root owner与具体阻碍沿用本页。
+
+本机证据：session-20261013/dynamic-home/的before-update.json、runtime-final.json、production-switch.json、ui-result.json、ui-check.cjs及桌面/手机截图；离线dynamic-home-feedback.json、dynamic-home-frontend-tests.json。原生材料在~/.cache/fishbot/dynamic-return-acceptance/native-20261013-ca9635d1与native-20261013-c64abdcb，含manifest、summary/result、truth/action/state流、journal和停止读回；全部在Git外。
+
+Knowledge: updated。根追加Obsidian既有`Wiki/ROS2 与 FishBot.md`第18节的任务出发点快照、模板与未知回执约定，同步`Wiki/开发知识入口.md`固定原点/点位不可见触发词。两处实际读回通过，保留原dirty内容，不复制运行日志。

@@ -62,12 +62,41 @@ class GoalBoundaryTests(unittest.TestCase):
         self.grid = fixture_grid()
         self.body = {'waypoints': [{'x': 1.0, 'y': 1.0, 'yaw': 0.0}],
                      'return_home': True, 'issued_at': 100.0}
+        self.return_point = {'x': 0., 'y': 0., 'yaw': 0.}
 
     def test_home_is_an_actual_last_waypoint(self):
-        points, returning = validate_mission(self.body, self.grid, now=100)
+        points, returning = validate_mission(self.body, self.grid, now=100, return_point=self.return_point)
         self.assertTrue(returning)
         self.assertEqual(points[-1], {'x': 0.0, 'y': 0.0, 'yaw': 0.0})
         self.assertEqual(len(points), 2)
+
+    def test_return_requires_explicit_mission_start_not_map_origin(self):
+        with self.assertRaises(APIError) as caught:
+            validate_mission(self.body, self.grid, now=100.)
+        self.assertEqual(caught.exception.status, 503)
+        start = {'x': -.8, 'y': .6, 'yaw': .7}
+        points, returning = validate_mission(self.body, self.grid, now=100., return_point=start)
+        self.assertTrue(returning)
+        self.assertEqual(points[-1], start)
+        self.assertNotEqual(points[-1], self.return_point)
+
+    def test_selected_start_is_not_appended_or_reclassified_as_automatic_return(self):
+        start = {'x': -.8, 'y': .6, 'yaw': .7}
+        self.body['waypoints'].append(dict(start))
+        points, _returning = validate_mission(self.body, self.grid, now=100., return_point=start)
+        self.assertEqual(len(points), 2)
+        wall = {'id': 'start_wall', 'kind': 'wall', 'width': .02,
+                'points': [{'x': -.7, 'y': .2}, {'x': -.7, 'y': 1.}]}
+        with self.assertRaises(MapRulesError) as explicit:
+            validate_mission(self.body, self.grid, now=100., zones=[wall], return_point=start)
+        self.assertEqual((explicit.exception.issue['target'], explicit.exception.issue['waypoint_index']),
+                         ('waypoint', 2))
+        self.body['waypoints'].pop()
+        with self.assertRaises(MapRulesError) as automatic:
+            validate_mission(self.body, self.grid, now=100., zones=[wall], return_point=start)
+        self.assertEqual((automatic.exception.issue['target'], automatic.exception.issue['waypoint_index']),
+                         ('return_home', None))
+        self.assertEqual(automatic.exception.issue['point'], start)
 
     def test_sender_timestamp_rejects_delayed_and_future_goals(self):
         for timestamp in (96.9, 101.1):
@@ -75,7 +104,7 @@ class GoalBoundaryTests(unittest.TestCase):
                 body = copy.deepcopy(self.body)
                 body['issued_at'] = timestamp
                 with self.assertRaises(APIError) as caught:
-                    validate_mission(body, self.grid, now=100)
+                    validate_mission(body, self.grid, now=100, return_point=self.return_point)
                 self.assertEqual(caught.exception.status, 408)
 
     def test_nonfinite_and_boolean_coordinates_are_not_goals(self):
@@ -84,7 +113,7 @@ class GoalBoundaryTests(unittest.TestCase):
                 body = copy.deepcopy(self.body)
                 body['waypoints'][0]['x'] = value
                 with self.assertRaises(APIError):
-                    validate_mission(body, self.grid, now=100)
+                    validate_mission(body, self.grid, now=100, return_point=self.return_point)
 
     def test_missing_timestamp_or_coordinates_rejected(self):
         for field in ('issued_at', 'x', 'y'):
@@ -95,7 +124,7 @@ class GoalBoundaryTests(unittest.TestCase):
                 else:
                     del body['waypoints'][0][field]
                 with self.assertRaises(APIError):
-                    validate_mission(body, self.grid, now=100)
+                    validate_mission(body, self.grid, now=100, return_point=self.return_point)
 
     def test_free_center_does_not_allow_footprint_through_obstacle(self):
         # Center (0.05,0.05) is free, adjacent cell [0.1,0.2] intersects radius .13.
@@ -156,7 +185,7 @@ class GoalBoundaryTests(unittest.TestCase):
         self.body['waypoints'].append({'x': .05, 'y': .05, 'yaw': 2*math.pi})
         self.grid['data'][20*40+20] = -1
         with self.assertRaises(APIError) as caught:
-            validate_mission(self.body, self.grid, now=100.)
+            validate_mission(self.body, self.grid, now=100., return_point=self.return_point)
         issue = caught.exception.issue
         self.assertEqual((issue['target'], issue['waypoint_index']), ('waypoint', 2))
         self.assertEqual(issue['kind'], 'unknown_cell')
@@ -167,27 +196,27 @@ class GoalBoundaryTests(unittest.TestCase):
         wall = {'id': 'near_home', 'kind': 'wall', 'width': .02,
                 'points': [{'x': .1, 'y': -.4}, {'x': .1, 'y': .4}]}
         with self.assertRaises(MapRulesError) as automatic:
-            validate_mission(self.body, self.grid, now=100., zones=[wall])
+            validate_mission(self.body, self.grid, now=100., zones=[wall], return_point=self.return_point)
         issue = automatic.exception.issue
         self.assertEqual((issue['target'], issue['waypoint_index']), ('return_home', None))
         self.assertEqual(issue['point'], {'x': 0., 'y': 0., 'yaw': 0.})
         self.body['waypoints'].append({'x': 0., 'y': 0.})
         with self.assertRaises(MapRulesError) as explicit:
-            validate_mission(self.body, self.grid, now=100., zones=[wall])
+            validate_mission(self.body, self.grid, now=100., zones=[wall], return_point=self.return_point)
         self.assertEqual((explicit.exception.issue['target'], explicit.exception.issue['waypoint_index']),
                          ('waypoint', 2))
 
     def test_automatic_home_map_rejection_has_no_user_waypoint_index(self):
         self.grid['data'][20*40+20] = 100
         with self.assertRaises(APIError) as caught:
-            validate_mission(self.body, self.grid, now=100.)
+            validate_mission(self.body, self.grid, now=100., return_point=self.return_point)
         self.assertEqual(caught.exception.issue['kind'], 'occupied_cell')
         self.assertEqual((caught.exception.issue['target'], caught.exception.issue['waypoint_index']),
                          ('return_home', None))
 
     def test_twelve_user_points_can_append_home_as_thirteenth(self):
         self.body['waypoints'] *= 12
-        points, returning = validate_mission(self.body, self.grid, now=100)
+        points, returning = validate_mission(self.body, self.grid, now=100, return_point=self.return_point)
         self.assertTrue(returning)
         self.assertEqual(len(points), 13)
         self.assertEqual(points[-1], {'x': 0.0, 'y': 0.0, 'yaw': 0.0})
@@ -195,7 +224,7 @@ class GoalBoundaryTests(unittest.TestCase):
     def test_thirteen_user_points_are_rejected(self):
         self.body['waypoints'] *= 13
         with self.assertRaises(APIError):
-            validate_mission(self.body, self.grid, now=100)
+            validate_mission(self.body, self.grid, now=100, return_point=self.return_point)
 
 
 class MissionSemanticsTests(unittest.TestCase):
@@ -306,7 +335,12 @@ class DispatchFeedbackTests(unittest.TestCase):
         bridge, sent_cancels = self.harness()
         bridge.mission = MissionRecord()
         bridge.ready, bridge.grid, bridge.truth = True, fixture_grid(), None
-        bridge.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=Time))
+        bridge.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=Time,
+                                                                              nanoseconds=100_000_000_000))
+        bridge.clock_fresh = lambda *_args: True
+        bridge.buffer = SimpleNamespace(lookup_transform=lambda *_args: SimpleNamespace(
+            header=SimpleNamespace(stamp=Time(sec=100)), transform=SimpleNamespace(
+                translation=SimpleNamespace(x=0., y=0.), rotation=SimpleNamespace(x=0., y=0., z=0., w=1.))))
         sent = []
         def send(*_args, **_kwargs):
             sent.append(True)
@@ -653,7 +687,8 @@ class MapRulesIntegrationBoundaryTests(unittest.TestCase):
         for altered in ({**body, 'return_home': True},
                         {**body, 'waypoints': [{'x': .25, 'y': 0., 'yaw': 0.}]}):
             with self.assertRaises(MapRulesError):
-                validate_mission(altered, fixture_grid(), now=100., zones=zones)
+                validate_mission(altered, fixture_grid(), now=100., zones=zones,
+                                 return_point={'x': 0., 'y': 0., 'yaw': 0.})
 
     def healthy_bridge(self):
         from builtin_interfaces.msg import Time
@@ -680,6 +715,229 @@ class MapRulesIntegrationBoundaryTests(unittest.TestCase):
         bridge.evaluate_ready = lambda wall: MissionBridge.evaluate_ready(bridge, wall)
         bridge.record_run = lambda: MissionBridge.record_run(bridge)
         return bridge, canceled
+
+    def dispatch_bridge(self, start=None):
+        from builtin_interfaces.msg import Time
+        bridge, _canceled = self.healthy_bridge()
+        bridge.mission = MissionRecord()
+        bridge.ready, bridge.rules_apply_state = True, 'applied'
+        source = dict(start or {'x': -.8, 'y': .6, 'yaw': .7})
+        reads, goals = [], []
+        def transform(*_args):
+            reads.append(True)
+            return SimpleNamespace(header=SimpleNamespace(stamp=Time(sec=100)),
+                transform=SimpleNamespace(translation=SimpleNamespace(x=source['x'], y=source['y']),
+                    rotation=SimpleNamespace(x=0., y=0., z=math.sin(source['yaw']/2),
+                                             w=math.cos(source['yaw']/2))))
+        bridge.buffer = SimpleNamespace(lookup_transform=transform)
+        bridge.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(
+            nanoseconds=100_000_000_000, to_msg=lambda: Time(sec=100)))
+        def send(goal, **_kwargs):
+            goals.append(goal)
+            return Future()
+        bridge.client.send_goal_async = send
+        bridge.reset_cleanup = MethodType(MissionBridge.reset_cleanup, bridge)
+        bridge.get_logger = lambda: SimpleNamespace(error=lambda _message: None)
+        bridge.pose, bridge.truth = {'x': 0., 'y': 0., 'yaw': 0.}, {'x': 1.8, 'y': 1.8, 'yaw': 2.8}
+        bridge.clock_last, bridge.scan_summary, bridge.command = 100., None, None
+        bridge.path, bridge.trajectory = [], []
+        return bridge, source, reads, goals
+
+    def test_dispatch_captures_nonzero_localized_start_once_and_freezes_every_copy(self):
+        bridge, source, reads, goals = self.dispatch_bridge()
+        expected = dict(source)
+        body = {'waypoints': [{'x': 1., 'y': 1., 'yaw': 0.}], 'return_home': True,
+                'issued_at': time.time()}
+        MissionBridge.start_mission(bridge, body)
+        self.assertEqual(reads, [True])
+        self.assertEqual(len(goals), 1)
+        last = goals[0].poses[-1].pose
+        self.assertEqual((last.position.x, last.position.y), (expected['x'], expected['y']))
+        self.assertAlmostEqual(last.orientation.z, math.sin(expected['yaw']/2))
+        self.assertAlmostEqual(last.orientation.w, math.cos(expected['yaw']/2))
+        self.assertEqual(bridge.mission.value['start_pose'], expected)
+        self.assertEqual(bridge.mission.value['waypoints'][-1], expected)
+        self.assertEqual(bridge.rules_run['start_pose'], expected)
+        self.assertEqual(self.store.runs()['runs'][0]['start_pose'], expected)
+        source['x'], source['yaw'], bridge.pose['x'] = .9, -1., 1.4
+        self.assertEqual(bridge.mission.value['start_pose'], expected)
+        bridge.rules_run['start_pose']['x'] = .8
+        self.assertEqual(bridge.mission.value['start_pose'], expected)
+        self.assertEqual(bridge.mission.value['waypoints'][-1], expected)
+
+    def test_each_new_mission_captures_its_own_departure_even_without_return(self):
+        bridge, source, reads, goals = self.dispatch_bridge()
+        body = {'waypoints': [{'x': 1., 'y': 1.}], 'return_home': False, 'issued_at': time.time()}
+        MissionBridge.start_mission(bridge, body)
+        first = copy.deepcopy(bridge.mission.value['start_pose'])
+        bridge.mission.finish(GoalStatus.STATUS_SUCCEEDED, 0, [])
+        MissionBridge.record_run(bridge, force=True)
+        source.update(x=.4, y=-.8, yaw=-1.1)
+        MissionBridge.start_mission(bridge, body)
+        self.assertEqual(len(reads), 2)
+        self.assertEqual(len(goals), 2)
+        self.assertEqual(len(goals[-1].poses), 1)
+        self.assertEqual(bridge.mission.value['start_pose'], source)
+        self.assertNotEqual(bridge.mission.value['start_pose'], first)
+
+    def test_missing_or_stale_current_tf_rejects_despite_cached_ready_pose(self):
+        from builtin_interfaces.msg import Time
+        for fault in ('missing', 'old', 'nonfinite', 'clock'):
+            with self.subTest(fault=fault):
+                bridge, _source, _reads, goals = self.dispatch_bridge()
+                if fault == 'clock':
+                    bridge.clock_fresh = lambda *_args: False
+                elif fault == 'missing':
+                    def missing(*_args):
+                        raise RuntimeError('No map localization')
+                    bridge.buffer.lookup_transform = missing
+                else:
+                    bridge.buffer.lookup_transform = lambda *_args: SimpleNamespace(
+                        header=SimpleNamespace(stamp=Time(sec=98 if fault == 'old' else 100)),
+                        transform=SimpleNamespace(translation=SimpleNamespace(x=math.nan if fault == 'nonfinite' else .4,
+                            y=.4), rotation=SimpleNamespace(x=0., y=0., z=0., w=1.)))
+                with self.assertRaises(APIError) as caught:
+                    MissionBridge.start_mission(bridge, {'waypoints': [{'x': 1., 'y': 1.}],
+                        'return_home': True, 'issued_at': time.time()})
+                self.assertEqual((caught.exception.status, caught.exception.outcome), (503, 'rejected'))
+                self.assertEqual(goals, [])
+                self.assertEqual(bridge.mission.value['status'], 'idle')
+                self.assertIsNone(bridge.mission.value['start_pose'])
+
+    def test_client_cannot_override_captured_start(self):
+        bridge, _source, _reads, goals = self.dispatch_bridge()
+        with self.assertRaises(APIError) as caught:
+            MissionBridge.start_mission(bridge, {'waypoints': [{'x': 1., 'y': 1.}],
+                'return_home': True, 'issued_at': time.time(), 'start_pose': {'x': 0., 'y': 0., 'yaw': 0.}})
+        self.assertEqual(caught.exception.outcome, 'rejected')
+        self.assertEqual(goals, [])
+
+    def test_pre_dispatch_save_failure_restores_previous_task_start_snapshot(self):
+        bridge, _source, reads, goals = self.dispatch_bridge()
+        bridge.mission.begin([{'x': 1., 'y': 1., 'yaw': 0.}], False,
+                             {'x': .4, 'y': -.8, 'yaw': -1.1})
+        bridge.mission.finish(GoalStatus.STATUS_SUCCEEDED, 0, [])
+        previous = copy.deepcopy(bridge.mission.value)
+        with patch.object(self.store, 'save_run', side_effect=MapRulesError('disk failure', 503)):
+            with self.assertRaises(MapRulesError) as caught:
+                MissionBridge.start_mission(bridge, {'waypoints': [{'x': 1., 'y': 1.}],
+                    'return_home': True, 'issued_at': time.time()})
+        self.assertEqual(caught.exception.outcome, 'rejected')
+        self.assertEqual(reads, [True])
+        self.assertEqual(goals, [])
+        self.assertEqual(bridge.mission.value, previous)
+
+    def test_unknown_send_receipt_keeps_captured_start_and_never_recaptures_or_replays(self):
+        bridge, source, reads, _goals = self.dispatch_bridge()
+        expected = dict(source)
+        bridge.request_cancel = MethodType(MissionBridge.request_cancel, bridge)
+        def fail_send(*_args, **_kwargs):
+            raise RuntimeError('unknown receipt')
+        bridge.client.send_goal_async = fail_send
+        body = {'waypoints': [{'x': 1., 'y': 1.}], 'return_home': True, 'issued_at': time.time()}
+        with self.assertRaisesRegex(RuntimeError, 'unknown receipt'):
+            MissionBridge.start_mission(bridge, body)
+        mission_id = bridge.mission.value['id']
+        source.update(x=.4, y=-.8, yaw=-1.1)
+        with self.assertRaises(APIError) as caught:
+            MissionBridge.start_mission(bridge, body)
+        self.assertEqual((caught.exception.status, caught.exception.outcome), (409, 'rejected'))
+        self.assertEqual(reads, [True])
+        self.assertEqual(bridge.mission.value['start_pose'], expected)
+        self.assertEqual(bridge.mission.value['waypoints'][-1], expected)
+        self.assertEqual(bridge.mission.value['id'], mission_id)
+        self.assertEqual(bridge.mission.value['cleanup_state'], 'unresolved')
+
+    def test_template_save_defers_return_origin_and_retains_boolean_validation(self):
+        bridge, _source, _reads, goals = self.dispatch_bridge()
+        bridge.clock_fresh = lambda *_args: False
+        bridge.buffer.lookup_transform = lambda *_args: self.fail('Saving a template must not resolve a departure pose')
+        for returning, status in ((True, 200), ('yes', 400)):
+            request = SimpleNamespace(kind='routes', body={'map_id': self.store.map_id, 'name': '将来返航',
+                'waypoints': [{'x': 1., 'y': 1.}], 'return_home': returning},
+                deadline=102., future=Future())
+            bridge.operations.put(request)
+            with patch('mission_bridge.time.monotonic', return_value=100.):
+                MissionBridge.tick(bridge)
+            self.assertEqual(request.future.result()[0], status)
+        route = self.store.routes()['routes'][0]
+        self.assertTrue(route['return_home'])
+        self.assertEqual(len(route['waypoints']), 1)
+        self.assertNotIn('start_pose', route)
+        self.assertEqual(goals, [])
+
+    def state_harness(self, bridge):
+        bridge.domain, bridge.reason = 107, 'ready'
+        bridge.obstacle, bridge.obstacle_truth, bridge.obstacle_state_wall = {'state': 'parked'}, {}, None
+        bridge.rules_state = lambda: {}
+        bridge.collision_monitor_state = lambda _wall: {}
+        return bridge
+
+    def test_home_state_freezes_only_active_task_and_idle_preview_uses_live_pose(self):
+        bridge, _source, _reads, _goals = self.dispatch_bridge()
+        self.state_harness(bridge)
+        frozen = {'x': -.8, 'y': .6, 'yaw': .7}
+        bridge.mission.begin([{'x': 1., 'y': 1., 'yaw': 0.}], True, frozen)
+        bridge.pose = {'x': .9, 'y': -.6, 'yaw': -.8}
+        self.assertEqual(MissionBridge.state(bridge)['home'], frozen)
+        bridge.mission.request_cancel()
+        self.assertEqual(MissionBridge.state(bridge)['home'], frozen)
+        bridge.mission.finish(GoalStatus.STATUS_CANCELED, 0, [])
+        self.assertEqual(MissionBridge.state(bridge)['home'], bridge.pose)
+        self.assertEqual(MissionBridge.state(bridge)['mission']['start_pose'], frozen)
+        bridge.ready = False
+        self.assertIsNone(MissionBridge.state(bridge)['home'])
+        bridge.mission.value.update(status='canceling', start_pose=None)
+        self.assertIsNone(MissionBridge.state(bridge)['home'])
+
+    def test_map_change_hides_old_task_home_but_retains_original_snapshot_and_identity(self):
+        bridge, _source, _reads, _goals = self.dispatch_bridge()
+        self.state_harness(bridge)
+        frozen = {'x': -.8, 'y': .6, 'yaw': .7}
+        bridge.mission.begin([{'x': 1., 'y': 1., 'yaw': 0.}], True, frozen)
+        original_map = self.store.map_id
+        bridge.mission.value['map_id'] = original_map
+        self.assertEqual(MissionBridge.state(bridge)['home'], frozen)
+        changed = fixture_grid()
+        changed['data'][0] = 100
+        self.store.bind(changed)
+        bridge.grid = changed
+        state = MissionBridge.state(bridge)
+        self.assertIsNone(state['home'])
+        self.assertEqual(state['mission']['start_pose'], frozen)
+        self.assertEqual(state['mission']['map_id'], original_map)
+        self.assertNotEqual(original_map, self.store.map_id)
+
+    def test_reconnection_restores_unknown_task_snapshot_without_current_pose_substitution(self):
+        from nav_msgs.msg import OccupancyGrid
+        for snapshot in ({'x': -.8, 'y': .6, 'yaw': .7}, None):
+            with self.subTest(snapshot=snapshot):
+                # Separate map documents exercise new and legacy interrupted records.
+                with tempfile.TemporaryDirectory() as directory:
+                    store = MapRulesStore(directory)
+                    store.bind(fixture_grid())
+                    record = {'id': 'interrupted', 'map_id': store.map_id, 'rules_revision': 0,
+                        'started_at': 100., 'finished_at': None, 'status': 'running', 'current_index': 0,
+                        'waypoints': [{'x': 1., 'y': 1., 'yaw': 0.}], 'return_home': True, 'message': 'running'}
+                    if snapshot is not None:
+                        record['start_pose'] = snapshot
+                    store.save_run(record)
+                    bridge = SimpleNamespace(lock=threading.RLock(), mission=MissionRecord(),
+                        rules_store=MapRulesStore(directory), pose={'x': 1.4, 'y': -1.4, 'yaw': -2.},
+                        publish_rules=lambda: None,
+                        request_cancel=lambda _reason: self.fail('A restored unknown task must not be replayed'))
+                    msg = OccupancyGrid()
+                    msg.header.frame_id = 'map'
+                    msg.info.width, msg.info.height, msg.info.resolution = 40, 40, .1
+                    msg.info.origin.position.x = msg.info.origin.position.y = -2.
+                    msg.info.origin.orientation.w = 1.
+                    msg.data = fixture_grid()['data']
+                    MissionBridge.on_map(bridge, msg)
+                    self.assertEqual(bridge.mission.value['status'], 'canceling')
+                    self.assertEqual(bridge.mission.value['cleanup_state'], 'unresolved')
+                    self.assertEqual(bridge.mission.value['start_pose'], snapshot)
+                    self.assertEqual(bridge.mission.value['id'], 'interrupted')
+                    self.assertEqual(bridge.mission.value['map_id'], record['map_id'])
 
     def test_readback_temporary_gap_does_not_cancel_existing_same_revision_mission(self):
         bridge, canceled = self.healthy_bridge()

@@ -17,8 +17,8 @@ describe('map rule rejection display', () => {
   it('uses the same list label and explains the implicit return waypoint', () => {
     const message = mapRuleErrorMessage('Waypoint footprint intersects map rule wall-id', zones)
     expect(message).toContain('虚拟墙 1')
-    expect(message).toContain('巡逻点或返航起点的车体范围')
-    expect(message).toContain('取消“巡逻结束后返回起点”')
+    expect(message).toContain('巡逻点或返航点的车体范围')
+    expect(message).toContain('取消“巡逻结束后返回本次出发点”')
     expect(message).not.toContain('wall-id')
   })
 
@@ -45,8 +45,8 @@ describe('map rule rejection display', () => {
 
   it('identifies the implicit home separately from the user waypoint list', () => {
     const message = mapRuleErrorMessage('rejected', [], { ...issue, target: 'return_home', waypoint_index: null, point: { x: 0, y: 0, yaw: 0 } })
-    expect(message).toContain('返航起点（0.00, 0.00）米')
-    expect(message).toContain('取消“巡逻结束后返回起点”')
+    expect(message).toContain('返航点（本次出发点）（0.00, 0.00）米')
+    expect(message).toContain('取消“巡逻结束后返回本次出发点”')
     expect(message).not.toContain('巡逻点 null')
   })
 
