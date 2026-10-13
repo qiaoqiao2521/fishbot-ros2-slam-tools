@@ -81,7 +81,7 @@ K source10前后均匹配，原件快照存runtime-k/accepted-source。K完整�
 
 ## Remaining
 
-实施与验收完成；L新episode恢复空闲供用户启动，最终同源就绪读回与Git提交推送收尾中。没有新训练、硬件或宇树控制结论。
+本轮实施与验收完成，无必需步骤遗留。L新episode已同源原生读回ready/idle：7ACTIVE、配置归一化SHA与K一致、source10匹配、完整速度链、车臂货物静止及相机来源绑定正确。390px完整运输归属K；L桌面开始可用、960px实际相机和0POST/页面异常单独通过，没有自动派发新任务。L unit fishbot-cooperation-114-20261014-l.service，invocation 5a6b4f65cbaf471eb1ce7b6a8bb92ab1，报告oracle/nav114-l-ready-report.json和ui-l-ready-result.json。没有新训练、硬件或宇树控制结论。
 
 ## Retained work
 
@@ -90,3 +90,7 @@ K source10前后均匹配，原件快照存runtime-k/accepted-source。K完整�
 ## Knowledge closeout
 
 updated：root已修订并再次读回知识库既有 `Wiki/ROS2 与 FishBot.md` 第19节“共同物理世界中，地图、外廓与速度各自对齐”，并同步 `Wiki/开发知识入口.md` 的触发词与段落链接。已读回新段落和入口，内容只记录可复用地图表达、完整足迹、速度参考点与验收边界，后来补入固定编码器参考点、原生虚拟目标/保护回执边界与仿真轨迹时钟预算；阶段结果回源项目，未把原始资料复制到知识库。第11节的转向进展经验已准确覆盖本轮，记为already_covered。
+
+## Git delivery
+
+源码与全部32个已审查文件提交为6972ba4d3049e721f4c802bd543d14854cb9b37a，已推送qiaoqiao2521/fishbot-ros2-slam-tools main并通过GitHub API读回同SHA。有效遗留simulation.rviz一并整合；只有未验收release.sh继续保留，阻碍与root接续入口见Retained work。此收尾记录为单独文档提交；不修改已验收源码或提交任何运行日志/地图/模型素材。
