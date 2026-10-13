@@ -25,6 +25,12 @@
 
 ## Runtime Handoff
 
+2026-10-13 运行恢复：用户报告页面无法打开，四个端口均拒绝连接。旧后端在08:02:10正常关闭；系统shutdown/reboot记录与当前10:13:36启动时间确认整机重启，不能归因为聊天回合结束。旧PID均已不存在。以下旧进程组段落保留为首轮运行记录。
+
+当前复用原Jar（SHA不变）、ROS修复overlay和同一domain106配置，四个服务由用户级systemd transient units接管。新来源记录位于本机忽略目录 `workspaces/fishbot_mujoco_ws/.runs/unitree-console-20261013-reopen-kqmz0_m_/owned-services.json`，owner=root。unit分别为 `fishbot-console-{simulation,rosbridge,backend,frontend}-106-kqmz0_m_.service`；全部active/running，仅监听原回环端口。管理命令须使用 `env XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus systemctl --user`，停止前先核对上述owned记录和unit身份。不设置开机自启，整机重启后仍需显式启动。
+
+实际HTTP读回 `/radar`、`/sim-api/state`、`/sim-api/map` 正常，仿真ready=true、任务idle且真值速度近零；Java control/laser两桥connected，map/scan/TF/localization均ready。未发送运动、Goal或初位姿。浏览器工具绑定已有错误标签时被URL协议策略拒绝，未绕过策略；本轮不声称已取得恢复后的浏览器画面，提示用户手动刷新。知识收尾仍already_covered，只更新项目运行记录。
+
 供本机查看的隔离实例：`http://127.0.0.1:5178/radar`，domain106；mission9078、rosbridge9098、backend8088。所有服务仅监听回环。owner=root。
 
 本轮拥有的进程组：simulation838478、rosbridge840986、frontend845975、backend855731。来源记录为上述目录的 `owned-processes.json`。结束查看时先核对PID、PGID和命令仍对应本轮，再逐个停止进程组；不要按进程名称批量停止其他实例。验收观察器843537已停止，原记录保留。收尾HTTP读回为200，任务为succeeded，真值速度近零。当前无排队Goal，仿真车已停稳。旧domain93及用户网络未更改。
