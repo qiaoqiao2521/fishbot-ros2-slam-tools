@@ -227,11 +227,13 @@ export class CooperationController {
   }
 }
 
-export type CooperationFrameObservation = { stamp: number; changedAt: number; loadedStamp: number | null; error: boolean }
+export type CooperationFrameObservation = { scene: string; stamp: number; changedAt: number; loadedStamp: number | null; error: boolean }
 export function cooperationFrameLabel(state: CooperationState | null, frame: CooperationFrameObservation | null, connected: boolean, now: number): string {
   if (!state?.frame.available || state.frame.stamp === null) return '等待相机画面'
+  if (frame && frame.scene !== state.source?.scene_sha) return '画面来源已变化，等待新帧'
   if (frame?.error) return '相机画面读取失败'
-  if (!frame || frame.loadedStamp !== state.frame.stamp) return '正在读取相机画面'
+  if (!frame || frame.loadedStamp === null) return '正在读取相机画面'
   if (!connected || now - frame.changedAt >= COOPERATION_STALE_MS) return '画面已过期'
+  if (state.frame.stamp < frame.loadedStamp || state.frame.stamp - frame.loadedStamp > 1.5) return '画面已过期'
   return '相机画面持续更新'
 }

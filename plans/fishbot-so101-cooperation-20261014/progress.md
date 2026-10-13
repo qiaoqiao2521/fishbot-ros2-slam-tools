@@ -94,3 +94,13 @@ updated：root已修订并再次读回知识库既有 `Wiki/ROS2 与 FishBot.md`
 ## Git delivery
 
 源码与全部32个已审查文件提交为6972ba4d3049e721f4c802bd543d14854cb9b37a，已推送qiaoqiao2521/fishbot-ros2-slam-tools main并通过GitHub API读回同SHA。有效遗留simulation.rviz一并整合；只有未验收release.sh继续保留，阻碍与root接续入口见Retained work。此收尾记录为单独文档提交；不修改已验收源码或提交任何运行日志/地图/模型素材。
+
+## 2026-10-14 camera flicker follow-up
+
+用户反馈正常观看时闪烁。实际页面每个frame stamp都重建img、清loadedStamp并显示半透明/加载提示；220ms受控图片延迟的6秒240采样中，59次闪暗/空白/notice、6次节点替换。只读审查及生产入口复现一致。
+
+仅前端改为浏览器原生fetch/BlobURL/Image.decode后换入，同img保留旧画面，正常pending不重置旧age或显示失效。串行在途只排latest，3.5s覆盖fetch/blob/decode截止；reset/dispose清timer和BlobURL，source及generation隔离迟到结果。显示帧携带scene，render先拒source失配/clock回退，不能等effect清图后才取消live。原生fetch采用既有controller的arrow wrapper，浏览器实测排除了直接作为class属性调用的Illegal invocation。
+
+最新141项前端测试全部通过、无skip/pending/todo；类型、lint与107生产构建通过，产物index-_eZUicZy.js。旧帧保持、加载失败、fetch/decode永挂后恢复、迟到旧source、首render来源切换/clock回退和过期提示均有回归。生产延迟验收持续换帧且0闪暗/空白/notice/节点替换，0POST/页面异常；4.5秒挂起请求后恢复、390px无横溢出另验。当前IAB已reload并读回同产物：60样本、2帧、0闪暗/空白/节点替换、全部live，用户原任务4120b147-fdd9-4758-aa81-acd0d13fb15b仍succeeded。
+
+没有重启或修改ROS、MuJoCo、任务桥/控制目标；用户运输在修复期间正常完成。诊断和截图私存~/.cache/fishbot/cooperation/flicker-20261014/，不入Git。knowledge closeout=no_reusable_delta：没有新增机器人领域结论，相机显示约束已写回既有COOPERATION文档，本轮不改共享知识页。固件release.sh继续按原阻碍保留。

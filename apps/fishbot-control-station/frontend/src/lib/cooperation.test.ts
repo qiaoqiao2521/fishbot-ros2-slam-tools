@@ -148,9 +148,12 @@ describe('cooperation receipts', () => {
 })
 
 describe('actual cooperation camera freshness', () => {
-  const frame = { stamp: 10, changedAt: 10000, loadedStamp: 10, error: false }
+  const frame = { scene: 'scene-a', stamp: 10, changedAt: 10000, loadedStamp: 10, error: false }
   it('requires successful image loading and advancing source stamps before claiming live', () => {
     expect(cooperationFrameLabel(idle, frame, true, 10000)).toBe('相机画面持续更新')
+    expect(cooperationFrameLabel({ ...idle, frame: { available: true, stamp: 11 } }, frame, true, 11000)).toBe('相机画面持续更新')
+    expect(cooperationFrameLabel({ ...idle, frame: { available: true, stamp: 12 } }, frame, true, 11000)).toBe('画面已过期')
+    expect(cooperationFrameLabel({ ...idle, source: { scene_sha: 'scene-b' } }, frame, true, 10000)).toBe('画面来源已变化，等待新帧')
     expect(cooperationFrameLabel(idle, { ...frame, loadedStamp: null }, true, 10000)).toBe('正在读取相机画面')
     expect(cooperationFrameLabel(idle, { ...frame, error: true }, true, 10000)).toBe('相机画面读取失败')
     expect(cooperationFrameLabel(idle, frame, true, 10000 + COOPERATION_STALE_MS)).toBe('画面已过期')

@@ -2,9 +2,18 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
 import { CooperationPage, CooperationView } from '@/components/cooperation/cooperation-page'
-import { COOPERATION_STALE_MS, EMPTY_COOPERATION_SNAPSHOT, type CooperationController, type CooperationSnapshot, type CooperationState } from '@/lib/cooperation'
+import { COOPERATION_STALE_MS, EMPTY_COOPERATION_SNAPSHOT, type CooperationController, type CooperationSnapshot, type CooperationState, type CooperationFrameObservation } from '@/lib/cooperation'
 
-const hooks = vi.hoisted(() => ({ active: false, cursor: 0, values: [] as unknown[], effects: [] as Array<() => (() => void) | undefined> }))
+const hooks = vi.hoisted(() => ({ active: false, cursor: 0, values: [] as unknown[], effects: [] as Array<() => (() => void) | undefined>,
+  frames: null as null | { display: (url: string | null) => void; observe: (frame: CooperationFrameObservation | null) => void },
+}))
+vi.mock('@/lib/cooperation-frame', async (original) => {
+  const actual = await original<typeof import('@/lib/cooperation-frame')>()
+  return { CooperationFrameBuffer: class extends actual.CooperationFrameBuffer {
+    constructor(options: ConstructorParameters<typeof actual.CooperationFrameBuffer>[0]) { super(options); if (hooks.active) hooks.frames = options }
+    request(scene: string | null, stamp: number | null) { if (!hooks.active) super.request(scene, stamp) }
+  } }
+})
 vi.mock('react', async (original) => {
   const actual = await original<typeof import('react')>()
   return { ...actual,
@@ -36,7 +45,7 @@ const state: CooperationState = {
 }
 function render(patch: Partial<CooperationSnapshot> = {}, loaded = true) {
   return renderToStaticMarkup(<CooperationView snapshot={{ ...EMPTY_COOPERATION_SNAPSHOT, state, receivedAt: 10000, ownedTaskId: 'task-a', ...patch }}
-    now={10000} frame={{ stamp: 12.5, changedAt: 10000, loadedStamp: loaded ? 12.5 : null, error: !loaded }}
+    now={10000} frame={{ scene: 'actual-scene-sha-123', stamp: 12.5, changedAt: 10000, loadedStamp: loaded ? 12.5 : null, error: !loaded }}
     onBack={() => {}} onStart={() => {}} onCancel={() => {}} onRefresh={() => {}} />)
 }
 
@@ -62,6 +71,19 @@ describe('cooperation page evidence rendering', () => {
     expect(workflow).not.toContain('hidden')
     expect(workflow).not.toContain('aria-hidden')
     expect(workflow).toContain('当前阶段')
+  })
+
+  it('rejects the previous source in the first render before camera effects clear it', () => {
+    const html = render({ state: { ...state, source: { scene_sha: 'replacement-scene' } } })
+    expect(html).toContain('画面来源已变化，等待新帧')
+    expect(html).toContain('data-frame-live="false"'); expect(html).not.toContain('<img')
+    expect(html).toContain('相机仿真时间 未收到')
+  })
+
+  it('hides the previous episode immediately when its clock restarts', () => {
+    const html = render({ state: { ...state, frame: { available: true, stamp: 1 } } })
+    expect(html).toContain('画面已过期'); expect(html).not.toContain('<img')
+    expect(html).toContain('相机仿真时间 未收到')
   })
 
   it('shows backend messages in sequence without generating cooperation dialogue', () => {
@@ -119,7 +141,8 @@ describe('cooperation page evidence rendering', () => {
     try {
       let page = CooperationPage({ onBack: () => {}, controller })
       cleanups.push(...hooks.effects.map((effect) => effect()))
-      page.props.onFrameResult(12.5, true)
+      hooks.frames!.display('blob:decoded-frame')
+      hooks.frames!.observe({ scene: 'actual-scene-sha-123', stamp: 12.5, changedAt: 10000, loadedStamp: 12.5, error: false })
       hooks.cursor = 0
       page = CooperationPage({ onBack: () => {}, controller })
       expect(renderToStaticMarkup(page)).toContain('data-frame-live="true"')

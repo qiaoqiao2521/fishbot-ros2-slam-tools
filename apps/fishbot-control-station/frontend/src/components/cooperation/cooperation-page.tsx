@@ -8,6 +8,7 @@ import {
   type CooperationFrameObservation, type CooperationSnapshot,
 } from '@/lib/cooperation'
 import './cooperation.css'
+import { CooperationFrameBuffer } from '@/lib/cooperation-frame'
 
 export function CooperationPage({ onBack, controller: suppliedController }: { onBack: () => void; controller?: CooperationController }) {
   const [controller] = useState(() => {
@@ -19,9 +20,10 @@ export function CooperationPage({ onBack, controller: suppliedController }: { on
   const [snapshot, setSnapshot] = useState(controller.getSnapshot)
   const [now, setNow] = useState(Date.now)
   const [frame, setFrame] = useState<CooperationFrameObservation | null>(null)
+  const [displayedFrameSrc, setDisplayedFrameSrc] = useState<string | null>(null)
   const frameStamp = snapshot.state?.frame.available ? snapshot.state.frame.stamp : null
-  const currentFrameStamp = useRef(frameStamp)
-  currentFrameStamp.current = frameStamp
+  const frameScene = snapshot.state?.source?.scene_sha ?? null
+  const frameBuffer = useRef<CooperationFrameBuffer | null>(null)
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 250)
@@ -41,21 +43,15 @@ export function CooperationPage({ onBack, controller: suppliedController }: { on
   }, [controller])
 
   useEffect(() => {
-    if (frameStamp === null || frameStamp === undefined) return
-    setFrame((previous) => previous?.stamp === frameStamp ? previous : {
-      stamp: frameStamp, changedAt: Date.now(), loadedStamp: null, error: false,
-    })
-  }, [frameStamp])
-
-  function frameResult(stamp: number, loaded: boolean) {
-    if (currentFrameStamp.current !== stamp) return
-    setFrame((previous) => ({ stamp, changedAt: previous?.stamp === stamp ? previous.changedAt : Date.now(),
-      loadedStamp: loaded ? stamp : null, error: !loaded }))
-  }
+    const buffer = new CooperationFrameBuffer({ display: setDisplayedFrameSrc, observe: setFrame })
+    frameBuffer.current = buffer
+    return () => { buffer.dispose(); frameBuffer.current = null }
+  }, [])
+  useEffect(() => { frameBuffer.current?.request(frameScene, frameStamp) }, [frameScene, frameStamp])
 
   return <CooperationView snapshot={snapshot} now={now} frame={frame} onBack={onBack}
     onStart={() => { void controller.act('start') }} onCancel={() => { void controller.act('cancel') }}
-    onRefresh={() => { void controller.refresh() }} onFrameResult={frameResult} />
+    onRefresh={() => { void controller.refresh() }} displayedFrameSrc={displayedFrameSrc} />
 }
 
 type CooperationViewProps = {
@@ -66,14 +62,14 @@ type CooperationViewProps = {
   onStart: () => void
   onCancel: () => void
   onRefresh: () => void
-  onFrameResult?: (stamp: number, loaded: boolean) => void
+  displayedFrameSrc?: string | null
 }
 
 function metric(value: number | undefined, digits = 3): string {
   return value === undefined ? '未收到' : value.toFixed(digits)
 }
 
-export function CooperationView({ snapshot, now, frame, onBack, onStart, onCancel, onRefresh, onFrameResult }: CooperationViewProps) {
+export function CooperationView({ snapshot, now, frame, onBack, onStart, onCancel, onRefresh, displayedFrameSrc }: CooperationViewProps) {
   const { state, pending, receipt, actionError, connectionError } = snapshot
   const connected = cooperationConnected(snapshot, now)
   const ready = connected && !!state?.ready
@@ -81,6 +77,10 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
   const frameStamp = state?.frame.available ? state.frame.stamp : null
   const frameLabel = cooperationFrameLabel(state, frame, connected, now)
   const frameLive = frameLabel === '相机画面持续更新'
+  const frameMatchesSource = !!frame && frame.scene === state?.source?.scene_sha
+    && (frame.loadedStamp === null || frameStamp === null || frame.loadedStamp <= frameStamp)
+  const imageSrc = !frameMatchesSource ? null : displayedFrameSrc === undefined && frameStamp !== null
+    ? `/coop-api/frame.jpg?stamp=${encodeURIComponent(frame?.loadedStamp ?? frameStamp)}` : displayedFrameSrc
   const task = state?.task
   const stageLabel = cooperationStageLabel(task?.stage)
   const canStart = cooperationCanStart(snapshot, now)
@@ -123,14 +123,13 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
           <span className={`cooperation-camera-status ${frameLive ? 'cooperation-camera-live' : ''}`}><Camera size={14} aria-hidden="true" />{frameLabel}</span>
         </div>
         <div className={`cooperation-camera ${frameLive ? '' : 'cooperation-camera-unavailable'}`} data-frame-live={frameLive}>
-          {frameStamp !== null && frameStamp !== undefined ? <>
-            <img key={frameStamp} src={`/coop-api/frame.jpg?stamp=${encodeURIComponent(frameStamp)}`} alt="共享 MuJoCo 场景的实际相机画面"
-              onLoad={() => onFrameResult?.(frameStamp, true)} onError={() => onFrameResult?.(frameStamp, false)} />
+          {imageSrc ? <>
+            <img src={imageSrc} alt="共享 MuJoCo 场景的实际相机画面" />
             {!frameLive && <div className="cooperation-camera-notice"><Camera size={24} aria-hidden="true" /><span>{frameLabel}</span></div>}
           </> : <div className="cooperation-camera-empty"><Camera size={34} aria-hidden="true" /><strong>等待实际相机画面</strong><p>相机帧就绪后将在这里显示。</p></div>}
         </div>
         <div className="cooperation-camera-footer">
-          <span>相机仿真时间 {frame?.loadedStamp !== null && frame?.loadedStamp !== undefined ? `${frame.loadedStamp.toFixed(3)} s` : '未收到'}</span>
+          <span>相机仿真时间 {frameMatchesSource && frame?.loadedStamp !== null ? `${frame.loadedStamp.toFixed(3)} s` : '未收到'}</span>
           <span>物理反馈 {physics ? `${physics.stamp.toFixed(3)} s` : '未收到'}</span>
           <span>{connected ? '状态每秒读取' : '当前显示为历史反馈'}</span>
         </div>
