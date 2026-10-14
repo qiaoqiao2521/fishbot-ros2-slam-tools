@@ -8,6 +8,8 @@ micro-ROS Agent sources, firmware source and staged runtime tools.
 ## Start here
 
 Read [PROJECT](PROJECT.md) for current priorities, then follow the relevant plan.
+Open the [results workbench](docs/WORKBENCH.md) at `/workbench` for six capability entrances and frozen acceptance evidence.
+It preserves original failures and keeps tool availability separate from experiment results.
 New scene inputs use [SpatialLM import](experiments/spatiallm/README.md).
 Two-job sequencing uses the [bounded workflow](docs/COOPERATION_WORKFLOW.md).
 Both preserve separate inference, editing and physical acceptance boundaries.

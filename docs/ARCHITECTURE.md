@@ -12,6 +12,8 @@
 
 源码向内收敛，旧路径向新项目链接。保留Git目录以保护历史，暂不自动压平为单仓。旧安装目录中的绝对路径可能经兼容链接工作；fresh build验收应另行记录，不能用布局通过替代。
 
+`/workbench` 是现有React控制站的只读成果入口。页面从同一静态JSON读取六项能力和冻结评分摘要，不挂载控制站遥测/运动初始化。原四操作页保持原所有权；SpatialLM与视频工具保留独立仓库和写协议。显式服务检查仅发GET，代理固定只读路径并校验响应身份，上次检查时刻不代表持续在线。原56例与新增三回合分开展示，完整边界见[WORKBENCH](WORKBENCH.md)。
+
 控制站 `/radar` 使用 React → Java → rosbridge，提供初位姿、导航目标和真实 `/plan` 叠层。显式提交前只保留位置与朝向草稿。模拟环境采用实际 `/clock`，连接代次隔离旧路径和旧时钟。`/simulation` 继续复用 Python mission bridge 的巡逻与 Goal 所有权，两页分别标识运行环境。数据契约和本轮验收见 [map-navigation.md](../apps/fishbot-control-station/docs/map-navigation.md)。
 
 `/cooperation` 使用独立domain114及同一MuJoCo世界。Nav2速度通过ROS薄适配驱动车轮；SO101规划复用只读依赖，规划克隆冻结停止车辆，执行器驱动实际关节。任务桥按双指接触、货物抬升、托盘落稳、机械臂退出与载物停车的反馈推进。相机与货物始终属于同一世界；原生目标回执和取消按任务所有权分别确认。入口与验收边界见 [COOPERATION.md](COOPERATION.md)。

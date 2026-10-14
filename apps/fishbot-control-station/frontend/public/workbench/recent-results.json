@@ -1,0 +1,689 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-10-15",
+  "period": "10月11日至15日",
+  "sourceRevision": "40f1181940d58de79f9ffbb1b61e8706a3b908a9",
+  "snapshotLabel": "已保存的验收快照，非当前机器人运行状态",
+  "capabilities": [
+    {
+      "id": "navigation",
+      "title": "地图与导航",
+      "summary": "在地图选点、保存路线、编辑禁区，从派发时的位置返航。",
+      "status": "verified",
+      "statusLabel": "仿真导航已验证",
+      "highlights": [
+        "真实 Nav2 / RViz",
+        "地图规则与路线模板",
+        "手机与网页共用"
+      ],
+      "boundary": "建图导航由用户确认完成；后续验收限合成仿真。当前运行状态到操作页查看。",
+      "action": {
+        "label": "进入地图巡逻",
+        "route": "simulation"
+      },
+      "evidenceUrl": "https://github.com/qiaoqiao2521/fishbot-ros2-slam-tools/blob/40f1181940d58de79f9ffbb1b61e8706a3b908a9/docs/MAP_RULES.md"
+    },
+    {
+      "id": "transport",
+      "title": "车臂运输",
+      "summary": "固定 SO101 工位装货，小车停靠、交接并运到交付点。",
+      "status": "verified",
+      "statusLabel": "运输闭环已验证",
+      "highlights": [
+        "取消后恢复原作业",
+        "同一桥连续两件运输",
+        "实际双指抓取与货物运输"
+      ],
+      "boundary": "新增面板：1次正确取消和2次完整运输通过。使用ideal工位观测，不补齐旧RGB失败。",
+      "action": {
+        "label": "进入车臂协同",
+        "route": "cooperation"
+      },
+      "evidenceUrl": "https://github.com/qiaoqiao2521/fishbot-ros2-slam-tools/blob/40f1181940d58de79f9ffbb1b61e8706a3b908a9/docs/COOPERATION_WORKFLOW.md"
+    },
+    {
+      "id": "vision",
+      "title": "RGB 视觉停靠",
+      "summary": "后向相机实际检测 AprilTag，将相对位姿交给原生停靠。",
+      "status": "partial",
+      "statusLabel": "鲁棒性验收未全通过",
+      "highlights": [
+        "实际 RGB / AprilTag",
+        "观测、动作、物理分层评分",
+        "56例报告保留11项失败"
+      ],
+      "boundary": "位置、偏航、连续停稳和输入时龄按原门槛评分；正确取消不算停靠成功。",
+      "action": {
+        "label": "查看协同感知",
+        "route": "cooperation"
+      },
+      "evidenceUrl": "https://github.com/qiaoqiao2521/fishbot-ros2-slam-tools/blob/40f1181940d58de79f9ffbb1b61e8706a3b908a9/plans/visual-docking-robustness-20261014/progress.md"
+    },
+    {
+      "id": "spatiallm",
+      "title": "空间场景生成",
+      "summary": "点云生成室内结构，经人工校正后导出 FishBot 仿真场景。",
+      "status": "pipeline",
+      "statusLabel": "推理与场景转换已验证",
+      "highlights": [
+        "官方单例预测16实体",
+        "人工校正六面墙",
+        "原FishBot物理模型100步"
+      ],
+      "boundary": "GT为18实体；尚未验证重建精度、车辆起点净空或导航。示例GT不是模型预测。",
+      "action": {
+        "label": "打开场景编辑器",
+        "service": "spatiallm"
+      },
+      "evidenceUrl": "https://github.com/qiaoqiao2521/fishbot-ros2-slam-tools/blob/40f1181940d58de79f9ffbb1b61e8706a3b908a9/experiments/spatiallm/INFERENCE.md"
+    },
+    {
+      "id": "video",
+      "title": "视频过程分析",
+      "summary": "把本地视频整理为人员活动候选、抓拍和可追溯人工复核。",
+      "status": "pipeline",
+      "statusLabel": "离线分析与复核已验证",
+      "highlights": [
+        "CC0视频375解码帧",
+        "29个采样 / 1个候选事件",
+        "保留写盘失败与重开审批"
+      ],
+      "boundary": "单个公开样本不能代表人数准确率、身份识别、家庭泛化、RTSP或设备部署。复核留在原工具。",
+      "action": {
+        "label": "打开视频复核台",
+        "service": "video"
+      },
+      "evidenceUrl": "https://github.com/qiaoqiao2521/uw-yolo-code-assets/blob/908f5bd8e40241bb74ec1bf384205c638edf7b1d/docs/OFFLINE_VIDEO_EVENTS.md"
+    },
+    {
+      "id": "arena",
+      "title": "组合策略评测",
+      "summary": "固定策略和预算，替换物体条件，比较原生回合并完成资源回收。",
+      "status": "pipeline",
+      "statusLabel": "评测运行链已验证",
+      "highlights": [
+        "Colab L4预检20步",
+        "两组各23步 / 同seed",
+        "取证与资源回收闭合"
+      ],
+      "boundary": "zero_action两组任务success均为false。运行链通过，不代表抓放成功或策略训练提升。",
+      "action": {
+        "label": "查看评测来源",
+        "href": "https://github.com/qiaoqiao2521/fishbot-ros2-slam-tools/blob/40f1181940d58de79f9ffbb1b61e8706a3b908a9/experiments/arena/README.md"
+      },
+      "evidenceUrl": "https://github.com/qiaoqiao2521/fishbot-ros2-slam-tools/blob/40f1181940d58de79f9ffbb1b61e8706a3b908a9/plans/fishbot-arena-evaluation-20261014/progress.md"
+    }
+  ],
+  "visual": {
+    "total": 56,
+    "completed": 38,
+    "safeCanceled": 7,
+    "failed": 11,
+    "shortCount": 50,
+    "fullCount": 6,
+    "qualified": false,
+    "shortCompleted": 34,
+    "fullCompleted": 4,
+    "reportSha256": "c5895190606c30aaa15fefcb2933db43e635aa26478c8e76305367b5076cd9b6",
+    "cases": [
+      {
+        "id": "baseline-dev-0",
+        "stage": "开发基线",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "228ae2ce235bb23b5f504647ddf3c9143d5df6d49ae08181437e8374e121f5c7",
+        "label": "开发初态1 · 基线"
+      },
+      {
+        "id": "baseline-dev-1",
+        "stage": "开发基线",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "bc4fd0362b54e0388df57bdfb3982c5b700e41feb384d111d68c3c9b029b41ef",
+        "label": "开发初态2 · 基线"
+      },
+      {
+        "id": "baseline-dev-2",
+        "stage": "开发基线",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "dfa1c1120347f6e07b9ab641c759b69e22017c9938fd670d6aa1cf20044a1da8",
+        "label": "开发初态3 · 基线"
+      },
+      {
+        "id": "dev-0-clean-parent",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "946a4bd97871917a09e993546d80325a3e81feb20b2ff528b9ac6de044a32f2d",
+        "label": "开发初态1 · 清晰观测 · 原版本"
+      },
+      {
+        "id": "dev-0-clean-candidate",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "3a937d1611fe49d9f7f014c056f205e9f181d5568b354d8c240fb6e26faa5a10",
+        "label": "开发初态1 · 清晰观测 · 同源码复现"
+      },
+      {
+        "id": "dev-0-noise-low-parent",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "d84c80ec0d7e90119d21d7dcab6ed45c90f18c4061e009f5a6b1657a261bba66",
+        "label": "开发初态1 · 低噪声 · 原版本"
+      },
+      {
+        "id": "dev-0-noise-low-candidate",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "d88462afd00916922b570b06645dfc1cd0f078e6ba879e500025058a70017938",
+        "label": "开发初态1 · 低噪声 · 同源码复现"
+      },
+      {
+        "id": "dev-1-noise-high-parent",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "eb5921e916d564515ce3a894785ec8c5795a19dd5607cdb82fc31debf11d1aab",
+        "label": "开发初态2 · 高噪声 · 原版本"
+      },
+      {
+        "id": "dev-2-bias-yaw-candidate",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "9022a85ccb470c12647d7838bd2c0628e4526b6fe9aa5ebe7385e25080349702",
+        "label": "开发初态3 · 固定偏航偏差 · 同源码复现"
+      },
+      {
+        "id": "dev-2-bias-yaw-parent",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "d6d55d4af1247918503463e60b81e6a3e2236bdf11b139d19559f6fdad67d9e0",
+        "label": "开发初态3 · 固定偏航偏差 · 原版本"
+      },
+      {
+        "id": "dev-1-bias-x-parent",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "00361e1ad290b9adbb4a5b3d1028c9814f13f1064f8b1e8e468fd437e322c30d",
+        "label": "开发初态2 · bias-x · 原版本"
+      },
+      {
+        "id": "dev-1-bias-x-candidate",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "5ff5ac9637492d1ea0867741d312fd4d6f197f61ceda8b79507c8dbf9b0d4c49",
+        "label": "开发初态2 · bias-x · 同源码复现"
+      },
+      {
+        "id": "dev-2-dropout-candidate",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "a9eaac4441ad69ba11a5b6e5887762aa2f26b599220cfbd2628fe10dc252b0bb",
+        "label": "开发初态3 · 丢检 · 同源码复现"
+      },
+      {
+        "id": "dev-1-noise-high-candidate",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "fd0f1677c6da0c14e7d4952e8baade7404ad510cdebc2a6100ccc7fd70413ae0",
+        "label": "开发初态2 · 高噪声 · 同源码复现"
+      },
+      {
+        "id": "dev-2-dropout-parent",
+        "stage": "扰动开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "7982b31be334707e3e695194897e8acd7c93ea342480a79b8d037c0a2a3a4a27",
+        "label": "开发初态3 · 丢检 · 原版本"
+      },
+      {
+        "id": "baseline-holdout-0",
+        "stage": "留出基线",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "4f2d76aa1fdace2fc361e9203f4d22e2541d620ec631e4c3f69edff84279fb92",
+        "label": "留出初态1 · 基线"
+      },
+      {
+        "id": "baseline-holdout-1",
+        "stage": "留出基线",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "0d52853f6f9ff8db59809393f699b75ea8de8a891bd5d9f32148d8ce2500133c",
+        "label": "留出初态2 · 基线"
+      },
+      {
+        "id": "baseline-holdout-2",
+        "stage": "留出基线",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "8838182d85c071f686954ed352b4d24801f2feabec6729b1858ac16599f288b8",
+        "label": "留出初态3 · 基线"
+      },
+      {
+        "id": "fault-delay-parent",
+        "stage": "故障开发",
+        "status": "safe-cancel",
+        "reason": "工位相对观测已过期",
+        "scoreSha256": "df154f915cff2f043732d37362ea228c1ee6f630d857bb2e5911e8a9060d2e70",
+        "label": "故障面板 · 过期输入 · 原版本"
+      },
+      {
+        "id": "fault-delay-candidate",
+        "stage": "故障开发",
+        "status": "safe-cancel",
+        "reason": "工位相对观测已过期",
+        "scoreSha256": "2682d0c39972b4abeeb6d9b2b7c485872fa13bae29ef4c96a880ed946355335f",
+        "label": "故障面板 · 过期输入 · 同源码复现"
+      },
+      {
+        "id": "fault-replay-identity-parent",
+        "stage": "故障开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "01249cd31f701429ed1f0b6ca9e68a19c2c0aa1812602022de836749f1c8b086",
+        "label": "故障面板 · 错误身份与重放 · 原版本"
+      },
+      {
+        "id": "fault-replay-identity-candidate",
+        "stage": "故障开发",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "36738f2cfc6c31ce672e7da598d3bd0d008b354ef1a00675af3aeee447365f69",
+        "label": "故障面板 · 错误身份与重放 · 同源码复现"
+      },
+      {
+        "id": "fault-long-occlusion-parent",
+        "stage": "故障留出",
+        "status": "safe-cancel",
+        "reason": "工位相对观测已过期",
+        "scoreSha256": "f8b2ce5c17e49c15694e321169eeb16b5eaa492cc9a2b08116f8a90839d0535a",
+        "label": "故障面板 · 持续失检 · 原版本"
+      },
+      {
+        "id": "fault-long-occlusion-candidate",
+        "stage": "故障留出",
+        "status": "safe-cancel",
+        "reason": "工位相对观测已过期",
+        "scoreSha256": "428d7fd61b859df681d5b45c6a3e88a08b15d2f3224241bf821f61faba6023ca",
+        "label": "故障面板 · 持续失检 · 同源码复现"
+      },
+      {
+        "id": "fault-moving-cancel-parent",
+        "stage": "故障留出",
+        "status": "safe-cancel",
+        "reason": "用户取消任务",
+        "scoreSha256": "3c935b70a1847f105877dce3a5654f9dde1ed4d3ed46bf9f41b0ecd628a3670e",
+        "label": "故障面板 · 运动取消 · 原版本"
+      },
+      {
+        "id": "fault-moving-cancel-candidate",
+        "stage": "故障留出",
+        "status": "safe-cancel",
+        "reason": "用户取消任务",
+        "scoreSha256": "959d4f891584b82738a42c0fdab845dbae4bd576bfe9c3940891dd72e9e8985c",
+        "label": "故障面板 · 运动取消 · 同源码复现"
+      },
+      {
+        "id": "vision-clear-dev-0",
+        "stage": "vision-development-receiver",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "f6faa362f9745aeba25dcbc98446359e0a77a255ff5175b2b9dccce2525a85cc",
+        "label": "RGB开发初态1 · 清晰画面"
+      },
+      {
+        "id": "vision-image-variant-dev-0",
+        "stage": "vision-development-receiver",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "1f4ec5ea3f48e2819d61b9397b50c2f48ef39146ce2a4ef5c0eca0f6895d1516",
+        "label": "RGB开发初态1 · 图像变体"
+      },
+      {
+        "id": "vision-clear-dev-1",
+        "stage": "vision-development-receiver",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "29a3df40a48b9ae71f647a074d4416328c219f87b8de9118ba038b161d8f5231",
+        "label": "RGB开发初态2 · 清晰画面"
+      },
+      {
+        "id": "vision-image-variant-dev-1",
+        "stage": "vision-development-receiver",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "f20b6156fb65e1d1471d22a962faa20cf733faa0f01a54aba4c81ffab8b01264",
+        "label": "RGB开发初态2 · 图像变体"
+      },
+      {
+        "id": "vision-clear-dev-2",
+        "stage": "vision-development-receiver",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "05af9337d42d8cbdb8d0afe26fc262cdbbf48ab0e168b6f3b1f695879090b3f9",
+        "label": "RGB开发初态3 · 清晰画面"
+      },
+      {
+        "id": "vision-image-variant-dev-2",
+        "stage": "vision-development-receiver",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "ad5b36fd92dc68c6bfc51a261292cfa4f98136ffeca936d1b9b683f684d422db",
+        "label": "RGB开发初态3 · 图像变体"
+      },
+      {
+        "id": "holdout-0-noise-high-parent",
+        "stage": "扰动留出",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "0970cd4f69655d6c91c3a53e6e32bb5d2823bed369bab914903bf2cc9babcc9e",
+        "label": "留出初态1 · 高噪声 · 原版本"
+      },
+      {
+        "id": "holdout-0-noise-high-candidate",
+        "stage": "扰动留出",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "b98bf511668c0dacac149b8a313ce6dceec95cfcfab9cbd15db2e5cf93f493cf",
+        "label": "留出初态1 · 高噪声 · 同源码复现"
+      },
+      {
+        "id": "holdout-0-bias-x-parent",
+        "stage": "扰动留出",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "d7443da9a80907f4881af5b838dbf3ed0e75d7714afca08d3e5307cec2d2cae6",
+        "label": "留出初态1 · bias-x · 原版本"
+      },
+      {
+        "id": "holdout-0-bias-x-candidate",
+        "stage": "扰动留出",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "7f81de166e29cbb1f8e9bf504dad657a2125fa7ff7ea2b34e10a45e5feaadb40",
+        "label": "留出初态1 · bias-x · 同源码复现"
+      },
+      {
+        "id": "holdout-1-bias-yaw-parent",
+        "stage": "扰动留出",
+        "status": "failed",
+        "reason": "车体尚未进入真实交接位置与朝向范围",
+        "scoreSha256": "52d558244f7360be3a4d1049d8efbad14231c28e16354d91ad8254d2f7580c33",
+        "label": "留出初态2 · 固定偏航偏差 · 原版本"
+      },
+      {
+        "id": "holdout-1-bias-yaw-candidate",
+        "stage": "扰动留出",
+        "status": "failed",
+        "reason": "车体尚未进入真实交接位置与朝向范围",
+        "scoreSha256": "a8b700c7a6952351bee66e084a26abb32f023eb78578cf1d38da1722c9262c3e",
+        "label": "留出初态2 · 固定偏航偏差 · 同源码复现"
+      },
+      {
+        "id": "holdout-1-dropout-parent",
+        "stage": "扰动留出",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "29107a95aa478eef3ca91c4dd7f3ada6c9b2248ba1f846343ae43cb5f3dd9b80",
+        "label": "留出初态2 · 丢检 · 原版本"
+      },
+      {
+        "id": "holdout-1-dropout-candidate",
+        "stage": "扰动留出",
+        "status": "failed",
+        "reason": "车体尚未进入真实交接位置与朝向范围",
+        "scoreSha256": "edaad012d87563be48c6639be2f3983cfc504488e9e3c09c381de1971e6dae57",
+        "label": "留出初态2 · 丢检 · 同源码复现"
+      },
+      {
+        "id": "holdout-2-short-occlusion-parent",
+        "stage": "扰动留出",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "847476536e2ca5a4a1d8bcfc4477527c2dfc128d74ed11d35d8546a3936d0665",
+        "label": "留出初态3 · short-occlusion · 原版本"
+      },
+      {
+        "id": "holdout-2-short-occlusion-candidate",
+        "stage": "扰动留出",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "0473232b4b37b6bc4c2d6ef6fff0c81b546a9af6d33a10ad97e6037ce83fb008",
+        "label": "留出初态3 · short-occlusion · 同源码复现"
+      },
+      {
+        "id": "holdout-2-combined-parent",
+        "stage": "扰动留出",
+        "status": "failed",
+        "reason": "车体尚未进入真实交接位置与朝向范围",
+        "scoreSha256": "1829dc6f8031ef623cae5551158541cd2992ed4241735d89d3f2be023a91ba67",
+        "label": "留出初态3 · 组合扰动 · 原版本"
+      },
+      {
+        "id": "holdout-2-combined-candidate",
+        "stage": "扰动留出",
+        "status": "failed",
+        "reason": "共享物理反馈时间失效",
+        "scoreSha256": "48c5866bf59ac17cbdd54da63efa1b14935df9ad95a86980c0a5a0bc93ab8de7",
+        "label": "留出初态3 · 组合扰动 · 同源码复现"
+      },
+      {
+        "id": "vision-clear-holdout-0",
+        "stage": "RGB留出",
+        "status": "failed",
+        "reason": "尚未收到有效工位相对观测",
+        "scoreSha256": "8babd74eadbec4751633dd0ab5a0fb788c4e5d2b0c3815a989dea9e06ea17773",
+        "label": "RGB留出初态1 · 清晰画面"
+      },
+      {
+        "id": "vision-image-variant-holdout-0",
+        "stage": "RGB留出",
+        "status": "failed",
+        "reason": "尚未收到有效工位相对观测",
+        "scoreSha256": "ccb656be12800c90cc3f0f8187989f6ba88d24257207d24f8a0ce38c6521e0ac",
+        "label": "RGB留出初态1 · 图像变体"
+      },
+      {
+        "id": "vision-clear-holdout-1",
+        "stage": "RGB留出",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "54b8af2fd75ec4ba3a1ac9c5737891a5a6b725ebd45365a7f195341168263f12",
+        "label": "RGB留出初态2 · 清晰画面"
+      },
+      {
+        "id": "vision-image-variant-holdout-1",
+        "stage": "RGB留出",
+        "status": "safe-cancel",
+        "reason": "用户取消任务",
+        "scoreSha256": "b2e8ef6641ff52dca8825275be0232ec1313b804a61b68b82164d1ba6d397673",
+        "label": "RGB留出初态2 · 图像变体"
+      },
+      {
+        "id": "vision-clear-holdout-2",
+        "stage": "RGB留出",
+        "status": "failed",
+        "reason": "工位相对观测已过期",
+        "scoreSha256": "3b3e813b418d6a5d43bb06a59181c033d22d39b42c66e37ccfdc908d6140154d",
+        "label": "RGB留出初态3 · 清晰画面"
+      },
+      {
+        "id": "vision-image-variant-holdout-2",
+        "stage": "RGB留出",
+        "status": "failed",
+        "reason": "工位相对观测已过期",
+        "scoreSha256": "0209bb00a11c5f62c00bcc1cf5005944b1a2c453594607223414a6cc5ed139a7",
+        "label": "RGB留出初态3 · 图像变体"
+      },
+      {
+        "id": "full-ideal-1",
+        "stage": "完整运输",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "1c4bf0a26e17d341a7e10561d613e74558a5d8ac8a8d0fefb1fdd2a35005c839",
+        "label": "理想观测完整运输 · 第1回合"
+      },
+      {
+        "id": "full-ideal-2",
+        "stage": "完整运输",
+        "status": "failed",
+        "reason": "共享物理反馈时间失效",
+        "scoreSha256": "7bf6473c43e7a741b0bdfb28d1528cdf458e0b8733f56f35b13c2f41b827e78d",
+        "label": "理想观测完整运输 · 第2回合"
+      },
+      {
+        "id": "full-perturbed-1",
+        "stage": "完整运输",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "c951ed0bfd83e82fbaa4ebcec2acf373085dda97297a35657131f178735da16c",
+        "label": "受扰观测完整运输 · 第1回合"
+      },
+      {
+        "id": "full-perturbed-2",
+        "stage": "完整运输",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "fc4783c5ef05d21fcc2f62ac6ee3bfcc9ba2a42c438e21e438f2fb609d2e7703",
+        "label": "受扰观测完整运输 · 第2回合"
+      },
+      {
+        "id": "full-vision-1",
+        "stage": "完整运输",
+        "status": "completed",
+        "reason": "",
+        "scoreSha256": "00132237b49f792e22a3355c9a2fcc170b1406223cba1a70499b7b3f7241a257",
+        "label": "RGB视觉完整运输 · 第1回合"
+      },
+      {
+        "id": "full-vision-2",
+        "stage": "完整运输",
+        "status": "failed",
+        "reason": "工位相对观测已过期",
+        "scoreSha256": "0edb23eb84b9e15486fb43b83d97b2b4bc3c17e9c7cf17fb78230f37d063fb9c",
+        "label": "RGB视觉完整运输 · 第2回合"
+      }
+    ]
+  },
+  "workflow": {
+    "total": 3,
+    "completed": 2,
+    "safeCanceled": 1,
+    "failed": 0,
+    "qualified": true,
+    "elapsedSeconds": 544.5309982229955,
+    "reportSha256": "9fcc9f42500be55da3e782fcd8ed92c83e74c4348945079f4374a046a21fdfd6",
+    "cases": [
+      {
+        "id": "moving-dock-cancel",
+        "title": "运动中取消",
+        "outcome": "safe-cancel",
+        "passed": true,
+        "durationSeconds": 30.978,
+        "cargoDistanceMeters": null,
+        "scoreSha256": "0b27bacf93c1259be1c140c0156e68ad22d650cae4b8195fbace6ef29ff155f6"
+      },
+      {
+        "id": "job1-transport",
+        "title": "第一件完整运输",
+        "outcome": "completed",
+        "passed": true,
+        "durationSeconds": 208.307,
+        "cargoDistanceMeters": 1.788226,
+        "scoreSha256": "76736d91d129ea378e582d8460a8e3c4c448bc7726d3736a02fdfad440d33791"
+      },
+      {
+        "id": "job2-transport",
+        "title": "第二件完整运输",
+        "outcome": "completed",
+        "passed": true,
+        "durationSeconds": 224.146,
+        "cargoDistanceMeters": 1.787301,
+        "scoreSha256": "62073d383b0ca790a4dfbc54e352d864b1e82873e997da1a8ffc8030967c30ba"
+      }
+    ]
+  },
+  "services": {
+    "spatiallm": {
+      "label": "场景编辑器",
+      "url": "http://127.0.0.1:8867/",
+      "probe": "/workbench-service/spatiallm"
+    },
+    "video": {
+      "label": "视频复核台",
+      "url": "http://127.0.0.1:18089/",
+      "probe": "/workbench-service/video"
+    }
+  },
+  "insights": [
+    {
+      "title": "连续任务交给控制器",
+      "body": "地图目标一次派发；聊天与页面刷新不充当运动周期。取消和失联后查询原任务，未知不重发。"
+    },
+    {
+      "title": "状态与物理结果分开",
+      "body": "网页完成、原生动作成功和实际抓取运输分别验收。观测质量分不解释为任务成功概率。"
+    },
+    {
+      "title": "复用共享世界与薄适配",
+      "body": "保留现有ROS、MuJoCo、Nav2和SO101；新工具补空间生成、过程分析与评测，不再增加一套机器人平台。"
+    }
+  ],
+  "nextSteps": [
+    {
+      "title": "视觉鲁棒性",
+      "detail": "偏航、连续停稳、RGB可见性和观测过期仍需新开发面板整改；旧留出不参与调参。"
+    },
+    {
+      "title": "场景用于导航",
+      "detail": "先验车辆起点净空和整条扫掠，再验证SpatialLM生成场景的地图与导航。"
+    },
+    {
+      "title": "后续研究",
+      "detail": "SmolVLA、Route Server、AGIBOT、SAM3、GigaBrain、RoboJEPA为已核查候选，新增实验未运行；AlphaNIST待官方代码与资产。"
+    }
+  ],
+  "provenance": [
+    {
+      "id": "visual",
+      "source": "FishBot visual-docking P1–P3",
+      "sha256": "c5895190606c30aaa15fefcb2933db43e635aa26478c8e76305367b5076cd9b6",
+      "classification": "original experiment report"
+    },
+    {
+      "id": "workflow",
+      "source": "FishBot workflow ec879ed",
+      "sha256": "9fcc9f42500be55da3e782fcd8ed92c83e74c4348945079f4374a046a21fdfd6",
+      "classification": "separate three-case runtime"
+    },
+    {
+      "id": "spatiallm",
+      "source": "SpatialLM official single inference",
+      "sha256": "4f8face87fef0f9cc863ff754408cd27ac4e7391b5b267b19a49324d857ab2a3",
+      "classification": "single inference and CPU conversion"
+    },
+    {
+      "id": "video",
+      "source": "offline-video-events public sample",
+      "sha256": "48b48b3810c006c747968491686a9ffb79e2ab33211e0f23532c9710f98ab739",
+      "classification": "single public video sample"
+    },
+    {
+      "id": "arena",
+      "source": "Isaac Lab-Arena recovered evaluation",
+      "sha256": "b9b2623fd7688c8e17382599a3b76d55bbcfdc714aae85762c8576d8c39a9b3b",
+      "classification": "zero-action evaluation pipeline"
+    }
+  ]
+}

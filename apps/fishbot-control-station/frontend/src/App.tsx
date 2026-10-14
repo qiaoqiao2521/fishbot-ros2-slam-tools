@@ -1,6 +1,6 @@
 import { startTransition, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Bot, ChevronRight, LayoutDashboard, Radar, Route, Workflow } from 'lucide-react'
+import { Bot, ChevronRight, House, LayoutDashboard, Radar, Route, Workflow } from 'lucide-react'
 
 import { MotionControlPanel } from '@/components/control/motion-control-panel'
 import { HeaderStatusBar } from '@/components/layout/header-status-bar'
@@ -10,6 +10,7 @@ import { RadarWorkbenchPage } from '@/components/radar/radar-workbench-page'
 import { SimulationPage } from '@/components/simulation/simulation-page'
 import { CooperationPage } from '@/components/cooperation/cooperation-page'
 import { ExpansionPanel } from '@/components/roadmap/expansion-panel'
+import { WorkbenchPage } from '@/components/workbench/workbench-page'
 import { ConnectionStatusPanel } from '@/components/status/connection-status-panel'
 import { RobotStatePanel } from '@/components/status/robot-state-panel'
 import { RuntimeModePanel } from '@/components/status/runtime-mode-panel'
@@ -29,7 +30,7 @@ function App() {
   }, [])
 
   function navigate(next: AppRoute) {
-    const pathname = next === 'cooperation' ? '/cooperation' : next === 'simulation' ? '/simulation' : next === 'radar' ? '/radar' : '/'
+    const pathname = next === 'workbench' ? '/workbench' : next === 'cooperation' ? '/cooperation' : next === 'simulation' ? '/simulation' : next === 'radar' ? '/radar' : '/'
     if (window.location.pathname === pathname) {
       return
     }
@@ -43,7 +44,9 @@ function App() {
 
   return (
     <StationFrame route={route} navigate={navigate}>
-      {route === 'simulation' ? (
+      {route === 'workbench' ? (
+        <WorkbenchPage onNavigate={navigate} />
+      ) : route === 'simulation' ? (
         <SimulationPage onBack={() => navigate('dashboard')} onCooperation={() => navigate('cooperation')} />
       ) : route === 'cooperation' ? (
         <CooperationPage onBack={() => navigate('dashboard')} />
@@ -53,6 +56,7 @@ function App() {
 }
 
 const workspaces = [
+  { route: 'workbench', label: '工作台', icon: House },
   { route: 'dashboard', label: '控制总览', icon: LayoutDashboard },
   { route: 'radar', label: '雷达与地图', icon: Radar },
   { route: 'simulation', label: '仿真巡逻', icon: Route },
@@ -67,7 +71,7 @@ function StationFrame({ route, navigate, children }: {
   return (
     <div className="station-app">
       <aside className="station-sidebar">
-        <div className="station-brand"><span><Bot size={22} /></span><div>FishBot<small>机器人工作台</small></div></div>
+        <button type="button" className="station-brand" onClick={() => navigate('workbench')} aria-label="打开工作台"><span><Bot size={22} /></span><div>FishBot<small>机器人工作台</small></div></button>
         <nav aria-label="工作区" className="station-navigation">
           {workspaces.map((workspace) => (
             <button key={workspace.route} type="button" onClick={() => navigate(workspace.route)}
@@ -80,7 +84,7 @@ function StationFrame({ route, navigate, children }: {
         <div className="station-sidebar-note"><span>FishBot + SO101</span><small>控制 · 感知 · 协作</small></div>
       </aside>
       <div className="station-workspace">
-        <div className="station-topbar"><span>工作台 <ChevronRight size={14} /> <strong>{workspaces.find((item) => item.route === route)?.label}</strong></span><span className="station-topbar-mark">FishBot 控制站</span></div>
+        <div className="station-topbar"><span>FishBot <ChevronRight size={14} /> <strong>{workspaces.find((item) => item.route === route)?.label}</strong></span><span className="station-topbar-mark">FishBot 控制站</span></div>
         {children}
       </div>
     </div>

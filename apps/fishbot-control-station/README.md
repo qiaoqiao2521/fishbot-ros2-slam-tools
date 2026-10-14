@@ -19,6 +19,11 @@ FishBot Control Station is a web-first robot control console for FishBot. It rep
 
 ## Map Navigation
 
+`/workbench` groups recent capabilities, frozen acceptance results, and links to the original workspaces.
+It initializes no motion controller or telemetry bootstrap. Tool checks require an explicit GET request.
+The FishBot logo returns here; existing control, radar, simulation, and cooperation paths remain available.
+See the [workbench guide](../../docs/WORKBENCH.md) for source identity and acceptance limits.
+
 `/radar` supports map and scan overlays, position and heading selection, navigation goals, and initial pose submission.
 Observation mode sends no commands. Operators explicitly submit each draft.
 The path overlay uses the latest observed ROS `/plan`.

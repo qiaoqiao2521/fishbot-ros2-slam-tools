@@ -15,6 +15,16 @@ export default defineConfig({
   server: {
     port: frontendPort,
     proxy: {
+      '/workbench-service/spatiallm': {
+        target: 'http://127.0.0.1:8867',
+        changeOrigin: true,
+        rewrite: () => '/api/health',
+      },
+      '/workbench-service/video': {
+        target: 'http://127.0.0.1:18089',
+        changeOrigin: true,
+        rewrite: () => '/api/run',
+      },
       '/coop-api': {
         target: `http://127.0.0.1:${process.env.FISHBOT_COOP_PORT || '9086'}`,
         changeOrigin: true,

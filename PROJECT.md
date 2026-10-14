@@ -10,6 +10,7 @@
 ## Constraints
 Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。历史无线延迟与专项验收边界继续保留，不再作为已售实车的当前阻塞项。
 ## Current State
+2026-10-15 近期成果统一到网页`/workbench`：地图导航、车臂运输、RGB停靠、SpatialLM、视频事件和Arena六项入口，复用原四操作页。原56例保持38完成/7正确取消/11失败；新三回合单列。总览不挂载运动控制，工具状态只由显式GET确认；本轮恢复5180工作台、8867场景编辑器和18089公开样本复核网页，不启动推理、渲染、ROS或GPU。实际桌面/390px导航、过滤、同源快照和工具页面验证通过，零写请求；最终测试与交付见[本轮进度](plans/workbench-harvest-20261015/progress.md)。
 2026-10-14 视觉停靠P0已完成实施与隔离120验收：显式ideal/perturbed/vision合同、标准位姿/诊断配对、来源/回合/时龄/协方差校验与独立oracle持久化。修复低实时因子下10Hz源采样跨0.5墙钟门槛，改复用50Hz状态测量，门槛与模型保持。运动取消同UUID终态5；新完整任务1Dock+2Nav均4，货物1.789564m、完整抓放/交接/运输评分通过，越界/接触0；34源起止/当前一致，120已清理，107/114原进程保持。最终696回归、54原物理/场景检查与8新采样检查通过；物理记录10缺序号保留，未声称无孔洞/泛化/真实RGB。知识已回写；源码交付见plans/visual-docking-robustness-20261014/progress.md。
 2026-10-14 SpecMesh责任核对发现视觉停靠计划尚未建立，CLAUDE与DECISIONS入口缺失，README的Arena状态滞后；本轮补齐规划、标准入口与索引。视觉停靠只完成源码合同和实验协议，受扰/真实RGB实验未开始；原生停靠、完整运输与Arena结果保持各自验收边界。见plans/visual-docking-robustness-20261014/。
 2026-10-14 用户要求结合Recursia优化现有共享执行栈。已补完整货物外廓、车臂交接与持续携货臂状态，并复用官方纯verdict增加同面板/预算/源冻结/零丢失配对门禁。官方Recursia仿真版未公开，本项目不称完整RSI部署；独立118单次完整运输原生/物理评分通过，货物1.789656m、越界/接触0，28源冻结；118已清理，当前107/114保持原进程。最终582反馈与45物理检查通过，未声称泛化或训练提升。见docs/STACK_IMPROVEMENT.md和plans/fishbot-recursia-stack-20261014/。
@@ -38,6 +39,7 @@ Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。
 历史记录：2026-10-05 已修正两块板的服务器地址，雷达约7 Hz、odom/imu约20 Hz上线；雷达接收定时器泄漏、断线重连和扫描点数变化导致的SLAM丢帧已修复。已实测低速短段直行、转向和主动零速停车，当时地图约6.725平方米自由区域及续建数据已保存。2026-10-05检查点的实车RViz实时视图曾保持打开，此处不代表当前在线状态。用户当时要求保持当前方向前进1米，实际仅前进约4.9厘米后触发前方保护，续试无新增位移；该检查点为零速、无排队动作，但续试的连续新鲜停车反馈未通过，原始时间戳偶发超限。底盘复位后恢复续建，轮式转角与点云实测转角不一致；后续修复与验收见Current Priority及plans/fishbot-real-autonomy-20261005/。
 2026-10-05：网页三点巡逻、物理箱体移入、减速转向绕障、继续巡航和返航已通过MuJoCo实测；三个巡逻点加返航共四点，约90.94秒，最终位置误差11.64cm且已停稳。取消任务、过期请求、仿真暂停和启动就绪门禁也已验证。入口为tools/fishbot_mujoco.sh web，证据见plans/fishbot-web-patrol-20261004/。此前RPP单点导航、断流停车和旧时间戳命令拒绝基线保留。2026-09-15原样迁移和旧路径兼容保留；本机Git历史未压平。历史实车建图和保存通过；最新固定图导航结果见Current State。私有成果未新增上传。
 ## Current Priority
+2026-10-15 用户确认FishBot网页工作台为近期成果总入口。使用`/workbench`查能力、原报告摘要与后续边界；操作继续进入既有页面。当前5180为本机只读汇总入口，9090实验API仍关闭；不把页面在线或新三回合通过当作原视觉整体通过。后续实验需另行声明新开发/留出面板。见[工作台说明](docs/WORKBENCH.md)。
 2026-10-15 内部交接的SpatialLM场景导入/编辑与任务编排已串行接入。SpatialLM合入后69CPU＋2Node通过；RRD收尾修复在取hash前原生disconnect，旧失配证据保留。固定官方单例本机26.903s输出16实体并严格解析，14产物hash/大小根已核对；与GT数量不同，不宣称重建精度、导航或起点安全。workflow合入后36CPU通过；前两轮运输失败保留，TimeSource专用回调组候选经实际ROS验证后，ec879ed新面板的一次移动取消＋两次完整运输独立评分通过。两次显式reset、失回执原ID恢复、45源起止与清理均通过，未重启bridge。两运输使用ideal观测；原视觉11失败不变，时序瞬态仍有记录。当前反馈877通过。入口experiments/spatiallm/INFERENCE.md与plans/cooperation-workflow-20261014/。
 2026-10-14 视觉停靠P1–P3实现与预声明50短回合＋6运输覆盖完成，整体验收未通过。34停靠完成、7正确取消、9短失败；运输4/6通过。原83份result/27额外尝试/1unknown与11预声明失败保留；留出未调参，原时间/物理/碰撞门槛不变。独立网页同帧显示验证与owned清理通过。下一步仅用新开发面板修复偏航持续停稳、时龄与RGB可见性，再冻结新留出；owner=root，入口plans/visual-docking-robustness-20261014/。
 2026-10-14 Arena官方执行与回收闭环已完成，当前GPU活动0。后续先选择与DROID或SO101任务直接兼容的真实策略，再在声明的新面板/预算下评测；当前固定zero_action预检不代表策略成功，不自动下载权重、训练或申请新GPU。
@@ -60,6 +62,7 @@ Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。
 2026-10-07 用户确认先在虚拟环境实现三点视觉巡检，现已完成：MuJoCo车载RGB→三点导航拍摄→绿灯/红灯/空位像素识别→图文报告→返航。最终整轮73.703秒，九帧带拍摄位姿证据，返航误差12.29cm且停稳；独立超时取消通过。入口tools/fishbot_inspection.sh，仅domain97；见docs/VISUAL_INSPECTION.md。识别限定合成工位，实车相机与巡检尚未验收。
 2026-10-06 用户确认直接采用FishBot开源模型，不以现场测量作为前置步骤；连续本地控制、分级限速/停车、触发记录与回放已实现。新入口 tools/fishbot_passage.launch.py 在隔离MuJoCo domain 96完成整段过门、硬停车及取消测试，74项聚焦测试通过；见docs/PASSAGE_CONTROL.md。当前小车充电，本次未操作实车。原domain 93仿真与旧实车脚本保留。接续使用新入口验收实际过门和建图；实车源时间戳、转角反馈、板端断流停车和旧命令拒绝仍需实际反馈验证。
 ## Knowledge Map
+[近期成果工作台](docs/WORKBENCH.md)；[本轮计划](plans/workbench-harvest-20261015/task_plan.md)；[交付进度](plans/workbench-harvest-20261015/progress.md)。
 [SpatialLM场景输入](experiments/spatiallm/README.md)；[官方单例推理](experiments/spatiallm/INFERENCE.md)；[两作业编排](docs/COOPERATION_WORKFLOW.md)。
 docs/DECISIONS.md；[视觉停靠鲁棒性计划](plans/visual-docking-robustness-20261014/task_plan.md)；[当前进度](plans/visual-docking-robustness-20261014/progress.md)。
 docs/STACK_IMPROVEMENT.md；plans/fishbot-recursia-stack-20261014/。
