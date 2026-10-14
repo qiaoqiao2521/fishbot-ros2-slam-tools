@@ -2,7 +2,7 @@
 
 ## Current
 
-P0代码、原默认链和独立取消/完整运输验收complete，root已独立读回。当前文档/知识/源码Git交付in_progress；真实RGB、完整扰动面板与泛化仍pending。没有云端GPU或实体操作。
+P0代码、原默认链、独立取消/完整运输验收及Git交付complete，root已独立读回。真实RGB、完整扰动面板与泛化仍pending。没有云端GPU或实体操作。
 
 ## Done
 
@@ -22,7 +22,6 @@ P0代码、原默认链和独立取消/完整运输验收complete，root已独�
 
 ## Remaining
 
-- 完成本轮文档、知识与源码Git交付读回。
 - 后续P1完整面板、P2受扰对照、P3真实RGB定位分别验收，owner=root。
 
 ## Issues
@@ -45,7 +44,7 @@ P0更新：独立oracle已完成最小迁入，原缓存仍保留。首次native
 
 ## Next
 
-完成P0文档与源码Git交付，然后P1预声明基线/留出面板与预算。root负责；当前RGB生产器未实施。
+P1预声明基线/留出面板与预算。root负责；当前P0交付完成，RGB生产器未实施。
 
 ## 当前独立验收读回
 
@@ -56,3 +55,7 @@ native-20261014-50hz完整任务SUCCEEDED，原生1Dock+2Nav均终态4；运动�
 停止前新鲜raw age0.008087s、native全部终态、连续静止与guard关闭已确认；systemctl readback MainPID0/inactive，9090关闭，owned120两个实例均已停止。107 PID626695/invocation17212db542fa466996fbe2af461e6253、114 PID1467776/invocation208ccc5e476942148b077ceef4dc6d4a均保持原进程。
 
 root在50Hz最终源后再跑全反馈696/696，零skip/error/缺依赖；前述54物理/场景检查加8项本次采样相关回归通过。唯一证据入口为~/.cache/fishbot/visual-docking-p0/native-20261014-50hz/：acceptance-report.json、observer/score原件、source-start/end、root-independent-readback.json与cleanup-quiet.json。先前零派发采集失败、完整Dock失败及补清理均保留；原始日志/地图/模型不入Git。
+
+## Git delivery
+
+19份明确审查的代码/测试/文档提交5060fa0a9f881160991057bb507576749e8b625b，已推送既有qiaoqiao2521/fishbot-ros2-slam-tools main，并经GitHub API独立读回同SHA。有效账号qiaoqiao2521/id238822818、fetch/push与public可见性保持。本条收尾状态另行同步；最新HEAD以远端Git为准。仅release.sh未提交，沿既有阻碍由root接续；认证、日志/地图/模型素材和其它知识库累计修改未入此提交。
