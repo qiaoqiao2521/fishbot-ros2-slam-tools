@@ -2,7 +2,7 @@
 
 ## Current
 
-软件转换、编辑器和真实MuJoCo验收完成。最终65项测试、100物理步、源码指纹与网页负例已读回。19文件代码提交`03e37eb166eeff553d9149d55a934e4d6db7c13b`已推送至独立特性分支并由`git ls-remote`读回一致；此收尾记录仅更新计划。
+软件转换、编辑器和真实MuJoCo验收完成。65项Python测试、100物理步、源码指纹与网页负例已读回。初版19文件代码提交`03e37eb166eeff553d9149d55a934e4d6db7c13b`及收尾`ef1a7f6`已推送；协调根追加发现的起点覆盖P2现已修复，2项JavaScript行为测试及受影响网页导出复验通过，正在提交补丁。
 官方单例推理尚未运行。已联系FishBot owner，等待其RGB时序批次安全收尾后的GPU窗口。
 
 ## Done
@@ -37,6 +37,8 @@
 - `browser-scene-v4.xml`、`browser-manifest-v4.json`、`browser-validation-v4.json`、`browser-layout-v4.txt`：当前校验器下的实际网页下载；6次显式墙厚校正，20步和29几何体。
 - `editor-export-v4.png`、`editor-mobile-v4.png`：当前校验器下实际截图，已查看；390px宽度和键盘door_0选择再次通过。
 - `acceptance/handoff-evidence.json`：16个模块文件源码指纹、当前验收摘要和外部产物哈希。
+- `acceptance/handoff-evidence-v5.json`：17个模块文件当前源码指纹；保留v4原件和Python不变核对，绑定2项Node行为验收和新网页导出。
+- `browser-scene-v5.xml`、`browser-manifest-v5.json`、`browser-validation-v5.json`、`browser-layout-v5.txt`及`editor-export-v5.png`、`editor-mobile-v5.png`：起点保护修复后实际下载和截图。7次校正，用户起点保持；20步真实加载与PNG通过，截图已查看。
 - `inference-preflight.json`及`model/SpatialLM1.1-Qwen-0.5B/`：兼容导入与固定权重缓存。
 
 ## Repairs and limits
@@ -48,6 +50,9 @@
 - 旧v3执行validator SHA256为`6baaf3c241a5870970ce3ecd27f70b55015b37b72e4d52a284bb876cc0cf582d`。
 - 审查发现缺layout.json会导致门探针为空仍通过，根已复现。修复后强制伴随文件存在并核对scene/layout SHA，加载前拒绝缺失/不一致；5项新增负例通过。
 - 当前v4执行validator SHA256为`f16aafa7b7b7e8e46ce447e8282e5ae228af1c2c64a2c3c8990c89abb0844345`，独立100步和当前网页20步validation均一致。审查Agent已只读确认闭合，无剩余代码交付阻碍。
+- 协调根发现setDocument每次校正后都会重设用户机器人xy。修复为仅新document_id初始化建议；同id修订保留xyz/yaw。
+- 2项Node测试实际调用生产JS状态逻辑，覆盖连续单体/批量修订保留起点、新文档重新初始化。实浏览器先填`3.25/-2.8/0.002/0.4`，再单体及批量保存，各次读回均保持；最终manifest和MuJoCo initial_qpos一致，20步/PNG/下载hash通过。
+- 此补丁只改前端JS、增加Node测试及文档。所有Python源码hash与v4相同，不重复CPU全套或100步；v4原件保留，当前v5网页实际运行同一validator指纹。只读审查已确认起点修复闭合。
 - Rerun依赖链最初安装到pyarrow26，与NumPy1.26不兼容；固定pyarrow19.0.1后实际记录/读回通过。
 - 原始source、样例、模型、运行输出和依赖环境均不进入Git。
 - 不连接ROS、不操作实机、不停止107/114、不修改生产地图或主区并行工作。

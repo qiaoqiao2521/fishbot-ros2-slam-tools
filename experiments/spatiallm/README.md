@@ -81,6 +81,7 @@ SPATIALLM_SOURCE_DIR="$HOME/.cache/fishbot-spatiallm/prepared/source/SpatialLM" 
 SPATIALLM_SAMPLE_LAYOUT="$HOME/.cache/fishbot-spatiallm/prepared/sample/layout/scene0000_00.txt" \
 SPATIALLM_SAMPLE_POINT_CLOUD="$HOME/.cache/fishbot-spatiallm/prepared/sample/pcd/scene0000_00.ply" \
 MUJOCO_GL=egl "$HOME/.cache/fishbot-spatiallm/runtime/bin/python" -m pytest -q experiments/spatiallm/tests
+node --test experiments/spatiallm/tests/test_editor_state.cjs
 ```
 
 本模块计划：[task_plan.md](../../plans/spatiallm-scene-import-20261014/task_plan.md)。本轮软件/实际加载已验收；官方推理状态和原项目整合由计划分别记录。后续由FishBot主区owner串行整合，不从本分支同时推main。
