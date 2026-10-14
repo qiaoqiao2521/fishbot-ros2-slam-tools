@@ -2,7 +2,7 @@
 
 ## Current
 
-软件转换、编辑器和真实MuJoCo验收完成。65项Python测试、100物理步、源码指纹与网页负例已读回。初版19文件代码提交`03e37eb166eeff553d9149d55a934e4d6db7c13b`及收尾`ef1a7f6`已推送；协调根追加发现的起点覆盖P2现已修复，2项JavaScript行为测试及受影响网页导出复验通过，正在提交补丁。
+软件转换、编辑器和真实MuJoCo验收完成。65项Python测试、100物理步、源码指纹与网页负例已读回。初版`03e37eb166eeff553d9149d55a934e4d6db7c13b`及收尾`ef1a7f6`已推送；起点修复提交`fcf0e919cbbfb75540d87227161b5758f8d1d411`完成2项JavaScript行为测试和受影响网页导出复验。有效源和最终远端tip绑定于v5交接证据；此收尾仅更新计划。
 官方单例推理尚未运行。已联系FishBot owner，等待其RGB时序批次安全收尾后的GPU窗口。
 
 ## Done
@@ -67,7 +67,9 @@
 
 - 分支：`codex/spatiallm-scene-import-20261014`。
 - 既有目标：`qiaoqiao2521/fishbot-ros2-slam-tools`，未更改可见性。
-- 代码提交：`03e37eb166eeff553d9149d55a934e4d6db7c13b`。
+- 初版代码提交：`03e37eb166eeff553d9149d55a934e4d6db7c13b`。
+- 起点修复提交：`fcf0e919cbbfb75540d87227161b5758f8d1d411`。当前共20个文件，仍严格限于本模块及本计划。
+- 最新交接证据：`acceptance/handoff-evidence-v5.json`，保存当前源码和产物哈希、Python验收继承边界、实际起点合同和最终远端tip。
 - 基线：`aab0da4`。只包含本模块和本计划，不包含主区视觉停靠改动。
 - `experiments/spatiallm/README.md`提供安装、准备、运行和测试入口。
 - 当前本地演示：`http://127.0.0.1:8867`，独立服务，不连接ROS。
