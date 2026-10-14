@@ -72,6 +72,8 @@ rerun "$HOME/.cache/fishbot-spatiallm/official-gt.rrd"
 
 包装器执行固定哈希的原始`visualize.py`，只隔离模型急切导入，未重写点云可视化。原脚本图层名`pred`不改变GT输入的身份。Rerun记录与碰撞导出是两种证据。
 
+包装器在生成manifest前调用Rerun官方`disconnect()`关闭保存文件，记录最终字节数及SHA256。已有RRD或同名manifest时拒绝覆盖；写入或关闭失败时保留原件，不生成成功manifest。
+
 ## 验证与接续
 
 条件：准备好官方源码与样例。测试缺失依赖时失败，不静默跳过。
@@ -84,7 +86,7 @@ MUJOCO_GL=egl "$HOME/.cache/fishbot-spatiallm/runtime/bin/python" -m pytest -q e
 node --test experiments/spatiallm/tests/test_editor_state.cjs
 ```
 
-本模块计划：[task_plan.md](../../plans/spatiallm-scene-import-20261014/task_plan.md)。本轮软件/实际加载已验收；官方推理状态和原项目整合由计划分别记录。后续由FishBot主区owner串行整合，不从本分支同时推main。
+本模块计划：[task_plan.md](../../plans/spatiallm-scene-import-20261014/task_plan.md)。本轮软件/实际加载及一个官方预测样例已验收；样例差异、未渲染的预测衍生场景和原项目整合由计划分别记录。后续由FishBot主区owner串行整合，不从本分支同时推main。
 
 来源与许可见[THIRD_PARTY.md](THIRD_PARTY.md)。
-官方单例推理的独立环境、固定权重和待执行命令见[INFERENCE.md](INFERENCE.md)。
+官方单例推理的结果、独立环境、固定权重和后续命令见[INFERENCE.md](INFERENCE.md)。

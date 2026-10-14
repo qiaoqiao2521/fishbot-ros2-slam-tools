@@ -1,10 +1,23 @@
-# 官方单例推理接续
+# 官方单例推理与接续
 
 ## 当前状态
 
-2026-10-14已准备固定源码、官方样例、模型权重和独立兼容环境。官方推理尚未运行，状态为`not_run_pending_gpu_window`。转换、编辑、实际MuJoCo加载和GT点云查看已分别验收。
+2026-10-15官方单例已实际运行，状态为`official_single_prediction_and_cpu_conversion_complete`。执行时模块冻结于`0d11a5bdc4a96e3b5a0586b4491b31098440bd48`；此前的`not_run_pending_gpu_window`属于准备阶段状态。原件与17份执行源码哈希保留，不用本次文档修订替代历史版本。
 
-GPU窗口由FishBot原对话owner协调。不要停止其他模拟器、RGB批次或服务。此入口不申请云GPU，不训练，不改模型源码。
+原官方CLI在26.903秒后退出0，BF16/seed0和4096 token默认上限保持。严格解析及原始生成与序列化ID对账通过：预测6墙/1门/1窗/8bbox，共16实体；GT为18实体，存在门、家具数量及类别差异。这是一个真实运行样例，不是重建精度或数据集评测。
+
+六墙显式校正为0.12米后，预测布局与原FishBot完成CPU编译及100物理步：27geom、9nq、363sensor，12固体探针及1门的两个截面通过。此衍生结果未渲染，起点`collision_checked=false`，没有导航或整车净空结论。
+
+所属进程每秒采样峰值2014MiB，属于采样下界；退出及GPU lease释放已独立读回。后续新运行的GPU窗口仍由FishBot owner协调。此入口不申请云GPU，不训练，不改模型源码。
+
+原件入口为Git外的`~/.cache/fishbot-spatiallm/inference-single-v1/`：
+
+| 原件 | SHA256 |
+| --- | --- |
+| `receipt.json` | `a2901ac1ebb965c3f4aacd496d0e1f30990993383b8d01c75c902a0e465d0d94` |
+| `handoff-manifest.json`，绑定14产物/17执行源 | `4f8face87fef0f9cc863ff754408cd27ac4e7391b5b267b19a49324d857ab2a3` |
+| 原始预测`scene0000_00.txt` | `3157749a1893ae7d20440873f32d05d2b01c30e78e9df636e15fde547cd6e34f` |
+| `prediction-corrected-cpu-v1/export-receipt.json` | `802665d5a4e67d68cfa5df2dc6efceae670e4ad0e447d45416fa32205b202150` |
 
 ## 固定输入
 
@@ -37,23 +50,23 @@ GPU窗口由FishBot原对话owner协调。不要停止其他模拟器、RGB批�
 
 FlashAttention使用[官方预编译wheel](https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1%2Bcu12torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl)。torch-scatter使用[官方PyG wheel](https://data.pyg.org/whl/torch-2.4.0%2Bcu124/torch_scatter-2.1.2%2Bpt24cu124-cp311-cp311-linux_x86_64.whl)。二者与本轮Python、Torch和ABI匹配；不要随意替换为最新版本。
 
-RTX3050 Laptop实际capability为8.6，BF16可用。模型参数加载估算约1.425GB，不包括激活、点云编码和KV缓存。4GB名义容量和参数估算均不证明单例推理能完成；峰值与结果需要实际运行。
+RTX3050 Laptop实际capability为8.6，BF16可用。模型参数加载估算约1.425GB，不包括激活、点云编码和KV缓存；实际单例及采样峰值见上文。不同点云和输出长度仍需另行测量。
 
 ## 运行一例
 
-条件：owner确认空闲窗口；上述缓存仍满足固定版本和哈希；输出目录尚不存在。此命令是接续入口，尚无本轮运行结果。
+条件：owner确认新的空闲窗口；缓存仍满足固定版本和哈希；选用不存在的新输出目录。以下命令保留本轮实际参数，但使用新目录，防止覆盖已验收的`inference-single-v1`。
 
 ```bash
-mkdir "$HOME/.cache/fishbot-spatiallm/inference-single-v1"
+mkdir "$HOME/.cache/fishbot-spatiallm/inference-single-v2"
 cd "$HOME/.cache/fishbot-spatiallm/prepared/source/SpatialLM"
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   timeout --signal=INT --kill-after=15s 600s \
   "$HOME/.cache/fishbot-spatiallm/inference-venv/bin/python" inference.py \
   --point_cloud "$HOME/.cache/fishbot-spatiallm/prepared/sample/pcd/scene0000_00.ply" \
-  --output "$HOME/.cache/fishbot-spatiallm/inference-single-v1/scene0000_00.txt" \
+  --output "$HOME/.cache/fishbot-spatiallm/inference-single-v2/scene0000_00.txt" \
   --model_path "$HOME/.cache/fishbot-spatiallm/model/SpatialLM1.1-Qwen-0.5B" \
   --inference_dtype bfloat16 --seed 0 \
-  > "$HOME/.cache/fishbot-spatiallm/inference-single-v1/run.log" 2>&1
+  > "$HOME/.cache/fishbot-spatiallm/inference-single-v2/run.log" 2>&1
 ```
 
 命令最多运行600秒，超时保留日志。从源码目录执行，因为官方CLI默认读取相对路径的代码模板。模型使用BF16，点云backbone按官方代码使用FP32；保留官方清理、模板、采样和4096 token默认上限。不要把人工GT校正文件替换为预测。
@@ -67,4 +80,4 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
 工作区：`/home/muqiao/worktrees/fishbot-spatiallm-scene-import-20261014`。
 软件入口和验收命令见[README.md](README.md)。实际状态见[progress.md](../../plans/spatiallm-scene-import-20261014/progress.md)。
 
-单例推理接续owner为本模块根Agent；窗口协调和主区整合owner为FishBot原对话`01a101eb-92b4-78b3-a725-361dc7342c05`。项目总协调对话为`01a13a98-c3ea-7760-aeb8-e5a7396a5574`。
+本轮单例由总协调根的内置helper执行；后续推理窗口协调和主区整合owner为FishBot原对话`01a101eb-92b4-78b3-a725-361dc7342c05`。项目总协调对话为`01a13a98-c3ea-7760-aeb8-e5a7396a5574`。
