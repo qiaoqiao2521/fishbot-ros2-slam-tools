@@ -21,3 +21,11 @@ Arena仍为alpha。默认uv环境包含完整Isaac Sim；官方runner无条件�
 第二轮Colab获用户明确接受NVIDIA软件与Isaac Sim许可。原580.82.07同版.run经过原生archive check，只提取64bit图形库到私有路径，未执行installer或覆盖provider CUDA/NVML。NVIDIA Vulkan设备与两RT扩展实际通过，官方source prepare也通过。uv实际安装351包（Sim6.1.0.0/Torch2.11.0+cu128/本锁版Lab），入口误读uv pyvenv.cfg：字段是version_info而不是普通venv的version。已在本机uv0.11.15真实环境复现并修读回，17项入口检查通过。首轮安装回执拒绝及所有原日志保留，未算20步成功；VM实际unassign且活动0。第三个独立会话继续同一原45分钟预算，未重复请求许可。
 
 T4不以桌面16GiB门槛误拒绝：官方GCP T4为nominal16GB，常见nvidia-smi总量15360MiB；薄入口单独识别T4云配置，仍要求实际图形/运行验收。A100/H100按官方无RT明确拒绝；更大显存不替代图形能力。
+
+第三轮uvfix：官方cube_goal_pose完成20/20物理steps（约2.4s），CUDA场景、Franka articulation、动作与观测实际初始化。env.close和空episode报告已生成，但SimulationApp关闭时SIGSEGV11；smoke不通过，两Run尚未执行。不能以20步覆盖进程失败。VM已解除分配，活动0；只保留正式日志。
+
+官方Isaac Sim v6.1.0（7c206f75bdadd9e05fc457f19863ca4c3f0cb693）检测JPY_PARENT_PID时设置ISAAC_JUPYTER_PYTHON_PACKAGE，再根据任一ISAAC_JUPYTER_*存在认定notebook，强制fast_shutdown=False。本次日志出现相同警告。薄入口现只清除独立子进程的这三个标记，不改父kernel、官方代码或退出逻辑；不使用测试专用跳过close、FORCE_EXIT或手写os._exit。18项入口测试通过，覆盖实际派发env与父环境保持。该触发链是已核实事实，不能单凭源码认定全部SIGSEGV根因已修复；最后terminal会话须实际正常退出后才算通过，仍共享首轮许可后45分钟总窗口。
+
+关闭模式来源已由Root实际读取三份官方v6.1.0源码并重算SHA：package init c6f9f064b9dd5a9fca8b52cb5c94484d0f334ff82ded06e525e6edc0196a3469、simulation_app init b32081c9c5e4bcd37bc7e041aabad1b08e451ac6d64e43a4e77873cce59fd6ee、simulation_app body c2a2173be57abac20ef97f81b80d58319c94c9a4017c98709f8d13489ad0b746。独立审查18/18通过。原始官方文件缓存不入Git；公开定位：https://github.com/isaac-sim/IsaacSim/blob/v6.1.0/source/python_packages/isaacsim/__init__.py 和 https://github.com/isaac-sim/IsaacSim/blob/v6.1.0/source/extensions/isaacsim.simulation_app/isaacsim/simulation_app/simulation_app.py 。
+
+terminal最终Vulkan/RT通过，install因剩余阶段395.675s上限中断，未进入smoke/evaluate；完整zip未在本机回收前下载，final live report已保留。stop真实解除分配，活动0。已验证子进程误继承模式与离线修复，但缺真实关闭复验；仍不能认定SIGSEGV已实际修复。原窗口耗尽后未再分配GPU。

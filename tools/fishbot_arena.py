@@ -175,6 +175,10 @@ def doctor(source, lock, gpu_index=0):
 
 def runtime_environment(accept_eula):
     env = os.environ.copy()
+    # Native runners are standalone processes. Isaac Sim otherwise inherits
+    # notebook shutdown behavior from Colab's parent kernel (v6.1.0).
+    for key in ("JPY_PARENT_PID", "ISAAC_JUPYTER_KERNEL", "ISAAC_JUPYTER_PYTHON_PACKAGE"):
+        env.pop(key, None)
     for key in EULA_KEYS:
         env.pop(key, None)
     if accept_eula:

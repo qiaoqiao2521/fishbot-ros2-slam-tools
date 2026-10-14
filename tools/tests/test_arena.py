@@ -106,6 +106,18 @@ class ArenaBoundaries(unittest.TestCase):
             self.assertEqual(arena.runtime_environment(False)["PRIVACY_CONSENT"], "NO")
             self.assertEqual(arena.runtime_environment(True)["PRIVACY_CONSENT"], "NO")
 
+    def test_standalone_child_does_not_inherit_notebook_shutdown_mode(self):
+        markers = {"JPY_PARENT_PID": "42", "ISAAC_JUPYTER_KERNEL": "0",
+                   "ISAAC_JUPYTER_PYTHON_PACKAGE": "1"}
+        with patch.dict(os.environ, {**markers, "PRIVACY_CONSENT": "NO"}):
+            with patch.object(arena.subprocess, "run") as execute:
+                arena.run_checked(["python", "official_runner.py"], self.source)
+            child_env = execute.call_args.kwargs["env"]
+            for key, value in markers.items():
+                self.assertNotIn(key, child_env)
+                self.assertEqual(os.environ[key], value)
+            self.assertEqual(child_env["PRIVACY_CONSENT"], "NO")
+
     def test_changed_source_rejects_before_native_execution(self):
         (self.source / "unexpected.py").write_text("# preserved untracked source\n")
         with patch.object(arena, "run_checked") as execute, self.assertRaisesRegex(RuntimeError, "source identity"):

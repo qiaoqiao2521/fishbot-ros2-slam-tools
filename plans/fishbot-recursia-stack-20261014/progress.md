@@ -2,11 +2,11 @@
 
 ## Current
 
-两项代码实施与独立118完整运输/清理已通过，Root已独立读回。582反馈和45物理检查通过。Git正在串行交付；并行Arena仍在原45分钟Colab窗口实测，见既有Arena计划。
+两项代码实施与独立118完整运输/清理已通过，Root已独立读回。582反馈和45物理检查通过。Git交付已完成：cf759f3b431bc52cc875a096d400995f868a2a39已推送，GitHub API读回同SHA。并行Arena的原45分钟窗口已收尾、活动会话0；20步已执行但关闭失败，两个Run仍pending，见既有Arena计划。
 
 ## Remaining
 
-本轮代码与验收无必需遗留；完成Git交付和并行Arena收尾。当前107/114保持旧已验收进程。固件release.sh保留阻碍见协同计划，不执行/暂不提交。
+本轮代码与验收无必需遗留；并行Arena已按既有计划有界收尾，真实关闭与两Run另待新窗口。当前107/114保持旧已验收进程。固件release.sh保留阻碍见协同计划，不执行/暂不提交。
 
 ## Knowledge closeout
 
@@ -44,4 +44,6 @@ updated：Root修订并读回Wiki/ROS2 与 FishBot.md第20节，覆盖交接/晋
 
 ## Remaining
 
-本轮两项实施与当前验收完成，Git交付待Root串行整合。新视觉/训练/全量源依赖签名证明及泛化统计不在成功声明内。Arena仍按既有计划完成有界Colab重试并释放会话；固件release.sh有来源/板型/分区/工具钉版阻碍，保留owner=root，接续见协同计划Retained work，不执行或暂提交。
+本轮两项实施、当前验收及Git交付完成。新视觉/训练/全量源依赖签名证明及泛化统计不在成功声明内。Arena有界Colab窗口已结束、活动0；固件release.sh有来源/板型/分区/工具钉版阻碍，保留owner=root，接续见协同计划Retained work，不执行或暂提交。
+
+Git收尾读回：cf759f3b431bc52cc875a096d400995f868a2a39已推送既有qiaoqiao2521/fishbot-ros2-slam-tools main，GitHub API读回同SHA。后续仅Arena独立子进程env多一个测试；整组583/583、零跳过，未重复或重启118运输。

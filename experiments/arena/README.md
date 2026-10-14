@@ -4,7 +4,7 @@
 
 ## 当前交付边界
 
-源码锁、两Run配置与部署预检已接入项目。尚未安装 Isaac Sim，尚未运行 Arena，也未验证 SO101 策略或模型迁移。本机 RTX3050 Laptop/4GB 低于官方支持基线。用户已选择Colab尝试。L4已实际分配，但原生Vulkan预检失败；尚未启动Arena。实际安装和运行仍需图形驱动完整的GPU目标及明确的Isaac Sim许可接受。
+源码锁、两Run配置与部署入口已接入项目。用户已明确接受NVIDIA软件和Isaac Sim/Omniverse许可。Colab L4通过同版私有图形库的原生Vulkan/RT验证，实际完成锁版安装和官方20物理步；关闭时SIGSEGV，尚不能算完整运行通过。最后独立子进程环境修复重试在安装阶段触及原45分钟窗口，所有VM已回收、活动会话0；真实关闭复验与两个Run仍待完成。未验证SO101策略或模型迁移，本机4GB GPU未安装Isaac。
 
 Arena 仍为alpha。锁定 `c7edf3a9d5d8276565208f72422f8f8a0806d6cf`，Isaac Lab子模块锁 `91a0906f93802eb859192dcb0bca879f891e92d6`。实际依赖见 [upstream.lock.json](upstream.lock.json)。分支 README 的部分版本文字滞后，以 gitlink 和 uv.lock 为准，不跟随 main 漂移。
 
@@ -34,7 +34,7 @@ zero_action让部署验证不依赖神经网络权重。它不证明抓取能力
 ./fishbot.sh arena evaluate --accept-eula --output /absolute/new/arena-run
 ```
 
-`--source` 可指定独立官方checkout；`--gpu` 指定nvidia-smi中的物理索引，执行时绑定实测GPU UUID。原生日志写stderr，入口回执写stdout。evaluate要求新目录，并记录源码与评测配置起止SHA，再读官方结果；失败原件不覆盖。此处命令是待执行入口，本轮没有执行这三条命令。
+`--source` 可指定独立官方checkout；`--gpu` 指定nvidia-smi中的物理索引，执行时绑定实测GPU UUID。原生日志写stderr，入口回执写stdout。evaluate要求新目录，并记录源码与评测配置起止SHA，再读官方结果；失败原件不覆盖。本轮已在Colab实际执行install与smoke；两Run验收必须以实际官方结果为准。
 
 ## 官方边界
 
@@ -48,9 +48,9 @@ Arena官方runner无条件启动SimulationApp。`--presets newton --viz none`仍
 
 2026-10-14使用既有Colab CLI的安全适配，独立申请L4会话。实际环境为L4/23034MiB、驱动580.82.07、Ubuntu24.04.4、GLIBC2.39、Python3.13.15；内存约53GiB，可用磁盘约193GiB。Python3.12应由官方uv锁环境独立安装，不改Colab主Python。
 
-该实例没有发现NVIDIA Vulkan ICD、GLX或RT用户态库。已有`libvulkan.so.1`的原生`vkCreateInstance`返回`-9 / VK_ERROR_INCOMPATIBLE_DRIVER`。这证明该实例当时的Vulkan环境未就绪，不是Arena运行失败，也不证明所有Colab实例都不可用。没有安装Isaac、接受EULA、运行20步或两Run评测。已确认本轮VM解除分配，服务端活动会话为0。
+该实例没有发现NVIDIA Vulkan ICD、GLX或RT用户态库。已有`libvulkan.so.1`的原生`vkCreateInstance`返回`-9 / VK_ERROR_INCOMPATIBLE_DRIVER`。这证明该实例当时的Vulkan环境未就绪，不是Arena运行失败，也不证明所有Colab实例都不可用。首次预检没有安装Isaac、接受EULA、运行20步或两Run评测。已确认该VM解除分配，服务端活动会话为0。后续获用户明确许可的实测见下段。
 
-[NVIDIA官方GCP部署](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/install_advanced_cloud_setup_gcp.html)列出T4和L4云方案；不能单凭桌面显存门槛排除T4，也不能把GCP完整VM支持当作Colab支持。[官方Vulkan排查](https://docs.omniverse.nvidia.com/dev-guide/latest/linux-troubleshooting.html)明确指出nvidia-smi不证明Vulkan可用。下一次尝试须先核对与托管内核驱动匹配的官方用户态图形组件及原生Vulkan，不能换驱动、重启宿主或使用软件Vulkan冒充NVIDIA设备。
+[NVIDIA官方GCP部署](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/install_advanced_cloud_setup_gcp.html)列出T4和L4云方案；不能单凭桌面显存门槛排除T4，也不能把GCP完整VM支持当作Colab支持。[官方Vulkan排查](https://docs.omniverse.nvidia.com/dev-guide/latest/linux-troubleshooting.html)明确指出nvidia-smi不证明Vulkan可用。实际运行仍须先核对与托管内核驱动匹配的官方用户态图形组件及原生Vulkan，不能换驱动、重启宿主或使用软件Vulkan冒充NVIDIA设备。
 
 Colab只用于有界评测。遵循[Colab FAQ](https://research.google.com/colaboratory/faq.html)的资源与使用限制，不搭建SSH、远程桌面、代理或常驻控制站，不购买新套餐。原始预检与回收证据存本机缓存，不进入Git。
 
@@ -59,3 +59,11 @@ Colab只用于有界评测。遵循[Colab FAQ](https://research.google.com/colab
 [colab_preflight.py](colab_preflight.py)只做原生NVIDIA Vulkan/RT预检；成功仍输出runtime_verified=false。[colab_bootstrap.py](colab_bootstrap.py)是Colab临时/content部署适配，复用本项目锁版CLI；必须由操作者明确接受许可后传--accept-eula。它不分配VM、不持有认证，不搭Web服务；VM分配/释放继续使用既有Colab工具。
 
 当实例缺图形组件时，只从官方同版.run提取64bit图形库和官方ICD，使用进程局部路径，不执行系统installer、不替换kernel、不覆盖provider CUDA/NVML。原生NVIDIA和RT预检通过后才继续官方prepare/install/smoke/evaluate。每阶段保留原生日志；总预算最多2640秒，为45分钟VM生命周期预留回收时间。结束下载artifacts.zip与报告并释放本轮VM，不能将脚本完成或Vulkan成功写成Arena物理运行通过。
+
+## 许可后运行记录
+
+同版580.82.07官方.run校验通过，仅提取32个私有图形库并保留provider CUDA/NVML；原生NVIDIA Vulkan与RT扩展通过。官方uv安装351包。初次入口误读uv的version_info，修复后官方cube_goal_pose实际完成20/20steps，env.close和报告生成，但SimulationApp关闭SIGSEGV11；该次smoke保持失败，VM已释放。
+
+Isaac Sim6.1会根据继承的JPY_PARENT_PID/ISAAC_JUPYTER_*把独立进程误判为notebook，强制关闭默认fast_shutdown。本项目薄入口仅清除独立子进程的这三个标记，保持父kernel、隐私偏好和官方close流程。18项离线入口检查通过；最后重试在安装阶段限时中断，尚未验证真实退出或两个Run；不使用自加强制退出或跳过关闭来制造成功。详细运行状态回源[progress](../../plans/fishbot-arena-evaluation-20261014/progress.md)。
+
+原45分钟窗口已收尾。所有许可后会话未购买额度；stop与活动0已实际读回。最后重试保留原生超时report，但完整zip未在回收前取得；此前20步后SIGSEGV的原日志完整保留。运行验收仍pending，不能称完整部署成功。接续使用现有入口与锁，需新的明确时间预算；本锁版已接受许可不再重复询问。
