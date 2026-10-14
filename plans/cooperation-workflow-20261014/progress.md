@@ -26,3 +26,7 @@ FishBot owner 接续已投递候选，串行整合与物理验收。运行入口
 
 ## Knowledge closeout
 `already_covered`：原知识页的提交边界原则已采用。新增领域经验候选由根决定；不编辑共享 Wiki。
+
+## Root串行接入
+
+2026-10-15 root在视觉56例及GET-only实例安全关闭后合入exact9c581f8，6模块路径不与视觉执行源重叠。合入前后独立36CPU检查均通过，默认start三键仍走完整transport。真实验收按task_plan新隔离面板，状态pending；等待SpatialLM600s单例释放，当前没有该面板ROS或运输派发。原oracle按episode分段采集，不用跨reset日志冒充一次评分。知识状态pending，由root实际取证后审定；模块worktree仍保持原件。
