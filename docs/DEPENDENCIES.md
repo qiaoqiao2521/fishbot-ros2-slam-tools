@@ -2,6 +2,10 @@
 
 本机Ubuntu24.04 / ROS2 Jazzy；Python固定使用 `/usr/bin/python3`。Java后端用Gradle wrapper，前端用package-lock.json。项目根不执行统一colcon build。
 
+## 可选 Arena 组合评测
+
+`./fishbot.sh arena` 是独立评测的薄部署入口，使用系统Python做预检，使用官方独立uv环境执行。版本、gitlink与lock文件来源见 [Arena说明](../experiments/arena/README.md)；源码/环境/资产留在缓存，不进入本项目Git。Arena的Isaac Sim6.1/Torch2.11/MuJoCo3.11依赖不会安装到既有ROS或SO101规划环境。当前本机4GB显存低于官方基线，真实运行尚未部署；不自动接受许可。
+
 保留的上游来源与本机HEAD（2026-09-15）：
 
 | Source | Revision | Local path |

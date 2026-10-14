@@ -35,6 +35,11 @@ The simulation extensions reuse the same ROS 2 and MuJoCo stack:
 - [Map rules and route templates](docs/MAP_RULES.md): edit software keepouts, save routes, and inspect actual task records in `/simulation`.
 - [Fixed SO101 cooperation](docs/COOPERATION.md): share one physical world, dock, load a free payload, and transport it through `/cooperation`.
 
+The optional [Arena evaluation deployment](experiments/arena/README.md) provides
+pinned upstream preparation and a two-condition policy evaluation configuration.
+Run `./fishbot.sh arena doctor` before installing its separate Isaac Sim stack.
+Arena execution is pending a suitable GPU target and license acceptance.
+
 ## Layout
 
 - tools/: staged startup, preflight, teleop and map saving.

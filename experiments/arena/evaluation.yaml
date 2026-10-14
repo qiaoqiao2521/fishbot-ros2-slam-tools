@@ -1,0 +1,28 @@
+# Derived from IsaacLab-Arena getting_started_experiment.yaml at c7edf3a.
+# Copyright (c) 2026, The Isaac Lab Arena Project Developers.
+# SPDX-License-Identifier: Apache-2.0
+# Two controlled Runs validate composition and evaluation, not grasp ability.
+shared:
+  environment:
+    type: pick_and_place_maple_table
+    embodiment: droid_rel_joint_pos
+    pick_up_object: rubiks_cube_hot3d_robolab
+    destination_location: bowl_ycb_robolab
+    hdr: home_office_robolab
+    episode_length_s: 1.5
+  policy:
+    type: zero_action
+  rollout_limit:
+    num_episodes: 1
+runs:
+  baseline:
+    environment_builder:
+      num_envs: 1
+      env_spacing: 2.5
+  swap_objects:
+    environment:
+      pick_up_object: mustard_bottle_hot3d_robolab
+      destination_location: wooden_bowl_hot3d_robolab
+    environment_builder:
+      num_envs: 1
+      env_spacing: 2.5

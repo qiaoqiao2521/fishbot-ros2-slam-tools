@@ -1,0 +1,19 @@
+{
+  "repository": "https://github.com/isaac-sim/IsaacLab-Arena.git",
+  "branch_reference": "release/0.3.1",
+  "commit": "c7edf3a9d5d8276565208f72422f8f8a0806d6cf",
+  "submodules": {
+    "submodules/IsaacLab": "91a0906f93802eb859192dcb0bca879f891e92d6",
+    "submodules/Isaac-GR00T": "e29d8fc50b0e4745120ae3fb72447986fe638aa6"
+  },
+  "source_sha256": {
+    "uv.lock": "485a01f6514d19fa066572033d76ceebcdd81c0813d7356919b4b19cd063d43d",
+    "pyproject.toml": "130cf1b2b3082bfd0ec212cf20513f5dbe0f01afede7318467609c6cae7ad857"
+  },
+  "python": "3.12",
+  "platform": "linux-x86_64",
+  "isaac_sim": "6.1.0.0",
+  "minimum_vram_mib": 16384,
+  "requirements_url": "https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/requirements.html",
+  "eula_url": "https://docs.isaacsim.omniverse.nvidia.com/6.1.0/common/NVIDIA_Omniverse_License_Agreement.html"
+}
