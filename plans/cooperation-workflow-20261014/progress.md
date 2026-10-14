@@ -1,7 +1,7 @@
 # Progress
 
 ## Current
-软件薄层实施、36 项 CPU 合同回归、根独立复审与main整合完成。两轮隔离实际取消/原ID恢复通过；完整运输均失败、job2未派发，整体物理验收incomplete。root继续验证桥本地Clock更新路径，保留原失败。
+软件薄层、36项CPU合同与main整合完成。第三轮隔离同桥面板通过：一次移动取消＋两次完整运输，原ID恢复、两次显式reset和独立物理评分通过。前两轮失败原件保留，原视觉56例中的11失败仍incomplete。以下较早段落是阶段历史，当前以本节及末尾实际读回为准。
 
 ## Done
 - 已读项目入口、SpecMesh v1.1、现有 action/reset/history 与原子写入工具。
@@ -14,7 +14,7 @@
 - 根交接回执：已用 Codex 内部 `send_message_to_thread` 向原 FishBot owner 投递候选 `85e9e07aa5e2347cc19c52c066feb69c89ae2272`、最终源码 SHA 与36项根独立测试证据；工具返回预期 threadId。投递不等于 owner 已整合或物理验收通过。
 
 ## Remaining
-两次完整运输和between-job reset后的完整物理闭环仍incomplete。分段计时与独立reset源时间采集已执行，第二轮异常转为Clock落后。root验证原生TimeSource与默认互斥组的阻塞风险，按实际ROS证据修最小缺口。保留旧评分，另建新目录声明同3case。CPU/取消成功不是完整运输成功。
+本模块预声明物理面板已通过。root完成当前文档、知识读回与远端串行交付；视觉11失败另由visual-docking计划的新开发整改入口接续。完整任务成功不外推生产稳定性或真机。
 
 ## Issues
 基线没有 cleanup/native_actions 公开字段；复用已有 reset.available 门禁。主桥历史截断时缺任务 ID 必须 unknown，不修主桥。
@@ -22,10 +22,10 @@ reset 本身失败或拒绝保留原 ID/receipt，交 FishBot owner 审查，不
 已纠正 queue 适用范围：当前 Codex App 对话、线程与内置子 Agent 属于内部协作，直接复用已有工具接续；无需 queue 迁移或重开。原生 queue 仅适用于 Paperclip 等独立外部系统回传。依据当前共享 `~/.agents/AGENTS.md` 的“外界 Agent 协作与原生队列”，不再以外部 queue 接入状态阻挡本模块内部交接。
 
 ## Next
-root继续Clock原生更新路径的实际ROS验证与最小分组候选，随后复现同3case面板。运行入口 `docs/COOPERATION_WORKFLOW.md`；CPU最短入口为其中 unittest 命令；不启动当前107/114。
+交付当前同桥、持久账本和有界run能力。后续重复仿真复用既有入口，保留原ID与episode边界；不重启未知bridge，不替代原视觉资格整改。运行入口 `docs/COOPERATION_WORKFLOW.md`。
 
 ## Knowledge closeout
-`already_covered`：原知识页的提交边界原则已采用。新增领域经验候选由根决定；不编辑共享 Wiki。
+`updated`：root串行修正Wiki/ROS2 与 FishBot第19节的旧“时钟保留原group”结论，增加两种滞后方向、受控TimeSource默认组风险、公开专组路由与消费回执边界；开发知识入口补对应触发词。两页原文读回与hash已验证，receipt见新runtime的knowledge-closeout.json。第20节原ID与交接评分约定already_covered。知识库其他累计变动不并入FishBot源码提交，发布状态单独记录。
 
 ## Root串行接入
 
@@ -66,3 +66,17 @@ job1新attempt 0c1bf47d在准备导航失败：原Nav31701beb到5，没有Dock/�
 候选已停写。系统/planning各74项core/readiness合同通过、零skip；根独立planning core72项和项目反馈877项（control517/mission145/autonomy61/frontend154）通过。根实际ROS `candidate-clock-probe.json`直接抽取候选四方法，确认唯一/clock订阅、原TimeSource实例/方法、专用组、depth1/BEST_EFFORT和3次原clock更新，实际DDS元数据可用；two nodes/executor/thread与domain120全部清理。旧Bridge方法AST只有构造函数增专组，原控制逻辑不变。bridge SHA aa3fec2f0e5f3106d5309cdf9d868e1193e87497bd1eddcb40f49dbebafa6208。新增clock_callback/clock_update仍明确bridge processing，不冒充controller consumption。
 
 根新harness只读复审通过，沿原oracle的完整http_state采集新clock字段，无额外服务/请求。根将在提交冻结后派发同三case；原failed结果不覆盖，正常transport仍须独立oracle通过，unknown不算通过。
+
+## 第三轮最终实际读回
+
+`runtime-20261015-clock-afde67e5`冻结ec879ed，544.531墙秒完成同桥三episode，低于1100根预算。三次start分别对应移动取消、job1与job2；一次cancel、两次显式reset，无重发。迟到ready、重复/旧版本/占用拒绝、真实丢start回执、unknown封锁、新CLI原ID对账和run超时保留执行端均通过。原CLI退出不冒充动作终态。
+
+取消task af333561/Dock c0f8c91d原status5，真值移动约0.160770m/s、连续quiet2.48源秒、hold/guard关闭确认，原score0b27bacf true；task completion仍false。job1 45b0bc70/episode d384a502与job2 c45fb177/episode9bc848af各原1Dock＋2Nav UUID终态4。原score76736d91、62073d38均true，原K/episode/reset源时间/完整交接评分通过；实际双指抬升、释放完整外廓留盘、臂回位后携同一自由货物运输、最终停稳通过。货物位移1.788226083m、1.787300786m，连续携货违规0。每个完整任务仍在原360s上限内。
+
+源起止45文件及revision相同；root逐项重算当前45SHA、score SHA、当前HEAD、六保护单元、17owned PID身份与9090关闭，全部通过。最终无活跃launch/oracle/CLI，连续静止2.98源秒，guard关闭，result.passed=true。原P1–P3的83 result与11失败保持，新增3case单列，不替代旧分母。
+
+边界仍保留：job2末账本保存clock225.74/raw225.48的+0.26s transient freshness_failure，以及3次共享物理拒绝；任务最终通过不代表全部抖动消失。专组只解除已证实的默认组串行风险，没有证明旧a82具体占组实体。新增clock_update是桥更新证据，native_consumption_ack仍false。两运输使用ideal工位观测，不能计为新的RGB或sim-to-real成功。
+
+独立复审再核两运输墙钟208.307s/224.146s、7409/8197独立物理样本与全部原gate。最终quiet快照clock_update max0.898ms、slow0；桥全阶段仍有5慢事件，主要位于between-job reset边界，HTTP组装max0.7005s、physics锁等待0.6170s。不能写全桥slow0。root另保存六保护实例原字段root-protected-after.json，与before一致。
+
+知识本地修订`updated`并读回；知识远端发布`pending`：my-programming-world远端80ab374尚无整个第19/20节，本轮两段不能直接替换。canonical有其它owner累计dirty，不能整页复制发布。已将具体差异交内部研究根，owner=根总协调/机器人知识接续；最短入口是审定原19/20段后从远端基线隔离补丁。此pending不影响FishBot源码交付，不声称知识远端已更新。

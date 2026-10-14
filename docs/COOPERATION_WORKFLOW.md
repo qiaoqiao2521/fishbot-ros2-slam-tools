@@ -95,3 +95,11 @@ python3 -B -m unittest discover -s tools/tests -p test_cooperation_workflow.py -
 ```
 
 fixtures 使用基线 `request_identity/reset_request_identity`，覆盖提交前后断点、lost receipts、同 UUID 取消/重启、版本乱序、缺 history、unknown、source=None 与 reset ACK 门禁。测试不启动 ROS、MuJoCo、浏览器、服务或 GPU。计划入口：[cooperation-workflow-20261014](../plans/cooperation-workflow-20261014/task_plan.md)。
+
+## 实际仿真验收边界
+
+2026-10-15，ec879ed冻结源在独占domain120/API9090完成一次移动取消与两次完整运输，逐episode原物理评分均通过。全过程保持同一bridge，只重启CLI；3start/1cancel/2reset，无未知重发。两次完整任务分别验证真实双指接触、抬升、释放、落稳、机械臂回位、携同一货物和最终停车。两次reset使用独立ROS回执源stamp，早于新episode采集和派发。
+
+私有报告位于`~/.cache/fishbot/workflow/runtime-20261015-clock-afde67e5/`的result.json、逐episode score与root-closeout-readback.json。45项执行源/输入起止一致，17owned进程停止、9090关闭、原107/114保持。此前两轮失败原件保留。受控ROS证明默认回调组可阻塞原生Clock；专组路由保留标准TimeSource及QoS，仍不保证所有时序抖动消失。新增clock_update记录不是控制器消费回执。
+
+本面板使用ideal工位观测与显式合成回合重置，不是新RGB留出、同回合多货物库存或真机验收。原视觉50短停靠＋6运输的11失败仍由[视觉计划](../plans/visual-docking-robustness-20261014/task_plan.md)接续。

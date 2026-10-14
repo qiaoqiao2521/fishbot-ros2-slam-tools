@@ -24,12 +24,12 @@
 2. 薄层实施与 CPU 回归：complete，36 项无跳过。
 3. 独立审查与 scoped 交付：complete，根独立36项与源SHA核对通过，特性分支远端读回一致。
 4. Codex内部交接与root串行整合：complete；原36CPU合同在合入main后再次通过。
-5. 独立实际取消/恢复通过；运输首次失败、job2未派发，资格incomplete。
+5. 前两轮独立取消/恢复通过，运输失败原件保留；第三轮取消＋两运输物理评分通过。
 6. 桥端缓存分段诊断与正确reset源时间采集：complete，第二轮仍失败。
-7. 原生Clock回调组的实际ROS阻塞验证、最小分组候选与新面板：in_progress，owner=root。
+7. 原生Clock回调组的实际ROS阻塞验证、最小分组候选与新面板：complete，owner=root。
 
 ## Next Step
-第二轮独立reset源时间采集已通过，但出现相反方向的异常：新physics已接纳，桥Node Clock落后0.32源秒。先验证默认互斥回调组能否阻塞原生Clock，再决定专用组候选。新目录`~/.cache/fishbot/workflow/runtime-20261015-clock-afde67e5/`复用同3case和预算。保留两轮failed score及此前视觉11失败，不放宽门槛，不自动重发未知动作。
+本模块同桥三episode面板已通过，串行完成文档、知识与远端交付。后续视觉资格整改回源visual-docking计划，使用新开发面板和新留出；不改写此前11失败。残余源龄拒绝仍保留，不宣称全部时序抖动消失。
 
 ## Root实际面板（2026-10-15）
 

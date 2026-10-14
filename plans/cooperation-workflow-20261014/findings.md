@@ -35,3 +35,5 @@ run 只循环本 workflow。fault/unknown 立即返回，不隐式 recover；成
 受控实际ROS probe `clock-group-controlled-20261015-c32d691b`通过。默认组busy callback持有0.759191墙秒，实际publisher20条推进0.634229源秒；shared Clock零推进，专组与独立witness精确匹配末戳，释放后全部同步。四节点destroy、executor停止、spin退出和新context空domain120读回通过。标准TimeSource.clock_callback与depth1/BEST_EFFORT/原QoS一致。根核对script SHA、publisher/witness原件和receipt SHA `dd61b6aca40652d69b28354a7ca26277e93c8be447c761de10d3ce0185fcbfae`。
 
 前两probe false原件保留：ac80d0c9的虚拟源推进预期不成立；b49ae70f把成功返回None的destroy_node误计0。新判据绑定实际publisher推进与独立witness，不把墙时间当源时间。通过probe只证明可构造的默认组阻塞风险，不声称复现桥原guard或识别a82占组实体。
+
+第三轮ec879ed下同三case全部通过，原360s完整任务与所有物理门槛保持。两作业之间独立reset源stamp早于采集和派发，原UUID、单货物自由体与完整交接评分通过；只重启CLI，不重启bridge。末账本仍保留一次+0.26s的物理源龄边界诊断和3次拒绝，因此不宣称全部时序异常已解决。新面板使用ideal信标，不能补齐旧RGB留出失败或重写原视觉56例。
