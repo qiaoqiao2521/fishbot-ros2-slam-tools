@@ -23,6 +23,39 @@ from cooperation_core import station_robot_pose, within_station_capture
 from cooperation_perception import (map_covariance, messages_to_observation,
                                     normalize_config, validate_observation)
 from cooperation_readiness import NativeReadiness
+from cooperation_sim import LoopTiming
+
+
+class BridgeTiming(LoopTiming):
+    """Reuse bounded loop observations for this bridge's processing phases."""
+    STAGES = ('physics_callback', 'physics_json', 'physics_validation',
+              'physics_readiness', 'physics_lock_wait', 'physics_cache_commit',
+              'station_detection', 'station_pair', 'station_lock_wait',
+              'station_parse', 'station_admission', 'station_publisher_query',
+              'http_lock_wait', 'http_assembly')
+
+    def __init__(self):
+        super().__init__()
+        self.diagnostic_lock = threading.RLock()
+        self.last = {}
+
+    def record(self, stage, start, end, context):
+        with self.diagnostic_lock:
+            super().observe(stage, start, end, context.get('source_stamp'))
+            event = dict(context, stage=stage, start_monotonic=start,
+                         end_monotonic=end, duration_s=end-start)
+            self.last[stage] = event
+            if end-start >= .1:
+                self.slow_tail[-1].update(context)
+
+    def snapshot(self):
+        with self.diagnostic_lock:
+            value = super().snapshot()
+            value.update(last={name: event.copy() for name, event in self.last.items()},
+                         native_consumption_ack=False,
+                         boundary='bridge processing only; not controller consumption',
+                         dds_timestamp_clock='RMW timestamp basis unverified; raw nanoseconds only')
+            return value
 
 
 class Canceled(RuntimeError):
@@ -58,6 +91,7 @@ def run(args):
         def __init__(self):
             super().__init__('fishbot_so101_cooperation', parameter_overrides=[rclpy.parameter.Parameter('use_sim_time', value=True)])
             self.lock = threading.RLock()
+            self.bridge_timing = BridgeTiming()
             self.raw = None
             self.received = 0.
             self.cancel_event = threading.Event()
@@ -132,7 +166,7 @@ def run(args):
                 '/global_costmap/clear_entirely_global_costmap', '/local_costmap/clear_entirely_local_costmap')]
             latest_state_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT,
                                          durability=DurabilityPolicy.VOLATILE)
-            self.create_subscription(String, '/cooperation/physics_state', self.observe, latest_state_qos,
+            self.create_subscription(String, '/cooperation/physics_state', self.observe_with_info, latest_state_qos,
                                      callback_group=self.physics_callbacks)
             self.create_subscription(DiagnosticArray, '/cooperation/vision_quality', self.observe_vision_quality, perception_qos,
                                      callback_group=self.perception_callbacks)
@@ -155,21 +189,95 @@ def run(args):
                 'episode_id': self.episode_id, 'reset_records': self.reset_records}, ensure_ascii=False, indent=2)+'\n')
             path.replace(self.ledger)
 
-        def observe(self, message):
+        def timing_context(self, value=None, info=None):
+            value = value if isinstance(value, dict) else {}
+            source = value.get('source') if isinstance(value.get('source'), dict) else value
+            context = {'entry_wall_time': time.time(), 'entry_monotonic': time.monotonic(),
+                       'bridge_episode_id_at_entry': getattr(self, 'episode_id', None),
+                       'dds_info_available': info is not None,
+                       'dds_source_timestamp_ns': None, 'dds_received_timestamp_ns': None,
+                       'producer_wall_time': None}
+            for name in ('scene_sha256', 'manifest_sha256'):
+                item = source.get(name)
+                context[name] = item if isinstance(item, str) and len(item) == 64 else None
+            item = value.get('episode_id')
+            context['episode_id'] = item if isinstance(item, str) and len(item) <= 64 else None
+            item = value.get('stamp_ns')
+            context['source_stamp_ns'] = item if type(item) is int and item > 0 else None
+            for name, output in (('stamp', 'source_stamp'), ('sequence', 'sequence'), ('wall_time', 'producer_wall_time')):
+                item = value.get(name)
+                try:
+                    context[output] = item if isinstance(item, (int, float)) and not isinstance(item, bool) and math.isfinite(item) else None
+                except OverflowError:
+                    context[output] = None
+            for name in ('source_timestamp', 'received_timestamp'):
+                item = info.get(name) if isinstance(info, dict) else getattr(info, name, None)
+                context['dds_'+name+'_ns'] = item if type(item) is int and item > 0 else None
+            return context
+
+        def station_timing_context(self, diagnostics):
             try:
-                value = validate_physics(json.loads(message.data), scene_sha, manifest_sha)
-                self.native_readiness.update()
+                status = diagnostics.status[0]
+                fields = {item.key: item.value for item in status.values if item.key in
+                          ('scene_sha256', 'manifest_sha256', 'episode_id', 'sequence')}
+                fields['sequence'] = int(fields['sequence'])
+                fields['stamp_ns'] = diagnostics.header.stamp.sec*1_000_000_000+diagnostics.header.stamp.nanosec
+                fields['stamp'] = fields['stamp_ns']*1e-9
+                return self.timing_context(fields)
+            except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+                return self.timing_context()
+
+        def timing_record(self, stage, start, context):
+            timing = getattr(self, 'bridge_timing', None)
+            if timing is not None:
+                timing.record(stage, start, time.monotonic(), context)
+
+        def timing_measure(self, stage, function, *values, context=None):
+            started = time.monotonic()
+            try:
+                return function(*values)
+            finally:
+                self.timing_record(stage, started, context or self.timing_context())
+
+        def observe_with_info(self, message, info):
+            # Jazzy selects one argument first when the second is optional.
+            # A required two-argument adapter requests its real RMW metadata.
+            return self.observe(message, info)
+
+        def observe(self, message, info=None):
+            started = time.monotonic()
+            context = self.timing_context(info=info)
+            try:
+                parsed_at = time.monotonic()
+                try:
+                    value = json.loads(message.data)
+                    bound = self.timing_context(value, info)
+                    bound.update(entry_wall_time=context['entry_wall_time'], entry_monotonic=context['entry_monotonic'],
+                                 bridge_episode_id_at_entry=context['bridge_episode_id_at_entry'])
+                    context = bound
+                finally:
+                    self.timing_record('physics_json', parsed_at, context)
+                value = self.timing_measure('physics_validation', validate_physics, value, scene_sha, manifest_sha, context=context)
+                self.timing_measure('physics_readiness', self.native_readiness.update, context=context)
+                waiting_at = time.monotonic()
                 with self.lock:
-                    episode = value.get('episode_id')
-                    if episode is not None:
-                        if value['source'].get('episode_id') != episode:
-                            raise ValueError('物理回合来源不一致')
-                        if self.episode_id is None:
-                            self.episode_id = episode
-                        if episode != self.episode_id:
-                            return
-                    self.raw, self.received = value, time.monotonic()
-                    self.observation_error = None
+                    self.timing_record('physics_lock_wait', waiting_at, context)
+                    committed_at = time.monotonic()
+                    try:
+                        episode = value.get('episode_id')
+                        if episode is not None:
+                            if value['source'].get('episode_id') != episode:
+                                raise ValueError('物理回合来源不一致')
+                            if self.episode_id is None:
+                                self.episode_id = episode
+                            if episode != self.episode_id:
+                                context['outcome'] = 'foreign_episode_ignored'
+                                return
+                        self.raw, self.received = value, time.monotonic()
+                        self.observation_error = None
+                        context['outcome'] = 'cache_committed'
+                    finally:
+                        self.timing_record('physics_cache_commit', committed_at, context)
             except (ValueError, KeyError, TypeError, IndexError) as error:
                 with self.lock:
                     self.raw = None
@@ -179,6 +287,8 @@ def run(args):
                         self.abort_reason = self.observation_error
                         self.hold(True)
                 self.get_logger().warning(self.observation_error)
+            finally:
+                self.timing_record('physics_callback', started, context)
 
         def fresh(self):
             with self.lock:
@@ -365,12 +475,15 @@ def run(args):
                     'episode_id': self.episode_id,
                     'reset_stamp': raw.get('episode_reset', {}).get('stamp', 0.)}
 
-        def station_publishers(self):
+        def station_publishers(self, context=None):
+            context = context or self.timing_context(getattr(self, 'raw', None))
             for topic in ('/cooperation/station_pose', '/cooperation/station_detection'):
-                publishers = self.get_publishers_info_by_topic(topic)
+                publishers = self.timing_measure('station_publisher_query', self.get_publishers_info_by_topic,
+                    topic, context=dict(context, topic=topic))
                 if len(publishers) != 1 or publishers[0].node_name != self.perception_config['publisher']:
                     raise ValueError('工位观测必须来自配置的本域唯一传感器')
-            publishers = self.get_publishers_info_by_topic('/detected_dock_pose')
+            publishers = self.timing_measure('station_publisher_query', self.get_publishers_info_by_topic,
+                '/detected_dock_pose', context=dict(context, topic='/detected_dock_pose'))
             if len(publishers) != 1 or publishers[0].node_name != self.get_name():
                 raise ValueError('原生停靠位姿必须由本桥唯一转发')
 
@@ -405,7 +518,7 @@ def run(args):
             self.publish_station_admission('rejected', observation)
 
         def admit_station_observation(self, observation):
-            self.station_publishers()
+            self.station_publishers(self.timing_context(observation))
             admitted = validate_observation(observation, self.perception_config,
                 self.station_identity(), self.get_clock().now().nanoseconds*1e-9,
                 0., self.station_last_seen)
@@ -419,37 +532,55 @@ def run(args):
             # valid pose's original time; never republish or restamp that pose.
             if len(diagnostics.status) == 1 and diagnostics.status[0].level in (0, b'\x00'):
                 return
-            with self.lock:
-                observation = None
-                try:
-                    observation = messages_to_observation(None, diagnostics)
-                    admitted = self.admit_station_observation(observation)
-                    if admitted['detected']:
-                        raise ValueError('失检诊断不能携带有效检测')
-                    self.station_counts['unavailable'] += 1
-                    self.publish_station_admission('unavailable', admitted)
-                except (RuntimeError, ValueError, KeyError, TypeError, AttributeError) as error:
-                    self.reject_station_observation(error, observation)
+            started = time.monotonic()
+            context = self.station_timing_context(diagnostics)
+            try:
+                waiting_at = time.monotonic()
+                with self.lock:
+                    self.timing_record('station_lock_wait', waiting_at, context)
+                    observation = None
+                    try:
+                        observation = self.timing_measure('station_parse', messages_to_observation,
+                            None, diagnostics, context=context)
+                        admitted = self.timing_measure('station_admission', self.admit_station_observation,
+                            observation, context=context)
+                        if admitted['detected']:
+                            raise ValueError('失检诊断不能携带有效检测')
+                        self.station_counts['unavailable'] += 1
+                        self.publish_station_admission('unavailable', admitted)
+                    except (RuntimeError, ValueError, KeyError, TypeError, AttributeError) as error:
+                        self.reject_station_observation(error, observation)
+            finally:
+                self.timing_record('station_detection', started, context)
 
         def observe_station_pair(self, pose, diagnostics):
-            with self.lock:
-                observation = None
-                try:
-                    observation = messages_to_observation(pose, diagnostics)
-                    admitted = self.admit_station_observation(observation)
-                    if not admitted['detected']:
-                        raise ValueError('失检不能产生停靠位姿')
-                    # Only admitted, fresh, same-episode observations reach Nav2.
-                    message = PoseStamped()
-                    message.header = copy.deepcopy(pose.header)
-                    message.pose = copy.deepcopy(pose.pose.pose)
-                    self.dock_pose_pub.publish(message)
-                    self.beacon = (admitted, time.monotonic(), copy.deepcopy(pose.header.stamp))
-                    self.station_counts['accepted'] += 1
-                    self.station_counts['forwarded'] += 1
-                    self.publish_station_admission('accepted', admitted)
-                except (RuntimeError, ValueError, KeyError, TypeError, AttributeError) as error:
-                    self.reject_station_observation(error, observation)
+            started = time.monotonic()
+            context = self.station_timing_context(diagnostics)
+            try:
+                waiting_at = time.monotonic()
+                with self.lock:
+                    self.timing_record('station_lock_wait', waiting_at, context)
+                    observation = None
+                    try:
+                        observation = self.timing_measure('station_parse', messages_to_observation,
+                            pose, diagnostics, context=context)
+                        admitted = self.timing_measure('station_admission', self.admit_station_observation,
+                            observation, context=context)
+                        if not admitted['detected']:
+                            raise ValueError('失检不能产生停靠位姿')
+                        # Only admitted, fresh, same-episode observations reach Nav2.
+                        message = PoseStamped()
+                        message.header = copy.deepcopy(pose.header)
+                        message.pose = copy.deepcopy(pose.pose.pose)
+                        self.dock_pose_pub.publish(message)
+                        self.beacon = (admitted, time.monotonic(), copy.deepcopy(pose.header.stamp))
+                        self.station_counts['accepted'] += 1
+                        self.station_counts['forwarded'] += 1
+                        self.publish_station_admission('accepted', admitted)
+                    except (RuntimeError, ValueError, KeyError, TypeError, AttributeError) as error:
+                        self.reject_station_observation(error, observation)
+            finally:
+                self.timing_record('station_pair', started, context)
 
         def observe_vision_quality(self, message):
             if self.perception_config['mode'] != 'vision':
@@ -1153,7 +1284,15 @@ def run(args):
             return path
 
         def state(self):
+            context = self.timing_context(getattr(self, 'raw', None))
+            waiting_at = time.monotonic()
             with self.lock:
+                self.timing_record('http_lock_wait', waiting_at, context)
+                assembled_at = time.monotonic()
+                assembly_context = self.timing_context(getattr(self, 'raw', None))
+                assembly_context.update(entry_wall_time=context['entry_wall_time'],
+                    entry_monotonic=context['entry_monotonic'],
+                    bridge_episode_id_at_entry=context['bridge_episode_id_at_entry'])
                 ready=False; reason='等待共享物理世界与 Nav2'
                 pose=None; raw=None; physics=None; nav_ready=False
                 try:
@@ -1181,7 +1320,7 @@ def run(args):
                 except Exception as error:
                     ready=False;nav_ready=False;reason=str(error)
                 frame=self.frame_state(raw)
-                return {'mode':'mujoco','domain':args.domain,'ready':ready,'reason':reason,'task':copy.deepcopy(self.task),
+                result = {'mode':'mujoco','domain':args.domain,'ready':ready,'reason':reason,'task':copy.deepcopy(self.task),
                     'events':copy.deepcopy(self.events),'physics':physics,'frame':frame,'source':{'scene_sha':raw['source']['scene_sha256']} if raw else None,
                     'nav':{'ready':nav_ready,'pose':pose},'stations':self.stations(),
                     'native_lifecycle':self.native_readiness.snapshot(),
@@ -1198,6 +1337,11 @@ def run(args):
                                           'url': '/coop-api/report' if (args.output.parent/'acceptance-report.json').is_file() else None},
                     **({'episode_id': self.episode_id} if self.episode_id else {}),
                     'reset': self.reset_state(raw), 'history': copy.deepcopy(self.history[-10:])}
+                self.timing_record('http_assembly', assembled_at, assembly_context)
+            timing = getattr(self, 'bridge_timing', None)
+            if timing is not None:
+                result['bridge_timing'] = timing.snapshot()
+            return result
 
         def frame_state(self, raw=None):
             try:

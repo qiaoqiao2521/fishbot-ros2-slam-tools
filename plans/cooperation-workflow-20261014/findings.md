@@ -19,3 +19,7 @@ Laundry readiness 为合成领域事件；刚性货物复用现有物理场景�
 run 只循环本 workflow。fault/unknown 立即返回，不隐式 recover；成功路径自动处理 ready、原 ID 轮询和显式配置流程内的 between-job reset。单步 reset/recover 保留供调试与故障处理。runner deadline 不取消原任务；HTTP 每步有固定 5 秒 timeout，退出时刻可被当前一步有限超出。
 
 独立 run 审查复现慢 GET 越过 deadline 后仍 POST。已在 start/reset 的 intent 前及同步后 POST 前检查预算；原复现零 POST/零 attempt，intent 后超时也零 POST并保留 unknown。预检失败但从未生成任何意图，保留 waiting_ready 与 blocked_preflight；此有证据的 unsent 可以恢复首次提交，不可套用于已尝试动作。旧 v1 证据保持，不冒充新版运行。
+
+## 实际桥端与采集边界
+
+新runtime源与独立接收每20ms推进，但桥缓存落后0.28源秒，原门槛触发取消；没有物理源暂停的证据。分段计时尚待确定readiness/锁/调度具体阻塞点，不预设根因。普通HTTP reset ACK缺源reset_stamp，不满足现有oracle；独立ROS reset_result与新episode physics的原源时间须绑定后再开始采集。两次运输尚未通过，取消与原ID恢复证据分别成立。

@@ -24,10 +24,11 @@
 2. 薄层实施与 CPU 回归：complete，36 项无跳过。
 3. 独立审查与 scoped 交付：complete，根独立36项与源SHA核对通过，特性分支远端读回一致。
 4. Codex内部交接与root串行整合：complete；原36CPU合同在合入main后再次通过。
-5. 独立实际运输/取消/编排器恢复：pending，按下述新面板执行。
+5. 独立实际取消/恢复通过；运输首次失败、job2未派发，资格incomplete。
+6. 桥端缓存分段诊断与正确reset源时间采集：in_progress，owner=root。
 
 ## Next Step
-FishBot owner 接续已投递的候选，串行整合并执行隔离实际运输与独立 oracle 验收。
+root定位已实证桥端约0.28s缓存滞后，按分段证据修最小缺口；修正独立reset源时间取证后，在新目录声明同3case面板。保留原failed score与此前视觉11失败，不放宽门槛，不自动重发未知动作。
 
 ## Root实际面板（2026-10-15）
 

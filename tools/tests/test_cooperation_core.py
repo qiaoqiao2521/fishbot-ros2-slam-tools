@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import patch
 import uuid
 import numpy as np
+from cooperation_bridge import BridgeTiming
 
 spec=importlib.util.spec_from_file_location('core',Path(__file__).parents[1]/'cooperation_core.py')
 core=importlib.util.module_from_spec(spec);spec.loader.exec_module(core)
@@ -254,6 +255,120 @@ class BridgeRaceTests(unittest.TestCase):
         if self.on_sleep:self.on_sleep()
 
     def goal(self):return {'x':0.,'y':0.,'yaw':0.}
+
+    def timed_physics(self):
+        p=self.bridge;p.bridge_timing=BridgeTiming();p.episode_id=str(uuid.uuid4())
+        value=copy.deepcopy(p.raw)
+        value['episode_id']=p.episode_id;value['source']['episode_id']=p.episode_id
+        value['sequence']=73
+        return p,value
+
+    def test_physics_timing_attributes_slow_readiness_to_exact_input_without_restamping(self):
+        p,value=self.timed_physics()
+        p.native_readiness.update=lambda:setattr(self,'clock',self.clock+.18)
+        info={'source_timestamp':123456789,'received_timestamp':123456999}
+        p.observe_with_info(NS(data=json.dumps(value)),info)
+        timing=p.bridge_timing.snapshot();event=timing['last']['physics_readiness']
+        self.assertAlmostEqual(event['duration_s'],.18)
+        self.assertEqual(event['source_stamp'],value['stamp']);self.assertEqual(event['sequence'],73)
+        self.assertEqual(event['episode_id'],value['episode_id']);self.assertEqual(event['scene_sha256'],'a'*64)
+        self.assertEqual(event['manifest_sha256'],'b'*64)
+        self.assertEqual(event['dds_source_timestamp_ns'],123456789)
+        self.assertEqual(event['dds_received_timestamp_ns'],123456999)
+        self.assertEqual(p.raw,value);self.assertEqual(p.received,self.clock)
+        self.assertFalse(timing['native_consumption_ack'])
+        self.assertEqual(timing['stages']['physics_cache_commit']['count'],1)
+        import inspect
+        with self.assertRaises(TypeError):inspect.signature(p.observe_with_info).bind(NS())
+        inspect.signature(p.observe_with_info).bind(NS(),info)
+
+    def test_json_validation_and_lock_wait_have_separate_slow_source_bound_phases(self):
+        p,value=self.timed_physics();loads=json.loads;validate=self.namespace['validate_physics']
+        def slow_json(payload):
+            self.clock+=.11
+            return loads(payload)
+        def slow_validation(*values):
+            self.clock+=.12
+            return validate(*values)
+        class SlowLock:
+            def __enter__(unused):self.clock+=.13
+            def __exit__(unused,*args):return False
+        self.namespace['json']=NS(loads=slow_json)
+        self.namespace['validate_physics']=slow_validation;p.lock=SlowLock()
+        p.observe(NS(data=json.dumps(value)))
+        timing=p.bridge_timing.snapshot()
+        for stage,duration in (('physics_json',.11),('physics_validation',.12),('physics_lock_wait',.13)):
+            event=timing['last'][stage]
+            self.assertAlmostEqual(event['duration_s'],duration)
+            self.assertEqual((event['episode_id'],event['sequence'],event['source_stamp']),
+                             (value['episode_id'],73,value['stamp']))
+            self.assertFalse(event['dds_info_available']);self.assertIsNone(event['dds_received_timestamp_ns'])
+        self.assertEqual(p.raw['stamp'],value['stamp']);self.assertEqual(p.received,self.clock)
+
+    def test_foreign_episode_timing_does_not_authorize_cache_commit(self):
+        p,value=self.timed_physics();original=p.raw;received=p.received
+        foreign=str(uuid.uuid4());value['episode_id']=value['source']['episode_id']=foreign
+        p.observe(NS(data=json.dumps(value)))
+        self.assertIs(p.raw,original);self.assertEqual(p.received,received)
+        event=p.bridge_timing.snapshot()['last']['physics_cache_commit']
+        self.assertEqual(event['episode_id'],foreign)
+        self.assertEqual(event['bridge_episode_id_at_entry'],p.episode_id)
+        self.assertEqual(event['outcome'],'foreign_episode_ignored')
+
+    def test_station_graph_query_slow_phase_is_bound_to_admitted_pair(self):
+        p=self.bridge;p.bridge_timing=BridgeTiming();value=copy.deepcopy(self.station_measurement())
+        value.update(sequence=2,stamp=10.1,stamp_ns=10_100_000_000)
+        p.raw['stamp']=p.raw['time_s']=10.1
+        lookup=p.get_publishers_info_by_topic
+        def slow_lookup(topic):
+            if topic=='/cooperation/station_pose':self.clock+=.12
+            return lookup(topic)
+        p.get_publishers_info_by_topic=slow_lookup
+        p.observe_station_pair(*self.station_messages(value))
+        timing=p.bridge_timing.snapshot()
+        slow=[event for event in timing['slow_tail'] if event['stage']=='station_publisher_query']
+        self.assertEqual(len(slow),1);self.assertEqual(slow[0]['topic'],'/cooperation/station_pose')
+        self.assertAlmostEqual(slow[0]['duration_s'],.12)
+        for stage in ('station_pair','station_parse','station_admission','station_lock_wait'):
+            event=timing['last'][stage]
+            self.assertEqual((event['episode_id'],event['sequence'],event['source_stamp']),
+                             (value['episode_id'],value['sequence'],value['stamp_ns']*1e-9))
+            self.assertEqual(event['source_stamp_ns'],value['stamp_ns'])
+        self.assertEqual(p.station_counts['forwarded'],1)
+        self.assertEqual(p.beacon[0]['stamp'],value['stamp_ns']*1e-9)
+
+    def test_http_lock_wait_and_assembly_are_distinct_and_optional_for_old_fixtures(self):
+        p=self.bridge;value=self.station_measurement();self.assertNotIn('bridge_timing',p.state())
+        p.bridge_timing=BridgeTiming();lock=threading.RLock();waited=[False]
+        class SlowFirstLock:
+            def __enter__(unused):
+                if not waited[0]:
+                    self.clock+=.13;waited[0]=True
+                    p.raw['stamp']=p.raw['time_s']=10.02;p.raw['sequence']+=1
+                lock.acquire()
+            def __exit__(unused,*args):lock.release();return False
+        def slow_localized():self.clock+=.12;return {'x':0.,'y':0.,'yaw':0.}
+        p.lock=SlowFirstLock();p.localized=slow_localized
+        state=p.state();timing=state['bridge_timing']
+        self.assertAlmostEqual(timing['last']['http_lock_wait']['duration_s'],.13)
+        self.assertAlmostEqual(timing['last']['http_assembly']['duration_s'],.12)
+        self.assertEqual(timing['last']['http_assembly']['episode_id'],value['episode_id'])
+        self.assertEqual(timing['last']['http_assembly']['source_stamp'],10.02)
+        self.assertEqual(timing['last']['http_assembly']['sequence'],p.raw['sequence'])
+        self.assertEqual(state['physics']['stamp'],p.raw['stamp'])
+        self.assertFalse(timing['native_consumption_ack'])
+
+    def test_timing_slow_tail_is_bounded_and_eviction_keeps_aggregate_truth(self):
+        timing=BridgeTiming()
+        for sequence in range(40):
+            timing.record('physics_readiness',float(sequence),sequence+.12,
+                          {'episode_id':'episode','source_stamp':sequence*.02,'sequence':sequence})
+        value=timing.snapshot()
+        self.assertEqual(value['slow_count'],40);self.assertEqual(value['slow_events_evicted'],8)
+        self.assertEqual(len(value['slow_tail']),32)
+        self.assertEqual(value['slow_tail'][0]['sequence'],8)
+        self.assertEqual(value['last']['physics_readiness']['sequence'],39)
+        self.assertEqual(value['stages']['physics_readiness']['count'],40)
 
     def reset_probe(self):
         folder=tempfile.TemporaryDirectory();self.addCleanup(folder.cleanup)

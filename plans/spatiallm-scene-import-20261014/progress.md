@@ -69,7 +69,7 @@
 ## Remaining
 
 本轮官方单例及CPU衍生转换完成，未进行数据集评测、预测GUI渲染、起点净空或导航验收。后续新运行入口为`experiments/spatiallm/INFERENCE.md`，使用新目录并由owner协调GPU窗口。
-主区整合由FishBot owner串行执行，当前分支不同时推main。
+主区已由FishBot owner串行整合，main/REST读回ddbfeab714f0cec76b755908324c82eaa5afa04f；此特性分支不独立推main。
 
 ## Delivery
 
@@ -90,4 +90,8 @@
 
 already_covered：采用既有开发协作接入的“静态结果与实际验收分层”和独立项目边界原则，已用真实物理/浏览器证据落实。
 already_covered：源码与实际验收绑定、SVG/空值经验已在本模块记录，原Wiki通用验收原则覆盖。本worker未写共享Wiki。
-pending：writer完成后才绑定原件的可复用结论，由总协调根汇总到既有知识页。本worker返回复现与真实SDK证据，不并行编辑共享知识。
+updated：总协调root已将writer原生关闭后hash/manifest内部绑定经验写回Wiki/自动化开发范式与智能体协作“持久事件与复核记录绑定原件”，开发知识入口新增Rerun触发；FishBot root已读回这两处。知识库提交80ab374a3c545ebf32a6cb5c288ebd56154b1307由知识owner独立推送/REST核对；本模块worker未并行写Wiki。
+
+## 主区最终整合
+
+root在无活动world安全边界依次合入0d11a5b、代码6f5dd4a和文档a84d9ce。18模块/3计划与最终交接源一致；合入后69CPU＋2Node通过，零skip，1第三方弃用warning；12模块/入口文档36相对链接无缺失。固定官方推理14产物实际hash/bytes逐项核对，GPU已释放。原RRD失配原件、旧GT/起点修复版本、预测与显式六墙校正均保留；当前不宣称起点净空、导航、数据集指标或真机能力。main仅保留原release.sh未跟踪，root不执行。
