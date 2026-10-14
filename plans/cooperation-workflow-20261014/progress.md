@@ -14,7 +14,7 @@
 - 根交接回执：已用 Codex 内部 `send_message_to_thread` 向原 FishBot owner 投递候选 `85e9e07aa5e2347cc19c52c066feb69c89ae2272`、最终源码 SHA 与36项根独立测试证据；工具返回预期 threadId。投递不等于 owner 已整合或物理验收通过。
 
 ## Remaining
-本模块预声明物理面板已通过。root完成当前文档、知识读回与远端串行交付；视觉11失败另由visual-docking计划的新开发整改入口接续。完整任务成功不外推生产稳定性或真机。
+本模块预声明物理面板已通过，源码、文档与知识小段已完成远端读回。视觉11失败另由visual-docking计划的新开发整改入口接续；广泛旧知识18–20节发布仍由研究根审定。完整任务成功不外推生产稳定性或真机。
 
 ## Issues
 基线没有 cleanup/native_actions 公开字段；复用已有 reset.available 门禁。主桥历史截断时缺任务 ID 必须 unknown，不修主桥。
@@ -25,7 +25,7 @@ reset 本身失败或拒绝保留原 ID/receipt，交 FishBot owner 审查，不
 交付当前同桥、持久账本和有界run能力。后续重复仿真复用既有入口，保留原ID与episode边界；不重启未知bridge，不替代原视觉资格整改。运行入口 `docs/COOPERATION_WORKFLOW.md`。
 
 ## Knowledge closeout
-`updated`：root串行修正Wiki/ROS2 与 FishBot第19节的旧“时钟保留原group”结论，增加两种滞后方向、受控TimeSource默认组风险、公开专组路由与消费回执边界；开发知识入口补对应触发词。两页原文读回与hash已验证，receipt见新runtime的knowledge-closeout.json。第20节原ID与交接评分约定already_covered。知识库其他累计变动不并入FishBot源码提交，发布状态单独记录。
+`updated`：root本地修正Wiki/ROS2 与 FishBot第19节的旧“时钟保留原group”及两种滞后方向。研究根将本轮TimeSource风险、公开专组路由和消费回执边界单独整理到同页“原生 ROS 时钟与回调组”，补开发知识入口的独立触发。该小段已从干净远端基线发布到私有my-programming-world main a2b99a5f0c2bc9701504b7caa20790ab949c7208。根实际fetch/REST、原小节与入口行逐字读回一致，receipt见新runtime的knowledge-closeout.json。第20节原ID与交接评分约定already_covered；canonical其它18–20节及累计dirty的整体发布pending，研究根接续，不宣称整库已交付。
 
 ## Root串行接入
 
@@ -79,4 +79,10 @@ job1新attempt 0c1bf47d在准备导航失败：原Nav31701beb到5，没有Dock/�
 
 独立复审再核两运输墙钟208.307s/224.146s、7409/8197独立物理样本与全部原gate。最终quiet快照clock_update max0.898ms、slow0；桥全阶段仍有5慢事件，主要位于between-job reset边界，HTTP组装max0.7005s、physics锁等待0.6170s。不能写全桥slow0。root另保存六保护实例原字段root-protected-after.json，与before一致。
 
-知识本地修订`updated`并读回；知识远端发布`pending`：my-programming-world远端80ab374尚无整个第19/20节，本轮两段不能直接替换。canonical有其它owner累计dirty，不能整页复制发布。已将具体差异交内部研究根，owner=根总协调/机器人知识接续；最短入口是审定原19/20段后从远端基线隔离补丁。此pending不影响FishBot源码交付，不声称知识远端已更新。
+知识发布差异已闭合本轮小段：远端80ab374原页只有1–17，不能整页复制canonical旧dirty。研究根从该干净基线只发布本轮独立Clock小节与入口到a2b99a5；canonical同名小节与远端逐字一致。其它扩展18–20节仍pending，owner=根总协调/机器人知识接续；最短入口是审定这些已存段后从远端基线隔离补丁。该pending不是本轮Clock小段未发布。
+
+## Git与报告交付
+
+执行候选ec879ed8bcc95225f4845b5a6c295bdaa1fbc40f和最终结果文档4189fce981abc8be452f7fa6e8c4c6275a89267b已串行推送既有qiaoqiao2521/fishbot-ros2-slam-tools main，GitHub REST与本地读回一致。有效账号238822818、仓库1381244533、公有可见性及fetch/push目标保持；运行后只改文档，45执行源当前仍匹配冻结。此元数据收尾另作文档提交，最新tip回源远端。
+
+私有index.html和acceptance-report.json单列3case通过，链接原视觉56报告；83原result哈希再次核对不变。原release.sh保持未执行、未暂存，具体依赖/分区静态阻碍及owner仍见cooperation计划Retained work。没有运行日志、地图、模型或凭据入Git。
