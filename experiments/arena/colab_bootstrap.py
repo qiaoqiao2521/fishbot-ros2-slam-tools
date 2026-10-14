@@ -10,7 +10,105 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 from zipfile import ZipFile, ZIP_DEFLATED
+
+
+INPUT_FILES = ('tools/fishbot_arena.py', 'experiments/arena/upstream.lock.json',
+               'experiments/arena/evaluation.yaml', 'experiments/arena/colab_preflight.py',
+               'experiments/arena/colab_bootstrap.py')
+
+
+def input_hashes(root):
+    result = {}
+    for name in INPUT_FILES:
+        try:
+            result[name] = hashlib.sha256((root/name).read_bytes()).hexdigest()
+        except OSError:
+            result[name] = None
+    return result
+
+
+def checkpoint_artifacts(work, report):
+    """Publish one atomic evidence snapshot, including interrupted phases."""
+    artifacts = work/'artifacts'
+    temporary = artifacts/'report.tmp'
+    temporary.write_text(json.dumps(report, indent=2))
+    temporary.replace(artifacts/'report.json')
+    bundle = work/('artifacts-'+uuid.uuid4().hex+'.zip')
+    pending = bundle.with_suffix('.zip.tmp')
+    manifest = {}
+    with ZipFile(pending, 'w', ZIP_DEFLATED) as archive:
+        for path in sorted(artifacts.rglob('*')):
+            if path.is_symlink():
+                continue
+            if path.is_file() and path.suffix in ('.json', '.jsonl', '.log', '.html', '.csv'):
+                name = str(path.relative_to(artifacts))
+                payload = path.read_bytes()
+                archive.writestr(name, payload)
+                manifest[name] = {'size_bytes': len(payload),
+                                  'sha256': hashlib.sha256(payload).hexdigest()}
+    pending.replace(bundle)
+    # Publish the index last. Report completion alone does not prove packaging.
+    index = {'schema_version': 1, 'report_final': report.get('report_final') is True,
+             'status': report.get('status'), 'files': manifest,
+             'report_sha256': manifest['report.json']['sha256'],
+             'bundle': {'name': bundle.name, 'size_bytes': bundle.stat().st_size,
+                        'sha256': hashlib.sha256(bundle.read_bytes()).hexdigest()}}
+    pending_index = work/'recovery-index.json.tmp'
+    pending_index.write_text(json.dumps(index, indent=2))
+    pending_index.replace(work/'recovery-index.json')
+    # Keep the legacy checkpoint path for best-effort recovery without an index.
+    alias = work/'artifacts.zip.tmp'
+    alias.unlink(missing_ok=True)
+    os.link(bundle, alias)
+    alias.replace(work/'artifacts.zip')
+    return bundle
+
+
+def smoke_readback(receipt, log):
+    """Verify native execution evidence, without scoring the policy."""
+    if (type(receipt.get('returncode')) is not int or receipt['returncode'] != 0
+            or receipt.get('source_unchanged') is not True
+            or receipt.get('source_after', {}).get('verified') is not True):
+        raise RuntimeError('native smoke lacks normal exit and unchanged source receipts')
+    if not re.search(r'Steps:\s*100%[^\r\n]*\b20/20\b', log):
+        raise RuntimeError('native smoke lacks the configured 20 completed steps')
+    if ('SimulationContext cleared' not in log or 'SIGSEGV' in log
+            or 'fast shutdown not supported with jupyter notebooks' in log):
+        raise RuntimeError('native smoke shutdown evidence is incomplete or failed')
+    return {'steps_completed': 20, 'returncode': 0, 'context_cleared': True,
+            'log_sha256': hashlib.sha256(log.encode()).hexdigest()}
+
+
+def stop_owned_group(process, grace=5):
+    """Stop the new session created by this worker, including native descendants."""
+    result = {'group_absent': False, 'sigkill_sent': False, 'leader_returncode': None}
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        result['group_absent'] = True
+    deadline = time.monotonic()+grace
+    while not result['group_absent'] and time.monotonic() < deadline:
+        process.poll()
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            result['group_absent'] = True
+            break
+        time.sleep(min(.05, max(0, deadline-time.monotonic())))
+    if not result['group_absent']:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+            result['sigkill_sent'] = True
+        except ProcessLookupError:
+            result['group_absent'] = True
+    result['leader_returncode'] = process.wait(timeout=5)
+    try:
+        os.killpg(process.pid, 0)
+    except ProcessLookupError:
+        result['group_absent'] = True
+    return result
 
 
 def main():
@@ -31,25 +129,41 @@ def main():
     artifacts.mkdir(parents=True, exist_ok=False)
     logs = artifacts / 'logs'; logs.mkdir()
     started = time.monotonic(); deadline = started + args.timeout
+    closing = False
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+
+    def request_stop(signum, frame):
+        nonlocal closing
+        if closing:
+            return
+        closing = True
+        raise InterruptedError('termination requested; preserving native evidence')
+
+    signal.signal(signal.SIGTERM, request_stop)
     report = {'schema_version': 1, 'status': 'running', 'phase': 'hardware', 'phases': [],
               'timeout_s': args.timeout, 'human_eula_accepted': True,
               'kernel_driver_changed': False, 'graphics_verified': False,
-              'arena_smoke_completed': False, 'pipeline_completed': False, 'policy_success': None}
+              'arena_smoke_completed': False, 'pipeline_completed': False, 'policy_success': None,
+              'report_final': False, 'input_sha256_before': input_hashes(root)}
     env = os.environ.copy()
     for key in ('UV_SYSTEM_PYTHON', 'UV_PYTHON', 'UV_PROJECT_ENVIRONMENT', 'VIRTUAL_ENV',
                 'OMNI_KIT_ACCEPT_EULA', 'ACCEPT_EULA', 'HF_TOKEN', 'HUGGING_FACE_HUB_TOKEN'):
         env.pop(key, None)
+    env.pop('ISAACLAB_ARENA_FORCE_EXIT_ON_COMPLETE', None)
     env.update(GIT_TERMINAL_PROMPT='0', MPLBACKEND='agg', PIP_DISABLE_PIP_VERSION_CHECK='1')
 
-    def save():
+    def save(*, checkpoint=False):
         report['elapsed_wall_s'] = round(time.monotonic()-started, 3)
         path = artifacts / 'report.json'; temporary = artifacts / 'report.tmp'
         temporary.write_text(json.dumps(report, indent=2)); temporary.replace(path)
+        if checkpoint:
+            checkpoint_artifacts(work, report)
 
     def phase(name, command, limit, *, cwd=None, allow_failure=False):
+        nonlocal closing
         report['phase'] = name
         item = {'name': name, 'status': 'running'}; report['phases'].append(item); save()
-        remaining = deadline-time.monotonic()-15
+        remaining = deadline-time.monotonic()-45
         if remaining <= 0: raise TimeoutError('bounded Colab deadline exhausted')
         output = artifacts / (name+'.json')
         with (logs/(name+'.log')).open('w') as stream, output.open('w') as stdout:
@@ -58,13 +172,10 @@ def main():
             try:
                 code = process.wait(timeout=min(limit, remaining))
             except BaseException:
-                try: os.killpg(process.pid, signal.SIGTERM)
-                except ProcessLookupError: pass
-                try: process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGKILL); process.wait(timeout=5)
-                item.update(status='interrupted'); save(); raise
-        item.update(returncode=code, status='passed' if code == 0 else 'failed'); save()
+                closing = True
+                item['group_cleanup'] = stop_owned_group(process)
+                item.update(status='interrupted'); save(checkpoint=True); raise
+        item.update(returncode=code, status='passed' if code == 0 else 'failed'); save(checkpoint=True)
         if code != 0 and not allow_failure:
             raise RuntimeError(name+' failed; native output and log retained')
         return output
@@ -144,8 +255,10 @@ def main():
         phase('prepare', [*cli,'prepare','--source',str(source)], 300)
         phase('doctor', [*cli,'doctor','--source',str(source)], 30)
         phase('install', [*cli,'install','--source',str(source),'--accept-eula'], 1500)
-        phase('smoke', [*cli,'smoke','--source',str(source),'--accept-eula'], 240)
-        report['arena_smoke_completed'] = True; save()
+        smoke = phase('smoke', [*cli,'smoke','--source',str(source),'--accept-eula'], 240)
+        report['smoke_evidence'] = smoke_readback(json.loads(smoke.read_text()),
+                                                (logs/'smoke.log').read_text())
+        report['arena_smoke_completed'] = True; save(checkpoint=True)
         result = phase('evaluate', [*cli,'evaluate','--source',str(source),'--accept-eula',
                                    '--output',str(artifacts/'evaluation')], 360)
         receipt = json.loads(result.read_text())
@@ -154,17 +267,24 @@ def main():
         if not report['pipeline_completed']: raise RuntimeError('native two-Run evaluation incomplete')
         report['status'] = 'completed'
     except BaseException as error:
-        report.update(status='failed', error_type=type(error).__name__, error=str(error))
+        report.update(status='failed', pipeline_completed=False,
+                      error_type=type(error).__name__, error=str(error))
     finally:
-        save()
-        bundle = work/'artifacts.zip'
-        with ZipFile(bundle,'w',ZIP_DEFLATED) as archive:
-            for path in artifacts.rglob('*'):
-                if path.is_file() and path.suffix in ('.json','.jsonl','.log','.html','.csv'):
-                    archive.write(path,path.relative_to(artifacts))
+        closing = True
+        report['input_sha256_after'] = input_hashes(root)
+        report['inputs_unchanged'] = (report['input_sha256_before'] == report['input_sha256_after']
+                                      and all(report['input_sha256_after'].values()))
+        if not report['inputs_unchanged']:
+            report.update(status='failed', pipeline_completed=False, error_type='SourceChanged',
+                          error='uploaded inputs changed during execution')
+        report['report_final'] = True
+        save(checkpoint=True)
+        index = json.loads((work/'recovery-index.json').read_text())
+        bundle = work/index['bundle']['name']
         print(json.dumps({'status':report['status'],'phase':report['phase'],
                           'pipeline_completed':report['pipeline_completed'],'bundle':str(bundle)}),flush=True)
-    return 0 if report['pipeline_completed'] else 1
+        signal.signal(signal.SIGTERM, previous_sigterm)
+    return 0 if report['status'] == 'completed' and report['pipeline_completed'] else 1
 
 
 if __name__ == '__main__':

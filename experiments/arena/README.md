@@ -4,7 +4,9 @@
 
 ## 当前交付边界
 
-源码锁、两Run配置与部署入口已接入项目。用户已明确接受NVIDIA软件和Isaac Sim/Omniverse许可。Colab L4通过同版私有图形库的原生Vulkan/RT验证，实际完成锁版安装和官方20物理步；关闭时SIGSEGV，尚不能算完整运行通过。最后独立子进程环境修复重试在安装阶段触及原45分钟窗口，所有VM已回收、活动会话0；真实关闭复验与两个Run仍待完成。未验证SO101策略或模型迁移，本机4GB GPU未安装Isaac。
+官方Arena运行与回收闭环已在Colab L4实际通过。20/20物理步正常关闭；baseline/swap_objects各1个23步回合，聚合JSON、JSONL、原生timings和对象任务指令一致。39个归档文件逐项校验；上传输入与源码/配置起止一致，VM实际解除分配、活动会话0。复用官方零动作策略，两组任务success均false，不能当抓取能力或训练效果。
+
+本轮同一45分钟窗口中，首次上传超时已回收，修复后serial会话用剩余2159秒；最终生命周期804.445秒，未购买额度或更换kernel。本机4GB GPU未安装Isaac，SO101/FishBot embodiment仍未适配。历史20步后SIGSEGV和末轮取证缺失保留，后续成功没有覆盖它们。
 
 Arena 仍为alpha。锁定 `c7edf3a9d5d8276565208f72422f8f8a0806d6cf`，Isaac Lab子模块锁 `91a0906f93802eb859192dcb0bca879f891e92d6`。实际依赖见 [upstream.lock.json](upstream.lock.json)。分支 README 的部分版本文字滞后，以 gitlink 和 uv.lock 为准，不跟随 main 漂移。
 
@@ -60,10 +62,36 @@ Colab只用于有界评测。遵循[Colab FAQ](https://research.google.com/colab
 
 当实例缺图形组件时，只从官方同版.run提取64bit图形库和官方ICD，使用进程局部路径，不执行系统installer、不替换kernel、不覆盖provider CUDA/NVML。原生NVIDIA和RT预检通过后才继续官方prepare/install/smoke/evaluate。每阶段保留原生日志；总预算最多2640秒，为45分钟VM生命周期预留回收时间。结束下载artifacts.zip与报告并释放本轮VM，不能将脚本完成或Vulkan成功写成Arena物理运行通过。
 
-## 许可后运行记录
+## 前一窗口的许可后记录（历史）
 
 同版580.82.07官方.run校验通过，仅提取32个私有图形库并保留provider CUDA/NVML；原生NVIDIA Vulkan与RT扩展通过。官方uv安装351包。初次入口误读uv的version_info，修复后官方cube_goal_pose实际完成20/20steps，env.close和报告生成，但SimulationApp关闭SIGSEGV11；该次smoke保持失败，VM已释放。
 
 Isaac Sim6.1会根据继承的JPY_PARENT_PID/ISAAC_JUPYTER_*把独立进程误判为notebook，强制关闭默认fast_shutdown。本项目薄入口仅清除独立子进程的这三个标记，保持父kernel、隐私偏好和官方close流程。18项离线入口检查通过；最后重试在安装阶段限时中断，尚未验证真实退出或两个Run；不使用自加强制退出或跳过关闭来制造成功。详细运行状态回源[progress](../../plans/fishbot-arena-evaluation-20261014/progress.md)。
 
 原45分钟窗口已收尾。所有许可后会话未购买额度；stop与活动0已实际读回。最后重试保留原生超时report，但完整zip未在回收前取得；此前20步后SIGSEGV的原日志完整保留。运行验收仍pending，不能称完整部署成功。接续使用现有入口与锁，需新的明确时间预算；本锁版已接受许可不再重复询问。
+
+## 项目内闭环入口
+
+[colab_run.py](colab_run.py)复用工作台已有ColabCLI0.6安全适配，负责本次单L4的有限调用。默认在相邻SO101项目查找安全适配；可用--safe-cli与--colab-python指定已安装工具。不读取认证文件，不复制浏览器登录态，不创建新认证或调度服务。
+
+操作者已接受本锁版许可后，使用全新输出目录：
+
+```bash
+python3 experiments/arena/colab_run.py \
+  --output /absolute/new/private/arena-results \
+  --budget-seconds 2700 --accept-eula
+```
+
+入口先独立确认活动会话0，再申请一次L4。分配与执行不自动重发；contents就绪只做有限只读检查。源码PUT超时后读回完整zip并核对字节数与SHA；相同则继续，明确404才允许有限重传同一bytes，未知或不符不执行SDK。新一轮默认2700秒；同窗口的串行恢复必须显式传剩余预算，不能每次重开计时。
+
+每阶段结束或中断都会保存不可变代际zip。最后原子发布recovery-index.json，标明zip及每个文件的大小/哈希。本机按索引取对应代际，最多三次有限重读；失败原件保留。仅有live报告、旧checkpoint或网页HTML都不能判闭环完成。预留360秒用于取证、释放和独立账户核对；成功、失败、超时都停止唯一owned会话。
+
+原生验收读取真实退出状态、20步日志和context关闭；排除notebook标记与测试force-exit。两个Run各需一个完整原生JSONL，与聚合JSON、对象对应的任务指令和timings一致；源/配置/输出时间绑定。原生success=false或null分别保留，上游没有termination_reason时仍为null。当前1.5秒在默认15Hz下上限23步，不能把旧75步夹具冒充本配置实测。
+
+生命周期的successful只在原生闭环、完整取证、上传输入起止一致、实际unassign和独立活动0均成立时为true。diagnostic_closure_verified只表示诊断与资源已收尾；评测未启动时远端产物为not_applicable。policy_success始终是原生结果，不能由successful=true推断策略能抓取。外部staging资产未由源码Git锁冻结；对象指令核对也不替代独立几何验收。
+
+## 本轮实际结果
+
+新有界入口已完成原生smoke和evaluate，退出均0；未出现SIGSEGV、notebook错误关闭或测试force-exit。基线为Rubik方块→碗，替换组为芥末瓶→木碗；同seed42、同1.5秒预算，两者各23步，任务success=false。原生progress约1/3，只完成objects_settled条件，未完成抓取/放置；它不能当完整成功或候选增益。上游未记录终止原因，保留null；False/23步与超时一致。
+
+原生HTML、完整JSONL/timings、最终校验回执与日志存本机私有cache，不入Git。详细证据、来源、失败与资源回收见[progress](../../plans/fishbot-arena-evaluation-20261014/progress.md)。后续真实策略、更多留出任务和SO101/FishBot适配需各自验收，本轮不自动训练或分配新GPU。

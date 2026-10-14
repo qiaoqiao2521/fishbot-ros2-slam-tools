@@ -29,3 +29,11 @@ T4不以桌面16GiB门槛误拒绝：官方GCP T4为nominal16GB，常见nvidia-s
 关闭模式来源已由Root实际读取三份官方v6.1.0源码并重算SHA：package init c6f9f064b9dd5a9fca8b52cb5c94484d0f334ff82ded06e525e6edc0196a3469、simulation_app init b32081c9c5e4bcd37bc7e041aabad1b08e451ac6d64e43a4e77873cce59fd6ee、simulation_app body c2a2173be57abac20ef97f81b80d58319c94c9a4017c98709f8d13489ad0b746。独立审查18/18通过。原始官方文件缓存不入Git；公开定位：https://github.com/isaac-sim/IsaacSim/blob/v6.1.0/source/python_packages/isaacsim/__init__.py 和 https://github.com/isaac-sim/IsaacSim/blob/v6.1.0/source/extensions/isaacsim.simulation_app/isaacsim/simulation_app/simulation_app.py 。
 
 terminal最终Vulkan/RT通过，install因剩余阶段395.675s上限中断，未进入smoke/evaluate；完整zip未在本机回收前下载，final live report已保留。stop真实解除分配，活动0。已验证子进程误继承模式与离线修复，但缺真实关闭复验；仍不能认定SIGSEGV已实际修复。原窗口耗尽后未再分配GPU。
+
+完善闭环审查：旧result_readback接受最小两段JSON、重复episode或错误run/seed/index而不核对原生JSONL；runner-receipt在最终验收前落盘，缺最终通过/失败结果。官方episode JSONL已有job_name/env_id/episode_in_env/seed/success/episode_length/language_instruction/timestamp/progress。当前任务默认15Hz，1.5秒源时间上限23步；官方不输出termination_reason，False/23只可称与超时一致。HTML在零episode时也可生成，不能单独证明评测完成。
+
+末轮取证失败发生在远端已经终态而本地exec仍pending，直到local cleanup预留截止，错误路径跳过zip下载。新有界入口须按远端终态进入恢复，检查zip发布后的index，成功/失败/超时都先恢复再停止唯一ownedscope并独立读回账户状态。只证明本轮 owned 释放与账户活动数，不杀其它会话。
+
+新窗口首次实际分配L4成功，源码zip上传PUT在25.847s ReadTimeout，尚未启动remote exec。原控制器随后只取得artifact路径404，88.948s后实际stop成功、独立活动0。该失败发生在传输，不是Arena物理/关闭失败。补丁将先确认contents就绪，PUT超时后GET同一文件核对完整zip SHA；已存则继续，明确404才重传相同bytes；无exec时取证不适用，保存本机诊断即可。后续serial重试只用此新窗口余额，不重开2700秒。
+
+本轮成功复验：SDK默认独立进程关闭路径下20步正常退出0，无原SIGSEGV和notebook警告；两Run各23步、false、progress约1/3且仅objects_settled事件。原生JSONL/汇总/timings/配置对照通过；39成员manifest通过，input五源起止一致；804.445s后回收，独立活动0。初次传输失败与前一窗口关闭失败保留，没有通过新观察改写历史。完整源/结果证据回源progress与本机cache。

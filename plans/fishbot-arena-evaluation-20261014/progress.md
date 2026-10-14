@@ -2,7 +2,7 @@
 
 ## Current
 
-准备阶段完成，真实Arena部署未完成。用户选择Colab，L4实际分配与原生Vulkan预检已完成；该实例返回VK_ERROR_INCOMPATIBLE_DRIVER，VM已释放且活动会话为0。用户随后已明确接受NVIDIA软件及Isaac Sim/Omniverse许可。所有许可后重试共用一个45分钟窗口，每次只有一个L4。私有同版图形库已让NVIDIA Vulkan/RT通过，锁版依赖已安装。uvfix已完成20物理步，但关闭SIGSEGV，不能算smoke通过；该VM已释放，活动0。最后terminal会话在install阶段触及剩余窗口，未进入smoke；原45分钟窗口已收尾，VM解除分配，服务端活动0。独立子进程修复仅离线通过，真实关闭和两个Run仍pending。
+本轮官方Arena执行、严格回执和资源回收闭环已通过，Root已独立读回。Colab L4完成20步正常关闭和两个23步回合，39文件manifest校验、上传输入/源码/配置起止一致；真实unassign与独立活动0已确认。zero_action任务success为False/False，完整抓取/训练效果没有通过声明。正在进行最终本机回归、项目/知识与Git收尾。先前SIGSEGV、超时和上传失败保留。
 
 ## Done
 
@@ -22,9 +22,7 @@
 
 ## Remaining / Next
 
-运行仍pending，owner=root。用户已明确接受本锁版NVIDIA/Isaac许可，不重复询问。L4同版私有图形库已让NVIDIA Vulkan/RT实际通过，351包安装完成；uv版本字段误读已修。uvfix已完成20物理步但关闭SIGSEGV；已回收。terminal会话只使用首轮许可后原45分钟窗口的剩余时间，install超时，已释放；真实关闭及两个Run未完成。最短入口：读取~/.cache/fishbot/arena/colab-eval-20261014-terminal/lifecycle.json及live.json；最后zip未在回收前下载成功，原uvfix的artifacts.zip保留；必须逐段区分依赖、Kit、20步和两Run，不以安装退出码替代评测。
-
-SO101/FishBot embodiment、真实视觉策略、训练、真机和生产稳定性均未纳入本轮成功声明。固件release.sh按既有阻碍保留，owner=root，接续入口见协同计划Retained work，不执行或提交。
+本轮运行与回收无必需遗留，owner=root完成最终Git读回。当前GPU已释放，不自动分配下一轮。真实策略、SO101/FishBot embodiment、真机和生产稳定性仍需各自验收。固件release.sh按既有来源/板型/分区/工具版本阻碍保留，owner=root，最短接续入口见协同计划Retained work，不执行或提交。
 
 ## Evidence
 
@@ -55,3 +53,31 @@ knowledge updated：Root已补写并实际读回Wiki/ROS2 与 FishBot.md第20节
 Root实际读回stop.unassign_completed=true，check-connection.connection_verified=true/active_assignments=0。没有购买额度、改变托管kernel、网络、107/114或策略权重。旧uvfix原件确认20/20steps，随后SIGSEGV11；该失败保留。真实关闭复验及两Run仍pending，owner=root；接续入口为同锁版experiments/arena/colab_bootstrap.py和本页Evidence。新的有界GPU窗口需要用户再指定预算；不自动重新分配，不重复索取本锁版已接受的许可。
 
 本轮18入口与583反馈、12路径、语法、选定链接和diff检查通过；新增环境修复经独立审查通过。Git收尾仅保存代码/配置/结论，不提交认证、会话、原生日志或资产；release.sh继续按既有静态阻碍保留。
+
+## Closure continuation
+
+实际复用既有ColabCLI0.6和SO101安全适配；原子索引/manifest沿现有colab-twin回收方式。该回收器带特定训练文件白名单，不能直接套用于Arena，因此只补本项目产物白名单与有限调用，不新建认证或通用调度层。root负责bootstrap/计划/知识与Git整合，worker分别负责native结果校验、生命周期薄入口与独立官方源码审查。所有worker不分配GPU，不编辑共享计划。
+
+Bootstrap已补阶段结束/中断原子zip、zip后索引、原生20steps/关闭证据与上传输入起止哈希；6项有界本机文件/证据负例通过，零跳过。这些是离线实现证据，真实Arena运行另验收。
+
+knowledge already_covered：既有Wiki/ROS2 与 FishBot第20节已覆盖steps/退出/策略分层与notebook标记；本轮采用该边界。新的回收和JSONL交叉经验待运行后由root归纳，worker不改知识库。
+
+Root独立全反馈627/627（control347/mission145/autonomy61/frontend74），零跳过；32项原生回执、8项bootstrap（含真实无GPU进程组）、22项生命周期均包含其中。12路径布局、bash语法、diff检查通过。源与配置接下来冻结；新单L4/2700秒窗口进入实际验收，不更改107/114或本机驱动。
+
+当前新窗口第一次分配已回收，activity0；还未运行SDK。初次upload超时的原完整生命周期保留在~/.cache/fishbot/arena/closure-20261014-native/lifecycle.json。root等待有界上传读回修复与相关独立回归，然后在同窗口剩余时间内分配一次serial L4；最多一个并发GPU。
+
+传输修复经Root独立27/27生命周期检查通过，零跳过；其余执行输入仍冻结。当前closure-20261014-native-transfer使用同窗口余额2159秒，allocation/contents readiness/source upload均通过；Vulkan/RT与源码prepare完成，进入官方安装。尚未声明20步或两个Run通过。只有这一个L4在运行，新的本机产物回源该目录lifecycle和后续recovered。
+
+## Current native acceptance readback
+
+Root独立读取closure-20261014-native-transfer的原生日志、聚合JSON、两个JSONL和timings，再重算归档SHA与39成员manifest，均匹配。L4/23034MiB、driver580.82.07；同版官方.run只提取用户态图形库，kernel_driver_changed=false。smoke真实20/20、context cleared、native0，无SIGSEGV/Jupyter错模式/测试force-exit。evaluate原生0，两个Run status completed；各rebuild0/env0/episode0/seed42/23步，任务指令分别Rubik+bowl与mustard+woodenbowl。三个原生step/env_step/policy_inference计数各23，合并计数46。source/config before=after，五上传输入与本机SHA相同。
+
+原生success=False/False，progress约1/3，事件仅objects_settled（baseline step1、swap step2），无完整pick/place；原生未提供termination_reason，保留null。False/23与配置超时一致，但不伪造time_out字段。源码锁不冻结外部staging资产；任务指令不是独立几何证明，source receipt也不是签名证明。
+
+最后生命周期804.445s；首次PUT超时已回收，serial复验只使用同一新2700秒窗口余额2159s，结束/Root读回处于该窗口约1467.637s内。artifact_recovery_verified/source_unchanged/uploaded_inputs_verified/diagnostic_closure_verified/successful均true。stop.unassign_completed=true，后续connection_verified=true/active_assignments=0。前一轮错误与本轮首传失败完整保留；没有套餐购买、策略权重/训练、107/114或网络变更。
+
+本机唯一验收入口：~/.cache/fishbot/arena/closure-20261014-native-transfer/。lifecycle.json、recovery-index.json、artifacts.zip、root-native-readback.json与recovered/{report.json,smoke.json,evaluate.json,evaluation/index.html,evaluation/arena_experiment_result.json,evaluation/各Run的JSONL/timings,logs/}。认证目录、原始日志/资产与private cache不入Git。
+
+最终全反馈632/632（control352/mission145/autonomy61/frontend74），零跳过、缺依赖与错误0；Root在最终代码后独立执行。GPU原生运行无skip替代；Bash/12路径/diff与选定文档相对链接检查通过。
+
+knowledge updated：Root补写并实际读回既有Wiki/ROS2 与 FishBot.md第20节的JSONL/timings与策略结果分离、不可变证据代际、整组中断、幂等源码PUT读回与未执行产物not_applicable；开发知识入口新增触发词并读回。该恢复规则不授权重复任务/收费调用。没有发布知识库其它累计修改或复制原始会话。
