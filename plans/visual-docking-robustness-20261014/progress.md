@@ -144,3 +144,7 @@ knowledge closeout为`updated`：局部更新`Wiki/ROS2 与 FishBot.md`第19/20�
 8份当前文档52相对链接全部存在，bash/diff检查通过。root与独立worker复审原9项评分函数AST/门槛保持；查看器身份、不可变元数据与quality回合锁修复没有真值检测回退。受保护六实例再次读回MainPID0/inactive，与冻结基线一致；本轮owned120与5180均关闭。知识页/索引局部内容再次读回，状态updated、publication=false。
 
 源码提交仅包含已核实本轮有效代码、测试和计划摘要，私有输入/图像/地图/逐帧日志/账号信息不入库。原release.sh保持未执行未暂存，沿既有阻碍由root接续。提交与远端SHA由Git独立读回确认；整体验收仍incomplete，不能用测试通过替换11个真实失败。
+
+## 远端有效成果读回
+
+视觉实现提交4fd9442861f313d2d185844fc05b3e0e90701235已推送既有qiaoqiao2521/fishbot-ros2-slam-tools main，GitHub REST ref独立读回相同SHA。其后root只在无活动世界的安全边界串行合入内部workflow9c581f8与SpatialLM6f5dd4a（包含0d11a5b原链）；两模块分别按独立计划/证据验收，不修改此前56例源或评分。新的workflow实际面板开始后不再改HEAD/source；最终模块文档同步须等quiet清理点。

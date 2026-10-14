@@ -8,6 +8,9 @@ micro-ROS Agent sources, firmware source and staged runtime tools.
 ## Start here
 
 Read [PROJECT](PROJECT.md) for current priorities, then follow the relevant plan.
+New scene inputs use [SpatialLM import](experiments/spatiallm/README.md).
+Two-job sequencing uses the [bounded workflow](docs/COOPERATION_WORKFLOW.md).
+Both preserve separate inference, editing and physical acceptance boundaries.
 See [architecture](docs/ARCHITECTURE.md) and [decisions](docs/DECISIONS.md) for context.
 
 From this checkout (no personal workspace path required):
