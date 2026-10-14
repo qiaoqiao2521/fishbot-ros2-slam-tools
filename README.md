@@ -7,6 +7,9 @@ micro-ROS Agent sources, firmware source and staged runtime tools.
 
 ## Start here
 
+Read [PROJECT](PROJECT.md) for current priorities, then follow the relevant plan.
+See [architecture](docs/ARCHITECTURE.md) and [decisions](docs/DECISIONS.md) for context.
+
 From this checkout (no personal workspace path required):
 
 ```bash
@@ -38,7 +41,9 @@ The simulation extensions reuse the same ROS 2 and MuJoCo stack:
 The optional [Arena evaluation deployment](experiments/arena/README.md) provides
 pinned upstream preparation and a two-condition policy evaluation configuration.
 Run `./fishbot.sh arena doctor` before installing its separate Isaac Sim stack.
-Arena execution is pending a suitable GPU target and license acceptance.
+The licensed Colab L4 run completed native execution, evidence recovery, and resource release.
+Both zero-action task results were false; policy training and SO101 adaptation remain unverified.
+See the [Arena progress](plans/fishbot-arena-evaluation-20261014/progress.md) for evidence and limits.
 
 ## Layout
 

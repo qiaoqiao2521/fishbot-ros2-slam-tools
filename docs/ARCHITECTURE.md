@@ -1,5 +1,7 @@
 # Local architecture
 
+重要取舍见 [DECISIONS](DECISIONS.md)。当前阶段与计划入口见 [PROJECT](../PROJECT.md)。
+
 - `apps/fishbot-control-station/`：Java/React控制台。
 - `fishbot_nav/`：Jazzy导航/描述/接口工作区。
 - `fishbot_laser_ws/`：实际使用的Python网络雷达驱动工作区。

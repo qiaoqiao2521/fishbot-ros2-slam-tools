@@ -159,3 +159,7 @@ FISHBOT_SO101_PYTHON="$FISHBOT_COOP_PYTHON" \
 桌面入口、实际960px相机、390px手机、完成页与只读刷新通过。完整流程只有两次显式start和一次同任务cancel，无页面异常或自动重发。K的执行源码10项SHA在采集前后均一致；完整运输之后，只修正禁用超时后cleanup漏验实际ACK的异常分支，正常轨迹、物理和Nav2参数未改。两条对应负例与当前36项编排回归通过；不把K的源码哈希冒充这次异常修复后的哈希。
 
 本机验收资料位于 `~/.cache/fishbot/cooperation/session-20261014/`，含 `ui-k-result.json`、`oracle/run-1791919665149152720/score-1791920037922113535.json`、`oracle/k-native-guard-end-proof.json` 和 `runtime-k/accepted-source/`。场景、地图、逐帧记录与原相机仍私下保存，不进入Git。所有失败与最终检查见 [任务进度](../plans/fishbot-so101-cooperation-20261014/progress.md)。
+
+## 下一步
+
+[视觉停靠鲁棒性计划](../plans/visual-docking-robustness-20261014/task_plan.md) 已建立。先冻结观测与独立评分合同，再做无扰动基线、受扰信标和实际 RGB 定位。当前仅完成规划；噪声、遮挡、真实视觉与泛化实验尚未运行。来源、私有 oracle 依赖和接续负责人见该计划的 findings 与 progress。

@@ -86,4 +86,4 @@ knowledge updated：Root补写并实际读回既有Wiki/ROS2 与 FishBot.md第20
 
 本轮13个明确审查文件提交ca506c6931dda86a0f1aa4b0153c7094c8445474，已推送qiaoqiao2521/fishbot-ros2-slam-tools main；有效账号qiaoqiao2521/id238822818和fetch/push目的地已核对，GitHub API读回同SHA。本条收尾状态作为后续文档提交，源码与GPU验收不变。认证、原生日志、cache及release.sh未入Git；release.sh保留原阻碍与root接续责任。
 
-后续研究协调通知已收到：选题事实回项目SpecMesh，根研究线程串行维护根研究计划。本任务不编辑根研究三文件、不申请额外GPU。视觉停靠鲁棒性计划仍为pending，owner=root后续规划；最短入口为docs/COOPERATION.md与根研究REPORT，不把该规划未建立混成本轮Arena失败，也不启动新实验。
+后续研究协调通知已收到：选题事实回项目SpecMesh，根研究线程串行维护根研究计划。本任务不编辑根研究三文件、不申请额外GPU。视觉停靠规划原先遗漏；用户核对后已建立[三文件计划](../visual-docking-robustness-20261014/task_plan.md)，owner=root。规划与源码合同已补齐，实施/实验仍pending；这不改变本轮Arena已通过的运行/回收结论，也没有启动新实验。
