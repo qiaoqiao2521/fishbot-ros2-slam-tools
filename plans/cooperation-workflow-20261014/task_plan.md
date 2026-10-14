@@ -23,7 +23,7 @@
 1. 接口核对与独立边界：complete。
 2. 薄层实施与 CPU 回归：complete，36 项无跳过。
 3. 独立审查与 scoped 交付：complete，根独立36项与源SHA核对通过，特性分支远端读回一致。
-4. FishBot owner 串行整合与物理验收：pending。
+4. Codex 内部交接已投递；FishBot owner 串行整合与物理验收：pending。
 
 ## Next Step
-根在原生 queue 可接续后交 FishBot owner 串行整合，执行隔离实际运输与独立 oracle 验收。
+FishBot owner 接续已投递的候选，串行整合并执行隔离实际运输与独立 oracle 验收。
