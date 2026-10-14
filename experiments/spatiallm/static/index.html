@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>FishBot 场景导入工作台</title>
+  <link rel="stylesheet" href="/static/editor.css">
+  <script src="/static/editor.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#workspace">跳到场景编辑区</a>
+  <header class="masthead">
+    <div class="brand">
+      <svg viewBox="0 0 36 36" aria-hidden="true"><path d="M7 14h22v15H7zM12 10h12M18 4v6M3 20h4m22 0h4"/><circle cx="13" cy="20" r="2"/><circle cx="23" cy="20" r="2"/></svg>
+      <div><strong>FishBot</strong><span>离线场景工具</span></div>
+    </div>
+    <div class="header-note"><span class="status-dot"></span>本机编辑 · 无机器人控制</div>
+  </header>
+  <main>
+    <div class="page-heading">
+      <div><h1>场景导入工作台</h1><p>读入布局，核对几何，导出可加载的 MuJoCo 场景。</p></div>
+      <div class="actions"><button id="load-example" class="primary">加载官方 GT 样例</button><button id="open-import">导入布局文本</button></div>
+    </div>
+    <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+    <section id="source-section" class="source-strip" aria-label="布局来源" hidden>
+      <div class="source-main"><span id="source-badge" class="badge"></span><strong id="source-title"></strong><span id="source-count"></span></div>
+      <details><summary>来源、许可与坐标</summary><dl id="source-info"></dl><p>布局中的家具是语义包围盒。导出使用近似几何，不代表真实网格或实测导航地图。</p></details>
+    </section>
+    <section id="warnings-section" class="warning-strip" aria-label="需要核对的几何" hidden>
+      <div><strong>核对后再导出</strong><ul id="warnings"></ul></div>
+      <form id="bulk-thickness-form" class="thickness-form"><label for="bulk-thickness">所有墙的碰撞厚度（m）</label><div><input id="bulk-thickness" type="number" min="0.001" max="2" step="0.001" value="0.12" required><button type="submit">明确应用到所有墙</button></div><small>保留原始标注，并记录本次厚度校正。</small></form>
+    </section>
+    <section id="workspace" class="workspace" aria-label="场景编辑区" tabindex="-1">
+      <div class="drawing-panel">
+        <div class="panel-toolbar"><h2>平面图</h2><span id="view-dimensions">米制坐标 · z 向上</span><button id="fit-view" disabled>适应场景</button></div>
+        <div class="layers" aria-label="图层显示">
+          <label><input type="checkbox" data-layer="wall" checked><i class="key-wall"></i>墙</label>
+          <label><input type="checkbox" data-layer="door" checked><i class="key-door"></i>门洞</label>
+          <label><input type="checkbox" data-layer="window" checked><i class="key-window"></i>窗</label>
+          <label><input type="checkbox" data-layer="bbox" checked><i class="key-bbox"></i>家具包围盒</label>
+        </div>
+        <div id="drawing-stage" class="drawing-stage">
+          <div id="empty-drawing" class="empty-drawing"><svg viewBox="0 0 120 90" aria-hidden="true"><path d="M18 12h84v65H18V12Zm0 41h28m38 24V43h18M46 12v18"/><path class="empty-door" d="M46 53v-24a24 24 0 0 1 24 24"/><rect x="67" y="20" width="24" height="15"/></svg><h3>从一个真实布局开始</h3><p>加载官方标注样例，或导入自己的 SpatialLM 布局文本。</p><p class="muted">样例为官方 GT；本页面不运行模型推理。</p></div>
+          <svg id="floorplan" xmlns="http://www.w3.org/2000/svg" aria-label="布局平面图，使用 Tab 选择实体" role="group" hidden></svg>
+        </div>
+        <div class="drawing-caption"><span>点击图形或下方实体列表进行校正。</span><span id="selection-caption">尚未加载布局</span></div>
+        <div id="entity-list" class="entity-list" aria-label="选择实体"></div>
+      </div>
+      <aside class="inspector">
+        <div class="inspector-heading"><h2>几何参数</h2><span id="revision-label">未加载</span></div>
+        <div id="empty-inspector" class="empty-inspector"><p>选择墙、门、窗或家具。</p><p class="muted">这里显示完整参数。位置和长度使用米，朝向使用弧度。</p></div>
+        <form id="entity-form" hidden><div class="entity-heading"><strong id="entity-id"></strong><span id="entity-kind"></span></div><p id="entity-description" class="muted"></p><div id="parameter-fields" class="parameter-fields"></div><button id="save-entity" class="primary wide" type="submit">保存参数校正</button><p id="unsaved-note" class="field-note">当前参数已保存。</p></form>
+        <details class="correction-history" open><summary>校正记录 <span id="correction-count">0</span></summary><div id="history-list"><p class="muted">每次保存都会保留改动前后的值。</p></div><button id="download-record" disabled>下载布局与校正记录</button><p class="field-note">编辑状态限于本次会话。导出或下载记录后，才保留为本机文件。</p></details>
+      </aside>
+    </section>
+    <section class="export-panel" aria-labelledby="export-heading">
+      <div><h2 id="export-heading">导出并验证</h2><p>生成 MJCF，并使用 MuJoCo 实际编译与短步进。通过后提供文件下载。</p></div>
+      <form id="export-form">
+        <label class="robot-toggle"><input id="include-robot" type="checkbox">加入 FishBot 模型（只导出，不派发动作）</label>
+        <fieldset id="robot-fields" hidden disabled><legend>填写一个空闲的起始位置</legend><label>x（m）<input name="position_x" type="number" step="any" value="0" required></label><label>y（m）<input name="position_y" type="number" step="any" value="0" required></label><label>z（m）<input name="position_z" type="number" step="any" value="0.002" required></label><label>朝向（rad）<input name="angle_z" type="number" step="any" value="0" required></label><p>编译通过不代表起始位置无碰撞，请核对平面图。</p></fieldset>
+        <button id="export-button" class="primary" type="submit" disabled>生成并验证 MuJoCo 场景</button>
+      </form>
+      <div id="export-result" class="export-result" role="status" aria-live="polite" hidden></div>
+    </section>
+    <footer>SpatialLM 官方格式 · 可追溯校正 · 本机文件导出<span>单位 m · 绕 z 轴角度 rad</span></footer>
+  </main>
+  <dialog id="import-dialog" aria-labelledby="import-heading">
+    <form id="import-form"><div class="dialog-heading"><h2 id="import-heading">导入布局文本</h2><button id="close-import" type="button" aria-label="关闭导入窗口">关闭</button></div><label for="layout-file">选择 txt 文件</label><input id="layout-file" type="file" accept=".txt,text/plain"><label for="source-kind">输入的身份</label><select id="source-kind"><option value="user-provided">用户提供的布局</option><option value="user-declared-gt">标注布局（用户声明）</option><option value="user-declared-prediction">模型输出（用户声明，未核查推理）</option></select><label for="layout-text">或粘贴布局文本</label><textarea id="layout-text" rows="10" spellcheck="false" required placeholder="wall_0=Wall(ax,ay,az,bx,by,bz,height,thickness)"></textarea><p class="muted">只读取布局实体，不执行文本代码。导入新布局会切换当前编辑文档。</p><button class="primary wide" type="submit">读取并检查布局</button></form>
+  </dialog>
+</body>
+</html>
