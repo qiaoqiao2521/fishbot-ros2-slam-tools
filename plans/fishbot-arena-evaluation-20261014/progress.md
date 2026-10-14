@@ -2,7 +2,7 @@
 
 ## Current
 
-准备阶段完成，真实Arena部署未完成。当前本机4GB显存低于官方16GB支持基线，尚无用户选择的运行GPU目标，Isaac Sim许可未接受。
+准备阶段完成，真实Arena部署未完成。用户选择Colab，L4实际分配与原生Vulkan预检已完成；该实例返回VK_ERROR_INCOMPATIBLE_DRIVER，VM已释放且活动会话为0。用户随后已明确接受NVIDIA软件及Isaac Sim/Omniverse许可。第二个独立L4会话限时45分钟；私有同版图形库已让原生NVIDIA Vulkan/RT通过，正在安装锁版Arena。结束必须收回原生结果并释放VM。
 
 ## Done
 
@@ -22,7 +22,7 @@
 
 ## Remaining / Next
 
-部署与运行仍pending，owner=root。最短入口：用户提供合适的Linux x86_64/RTX GPU主机或SSH别名；root先读回目标身份、显存、空间和驱动，再请用户具体确认Isaac Sim/Omniverse许可。之后执行install、20步smoke和两个Run的evaluate；必须核对原生episode、组合、终止原因与结果。zero_action失败是策略结果，不改为任务成功。
+运行仍pending，owner=root。用户已明确接受本锁版NVIDIA/Isaac许可，不重复询问。L4同版私有图形库已让NVIDIA Vulkan/RT实际通过，351包安装完成；uv版本字段误读已修。当前uvfix会话只使用首轮许可后原45分钟窗口的剩余时间，结束回收原生结果并释放。最短入口：读取~/.cache/fishbot/arena/colab-eval-20261014-uvfix/lifecycle.json及最终artifacts.zip；必须逐段区分依赖、Kit、20步和两Run，不以安装退出码替代评测。
 
 SO101/FishBot embodiment、真实视觉策略、训练、真机和生产稳定性均未纳入本轮成功声明。固件release.sh按既有阻碍保留，owner=root，接续入口见协同计划Retained work，不执行或提交。
 
@@ -37,3 +37,7 @@ updated：root已补写并读回知识库既有Wiki/ROS2 与 FishBot.md第19节�
 ## Git delivery
 
 准备阶段13个已审查文件提交149447f129beca79414a586bc44eacb10030ad52，已推送qiaoqiao2521/fishbot-ros2-slam-tools main，并经GitHub API读回同SHA。此接续记录单独提交；实际GPU部署保持pending，root等待GPU目标与许可确认。固件release.sh仍是唯一未提交保留项，不以Git交付冒充运行完成。
+
+## Colab closeout
+
+本轮缓存~/.cache/fishbot/arena/colab-20261014/{preflight.json,vulkan.json}已独立读回；native -9和缺ICD保留。stop回执unassign_completed=true，随后活动会话0。没有Isaac安装、EULA接受、场景/策略运行或套餐购买。知识回写updated：已补既有FishBot第20节的T4云路径、CUDA/Vulkan分层验证与uv version_info；Root已读回并更新知识入口。

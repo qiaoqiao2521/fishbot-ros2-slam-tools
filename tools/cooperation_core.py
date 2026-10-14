@@ -238,8 +238,8 @@ def tip_forces(raw):
     return list(raw['finger_normal_forces_n'].values())
 
 
-def settled_cargo(raw):
-    """Full rotated box footprint, tray support, released tips and relative rest."""
+def cargo_footprint_inside(raw):
+    """Keep every rotated cargo corner within the original tray boundary."""
     p = raw['cargo']['position_relative_tray']
     q = raw['cargo']['quaternion_wxyz']
     w, x, y, z = q
@@ -249,8 +249,13 @@ def settled_cargo(raw):
     tray = raw['tray']['rotation_world']
     extent = [sum(abs(sum(tray[k][axis]*rotation[k][j] for k in range(3)))*half
                   for j, half in enumerate((.009, .009, .008))) for axis in range(2)]
+    return all(abs(p[i])+extent[i] <= .058 for i in range(2))
+
+
+def settled_cargo(raw):
+    """Full rotated box footprint, tray support, released tips and relative rest."""
     velocity = raw['cargo']['velocity_relative_tray']
-    return (all(abs(p[i])+extent[i] <= .058 for i in range(2))
+    return (cargo_footprint_inside(raw)
             and raw['cargo_tray_floor_contact'] and max(tip_forces(raw)) < .02
             and math.sqrt(sum(v*v for v in velocity)) < .002)
 
@@ -258,4 +263,19 @@ def settled_cargo(raw):
 def cargo_retained(raw):
     p = raw['cargo']['position_relative_tray']
     return (abs(p[0]) <= .047 and abs(p[1]) <= .047 and -.002 <= p[2] <= .04
-            and raw['cargo_tray_floor_contact'])
+            and raw['cargo_tray_floor_contact'] and cargo_footprint_inside(raw))
+
+
+def arm_home_quiet(raw, home):
+    """Preserve the original six-joint home and velocity thresholds."""
+    q = finite_vector(raw['q6'], 6, '机械臂交接关节位置')
+    velocity = finite_vector(raw['qvel6'], 6, '机械臂交接关节速度')
+    home = finite_vector(home, 6, '机械臂回位参考')
+    return (max(abs(value-target) for value, target in zip(q, home)) < .02
+            and math.sqrt(sum(value*value for value in velocity)) < .05)
+
+
+def transport_handoff_ready(raw, home):
+    """The completed placement must establish all transport preconditions."""
+    return (raw['car_hold'] is True and stopped(raw) and arm_home_quiet(raw, home)
+            and cargo_retained(raw) and settled_cargo(raw))

@@ -10,7 +10,8 @@
 ## Constraints
 Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。历史无线延迟与专项验收边界继续保留，不再作为已售实车的当前阻塞项。
 ## Current State
-2026-10-14 用户要求部署官方Isaac Lab-Arena作为组合评测底座。当前锁定c7edf3a与Isaac Lab子模块91a0906，独立入口、baseline/swap_objects两Run配置与实际源码prepare/doctor/plan已完成，15项离线边界检查通过；不自建仿真器或替换现有MuJoCo/Nav2。当前本机RTX3050Laptop/4GB低于Sim6.1官方16GB支持基线，GPU目标与运行许可未确认，尚未安装或实际评测，不能称部署完成。入口与接续见experiments/arena/README.md及plans/fishbot-arena-evaluation-20261014/。
+2026-10-14 用户要求结合Recursia优化现有共享执行栈。已补完整货物外廓、车臂交接与持续携货臂状态，并复用官方纯verdict增加同面板/预算/源冻结/零丢失配对门禁。官方Recursia仿真版未公开，本项目不称完整RSI部署；独立118单次完整运输原生/物理评分通过，货物1.789656m、越界/接触0，28源冻结；118已清理，当前107/114保持原进程。最终582反馈与45物理检查通过，未声称泛化或训练提升。见docs/STACK_IMPROVEMENT.md和plans/fishbot-recursia-stack-20261014/。
+2026-10-14 用户要求部署官方Isaac Lab-Arena作为组合评测底座。当前锁定c7edf3a与Isaac Lab子模块91a0906，独立入口、baseline/swap_objects两Run配置与实际源码prepare/doctor/plan已完成，15项离线边界检查通过；不自建仿真器或替换现有MuJoCo/Nav2。当前本机RTX3050Laptop/4GB低于Sim6.1官方16GB支持基线，用户已选Colab并实际申请L4，原生Vulkan预检返回-9；会话已回收。用户随后已接受许可；L4私有同版图形库已让原生Vulkan/RT通过，锁版依赖已实际安装，但入口误读uv版本字段导致拒绝，未算Arena运行通过。读回修复后正在原45分钟预算内继续实测，不能称部署完成。入口与接续见experiments/arena/README.md及plans/fishbot-arena-evaluation-20261014/。
 2026-10-14 协同补齐显式“重置场景”与新回合，保留服务端历史。当前同一114进程连续完成两轮真实抓放/运输/停稳，货物分别位移1.790412m和1.789532m，原生动作均终态4；沿用K独立物理门槛。重置保持ROS时钟、编码器积分和序列连续，旧命令与图片按回合隔离；两次网页重置后不自动开始。M已留第三回合ready/idle，原L与两轮记录均保留。后端与物理源全程冻结，随后只修前端迟到POST覆盖已确认结果的提示竞态。最终全协同87/87、全前端167/167及类型/lint/domain107构建通过，零跳过；新版页面已实际读回。详见既有协同计划及docs/COOPERATION.md。
 2026-10-14 控制站整体视觉改版完成：蓝白工作面、统一四工作区侧栏、中文紧凑状态、控制与遥测并排、IMU和来源诊断可展开；配套可编辑 Figma 桌面/手机版。148项前端测试、类型/lint/domain107构建通过，1440/937/390px四工作区导航、持按释放与导出验收通过；所有隔离写请求被拦截，无ROS运动。当前5179页面已刷新，新版资产和数据接管已读回；协同完成记录与ROS服务保持。详见plans/fishbot-control-design-20261014/。
 2026-10-14 固定SO101工位与FishBot运输已接入控制站`/cooperation`。同一MuJoCo世界中完成原生停靠、真实双指抓取/抬升、松爪托盘落稳、机械臂先回位与同一自由货物运输1.790841m；原生停靠及载物导航均成功，独立终态停稳和运动取消通过。525反馈回归、39场景/物理/原生准备检查和全前端132项通过，零跳过，类型/lint/构建通过。完整K回合源码冻结；之后仅修禁用ACK超时清理负例，当前36项编排通过。SO101已有本机接触规划源码为只读依赖，实际SHA保留，基线远端不足以唯一复现；理想信标/plant保护没有视觉、硬件或训练验收。当前107、地图规则与网络保持，L新episode恢复空闲待启动；来源与边界见docs/COOPERATION.md及既有协同计划。
@@ -55,6 +56,7 @@ Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。
 2026-10-07 用户确认先在虚拟环境实现三点视觉巡检，现已完成：MuJoCo车载RGB→三点导航拍摄→绿灯/红灯/空位像素识别→图文报告→返航。最终整轮73.703秒，九帧带拍摄位姿证据，返航误差12.29cm且停稳；独立超时取消通过。入口tools/fishbot_inspection.sh，仅domain97；见docs/VISUAL_INSPECTION.md。识别限定合成工位，实车相机与巡检尚未验收。
 2026-10-06 用户确认直接采用FishBot开源模型，不以现场测量作为前置步骤；连续本地控制、分级限速/停车、触发记录与回放已实现。新入口 tools/fishbot_passage.launch.py 在隔离MuJoCo domain 96完成整段过门、硬停车及取消测试，74项聚焦测试通过；见docs/PASSAGE_CONTROL.md。当前小车充电，本次未操作实车。原domain 93仿真与旧实车脚本保留。接续使用新入口验收实际过门和建图；实车源时间戳、转角反馈、板端断流停车和旧命令拒绝仍需实际反馈验证。
 ## Knowledge Map
+docs/STACK_IMPROVEMENT.md；plans/fishbot-recursia-stack-20261014/。
 experiments/arena/README.md；plans/fishbot-arena-evaluation-20261014/。
 plans/fishbot-control-design-20261014/（含Figma链接与网页验收范围）。
 docs/COOPERATION.md；plans/fishbot-so101-cooperation-20261014/。

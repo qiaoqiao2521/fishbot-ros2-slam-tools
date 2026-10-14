@@ -92,14 +92,19 @@ def hardware_status(source, lock, gpu_index=0):
     except (ValueError, TypeError):
         gpus = []
     selected = next((gpu for gpu in gpus if gpu["index"] == gpu_index), None)
+    cloud_t4 = selected is not None and selected['name'] in ('T4', 'Tesla T4', 'NVIDIA T4')
+    minimum_memory = 15360 if cloud_t4 else lock['minimum_vram_mib']
+    profile = 'official GCP T4 (nominal 16 GB)' if cloud_t4 else 'desktop conservative precheck'
     os_supported = platform.system() == "Linux" and platform.machine() == "x86_64"
     reasons = []
     if not os_supported:
         reasons.append("requires Linux x86_64")
     if selected is None or not selected["uuid"].startswith("GPU-"):
         reasons.append("selected NVIDIA GPU identity or memory is unknown")
-    elif selected["vram_mib"] < lock["minimum_vram_mib"]:
-        reasons.append(f"selected GPU has {selected['vram_mib']} MiB; minimum is {lock['minimum_vram_mib']} MiB")
+    elif any(name in selected['name'].upper() for name in ('A100', 'H100')):
+        reasons.append('selected GPU lacks required RT cores according to official Isaac Sim requirements')
+    elif selected["vram_mib"] < minimum_memory:
+        reasons.append(f"selected GPU has {selected['vram_mib']} MiB; selected precheck requires {minimum_memory} MiB")
     try:
         ram = int(next(line.split()[1] for line in Path("/proc/meminfo").read_text().splitlines()
                        if line.startswith("MemTotal:"))) * 1024
@@ -115,6 +120,8 @@ def hardware_status(source, lock, gpu_index=0):
     return {"platform": f"{platform.system()}-{platform.machine()}", "gpus": gpus,
             "selected_gpu": selected, "minimum_vram_mib": lock["minimum_vram_mib"],
             "ram_bytes": ram, "disk_free_bytes": disk, "precheck_passed": not reasons,
+            "hardware_profile": profile, "selected_minimum_vram_mib": minimum_memory,
+            "cloud_gpu_source": "https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/install_advanced_cloud_setup_gcp.html",
             "errors": reasons, "official_compatibility": "unknown; requires official checker and actual rollout",
             "official_requirements": {"ram": "32 GB", "ssd": "50 GB", "linux_driver": "595.58.03",
                                       "minimum_gpu": "RTX 4080", "url": lock["requirements_url"]}}
@@ -136,8 +143,11 @@ def dependency_status(source, lock):
     cfg = venv / "pyvenv.cfg"
     python_version = None
     if cfg.is_file():
-        python_version = next((line.split("=", 1)[1].strip() for line in cfg.read_text().splitlines()
-                               if line.startswith("version =")), None)
+        fields = dict(line.split('=', 1) for line in cfg.read_text().splitlines() if '=' in line)
+        fields = {key.strip(): value.strip() for key, value in fields.items()}
+        python_version = fields.get('version_info', fields.get('version'))
+        if fields.get('version') and fields.get('version_info') and fields['version'] != fields['version_info']:
+            python_version = None
     required = ("isaaclab-arena", "isaaclab", "isaacsim", "torch")
     try:
         packages = tomllib.loads((Path(source) / "uv.lock").read_text()).get("package", [])
@@ -151,7 +161,7 @@ def dependency_status(source, lock):
                  and versions.get("isaacsim") == lock["isaac_sim"])
     return {"uv": shutil.which("uv"), "git_lfs": query(["git", "lfs", "version"]),
             "python": python_version, "installed": installed,
-            "required_versions": {name: versions.get(name) for name in required},
+            "required_versions": {name: versions.get(name) for name in required}, "expected_versions": expected,
             "runtime_imports_verified": False}
 
 
@@ -277,7 +287,9 @@ def execute(action, source, lock, *, accept_eula=False, output=None, gpu_index=0
         run_checked(commands[action], source, accept_eula=True)
         result = doctor(source, lock, gpu_index)
         if not result["source"]["verified"] or not result["dependencies"]["installed"]:
-            raise RuntimeError("uv finished but pinned source or locked package metadata did not verify")
+            raise RuntimeError("uv finished but pinned source or locked package metadata did not verify: "
+                               + json.dumps({'source_errors': result['source'].get('errors', []),
+                                             'dependencies': result['dependencies']}, ensure_ascii=False))
         return result
     if action == "evaluate":
         if output is None:

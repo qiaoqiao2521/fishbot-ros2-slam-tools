@@ -13,11 +13,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 from urllib.parse import parse_qs
 
-from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, car_pose,
+from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, arm_home_quiet, car_pose,
                               cargo_retained, dispatch_terminal, finite_vector,
                               physical_quiet, quaternion, request_identity,
                               reset_request_identity,
-                              settled_cargo, stopped, tip_forces, validate_physics)
+                              settled_cargo, stopped, tip_forces, transport_handoff_ready, validate_physics)
 from cooperation_core import station_robot_pose, within_station_capture
 
 
@@ -268,6 +268,8 @@ def run(args):
                     raise RuntimeError('车体或机械臂发生非预期物理接触')
                 if carrying and not cargo_retained(raw):
                     raise RuntimeError('运输途中货物离开托盘支撑范围')
+                if carrying and not arm_home_quiet(raw, manifest['arm_home_qpos6']):
+                    raise RuntimeError('运输期间机械臂未保持回位停稳状态')
                 return raw
 
         def wait_condition(self, condition, *, duration=.7, timeout=8., carrying=False, cancelable=True):
@@ -573,15 +575,16 @@ def run(args):
                         self.event('arm',segment['stage'],message)
                     self.segment(segment,planner)
                 if not released:raise RuntimeError('规划缺少真实松爪与退出阶段')
-                self.wait_condition(lambda v: settled_cargo(v) and np.max(np.abs(np.asarray(v['q6'])-manifest['arm_home_qpos6']))<.02
-                    and np.linalg.norm(v['qvel6'])<.05,duration=1.,timeout=8.)
+                self.wait_condition(lambda v: transport_handoff_ready(v, manifest['arm_home_qpos6']),
+                                    duration=1., timeout=8.)
                 self.event('arm','loaded','货物已放稳，机械臂已退出，可以运输。')
                 self.loaded = True
                 raw = self.check(carrying=True)
                 start = raw['cargo']['position'][:2]
                 self.event('car','delivery','收到交接确认，驶往交付点。')
                 self.navigate(self.stations()['delivery'],carrying=True)
-                raw = self.wait_condition(lambda v: stopped(v) and settled_cargo(v),duration=1.,timeout=8.,carrying=True)
+                raw = self.wait_condition(lambda v: transport_handoff_ready(v, manifest['arm_home_qpos6']),
+                                          duration=1., timeout=8., carrying=True)
                 if math.hypot(raw['cargo']['position'][0]-start[0],raw['cargo']['position'][1]-start[1])<.5:
                     raise RuntimeError('货物实际运输位移不足0.5米')
                 self.event('car','delivered','已到交付点，货物仍在托盘，车辆与货物已停稳。')

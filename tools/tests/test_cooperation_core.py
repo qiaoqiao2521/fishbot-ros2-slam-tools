@@ -72,6 +72,44 @@ def measurement():
 
 
 class PhysicsAdmissionTests(unittest.TestCase):
+    def test_retention_rejects_rotated_corner_outside_despite_center_inside(self):
+        raw=measurement()
+        raw['cargo']['position_relative_tray'][0]=.047
+        raw['cargo']['quaternion_wxyz']=[math.cos(math.pi/8),0.,0.,math.sin(math.pi/8)]
+        # Original center/height/support gates pass, but the diagonal corner is
+        # .047 + .009*sqrt(2) = .059728m, beyond the unchanged .058m boundary.
+        self.assertLessEqual(abs(raw['cargo']['position_relative_tray'][0]),.047)
+        self.assertTrue(raw['cargo_tray_floor_contact'])
+        self.assertGreater(.047+.009*math.sqrt(2),.058)
+        self.assertFalse(core.cargo_retained(raw))
+        self.assertFalse(core.settled_cargo(raw))
+        raw['cargo']['position_relative_tray'][0]=.04
+        self.assertTrue(core.cargo_retained(raw))
+        self.assertTrue(core.settled_cargo(raw))
+
+    def test_shared_cargo_rotation_tracks_tray_frame_and_keeps_original_center_limit(self):
+        raw=measurement();raw['cargo']['position_relative_tray'][0]=.047
+        q=[math.cos(math.pi/8),0.,0.,math.sin(math.pi/8)]
+        raw['cargo']['quaternion_wxyz']=q
+        c,s=math.cos(math.pi/4),math.sin(math.pi/4)
+        raw['tray']['rotation_world']=[[c,-s,0.],[s,c,0.],[0.,0.,1.]]
+        self.assertTrue(core.cargo_retained(raw))  # Same world yaw, relative box is aligned.
+        raw['cargo']['position_relative_tray'][0]=.0471
+        self.assertTrue(core.cargo_footprint_inside(raw))
+        self.assertFalse(core.cargo_retained(raw))  # Preserve the original .047 center gate.
+
+    def test_transport_handoff_requires_hold_stop_home_and_arm_quiet_together(self):
+        raw=measurement();home=[0.]*6
+        self.assertTrue(core.transport_handoff_ready(raw,home))
+        changes=[lambda r:r.update(car_hold=False),lambda r:r['car'].update(speed=.01),
+                 lambda r:r['car'].update(yaw_rate=.01),lambda r:r['q6'].__setitem__(5,.02),
+                 lambda r:r['qvel6'].__setitem__(2,.05),lambda r:r.update(cargo_tray_floor_contact=False)]
+        for change in changes:
+            value=copy.deepcopy(raw);change(value)
+            with self.subTest(change=change):self.assertFalse(core.transport_handoff_ready(value,home))
+        raw['qvel6'][:2]=[.03,.04]
+        self.assertFalse(core.arm_home_quiet(raw,home))  # Norm, not per-joint maximum.
+
     def test_capture_requires_correct_side_alignment_and_heading_in_dock_frame(self):
         dock=[-1.8,-1.8,0.]
         self.assertTrue(core.within_station_capture({'x':-1.1,'y':-1.8,'yaw':0.},dock))
@@ -387,6 +425,84 @@ class BridgeRaceTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'非预期物理接触'):p.check()
         p.task['status']='idle'
         self.assertFalse(p.state()['ready'])
+
+    def test_transport_wait_rechecks_arm_home_after_transfer(self):
+        p=self.bridge;future=ControlledFuture()
+        p.check(carrying=True)
+        def leaves_home():
+            p.raw['q6'][0]=p.raw['qpos22'][0]=.021
+        self.on_sleep=leaves_home
+        with self.assertRaisesRegex(RuntimeError,'机械臂未保持回位停稳'):
+            p.wait_future(future,timeout=1.,carrying=True)
+        self.assertFalse(future.done())
+
+    def test_transport_check_rejects_supported_corner_overhang_and_arm_motion(self):
+        p=self.bridge;p.raw['cargo']['position_relative_tray'][0]=.047
+        q=[math.cos(math.pi/8),0.,0.,math.sin(math.pi/8)]
+        p.raw['cargo']['quaternion_wxyz']=q;p.raw['qpos22'][9:13]=q
+        with self.assertRaisesRegex(RuntimeError,'托盘支撑范围'):p.check(carrying=True)
+        p.raw['cargo']['position_relative_tray'][0]=0.
+        p.raw['qvel6'][1]=p.raw['qvel20'][1]=.05
+        with self.assertRaisesRegex(RuntimeError,'机械臂未保持回位停稳'):p.check(carrying=True)
+
+    def execution_handoff_probe(self, *, before_transfer=None, after_delivery=None, delivery_distance=1.):
+        """Exercise current execute ordering; controlled samples are not physical acceptance."""
+        p=self.bridge;p.station_capture_ready=lambda:True;p.align_station_map=lambda:None
+        p.dock_at_station=lambda:p.check()
+        class Planner:
+            def __init__(self,*args,**kwargs):pass
+            def prepare_approach(self,q):return {'segments':[{'stage':'lift'}]}
+            def prepare_transport(self,raw):return {'segments':[{'stage':name} for name in ('release','retreat','settle')]}
+        self.namespace['ArmPlanner']=Planner
+        def segment(item,planner):
+            if item['stage']=='lift':
+                p.raw['cargo']['position'][2]=p.raw['qpos22'][8]=.07
+                p.raw['finger_normal_forces_n']={key:.1 for key in p.raw['finger_normal_forces_n']}
+            if item['stage']=='release':
+                p.raw['cargo']['position'][2]=p.raw['qpos22'][8]=.03
+                p.raw['finger_normal_forces_n']={key:0. for key in p.raw['finger_normal_forces_n']}
+            if item['stage']=='settle' and before_transfer:before_transfer(p.raw)
+            return p.check()
+        p.segment=segment;deliveries=[]
+        def navigate(goal,**kwargs):
+            deliveries.append(goal)
+            p.raw['cargo']['position'][0]=p.raw['qpos22'][6]=.24+delivery_distance
+            if after_delivery:after_delivery(p.raw)
+            return p.raw
+        p.navigate=navigate
+        def hold(message):
+            p.holds.append(message.data);p.raw['car_hold']=p.raw['car']['hold']=message.data
+        p.hold_pub=NS(publish=hold)
+        p.execute(p.execution_token)
+        return p,deliveries
+
+    def test_execute_never_dispatches_transport_without_held_stationary_handoff(self):
+        for fault in ('unheld','moving'):
+            with self.subTest(fault=fault):
+                self.setUp()
+                def change(raw):
+                    if fault=='unheld':raw['car_hold']=raw['car']['hold']=False
+                    else:raw['car']['speed']=.01
+                p,deliveries=self.execution_handoff_probe(before_transfer=change)
+                self.assertEqual(deliveries,[])
+                self.assertNotEqual(p.task['status'],'succeeded')
+                self.assertNotIn('货物已放稳，机械臂已退出，可以运输。',[event['message'] for event in p.events])
+
+    def test_execute_does_not_succeed_if_arm_leaves_home_at_delivery(self):
+        def change(raw):raw['q6'][0]=raw['qpos22'][0]=.021
+        p,deliveries=self.execution_handoff_probe(after_delivery=change)
+        self.assertEqual(len(deliveries),1)
+        self.assertEqual(p.task['status'],'failed')
+        self.assertIn('机械臂未保持回位停稳',p.task['stop_reason'])
+
+    def test_execute_controlled_handoff_keeps_half_meter_completion_gate(self):
+        for distance in (.49,.5,1.):
+            with self.subTest(distance=distance):
+                self.setUp()
+                p,deliveries=self.execution_handoff_probe(delivery_distance=distance)
+                self.assertEqual(len(deliveries),1)
+                self.assertEqual(p.task['status'],'failed' if distance<.5 else 'succeeded')
+                if distance<.5:self.assertIn('运输位移不足0.5米',p.task['stop_reason'])
 
     def test_dock_action_has_no_hidden_staging_and_requires_payload_success(self):
         p=self.bridge;handle=ControlledHandle();requests=[]

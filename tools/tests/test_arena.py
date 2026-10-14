@@ -64,6 +64,34 @@ class ArenaBoundaries(unittest.TestCase):
             with self.subTest(raw=raw), patch.object(arena, "query", return_value=raw):
                 self.assertFalse(arena.hardware_status(self.source, self.lock)["precheck_passed"])
 
+    def test_official_cloud_t4_reports_nominal_memory_without_desktop_false_rejection(self):
+        for name in ('T4', 'Tesla T4', 'NVIDIA T4'):
+            raw = f'0, {name}, 15360, 580.82.07, GPU-unit-fixture'
+            with self.subTest(name=name), patch.object(arena, 'query', return_value=raw):
+                result = arena.hardware_status(self.source, self.lock)
+                self.assertTrue(result['precheck_passed'])
+                self.assertEqual(result['selected_minimum_vram_mib'], 15360)
+                self.assertIn('requires official checker', result['official_compatibility'])
+        for name in ('NVIDIA A100-SXM4-80GB', 'NVIDIA H100 PCIe'):
+            with patch.object(arena, 'query', return_value=f'0, {name}, 81920, 580.82.07, GPU-unit-fixture'):
+                self.assertFalse(arena.hardware_status(self.source, self.lock)['precheck_passed'])
+
+    def test_uv_version_info_and_standard_version_both_readback_without_import(self):
+        venv = self.source/'.venv'
+        (venv/'bin').mkdir(parents=True)
+        (venv/'bin/python').write_text('metadata fixture only')
+        site = venv/'lib/python3.12/site-packages';site.mkdir(parents=True)
+        packages = {'isaaclab-arena':'0.3.0', 'isaaclab':'17.0.2', 'isaacsim':'6.1.0.0', 'torch':'2.11.0+cu128'}
+        (self.source/'uv.lock').write_text(''.join(f'[[package]]\nname = "{name}"\nversion = "{version}"\n' for name, version in packages.items()))
+        for name, version in packages.items():
+            folder = site/(name+'.dist-info');folder.mkdir()
+            (folder/'METADATA').write_text(f'Name: {name}\nVersion: {version}\n')
+        for field in ('version_info', 'version'):
+            (venv/'pyvenv.cfg').write_text(f'{field} = 3.12.3\n')
+            self.assertTrue(arena.dependency_status(self.source, self.lock)['installed'])
+        (venv/'pyvenv.cfg').write_text('version = 3.13.0\nversion_info = 3.12.3\n')
+        self.assertFalse(arena.dependency_status(self.source, self.lock)['installed'])
+
     def test_inherited_eula_never_authorizes_execution(self):
         with patch.dict(os.environ, {"ACCEPT_EULA": "Y", "OMNI_KIT_ACCEPT_EULA": "YES"}), \
                 patch.object(arena, "run_checked") as execute:

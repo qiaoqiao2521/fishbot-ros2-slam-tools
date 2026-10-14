@@ -4,7 +4,7 @@
 
 ## 当前交付边界
 
-源码锁、两Run配置与部署预检已接入项目。尚未安装 Isaac Sim，尚未运行 Arena，也未验证 SO101 策略或模型迁移。本机 RTX3050 Laptop/4GB 低于官方支持基线。实际安装和运行需要选择 GPU 目标并明确接受 Isaac Sim 许可。
+源码锁、两Run配置与部署预检已接入项目。尚未安装 Isaac Sim，尚未运行 Arena，也未验证 SO101 策略或模型迁移。本机 RTX3050 Laptop/4GB 低于官方支持基线。用户已选择Colab尝试。L4已实际分配，但原生Vulkan预检失败；尚未启动Arena。实际安装和运行仍需图形驱动完整的GPU目标及明确的Isaac Sim许可接受。
 
 Arena 仍为alpha。锁定 `c7edf3a9d5d8276565208f72422f8f8a0806d6cf`，Isaac Lab子模块锁 `91a0906f93802eb859192dcb0bca879f891e92d6`。实际依赖见 [upstream.lock.json](upstream.lock.json)。分支 README 的部分版本文字滞后，以 gitlink 和 uv.lock 为准，不跟随 main 漂移。
 
@@ -43,3 +43,19 @@ zero_action让部署验证不依赖神经网络权重。它不证明抓取能力
 Arena官方runner无条件启动SimulationApp。`--presets newton --viz none`仍使用完整Isaac Sim；不能照搬独立Isaac Lab的kit-less安装宣传。当前部署走原版依赖，不改上游移除Kit。
 
 官方执行、结果和组合语义：[Experiment教程](https://isaac-sim.github.io/IsaacLab-Arena/release/0.3.1/pages/quickstart/arena_experiment.html)、[锁定源码](https://github.com/isaac-sim/IsaacLab-Arena/tree/c7edf3a9d5d8276565208f72422f8f8a0806d6cf)。派生配置保留Apache-2.0声明；原许可证见 [LICENSE.upstream.md](LICENSE.upstream.md)。Isaac Sim许可独立，不包含在Arena的Apache许可证内。
+
+## Colab 实测
+
+2026-10-14使用既有Colab CLI的安全适配，独立申请L4会话。实际环境为L4/23034MiB、驱动580.82.07、Ubuntu24.04.4、GLIBC2.39、Python3.13.15；内存约53GiB，可用磁盘约193GiB。Python3.12应由官方uv锁环境独立安装，不改Colab主Python。
+
+该实例没有发现NVIDIA Vulkan ICD、GLX或RT用户态库。已有`libvulkan.so.1`的原生`vkCreateInstance`返回`-9 / VK_ERROR_INCOMPATIBLE_DRIVER`。这证明该实例当时的Vulkan环境未就绪，不是Arena运行失败，也不证明所有Colab实例都不可用。没有安装Isaac、接受EULA、运行20步或两Run评测。已确认本轮VM解除分配，服务端活动会话为0。
+
+[NVIDIA官方GCP部署](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/installation/install_advanced_cloud_setup_gcp.html)列出T4和L4云方案；不能单凭桌面显存门槛排除T4，也不能把GCP完整VM支持当作Colab支持。[官方Vulkan排查](https://docs.omniverse.nvidia.com/dev-guide/latest/linux-troubleshooting.html)明确指出nvidia-smi不证明Vulkan可用。下一次尝试须先核对与托管内核驱动匹配的官方用户态图形组件及原生Vulkan，不能换驱动、重启宿主或使用软件Vulkan冒充NVIDIA设备。
+
+Colab只用于有界评测。遵循[Colab FAQ](https://research.google.com/colaboratory/faq.html)的资源与使用限制，不搭建SSH、远程桌面、代理或常驻控制站，不购买新套餐。原始预检与回收证据存本机缓存，不进入Git。
+
+## 有界Colab入口
+
+[colab_preflight.py](colab_preflight.py)只做原生NVIDIA Vulkan/RT预检；成功仍输出runtime_verified=false。[colab_bootstrap.py](colab_bootstrap.py)是Colab临时/content部署适配，复用本项目锁版CLI；必须由操作者明确接受许可后传--accept-eula。它不分配VM、不持有认证，不搭Web服务；VM分配/释放继续使用既有Colab工具。
+
+当实例缺图形组件时，只从官方同版.run提取64bit图形库和官方ICD，使用进程局部路径，不执行系统installer、不替换kernel、不覆盖provider CUDA/NVML。原生NVIDIA和RT预检通过后才继续官方prepare/install/smoke/evaluate。每阶段保留原生日志；总预算最多2640秒，为45分钟VM生命周期预留回收时间。结束下载artifacts.zip与报告并释放本轮VM，不能将脚本完成或Vulkan成功写成Arena物理运行通过。

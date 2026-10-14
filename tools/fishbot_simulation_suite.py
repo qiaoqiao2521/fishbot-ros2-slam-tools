@@ -308,8 +308,15 @@ def collect(path, require_guard, require_amcl=False):
             raise RuntimeError('; '.join(errors))
 
 
+def case_execution_budget(case):
+    """Expose the same limits used by execution for a frozen paired panel."""
+    return {'startup_timeout_s': 55, 'command_timeout_s': None if case['kind'] == 'motion' else 90,
+            'command_watchdog_s': 110, 'startup_max_retries': 1}
+
+
 def execute_case(case, directory, env):
     started = time.monotonic()
+    budget = case_execution_budget(case)
     domain = str(env.get('ROS_DOMAIN_ID', '96'))
     case['domain'] = int(domain)
     directory.mkdir(mode=0o700)
@@ -341,7 +348,7 @@ def execute_case(case, directory, env):
         recorder = start([sys.executable, '-B', str(Path(__file__).resolve()), '--collect',
                           str(directory/'recording.json'), '--domain', domain, '--require-guard',
                           'false' if case['kind'] == 'motion' else 'true'], 'recorder')
-        deadline = time.monotonic()+55
+        deadline = time.monotonic()+budget['startup_timeout_s']
         while not (directory/'ready.json').is_file():
             if launch.poll() is not None or recorder.poll() is not None:
                 raise RuntimeError('Simulation or recorder exited before readiness; inspect case logs')
@@ -353,7 +360,7 @@ def execute_case(case, directory, env):
             command = [sys.executable, str(SCRIPTS/'verify_stack.py'), 'motion', '--output', str(directory/'motion.json')]
         else:
             command = [sys.executable, str(ROOT/'tools/fishbot_passage_goal.py'), '--domain', domain,
-                '--use-sim-time', '--execute', '--timeout', '90', '--output', str(directory/'goal.json'),
+                '--use-sim-time', '--execute', '--timeout', str(budget['command_timeout_s']), '--output', str(directory/'goal.json'),
                 '--timing-profile', 'tolerant' if case['kind'] == 'scan_gap' else 'strict']
             if case['kind'] == 'route':
                 write_json(directory/'route.json', case['route'])
@@ -363,7 +370,7 @@ def execute_case(case, directory, env):
         # Mark this before spawning: even an uncertain spawn must never resend a Goal.
         execution.update(phase='command', goal_process_started=True)
         goal_process = start(command, 'goal')
-        deadline = time.monotonic()+110
+        deadline = time.monotonic()+budget['command_watchdog_s']
         cancel_sent = False
         while goal_process.poll() is None:
             if launch.poll() is not None or recorder.poll() is not None:
@@ -419,6 +426,7 @@ def execute_case(case, directory, env):
                       metrics={}, trajectory=[], goal={}, limitations=['Evidence analysis did not complete.'],
                       checks={'evidence_analysis': {'status':'failed','evidence':str(exc)}})
         error = '; '.join(value for value in (error, 'Evidence analysis failed: '+str(exc)) if value)
+    report['execution_budget'] = budget
     if error:
         report.update(status='failed', passed=False, error=error)
         report.setdefault('checks', {})['runner_completed'] = {'status':'failed','evidence':error}
@@ -519,6 +527,15 @@ def main():
     output.mkdir(parents=True, mode=0o700, exist_ok=False)
     sources = [Path(__file__), ROOT/'tools/fishbot_passage_goal.py', ROOT/'tools/fishbot_passage_sim.launch.py',
                ROOT/'tools/fishbot_sim_scan_relay.py', ROOT/'tools/fishbot_simulation_report.py',
+               ROOT/'tools/config/fishbot_model_geometry.yaml',
+               ROOT/'tools/config/fishbot_passage_nav.yaml',
+               ROOT/'tools/fishbot_command_guard.py', ROOT/'tools/fishbot_passage.launch.py',
+               ROOT/'tools/fishbot_sampling_trace.py',
+               ROOT/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/mjcf/passage.xml',
+               ROOT/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/mjcf/fishbot.xml',
+               ROOT/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/mjcf/arena.xml',
+               ROOT/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/config/plugins.yaml',
+               ROOT/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/launch/sim.launch.py',
                SCRIPTS/'verify_stack.py', SCRIPTS/'wait_ready.py']
     revision = subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,capture_output=True,text=True,check=True).stdout.strip()
     report = dict(schema_version=1, domain=96, seed=args.seed, status='running', cases=[], case_count=len(cases),

@@ -135,6 +135,12 @@ def source_receipt():
                ROOT/'tools/fishbot_passage_sim.launch.py', ROOT/'tools/fishbot_sim_scan_relay.py',
                ROOT/'tools/fishbot_passage.launch.py', ROOT/'tools/config/fishbot_passage_nav.yaml',
                ROOT/'tools/config/fishbot_model_geometry.yaml',
+               ROOT/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/mjcf/passage.xml',
+               ROOT/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/mjcf/fishbot.xml',
+               ROOT/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/mjcf/arena.xml',
+               ROOT/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/config/plugins.yaml',
+               ROOT/'tools/fishbot_command_guard.py',
+               ROOT/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/launch/sim.launch.py',
                SCRIPTS/'verify_stack.py', SCRIPTS/'wait_ready.py']
     revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True,
                               text=True, check=True).stdout.strip()
