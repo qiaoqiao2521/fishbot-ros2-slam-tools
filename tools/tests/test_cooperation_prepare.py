@@ -36,6 +36,14 @@ declared={'mode':'perturbed','max_covariance':[.01,.01,.01],
 declaration=out/'declared-perception.json';declaration.write_text(json.dumps(declared))
 condition=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
                                 output=out/'perturbed',perception_config=declaration))
+vision_declaration=out/'vision-perception.json'
+vision_declaration.write_text(json.dumps({'mode':'vision','publisher':'station_camera',
+    'min_confidence':.75,'max_covariance':[.0013,.0014,.019]}))
+vision=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
+    output=out/'vision',perception_config=vision_declaration))
+vision_nav=yaml.safe_load(Path(vision['nav2_yaml']).read_text())
+vision_staging={'pose':vision['staging_pose'],'dock_pose':vision['dock_pose'],
+    'native_staging_offset':vision_nav['docking_server']['ros__parameters']['station_plugin']['staging_x_offset']}
 default_nav=yaml.safe_load(Path(m['nav2_yaml']).read_text())
 perturbed_nav=yaml.safe_load(Path(condition['nav2_yaml']).read_text())
 for configured in (default_nav,perturbed_nav):
@@ -162,6 +170,7 @@ result={'height':m['localization_laser_height_m'],'different_maps':m['localizati
         'robot_dock_pose':m['dock_pose'],'native_dock_pose':m['native_dock_pose'],
         'ideal_station_perception':m['ideal_station_perception'],
         'station_perception':m['station_perception'],'condition_result':condition_result,
+        'vision_staging':vision_staging,
         'localization_parameters':m['localization_parameters'],
         'configured_footprints':configured_footprints,'manifest_footprint':m['car_footprint_xy'],
         'stop_sweep':stop_sweep,
@@ -271,6 +280,13 @@ print('RESULT_JSON:'+json.dumps(result))
         self.assertAlmostEqual(self.evidence['native_dock_pose'][2], math.pi)
         self.assertAlmostEqual(docking['station_plugin']['staging_yaw_offset'], math.pi)
         self.assertFalse(self.evidence['native_docking']['navigate_to_staging_pose'])
+
+    def test_rgb_staging_reserves_resolution_margin_without_moving_final_dock(self):
+        vision=self.evidence['vision_staging']
+        for actual,expected in zip(vision['pose'],[-1.15,-1.8,0.]):
+            self.assertAlmostEqual(actual,expected)
+        self.assertEqual(vision['dock_pose'],self.evidence['robot_dock_pose'])
+        self.assertAlmostEqual(vision['native_staging_offset'],-.65)
 
     def test_relative_perception_is_explicit_and_docking_preserves_collision_checks(self):
         docking = self.evidence['docking']

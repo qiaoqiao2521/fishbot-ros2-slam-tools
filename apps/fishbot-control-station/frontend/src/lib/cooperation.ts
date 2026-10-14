@@ -1,16 +1,32 @@
-export const COOPERATION_DOMAIN = 114
+export function cooperationExpectedDomain(configured: unknown): number {
+  if (configured === undefined || configured === '') return 114
+  if (typeof configured !== 'string' || !/^\d+$/.test(configured)
+    || Number(configured) > 232) throw new Error('VITE_COOPERATION_DOMAIN 必须是 0–232 的明确 ROS 域。')
+  return Number(configured)
+}
+export const COOPERATION_DOMAIN = cooperationExpectedDomain(import.meta.env.VITE_COOPERATION_DOMAIN)
 export const COOPERATION_POLL_MS = 1000
 export const COOPERATION_STALE_MS = 3500
 
 export type CooperationStatus = 'idle' | 'running' | 'canceling' | 'succeeded' | 'failed' | 'canceled' | 'unknown'
+export type CooperationScope = 'dock' | 'transport'
 export type CooperationPose = { x: number; y: number; yaw: number }
 export type CooperationEvent = { sequence: number; time_s: number; role: 'car' | 'arm' | 'system'; message: string }
-export type CooperationTask = { id: string | null; status: CooperationStatus; stage: string; message: string; stop_reason?: string | null }
+export type CooperationTask = { id: string | null; status: CooperationStatus; stage: string; message: string; scope?: CooperationScope; stop_reason?: string | null }
 export type CooperationResetStatus = 'pending' | 'succeeded' | 'failed' | 'unknown'
 export type CooperationResetRecord = {
   request_id: string; episode_id: string; status: CooperationResetStatus; new_episode_id: string | null; message: string
 }
 export type CooperationHistory = { episode_id: string; task: CooperationTask; events: CooperationEvent[]; completed_at: string | number }
+export type CooperationPerception = {
+  mode: string; publisher: string; detected: boolean; reason: string
+  confidence: number | null; stamp: number | null; received_age_s: number | null; source_age_s: number | null
+  counts: Record<string, number>; reprojection_error_px: number | null
+}
+export type CooperationVisionFrame = {
+  available: boolean; stamp: number | null; episode_id: string; sequence: number
+  corners: Array<[number, number]> | null; image_width: number; image_height: number
+}
 export type CooperationState = {
   mode: 'mujoco'
   domain: number
@@ -20,6 +36,9 @@ export type CooperationState = {
   reset?: { available: boolean; reason: string; pending: boolean;
     last: { request_id: string; status: CooperationResetStatus; from_episode: string; to_episode: string | null; message: string } | null }
   history?: CooperationHistory[]
+  perception?: CooperationPerception
+  vision_frame?: CooperationVisionFrame
+  acceptance_report?: { available: boolean; url: string | null }
   task: CooperationTask
   events: CooperationEvent[]
   physics: {
@@ -57,11 +76,24 @@ function finite(value: unknown): value is number { return typeof value === 'numb
 function pose(value: unknown): boolean { return record(value) && finite(value.x) && finite(value.y) && finite(value.yaw) }
 function numbers(value: unknown): value is number[] { return Array.isArray(value) && value.every(finite) }
 function identity(value: unknown): value is string { return typeof value === 'string' && value.length > 0 }
+function nonnegativeNullable(value: unknown): boolean { return value === null || (finite(value) && value >= 0) }
+function validVisionFrame(value: unknown): boolean {
+  return record(value) && typeof value.available === 'boolean' && nonnegativeNullable(value.stamp)
+    && typeof value.episode_id === 'string' && (!value.available || (identity(value.episode_id) && value.stamp !== null))
+    && Number.isInteger(value.sequence) && finite(value.sequence) && value.sequence >= 0
+    && Number.isInteger(value.image_width) && finite(value.image_width) && value.image_width > 0
+    && Number.isInteger(value.image_height) && finite(value.image_height) && value.image_height > 0
+    && (value.corners === null || (Array.isArray(value.corners) && value.corners.length === 4
+      && value.corners.every((point) => Array.isArray(point) && point.length === 2
+        && finite(point[0]) && finite(point[1]))))
+}
+function reportUrl(value: unknown): boolean { return typeof value === 'string' && /^\/coop-api\/report(?:\?[^#]*)?$/.test(value) }
 function resetStatus(value: unknown): value is CooperationResetStatus { return typeof value === 'string' && ['pending', 'succeeded', 'failed', 'unknown'].includes(value) }
 function validTask(value: unknown): boolean {
   return record(value) && (value.id === null || identity(value.id)) && typeof value.status === 'string'
     && ['idle', 'running', 'canceling', 'succeeded', 'failed', 'canceled', 'unknown'].includes(value.status)
     && typeof value.stage === 'string' && typeof value.message === 'string'
+    && (value.scope === undefined || value.scope === 'dock' || value.scope === 'transport')
     && (value.stop_reason == null || typeof value.stop_reason === 'string')
 }
 function validEvents(value: unknown): boolean {
@@ -71,8 +103,8 @@ function validEvents(value: unknown): boolean {
     && ['car', 'arm', 'system'].includes(event.role) && typeof event.message === 'string')
 }
 
-export function validateCooperationState(value: unknown): CooperationState {
-  if (!record(value) || value.mode !== 'mujoco' || value.domain !== COOPERATION_DOMAIN
+export function validateCooperationState(value: unknown, expectedDomain = COOPERATION_DOMAIN): CooperationState {
+  if (!record(value) || value.mode !== 'mujoco' || value.domain !== expectedDomain
     || typeof value.ready !== 'boolean' || typeof value.reason !== 'string'
     || !validTask(value.task) || !validEvents(value.events)
     || (value.episode_id !== undefined && !identity(value.episode_id))
@@ -85,6 +117,18 @@ export function validateCooperationState(value: unknown): CooperationState {
       && identity(entry.episode_id) && validTask(entry.task) && validEvents(entry.events)
       && ((finite(entry.completed_at) && entry.completed_at >= 0)
         || (identity(entry.completed_at) && Number.isFinite(Date.parse(entry.completed_at)))))))
+    || (value.perception !== undefined && (!record(value.perception) || !identity(value.perception.mode)
+      || typeof value.perception.publisher !== 'string' || typeof value.perception.detected !== 'boolean'
+      || typeof value.perception.reason !== 'string' || !nonnegativeNullable(value.perception.confidence)
+      || (finite(value.perception.confidence) && value.perception.confidence > 1)
+      || !nonnegativeNullable(value.perception.stamp) || !nonnegativeNullable(value.perception.received_age_s)
+      || !(value.perception.source_age_s === null || finite(value.perception.source_age_s)) || !nonnegativeNullable(value.perception.reprojection_error_px)
+      || !record(value.perception.counts) || !Object.values(value.perception.counts).every((count) => finite(count) && Number.isInteger(count) && count >= 0)))
+    || (value.vision_frame !== undefined && (!validVisionFrame(value.vision_frame)
+      || (record(value.vision_frame) && value.vision_frame.available && value.vision_frame.episode_id !== value.episode_id)))
+    || (value.acceptance_report !== undefined && (!record(value.acceptance_report) || typeof value.acceptance_report.available !== 'boolean'
+      || !(value.acceptance_report.url === null || reportUrl(value.acceptance_report.url))
+      || (value.acceptance_report.available && !reportUrl(value.acceptance_report.url))))
     || !record(value.frame) || typeof value.frame.available !== 'boolean'
     || !(value.frame.stamp === null || (finite(value.frame.stamp) && value.frame.stamp >= 0))
     || (value.source !== null && (!record(value.source) || typeof value.source.scene_sha !== 'string'))
@@ -120,11 +164,14 @@ export const COOPERATION_STAGES = [
   { key: 'delivery_stopped', label: '交付点停稳', role: 'car' },
 ] as const
 
-export function cooperationStageLabel(stage: string | undefined): string {
+export function cooperationStageLabel(stage: string | undefined, scope?: CooperationScope): string {
   if (!stage || stage === 'idle') return '等待开始'
+  if (stage === 'succeeded' && scope === 'dock') return '停靠停稳验证完成'
   return COOPERATION_STAGES.find((item) => item.key === stage)?.label ?? stage
 }
-export function cooperationStatusLabel(status: CooperationStatus | undefined): string {
+export function cooperationStatusLabel(status: CooperationStatus | undefined, scope?: CooperationScope): string {
+  if (scope === 'dock' && status === 'succeeded') return '停靠完成'
+  if (scope === 'dock' && status === 'running') return '停靠进行中'
   return { idle: '等待开始', running: '协同进行中', canceling: '正在取消，等待停稳',
     succeeded: '装货运输完成', failed: '任务失败', canceled: '任务已取消', unknown: '任务状态未知' }[status ?? 'idle']
 }
@@ -166,7 +213,7 @@ function validateResetRecord(value: unknown): CooperationResetRecord {
 }
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 type ReceiptStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
-const STORAGE_KEY = 'fishbot.cooperation.receipt.v1'
+const STORAGE_KEY = `fishbot.cooperation.receipt.v1${COOPERATION_DOMAIN === 114 ? '' : `.domain${COOPERATION_DOMAIN}`}`
 type ControllerOptions = { fetcher?: Fetcher; now?: () => number; taskId?: () => string; resetId?: () => string; storage?: ReceiptStorage | null }
 
 /** Only user actions send POST. Polling reconciles the same task and never resends a mutation. */
@@ -334,7 +381,7 @@ export class CooperationController {
   }
 }
 
-export type CooperationFrameObservation = { scene: string; stamp: number; changedAt: number; loadedStamp: number | null; error: boolean }
+export type CooperationFrameObservation = { scene: string; stamp: number; changedAt: number; loadedStamp: number | null; error: boolean; vision?: CooperationVisionFrame }
 export function cooperationFrameLabel(state: CooperationState | null, frame: CooperationFrameObservation | null, connected: boolean, now: number): string {
   if (!state?.frame.available || state.frame.stamp === null) return '等待相机画面'
   if (frame && frame.scene !== cooperationFrameSourceKey(state)) return '画面来源已变化，等待新帧'
@@ -343,4 +390,37 @@ export function cooperationFrameLabel(state: CooperationState | null, frame: Coo
   if (!connected || now - frame.changedAt >= COOPERATION_STALE_MS) return '画面已过期'
   if (state.frame.stamp < frame.loadedStamp || state.frame.stamp - frame.loadedStamp > 1.5) return '画面已过期'
   return '相机画面持续更新'
+}
+
+export function cooperationPerceptionModeLabel(mode: string | undefined): string {
+  if (!mode) return '感知模式未提供'
+  if (mode === 'ideal') return '理想化仿真信标'
+  if (mode === 'perturbed') return '受扰仿真信标'
+  if (mode === 'vision') return 'AprilTag RGB 视觉'
+  return mode
+}
+export function cooperationPerceptionReason(reason: string | undefined): string {
+  if (!reason) return '服务未提供具体原因。'
+  const labels: Record<string, string> = {
+    waiting_for_observation: '等待感知观测', observation_expired: '感知观测已过期',
+    not_detected: '未检测到工位标记', tag_detected: '工位标记图像定位已完成',
+    wrong_or_duplicate_tag_id: '标记编号不匹配或出现重复标记', small_or_clipped_tag: '标记过小或被画面边缘裁切',
+    insufficient_resolution: '标记像素尺寸不足，需先靠近工位', clipped_tag: '工位标记被画面边缘裁切',
+    invalid_pose_or_reprojection: '位姿或重投影误差未通过校验', ambiguous_planar_pose: '平面标记的位姿解存在歧义',
+    out_of_range: '工位标记超出观测范围',
+  }
+  return labels[reason] ? `${labels[reason]}（${reason}）` : reason
+}
+export function cooperationVisionFrameMatches(state: CooperationState | null, frame: CooperationFrameObservation | null): boolean {
+  const current = state?.vision_frame, loaded = frame?.vision
+  return !!state?.episode_id && !!current && !!loaded && frame?.scene === cooperationFrameSourceKey(state)
+    && loaded.episode_id === state.episode_id && current.episode_id === state.episode_id
+    && (!current.available || (loaded.sequence <= current.sequence
+      && (current.stamp === null || frame.loadedStamp === null || frame.loadedStamp <= current.stamp)))
+}
+export function cooperationVisionFrameLabel(state: CooperationState | null, frame: CooperationFrameObservation | null, connected: boolean, now: number): string {
+  if (!state?.vision_frame) return '视觉画面未接入'
+  if (!state.vision_frame.available) return '等待后视相机画面'
+  if (frame?.loadedStamp !== null && frame?.vision && !cooperationVisionFrameMatches(state, frame)) return '后视画面来源已变化，等待新帧'
+  return cooperationFrameLabel({ ...state, frame: state.vision_frame }, frame, connected, now)
 }

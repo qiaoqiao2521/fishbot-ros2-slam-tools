@@ -967,7 +967,7 @@ class SharedWorldTest(unittest.TestCase):
                  'Odometry': Odometry, 'Clock': Clock, 'Imu': Imu, 'JointState': JointState,
                  'LaserScan': LaserScan, 'String': String, 'math': math, 'json': json,
                  'ARM_JOINTS': sim.ARM_JOINTS, 'WHEEL_JOINTS': sim.WHEEL_JOINTS,
-                 'station_messages': sim.station_messages}
+                 'station_messages': sim.station_messages, 'time': time}
         exec(compile(ast.Module(body=methods, type_ignores=[]), str(TOOLS/'cooperation_sim.py'), 'exec'), scope)
         sinks = {name: [] for name in ('clock','scan','imu','joint','odom','truth','cargo','state',
                                        'station_pose','station_detection')}
@@ -975,6 +975,9 @@ class SharedWorldTest(unittest.TestCase):
         for name, messages in sinks.items():
             setattr(node, name+'_pub', SimpleNamespace(publish=messages.append))
         measurements = []
+        camera_offers = []
+        node.camera = SimpleNamespace(error=None, rendered=0,
+                                      offer=lambda: camera_offers.append(float(physics.data.time)))
         original = physics.station_beacon.measure
         def observed_measure(car_pose, source_stamp):
             measurements.append(source_stamp)
@@ -988,6 +991,8 @@ class SharedWorldTest(unittest.TestCase):
         self.assertEqual(len(sinks['scan']), 1)
         self.assertEqual(len(sinks['station_pose']), 3)
         self.assertEqual(len(sinks['station_detection']), 3)
+        self.assertEqual(camera_offers, measurements)
+        self.assertEqual(timing.stats['camera_offer']['count'], 3)
         for sequence, (pose, detection, state) in enumerate(zip(
                 sinks['station_pose'], sinks['station_detection'], sinks['state']), start=1):
             cached = json.loads(state.data)['dock_beacon']['observation']
@@ -996,6 +1001,14 @@ class SharedWorldTest(unittest.TestCase):
             self.assertAlmostEqual(cached['stamp'], measurements[sequence-1])
             self.assertEqual(detection.header.stamp.sec*1_000_000_000+detection.header.stamp.nanosec,
                              round(measurements[sequence-1]*1_000_000_000))
+        # The actual vision branch offers a new camera source snapshot without
+        # synthesizing a station observation, even with scan disabled.
+        physics.station_beacon.perception_config = {'mode': 'vision'}
+        for _ in range(10):physics.step()
+        scope['publish'](node, False)
+        self.assertEqual(len(camera_offers), 4)
+        self.assertEqual(timing.stats['camera_offer']['count'], 4)
+        self.assertEqual(len(sinks['station_pose']), 3)
 
 
 if __name__ == '__main__':

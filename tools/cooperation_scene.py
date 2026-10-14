@@ -72,10 +72,12 @@ def _translate_world(world, offset):
             child.set("pos", _numbers(a + b for a, b in zip(position, offset)))
 
 
-def _fishbot_element(path, spawn):
+def _fishbot_element(path, spawn, spawn_yaw=0.):
     root = ET.parse(path).getroot()
     car = root.find("worldbody/body")
     car.set("pos", _numbers((*spawn, .002)))
+    if spawn_yaw:
+        car.set('quat', _numbers((math.cos(spawn_yaw/2), 0., 0., math.sin(spawn_yaw/2))))
     car.find(".//body[@name='laser_link']").set("pos", "-.065 0 .075")
     # Bind the car's original global geom defaults explicitly. The SO101
     # global default must not change its wheel/floor friction or solver terms.
@@ -200,13 +202,15 @@ def car_footprint(common_model, radius=.13):
 
 
 def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
-                spawn=(0., -2.), station=DEFAULT_STATION):
+                spawn=(0., -2.), station=DEFAULT_STATION, spawn_yaw=0., camera=False, camera_light_scale=1.,
+                tag_lateral_offset=.03):
     import numpy as np
 
     so101_project, fishbot_project, output = map(lambda path: Path(path).resolve(),
                                                 (so101_project, fishbot_project, output))
     spawn, station = np.asarray(spawn, dtype=float), np.asarray(station, dtype=float)
-    if spawn.shape != (2,) or station.shape != (3,) or not np.isfinite(np.r_[spawn, station]).all():
+    if (spawn.shape != (2,) or station.shape != (3,) or
+            not np.isfinite(np.r_[spawn, station, spawn_yaw]).all()):
         raise ValueError("Spawn xy and station xyz must be finite")
     output.mkdir(parents=True, exist_ok=True)
     modules = source_modules(so101_project)
@@ -230,12 +234,17 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
         if geom.get("class") != "collision" and geom.get("contype", "0") != "0":
             geom.set("group", "0")
     _translate_world(common_root.find("worldbody"), station)
-    fish_root, car = _fishbot_element(fish_xml, spawn)
+    fish_root, car = _fishbot_element(fish_xml, spawn, spawn_yaw)
     common_root.find("worldbody").append(car)
     for element in fish_root.find("actuator"):
         common_root.find("actuator").append(copy.deepcopy(element))
     common_root.append(copy.deepcopy(fish_root.find("sensor")))
     _append_arena(common_root, arena_xml)
+    dock = (station[0] + .20, station[1] + .20, 0.)
+    station_camera = None
+    if camera:
+        from cooperation_camera import add_camera_fixture
+        station_camera = add_camera_fixture(common_root, car, dock, output, camera_light_scale, tag_lateral_offset)
     midpoint = (spawn + station[:2]) / 2
     lookat = np.r_[midpoint, station[2] + .05]
     camera_pos = lookat + np.array([0., -2.8, 2.25])
@@ -254,7 +263,6 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
                 "left_wheel_joint", "right_wheel_joint")
     if tuple(model.joint(index).name for index in range(model.njnt)) != expected:
         raise RuntimeError("Common scene must preserve arm, target, car joint order")
-    dock = (station[0] + .20, station[1] + .20, 0.)
     arena = ET.parse(arena_xml).getroot()
     for child in arena.find("worldbody").findall("geom"):
         duplicate = copy.deepcopy(child)
@@ -286,6 +294,8 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
         raise RuntimeError(f"Common-scene arm home is obstructed: {checker.evaluate(home)}")
     source_files = [source, fish_xml, arena_xml, *[Path(module.__file__) for module in modules.values()],
                     so101_project / "experiments/colab-twin/grasp_workcell.py"]
+    if station_camera is not None:
+        source_files.append(Path(station_camera['tag_texture_file']))
     manifest = {"schema": "fishbot-so101-contact-cooperation-v1",
                 "world_xml": str(world_path), "rig_xml": str(rig_path),
                 "arm_contact_xml": str(contact_path), "so101_project": str(so101_project),
@@ -308,6 +318,10 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
                 "contact_assumptions": {"jaw_force_cap_nm": .15, "noslip_iterations": 10,
                                         "free_target_mass_kg": .01, "timestep_s": .002}}
     manifest.update(car_footprint(model))
+    if spawn_yaw:
+        manifest['spawn_yaw'] = float(spawn_yaw)
+    if station_camera is not None:
+        manifest['station_camera'] = station_camera
     (output / "scene-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
 

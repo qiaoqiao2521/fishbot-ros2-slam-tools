@@ -16,11 +16,13 @@ from urllib.parse import parse_qs
 from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, arm_home_quiet, car_pose,
                               cargo_retained, dispatch_terminal, finite_vector,
                               physical_quiet, quaternion, request_identity,
+                              task_scope,
                               reset_request_identity,
                               settled_cargo, stopped, tip_forces, transport_handoff_ready, validate_physics)
 from cooperation_core import station_robot_pose, within_station_capture
 from cooperation_perception import (map_covariance, messages_to_observation,
                                     normalize_config, validate_observation)
+from cooperation_readiness import NativeReadiness
 
 
 class Canceled(RuntimeError):
@@ -33,12 +35,13 @@ def run(args):
     import numpy as np
     import rclpy
     from rclpy.action import ActionClient
+    from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
     from rclpy.executors import MultiThreadedExecutor
     from rclpy.node import Node
     from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy, qos_profile_sensor_data
     from rclpy.time import Time
     from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
-    from diagnostic_msgs.msg import DiagnosticArray
+    from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
     from message_filters import Subscriber, TimeSynchronizer
     from nav2_msgs.action import NavigateToPose, DockRobot
     from nav2_msgs.srv import ClearEntireCostmap
@@ -65,6 +68,8 @@ def run(args):
             self.execution_token = None
             self.task_epoch = self.dispatch_epoch = 0
             self.dispatches = []
+            self.cleanup_summary = {'state': 'not_started', 'native_terminal': False,
+                                    'quiet': False, 'hold': False, 'guard_disabled': False}
             self.last_ref = list(manifest['arm_home_qpos6'])
             self.task = {'id': None, 'status': 'idle', 'stage': 'idle', 'message': '等待装货运输任务', 'stop_reason': None}
             self.events = []
@@ -82,6 +87,10 @@ def run(args):
             self.listener = TransformListener(self.buffer, self)
             self.nav = ActionClient(self, NavigateToPose, '/navigate_to_pose')
             self.docking = ActionClient(self, DockRobot, '/dock_robot')
+            self.native_readiness = NativeReadiness(self)
+            self.physics_callbacks = MutuallyExclusiveCallbackGroup()
+            self.perception_callbacks = MutuallyExclusiveCallbackGroup()
+            self.last_freshness_failure = None
             self.beacon = None
             self.perception_config = normalize_config(manifest.get('station_perception'))
             if self.perception_config['station_id'] != manifest['native_docking']['dock_id']:
@@ -90,16 +99,20 @@ def run(args):
             self.station_detection = None
             self.station_rejection = None
             self.station_counts = {'accepted': 0, 'unavailable': 0, 'rejected': 0, 'forwarded': 0}
+            self.station_rejection_reason_counts = {}
             self.last_station_pose_stamp = -math.inf
+            self.vision_quality = None
             self.pose_pub = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 1)
             self.dock_pose_pub = self.create_publisher(PoseStamped, '/detected_dock_pose', 1)
             # Exact source stamps, bounded queues, and standard ROS messages.
             perception_qos = copy.copy(qos_profile_sensor_data)
             perception_qos.depth = 1
             self.station_pose_filter = Subscriber(self, PoseWithCovarianceStamped,
-                                                  '/cooperation/station_pose', qos_profile=perception_qos)
+                                                  '/cooperation/station_pose', qos_profile=perception_qos,
+                                                  callback_group=self.perception_callbacks)
             self.station_detection_filter = Subscriber(self, DiagnosticArray,
-                                                       '/cooperation/station_detection', qos_profile=perception_qos)
+                                                       '/cooperation/station_detection', qos_profile=perception_qos,
+                                                       callback_group=self.perception_callbacks)
             self.station_detection_filter.registerCallback(self.observe_station_detection)
             self.station_sync = TimeSynchronizer(
                 [self.station_pose_filter, self.station_detection_filter], queue_size=5)
@@ -107,6 +120,8 @@ def run(args):
             hold_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL, reliability=ReliabilityPolicy.RELIABLE)
             self.hold_pub = self.create_publisher(Bool, '/cooperation/car_hold', hold_qos)
             self.dock_guard_pub = self.create_publisher(Bool, '/cooperation/docking_guard', hold_qos)
+            self.fault_trigger_pub = self.create_publisher(String, '/cooperation/observation_fault_trigger', 1)
+            self.admission_pub = self.create_publisher(DiagnosticArray, '/cooperation/station_admission', 10)
             self.dock_guard_active = False
             self.arm_pub = self.create_publisher(JointState, '/cooperation/arm_reference', 1)
             reset_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
@@ -117,7 +132,10 @@ def run(args):
                 '/global_costmap/clear_entirely_global_costmap', '/local_costmap/clear_entirely_local_costmap')]
             latest_state_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT,
                                          durability=DurabilityPolicy.VOLATILE)
-            self.create_subscription(String, '/cooperation/physics_state', self.observe, latest_state_qos)
+            self.create_subscription(String, '/cooperation/physics_state', self.observe, latest_state_qos,
+                                     callback_group=self.physics_callbacks)
+            self.create_subscription(DiagnosticArray, '/cooperation/vision_quality', self.observe_vision_quality, perception_qos,
+                                     callback_group=self.perception_callbacks)
             args.output.mkdir(parents=True, exist_ok=True)
             self.ledger = args.output/'task.json'
             self.history_dir = args.output/'history'
@@ -140,6 +158,7 @@ def run(args):
         def observe(self, message):
             try:
                 value = validate_physics(json.loads(message.data), scene_sha, manifest_sha)
+                self.native_readiness.update()
                 with self.lock:
                     episode = value.get('episode_id')
                     if episode is not None:
@@ -170,6 +189,9 @@ def run(args):
                     raise RuntimeError('等待新回合的物理反馈')
                 now = self.get_clock().now().nanoseconds*1e-9
                 if not -.1 <= now-self.raw['stamp'] <= .25:
+                    self.last_freshness_failure = {'wall_time':time.time(),'task_id':self.task.get('id'),
+                        'episode_id':self.episode_id,'clock_stamp':now,'physics_stamp':self.raw['stamp'],
+                        'source_age_s':now-self.raw['stamp'],'received_age_s':time.monotonic()-self.received}
                     raise RuntimeError('共享物理反馈时间失效')
                 return copy.deepcopy(self.raw)
 
@@ -249,6 +271,7 @@ def run(args):
             handle = dispatch.get('handle')
             if handle and handle.accepted and not dispatch_terminal(dispatch) and not dispatch.get('cancel_requested'):
                 dispatch['cancel_requested'] = True
+                dispatch['cancel_requested_wall_time'] = time.time()
                 try:
                     dispatch['cancel'] = handle.cancel_goal_async()
                 except Exception as error:
@@ -285,6 +308,8 @@ def run(args):
                 if time.monotonic()>self.wall_deadline:
                     raise RuntimeError('协同任务超过总执行时间')
                 raw = self.fresh()
+                if self.perception_config['mode'] == 'vision' and raw.get('camera_error'):
+                    raise RuntimeError(f'后向相机渲染失败：{raw["camera_error"]}')
                 if any(raw[f'{body}_forbidden_contact_{kind}']
                        for body in ('arm','car') for kind in ('count','total')):
                     raise RuntimeError('车体或机械臂发生非预期物理接触')
@@ -349,10 +374,35 @@ def run(args):
             if len(publishers) != 1 or publishers[0].node_name != self.get_name():
                 raise ValueError('原生停靠位姿必须由本桥唯一转发')
 
-        def reject_station_observation(self, error):
+        def publish_station_admission(self, outcome, observation=None):
+            if not hasattr(self, 'admission_pub'):
+                return
+            values = observation or {}
+            event = DiagnosticArray()
+            event.header.stamp = self.get_clock().now().to_msg()
+            event.header.frame_id = 'base_footprint'
+            status = DiagnosticStatus()
+            status.name, status.hardware_id = 'station_admission', self.perception_config['station_id']
+            status.level = DiagnosticStatus.OK if outcome == 'accepted' else DiagnosticStatus.WARN
+            status.message = outcome
+            metadata = {'schema': 1, 'outcome': outcome, 'reason': self.station_rejection,
+                        'scene_sha256': scene_sha, 'manifest_sha256': manifest_sha,
+                        'episode_id': self.episode_id, 'input_episode_id': values.get('episode_id'),
+                        'input_sequence': values.get('sequence'), 'input_stamp': values.get('stamp'),
+                        'input_frame_id': values.get('frame_id'), 'input_detected': values.get('detected'),
+                        'received_wall_time': time.time(), 'received_monotonic': time.monotonic(),
+                        'task_id': self.task.get('id'), 'native_consumption_ack': False}
+            status.values = [KeyValue(key=key, value=json.dumps(value, allow_nan=False)) for key, value in metadata.items()]
+            event.status = [status]
+            self.admission_pub.publish(event)
+
+        def reject_station_observation(self, error, observation=None):
             # A late rejected packet cannot erase a newer accepted observation.
             self.station_counts['rejected'] += 1
             self.station_rejection = str(error)
+            reasons = self.station_rejection_reason_counts
+            reasons[self.station_rejection] = reasons.get(self.station_rejection, 0)+1
+            self.publish_station_admission('rejected', observation)
 
         def admit_station_observation(self, observation):
             self.station_publishers()
@@ -370,18 +420,23 @@ def run(args):
             if len(diagnostics.status) == 1 and diagnostics.status[0].level in (0, b'\x00'):
                 return
             with self.lock:
+                observation = None
                 try:
-                    admitted = self.admit_station_observation(messages_to_observation(None, diagnostics))
+                    observation = messages_to_observation(None, diagnostics)
+                    admitted = self.admit_station_observation(observation)
                     if admitted['detected']:
                         raise ValueError('失检诊断不能携带有效检测')
                     self.station_counts['unavailable'] += 1
+                    self.publish_station_admission('unavailable', admitted)
                 except (RuntimeError, ValueError, KeyError, TypeError, AttributeError) as error:
-                    self.reject_station_observation(error)
+                    self.reject_station_observation(error, observation)
 
         def observe_station_pair(self, pose, diagnostics):
             with self.lock:
+                observation = None
                 try:
-                    admitted = self.admit_station_observation(messages_to_observation(pose, diagnostics))
+                    observation = messages_to_observation(pose, diagnostics)
+                    admitted = self.admit_station_observation(observation)
                     if not admitted['detected']:
                         raise ValueError('失检不能产生停靠位姿')
                     # Only admitted, fresh, same-episode observations reach Nav2.
@@ -392,8 +447,28 @@ def run(args):
                     self.beacon = (admitted, time.monotonic(), copy.deepcopy(pose.header.stamp))
                     self.station_counts['accepted'] += 1
                     self.station_counts['forwarded'] += 1
+                    self.publish_station_admission('accepted', admitted)
                 except (RuntimeError, ValueError, KeyError, TypeError, AttributeError) as error:
-                    self.reject_station_observation(error)
+                    self.reject_station_observation(error, observation)
+
+        def observe_vision_quality(self, message):
+            if self.perception_config['mode'] != 'vision':
+                return
+            try:
+                publishers = self.get_publishers_info_by_topic('/cooperation/vision_quality')
+                if len(publishers) != 1 or publishers[0].node_name != self.perception_config['publisher']:
+                    raise ValueError('视觉诊断发布者不匹配')
+                if len(message.status) != 1:
+                    raise ValueError('视觉诊断数量无效')
+                pairs = message.status[0].values
+                values = {item.key: json.loads(item.value) for item in pairs}
+                with self.lock:
+                    if len(values) != len(pairs) or any(values.get(key) != value for key, value in
+                            (('scene_sha256', scene_sha), ('manifest_sha256', manifest_sha), ('episode_id', self.episode_id))):
+                        raise ValueError('视觉诊断来源或回合不匹配')
+                    self.vision_quality = values
+            except (ValueError, TypeError, AttributeError) as error:
+                self.get_logger().warning(f'视觉诊断已拒绝：{error}')
 
         def update_station_localization(self,*,force=False,optional=False):
             """Use an admitted sensor observation, only under this task's ownership.
@@ -433,6 +508,10 @@ def run(args):
                     raise RuntimeError(f'工位观测来源或内容无效：{error}') from error
                 relative=measured['relative']
                 pose=station_robot_pose(relative,manifest['native_dock_pose'])
+                if self.perception_config['mode'] == 'vision':
+                    # AMCL owns map localization. RGB supplies the native dock
+                    # target; uncertain distant PnP must not reset that filter.
+                    return pose
                 if not force and stamp-self.last_station_pose_stamp<.3:
                     return pose
                 message=PoseWithCovarianceStamped()
@@ -452,6 +531,12 @@ def run(args):
         def align_station_map(self):
             raw=self.check()
             if not stopped(raw):raise RuntimeError('校准工位定位前车辆必须停稳')
+            if self.perception_config['mode'] == 'vision':
+                def captured(value):
+                    self.update_station_localization()
+                    return stopped(value)
+                self.wait_condition(captured,duration=.4,timeout=5.)
+                return
             pose=self.update_station_localization(force=True)
             def aligned(value):
                 estimate=self.localized()
@@ -486,9 +571,18 @@ def run(args):
                     self.cancel_dispatch(dispatch)
 
         def cleanup(self, token, timeout=6.):
+            try:
+                return self.cleanup_evidence(token, timeout)
+            except Exception as error:
+                self.cleanup_summary.update(state='unknown', error=str(error), finished_wall_time=time.time())
+                raise
+
+        def cleanup_evidence(self, token, timeout=6.):
             gate = ContinuousEvidence(.7)
             end = time.monotonic()+timeout
             disabled_at = None
+            self.cleanup_summary = {'state': 'running', 'native_terminal': False, 'quiet': False,
+                                    'hold': False, 'guard_disabled': False, 'started_wall_time': time.time()}
             while time.monotonic()<end:
                 with self.lock:
                     self.owner(token, allow_abort=True)
@@ -496,8 +590,18 @@ def run(args):
                     for dispatch in dispatches:
                         self.cancel_dispatch(dispatch)
                     native_terminal = all(dispatch_terminal(item) for item in dispatches)
-                raw = self.fresh()
+                try:
+                    raw = self.fresh()
+                except (RuntimeError, ValueError) as error:
+                    # A transient invalid sample cannot prove quiet, but it
+                    # need not abandon the original bounded cleanup attempt.
+                    self.cleanup_summary['last_invalid_feedback'] = str(error)
+                    gate = ContinuousEvidence(.7)
+                    time.sleep(.01)
+                    continue
                 quiet = gate.update(raw['stamp'], physical_quiet(raw))
+                self.cleanup_summary.update(native_terminal=native_terminal, quiet=quiet,
+                    hold=raw['car_hold'] is True, source_stamp=raw['stamp'])
                 if quiet and native_terminal and raw['car_hold'] is True:
                     enabled=self.guard_acknowledged(raw)
                     tripped=raw['docking_guard']['tripped']
@@ -505,8 +609,10 @@ def run(args):
                         disabled_at = raw['stamp']
                         self.set_docking_guard(False,token,allow_abort=True)
                     if not enabled and not tripped and (disabled_at is None or raw['stamp'] > disabled_at):
+                        self.cleanup_summary.update(state='verified', guard_disabled=True, finished_wall_time=time.time())
                         return True
                 time.sleep(.01)
+            self.cleanup_summary.update(state='unknown', finished_wall_time=time.time())
             return False
 
         def navigate(self, goal, *, carrying=False, station_localization=False):
@@ -538,7 +644,7 @@ def run(args):
                 with self.lock:
                     self.owner(token)
                     self.dispatch_epoch += 1
-                    dispatch = {'token': token, 'epoch': self.dispatch_epoch, 'request': None, 'handle': None,
+                    dispatch = {'token': token, 'epoch': self.dispatch_epoch, 'label': label, 'request': None, 'handle': None,
                                 'result': None, 'cancel': None, 'received': False, 'aborted': False, 'error': None}
                     self.dispatches.append(dispatch)
                     sent = client.send_goal_async(request)
@@ -555,6 +661,14 @@ def run(args):
                 if docking_guard:
                     self.set_docking_guard(True,token)
                     self.wait_condition(self.guard_acknowledged,duration=.02,timeout=2.)
+                    if hasattr(self, 'fault_trigger_pub'):
+                        goal_uuid = getattr(getattr(handle, 'goal_id', None), 'uuid', None)
+                        if goal_uuid is None:
+                            raise RuntimeError('停靠动作缺少原生UUID，不能绑定实验或继续')
+                        trigger = {'scene_sha256': scene_sha, 'manifest_sha256': manifest_sha,
+                                   'episode_id': self.episode_id, 'native_goal_uuid': bytes(goal_uuid).hex(),
+                                   'source_stamp': self.get_clock().now().nanoseconds*1e-9}
+                        self.fault_trigger_pub.publish(String(data=json.dumps(trigger)))
                 with self.lock:
                     self.owner(token)
                     if not dispatch['result'].done():
@@ -623,21 +737,37 @@ def run(args):
         def execute(self, token):
             self.worker.token = token
             try:
-                self.wall_deadline = time.monotonic()+360
+                scope = self.task.get('scope', 'transport')
+                self.wall_deadline = time.monotonic()+(60 if scope == 'dock' else 360)
                 self.event('car','docking','前往 SO101 工位，请等待停靠。')
-                if self.station_capture_ready():
+                if self.perception_config['mode'] == 'vision':
+                    # The original staging view avoids the arm's oblique
+                    # occlusion. Approach uses AMCL; RGB drives the dock leg.
+                    self.navigate(self.stations()['staging'],station_localization=False)
+                elif self.station_capture_ready():
                     self.event('car','docking','已在工位停靠捕获区，继续对准原生停靠。')
                 else:
                     self.navigate(self.stations()['staging'],station_localization=True)
                 self.align_station_map()
-                self.event('car','docking','已到工位附近，使用仿真信标进行原生近距离精停靠。')
+                sensor_label = 'AprilTag RGB 观测' if self.perception_config['mode'] == 'vision' else '相对工位观测'
+                self.event('car','docking',f'已到工位附近，使用{sensor_label}进行原生近距离精停靠。')
                 raw = self.dock_at_station()
                 self.hold(True)
                 pose = car_pose(raw)
                 dock = self.stations()['dock']
                 if math.hypot(pose['x']-dock['x'],pose['y']-dock['y'])>.04 or abs(math.atan2(math.sin(pose['yaw']),math.cos(pose['yaw'])))>.05:
                     raise RuntimeError('车体尚未进入真实交接位置与朝向范围')
-                self.event('car','docked','已到工位并停稳，请 SO101 装货。')
+                docked_message = '已到工位并停稳。' if scope == 'dock' else '已到工位并停稳，请 SO101 装货。'
+                self.event('car','docked',docked_message)
+                if scope == 'dock':
+                    if not self.cleanup(token):
+                        raise RuntimeError('停靠完成但清理证据未知')
+                    self.event('system','succeeded','停靠与停稳验证完成；本回合未执行装货运输。',terminal=True)
+                    with self.lock:
+                        self.owner(token)
+                        self.task.update(status='succeeded', message='停靠完成')
+                        self.persist()
+                    return
                 planner = ArmPlanner(manifest, car_pose=raw['qpos22'][13:20])
                 plan = planner.prepare_approach(raw['q6'])
                 self.check()
@@ -677,6 +807,8 @@ def run(args):
                 if math.hypot(raw['cargo']['position'][0]-start[0],raw['cargo']['position'][1]-start[1])<.5:
                     raise RuntimeError('货物实际运输位移不足0.5米')
                 self.event('car','delivered','已到交付点，货物仍在托盘，车辆与货物已停稳。')
+                if not self.cleanup(token):
+                    raise RuntimeError('运输完成但清理证据未知')
                 with self.lock:
                     self.owner(token)
                     self.task.update(status='succeeded',message='装货运输完成')
@@ -878,6 +1010,10 @@ def run(args):
                     self.station_last_seen = None
                     self.station_detection = None
                     self.station_rejection = None
+                    self.vision_quality = None
+                    self.last_freshness_failure = None
+                    self.cleanup_summary = {'state': 'not_started', 'native_terminal': False,
+                                            'quiet': False, 'hold': False, 'guard_disabled': False}
                     self.last_station_pose_stamp = -math.inf
                     record['new_episode_id'] = self.episode_id
                 raw = self.wait_reset_condition(lambda raw: raw['episode_id'] == self.episode_id
@@ -923,18 +1059,114 @@ def run(args):
                     'staging':dict(zip(('x','y','yaw'),manifest['staging_pose'])),
                     'delivery':{'x':0.,'y':-2.,'yaw':0.}}
 
+        def native_action_state(self):
+            result = []
+            for item in self.dispatches:
+                handle, future = item.get('handle'), item.get('result')
+                goal_id = getattr(getattr(handle, 'goal_id', None), 'uuid', None)
+                status = None
+                known = False
+                if future is not None and future.done():
+                    try:
+                        reply = future.result()
+                        status = getattr(reply, 'status', None)
+                        known = status in (4, 5, 6)
+                    except Exception:
+                        known = False
+                result.append({'uuid': bytes(goal_id).hex() if goal_id is not None else None,
+                    'label': item.get('label'), 'accepted': bool(handle and handle.accepted),
+                    'status': status, 'result_known': known, 'terminal': dispatch_terminal(item),
+                    'cancel_requested_wall_time': item.get('cancel_requested_wall_time')})
+            return result
+
+        def perception_state(self):
+            current = self.station_detection[0] if self.station_detection else None
+            received = self.station_detection[1] if self.station_detection else None
+            quality = getattr(self, 'vision_quality', None) or {}
+            if not current or any(quality.get(key) != current.get(key) for key in ('episode_id','sequence','stamp')):
+                quality = {}
+            source_age = self.get_clock().now().nanoseconds*1e-9-current['stamp'] if current else None
+            reason = self.station_rejection or (current.get('reason') if current else 'waiting_for_observation')
+            receive_age = max(0., time.monotonic()-received) if received is not None else None
+            detected = bool(current and current['detected'])
+            if detected and (receive_age > .5 or not -.1 <= source_age <= .25):
+                detected, reason = False, 'observation_expired'
+            return {'mode': self.perception_config['mode'], 'publisher': self.perception_config['publisher'],
+                    'detected': detected, 'reason': reason, 'confidence': current.get('confidence') if current else None,
+                    'stamp': current.get('stamp') if current else None,
+                    'received_age_s': receive_age, 'source_age_s': source_age,
+                    'counts': dict(self.station_counts), 'reprojection_error_px': quality.get('reprojection_error_px')}
+
+        def vision_frame_state(self, raw=None):
+            unavailable = {'available': False, 'stamp': None, 'episode_id': self.episode_id or '',
+                           'sequence': 0, 'corners': None, 'image_width': 640, 'image_height': 480}
+            try:
+                raw = self.fresh() if raw is None else raw
+                info = json.loads((args.frame_dir/'vision-latest.json').read_text())
+                return self.vision_frame_info(info, raw)
+            except (OSError, ValueError, KeyError, TypeError, RuntimeError):
+                return unavailable
+
+        def vision_frame_info(self, info, raw=None):
+            raw = self.fresh() if raw is None else raw
+            stamp, wall = finite_vector([info['stamp'], info['wall_time']], 2, '后向相机帧时间')
+            sequence = info['sequence']
+            if (type(sequence) is not int or sequence < 1
+                    or info['scene_sha256'] != scene_sha or info['manifest_sha256'] != manifest_sha
+                    or info['episode_id'] != self.episode_id
+                    or not 0 <= time.time()-wall <= 3.5 or not -.1 <= raw['stamp']-stamp <= 1.5):
+                raise ValueError('后向相机帧来源或时间无效')
+            self.vision_frame_image(info)
+            corners = info.get('corners')
+            if corners is not None:
+                if not isinstance(corners, list) or len(corners) != 4:
+                    raise ValueError('后向相机角点无效')
+                for pair in corners:
+                    finite_vector(pair, 2, '标记角点')
+            if info['image_width'] != 640 or info['image_height'] != 480:
+                raise ValueError('后向相机规格不匹配')
+            return {'available': True, 'stamp': stamp, 'episode_id': self.episode_id,
+                    'sequence': sequence, 'corners': corners, 'image_width': 640, 'image_height': 480}
+
+        def vision_frame_request(self, query):
+            if set(query) != {'stamp','episode_id','sequence'} or any(len(values)!=1 for values in query.values()):
+                raise Rejected('后向相机请求必须指定唯一回合、帧编号与源时间',409)
+            sequence = int(query['sequence'][0])
+            stamp = float(query['stamp'][0])
+            if (sequence < 1 or str(sequence) != query['sequence'][0] or not math.isfinite(stamp)
+                    or query['episode_id'][0] != self.episode_id):
+                raise Rejected('后向相机请求来源或编号不匹配',409)
+            path = args.frame_dir/f'vision-{self.episode_id}-{sequence}.json'
+            info = json.loads(path.read_text())
+            frame = self.vision_frame_info(info)
+            if frame['sequence'] != sequence or frame['stamp'] != stamp:
+                raise Rejected('后向相机请求源时间与不可变帧不匹配',409)
+            return info
+
+        def vision_frame_image(self, info):
+            expected = f'vision-{self.episode_id}-{info["sequence"]}.jpg'
+            if info.get('episode_id') != self.episode_id or info.get('image_file') != expected:
+                raise ValueError('后向相机文件与帧编号不匹配')
+            path = args.frame_dir/expected
+            if not path.is_file():
+                raise ValueError('后向相机帧已更新或缺失')
+            return path
+
         def state(self):
             with self.lock:
                 ready=False; reason='等待共享物理世界与 Nav2'
                 pose=None; raw=None; physics=None; nav_ready=False
                 try:
                     raw=self.fresh()
+                    if self.perception_config['mode'] == 'vision' and raw.get('camera_error'):
+                        raise RuntimeError(f'后向相机渲染失败：{raw["camera_error"]}')
                     cargo=raw['cargo'];velocity=cargo['velocity_world_angular_linear'][3:]
                     physics={'stamp':raw['stamp'],'car':{**car_pose(raw),'linear_speed':raw['car']['speed'],'angular_speed':raw['car']['yaw_rate']},
                         'arm':{'q':raw['q6'],'velocity':raw['qvel6']},'cargo':dict(zip(('x','y','z'),cargo['position']))}
                     physics['cargo'].update(speed=math.sqrt(sum(v*v for v in velocity)),tip_forces=tip_forces(raw),tray_contact=raw['cargo_tray_floor_contact'])
                     pose=self.localized()
-                    nav_ready=self.nav.server_is_ready() and self.docking.server_is_ready()
+                    nav_ready=(self.nav.server_is_ready() and self.docking.server_is_ready()
+                               and self.native_readiness.active())
                     ready=nav_ready
                     reason='共享物理世界与 Nav2 已就绪' if ready else '等待原生导航服务'
                     self.station_publishers()
@@ -952,10 +1184,18 @@ def run(args):
                 return {'mode':'mujoco','domain':args.domain,'ready':ready,'reason':reason,'task':copy.deepcopy(self.task),
                     'events':copy.deepcopy(self.events),'physics':physics,'frame':frame,'source':{'scene_sha':raw['source']['scene_sha256']} if raw else None,
                     'nav':{'ready':nav_ready,'pose':pose},'stations':self.stations(),
+                    'native_lifecycle':self.native_readiness.snapshot(),
+                    'freshness_failure':copy.deepcopy(getattr(self,'last_freshness_failure',None)),
                     'station_perception':{'mode':self.perception_config['mode'],
                         'publisher':self.perception_config['publisher'],
                         'last_rejection':self.station_rejection,'counts':dict(self.station_counts),
+                        'rejection_reason_counts':dict(self.station_rejection_reason_counts),
                         'last_detection':copy.deepcopy(self.station_detection[0]) if self.station_detection else None},
+                    'perception': self.perception_state(), 'vision_frame': self.vision_frame_state(raw),
+                    'native_actions': self.native_action_state(),
+                    'cleanup': copy.deepcopy(getattr(self, 'cleanup_summary', {'state': 'not_started'})),
+                    'acceptance_report': {'available': (args.output.parent/'acceptance-report.json').is_file(),
+                                          'url': '/coop-api/report' if (args.output.parent/'acceptance-report.json').is_file() else None},
                     **({'episode_id': self.episode_id} if self.episode_id else {}),
                     'reset': self.reset_state(raw), 'history': copy.deepcopy(self.history[-10:])}
 
@@ -983,8 +1223,11 @@ def run(args):
         def start(self, body):
             with self.lock:
                 task_id=request_identity(body, episode_id=self.episode_id)
+                scope = task_scope(body)
                 if task_id in self.known_ids:
                     if task_id!=self.task['id']: raise Rejected('该任务编号已使用；请读取原任务记录',409)
+                    if self.task.get('scope', 'transport') != scope:
+                        raise Rejected('任务编号已绑定另一范围；请读取原任务',409)
                     return {'task_id':task_id,'task':copy.deepcopy(self.task)}
                 current=self.state()
                 if not current['ready']: raise Rejected(current['reason'],409)
@@ -994,7 +1237,10 @@ def run(args):
                 self.task_epoch+=1
                 self.execution_token=(task_id,self.task_epoch)
                 self.dispatches=[]
-                self.task={'id':task_id,'status':'running','stage':'submitted','message':'任务已提交，等待原生执行','stop_reason':None}
+                self.last_freshness_failure = None
+                self.cleanup_summary = {'state': 'not_started', 'native_terminal': False,
+                                        'quiet': False, 'hold': False, 'guard_disabled': False}
+                self.task={'id':task_id,'scope':scope,'status':'running','stage':'submitted','message':'任务已提交，等待原生执行','stop_reason':None}
                 self.events=[];self.persist()
                 self.task_worker = threading.Thread(target=self.execute,args=(self.execution_token,),daemon=True,name='cooperation-task')
                 self.task_worker.start()
@@ -1013,7 +1259,7 @@ def run(args):
                 return {'task_id':task_id,'task':copy.deepcopy(self.task)}
 
     rclpy.init()
-    bridge=Bridge(); executor=MultiThreadedExecutor(num_threads=3);executor.add_node(bridge)
+    bridge=Bridge(); executor=MultiThreadedExecutor(num_threads=4);executor.add_node(bridge)
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*unused): pass
         def send_json(self,status,value):
@@ -1022,6 +1268,25 @@ def run(args):
         def do_GET(self):
             path=urlsplit(self.path).path
             if path=='/coop-api/state':self.send_json(200,bridge.state());return
+            if path=='/coop-api/report':
+                try:
+                    report = json.loads((args.output.parent/'acceptance-report.json').read_text())
+                    self.send_json(200, report)
+                except (OSError, ValueError):
+                    self.send_json(404, {'error': '本运行尚无独立验收报告'})
+                return
+            if path=='/coop-api/vision-frame.jpg':
+                try:
+                    query = parse_qs(urlsplit(self.path).query)
+                    with bridge.lock:
+                        info = bridge.vision_frame_request(query)
+                        content = bridge.vision_frame_image(info).read_bytes()
+                except Rejected as error:
+                    self.send_json(error.status, {'error':str(error)});return
+                except (OSError, ValueError, KeyError, TypeError, RuntimeError):
+                    self.send_json(503, {'error': '后向相机图像已更新或不可用'});return
+                self.send_response(200);self.send_header('Content-Type','image/jpeg');self.send_header('Cache-Control','no-store')
+                self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content);return
             if path.startswith('/coop-api/reset/'):
                 try:self.send_json(200,bridge.reset_record(path.rsplit('/',1)[1]))
                 except Rejected as error:self.send_json(error.status,{'error':str(error),'outcome':'rejected'})

@@ -59,7 +59,8 @@ def uuid_hex(value):
     return bytes(value).hex()
 
 
-def extra_checks(records, marker_path, expected, *, reset_receipt=None, allow_initial_episode=False):
+def extra_checks(records, marker_path, expected, *, reset_receipt=None, allow_initial_episode=False,
+                 scope='transport', expected_outcome='success'):
     physics = [r for r in records if r['topic'] == 'physics']
     events = oracle.marker_events(records, marker_path)
     identifiers = [episode_id(r['payload']) for r in physics]
@@ -77,8 +78,9 @@ def extra_checks(records, marker_path, expected, *, reset_receipt=None, allow_in
     reset_counts = [r['payload'].get('episode_reset', {}).get('count') for r in physics]
     reset_count_fixed = bool(reset_counts) and all(isinstance(x, int) and not isinstance(x, bool) for x in reset_counts) and len(set(reset_counts)) == 1
     windows = []
-    for start in (e for e in events if e.get('kind') == 'full_started'):
-        ends = [e for e in events if e.get('kind') == 'full_finished' and e.get('task_id') == start['task_id'] and e['wall_time'] >= start['wall_time']]
+    prefix = 'dock' if scope == 'dock' else 'full'
+    for start in (e for e in events if e.get('kind') == prefix+'_started'):
+        ends = [e for e in events if e.get('kind') == prefix+'_finished' and e.get('task_id') == start['task_id'] and e['wall_time'] >= start['wall_time']]
         end = min((e['wall_time'] for e in ends), default=None)
         items = [r for r in physics if start['wall_time'] <= r['received_wall_time'] <= (end or math.inf)]
         action_ids = set()
@@ -97,15 +99,48 @@ def extra_checks(records, marker_path, expected, *, reset_receipt=None, allow_in
                         action_ids.add(key)
                     if key in action_ids:
                         terminal[key] = s['status']
-        native = bool(action_ids) and any(k[0] == 'dock' for k in action_ids) and any(k[0] == 'nav' for k in action_ids) and all(terminal.get(k) == 4 for k in action_ids)
-        http = [r['payload'] for r in records if r['topic'] == 'http_state' and r['payload'].get('task', {}).get('id') == start['task_id']]
-        terminal_task = bool(http) and http[-1]['task']['status'] == 'succeeded'
+        dock_ids = [k for k in action_ids if k[0] == 'dock']
+        native_success = bool(action_ids) and bool(dock_ids) and all(terminal.get(k) == 4 for k in action_ids)
+        if scope == 'dock':
+            native_success = native_success and len(dock_ids) == 1
+        else:
+            native_success = native_success and any(k[0] == 'nav' for k in action_ids)
+        native_known = bool(action_ids) and all(terminal.get(k) in (4,5,6) for k in action_ids)
+        native = native_success if expected_outcome == 'success' else native_known
+        http = [r['payload'] for r in records if r['topic'] == 'http_state'
+                and r['received_wall_time'] >= start['wall_time']
+                and r['payload'].get('task', {}).get('id') == start['task_id']]
+        strict_handles = scope == 'dock' or start.get('scope') in ('dock','transport')
+        handle_ids=set();handle_terminal={};handle_cancel_times={};handle_bad=False
+        for state in http:
+            for action in state.get('native_actions',[]):
+                if action.get('accepted') is not True:continue
+                kind={'Nav2停靠':'dock','Nav2':'nav'}.get(action.get('label'))
+                identifier=action.get('uuid')
+                if kind is None or not isinstance(identifier,str) or len(identifier)!=32:
+                    handle_bad=True;continue
+                key=(kind,identifier);handle_ids.add(key)
+                if action.get('result_known') is True:handle_terminal[key]=action.get('status')
+                if finite(action.get('cancel_requested_wall_time')):handle_cancel_times[key]=action['cancel_requested_wall_time']
+        handles_bound=(not handle_bad and bool(handle_ids) and handle_ids==action_ids
+                       and all(handle_terminal.get(key)==terminal.get(key) for key in action_ids))
+        cancel_events=[e for e in events if e.get('kind')=='cancel_requested' and e.get('task_id')==start['task_id']]
+        cancel_bound=all(('dock',e.get('native_uuid')) in action_ids
+                         and handle_cancel_times.get(('dock',e.get('native_uuid')))==e.get('wall_time') for e in cancel_events)
+        if strict_handles:
+            native = native and handles_bound and cancel_bound
+        terminal_status = http[-1]['task'].get('status') if http else None
+        terminal_task = terminal_status == 'succeeded' if expected_outcome == 'success' else terminal_status in ('canceled','failed')
         windows.append({'task_id': start['task_id'], 'wall_start': start['wall_time'], 'wall_end': end,
                         'first_source_stamp': items[0]['source_stamp'] if items else None,
                         'last_source_stamp': items[-1]['source_stamp'] if items else None,
                         'episode_fixed': bool(items) and all(episode_id(x['payload']) == expected for x in items),
                         'native_actions': [{'kind': k[0], 'uuid': k[1], 'terminal_status': terminal.get(k)} for k in sorted(action_ids)],
-                        'all_native_success': native, 'terminal_task_success': terminal_task,
+                        'all_native_success': native_success, 'native_terminal_known':native_known,
+                        'native_expected_outcome':native,'terminal_task_success':terminal_status == 'succeeded',
+                        'accepted_handle_uuid_bound':handles_bound if strict_handles else None,
+                        'cancel_marker_uuid_and_actual_time_bound':cancel_bound if strict_handles else None,
+                        'terminal_task_expected_outcome':terminal_task,'terminal_task_status':terminal_status,
                         'closed': end is not None})
     receipt = None
     receipt_ok = allow_initial_episode
@@ -134,7 +169,7 @@ def extra_checks(records, marker_path, expected, *, reset_receipt=None, allow_in
         for w in windows:
             if finite(stamp) and w['first_source_stamp'] is not None and w['last_source_stamp'] is not None and w['first_source_stamp'] <= stamp <= w['last_source_stamp']:
                 receipt_inside_task.append(item)
-    all_windows = bool(windows) and all(w['episode_fixed'] and w['all_native_success'] and w['terminal_task_success'] and w['closed'] for w in windows)
+    all_windows = bool(windows) and all(w['episode_fixed'] and w['native_expected_outcome'] and w['terminal_task_expected_outcome'] and w['closed'] for w in windows)
     return {'expected_episode_id': expected, 'episode_identity_fixed': identity,
             'source_monotonic': monotonic, 'first_contact_counters': first_contacts,
             'reset_count_fixed': reset_count_fixed,
@@ -142,7 +177,7 @@ def extra_checks(records, marker_path, expected, *, reset_receipt=None, allow_in
             'all_episode_contact_totals_zero': contacts, 'windows': windows,
             'reset_receipt': receipt, 'reset_receipt_precedes_collection_and_tasks': bool(receipt_ok),
             'reset_receipts_inside_task': receipt_inside_task,
-            'original_full_score_reused': True,
+            'original_full_score_reused':scope == 'transport','scope':scope,'expected_outcome':expected_outcome,
             'passed': identity and all(monotonic.values()) and contacts and reset_count_fixed and bool(receipt_ok) and not receipt_inside_task and all_windows}
 
 
@@ -201,10 +236,412 @@ def transport_checks(samples, audit, attempts, events):
             'passed': bool(windows) and all(window['passed'] for window in windows)}
 
 
+def percentile(values, fraction=.95):
+    values = sorted(value for value in values if finite(value))
+    return values[min(len(values)-1, math.ceil(fraction*len(values))-1)] if values else None
+
+
+def cleanup_checks(records, samples, events, task_id):
+    """Require independently observed quiet, hold, guard ACK and native terminal."""
+    proofs = [e for e in events if e.get('kind') == 'cleanup_checked' and e.get('task_id') == task_id]
+    if not proofs:
+        return {'passed':False,'reason':'No explicit cleanup proof marker'}
+    end = proofs[-1]['wall_time']
+    eligible = [s for s in samples if s['wall_time'] <= end]
+    quiet = oracle.Gate(.7)
+    for item in eligible:
+        raw = item['raw']; guard = raw.get('docking_guard', {})
+        valid = (item['independent_crosscheck'] and raw.get('finite') is True
+                 and raw.get('car_hold') is True and item['car_speed'] < .01
+                 and abs(item['yaw_rate']) < .01 and oracle.norm(raw.get('qvel6',[math.inf])) < .05
+                 and guard.get('enabled') is False and guard.get('tripped') is False)
+        quiet.update(item['stamp'], valid)
+    last = eligible[-1] if eligible else None
+    clocks = [r for r in records if r['topic'] == 'clock' and r['received_wall_time'] <= end]
+    source_age = clocks[-1]['source_stamp']-last['stamp'] if last and clocks else None
+    received_age = end-last['wall_time'] if last else None
+    native = {}
+    for record in records:
+        if record['topic'] in ('dock_status','nav_status') and record['received_wall_time'] <= end:
+            for item in record['payload']['status_list']:
+                native[(record['topic'],uuid_hex(item['goal_info']['goal_id']['uuid']))] = item['status']
+    terminal = bool(native) and all(status in (4,5,6) for status in native.values())
+    fresh = finite(source_age) and -.1 <= source_age <= .25 and finite(received_age) and 0 <= received_age <= .5
+    # An earlier quiet dwell does not certify a later moving/faulted plant.
+    last_valid = bool(last and last['raw'].get('car_hold') is True
+                      and last['car_speed'] < .01 and abs(last['yaw_rate']) < .01
+                      and last['raw'].get('docking_guard',{}).get('enabled') is False
+                      and last['raw'].get('docking_guard',{}).get('tripped') is False)
+    enabled=[s['stamp'] for s in eligible if s['raw'].get('docking_guard',{}).get('enabled') is True]
+    disabled_after_enabled=bool(enabled and last and last['stamp']>max(enabled))
+    return {'passed':quiet.first_pass is not None and quiet.started is not None
+            and last is not None and last['stamp']-quiet.started >= .7 and fresh and terminal and last_valid and disabled_after_enabled,
+            'continuous_quiet':quiet.result(),'received_age_s':received_age,'source_age_s':source_age,
+            'native_terminal_known':terminal,'guard_disabled_after_enabled':disabled_after_enabled,
+            'native_actions':[{'topic':key[0],'uuid':key[1],'status':status}
+                for key,status in sorted(native.items())],'proof_wall_time':end}
+
+
+def dock_checks(records, samples, audit, events, *, expected_outcome='success'):
+    attempts = []
+    for event in events:
+        if event.get('kind') != 'dock_started':
+            continue
+        ends = [e['wall_time'] for e in events if e.get('kind') == 'dock_finished'
+                and e.get('task_id') == event['task_id'] and e['wall_time'] >= event['wall_time']]
+        end = min(ends, default=None)
+        episode = [s for s in samples if event['wall_time'] <= s['wall_time'] <= (end or math.inf)]
+        # Read the existing K predicate; full transport remains unclaimed.
+        original = oracle.full_score(episode, audit)
+        clean = cleanup_checks(records,samples,events,event['task_id'])
+        first=original['dock_true_pose_and_stop']['first_pass_stamp']
+        dwell=[s for s in episode if first is not None and first-.7 <= s['stamp'] <= first]
+        errors = [math.hypot(s['car'][0]-audit['dock_pose'][0],s['car'][1]-audit['dock_pose'][1])
+                  for s in dwell if s['car_speed'] < .01 and abs(s['yaw_rate']) < .01]
+        yaw_errors = [oracle.yaw_error(s['car_yaw'],audit['dock_pose'][2])
+                      for s in dwell if s['car_speed'] < .01 and abs(s['yaw_rate']) < .01]
+        cancellations = [e for e in events if e.get('kind') == 'cancel_requested'
+                         and e.get('task_id') == event['task_id']]
+        cancellation = oracle.cancellation_score(records,samples,cancellations[-1],None) if cancellations else None
+        physical_ok = original['forbidden_contacts']['passed'] and original['independent_pose_crosschecks']['passed']
+        completion = expected_outcome == 'success' and original['dock_true_pose_and_stop']['passed']
+        safety = expected_outcome == 'safe_cancel' and cancellation is not None and cancellation['passed']
+        attempts.append({'task_id':event['task_id'],'started_wall_time':event['wall_time'],'finished_wall_time':end,
+            'dock_true_pose_and_stop':original['dock_true_pose_and_stop'],
+            'forbidden_contacts':original['forbidden_contacts'],'independent_pose_crosschecks':original['independent_pose_crosschecks'],
+            'cleanup':clean,'cancellation':cancellation,'expected_outcome':expected_outcome,
+            'task_completion_passed':bool(completion and physical_ok and clean['passed'] and end is not None),
+            'expected_safety_passed':bool(safety and physical_ok and clean['passed'] and end is not None),
+            'stationary_position_error_p95_m':percentile(errors),'stationary_yaw_error_p95_rad':percentile(yaw_errors),
+            'full_transport_claimed':False,'passed':bool((completion or safety) and physical_ok and clean['passed'] and end is not None)})
+    return {'attempts':attempts,'passed':bool(attempts) and all(item['passed'] for item in attempts)}
+
+
+def observation_metrics(records, samples, audit):
+    """Compare raw standard observations with independently received truth."""
+    poses = {r['source_stamp']:r for r in records if r['topic'] == 'station_pose'}
+    diagnostics = [r for r in records if r['topic'] == 'station_detection']
+    position_errors=[]; angle_errors=[]; paired=detected=misses=0
+    sample_by_stamp = sorted(samples,key=lambda s:s['stamp'])
+    import bisect
+    for record in diagnostics:
+        statuses=record['payload'].get('status',[])
+        if len(statuses) != 1:
+            continue
+        metadata={item['key']:item['value'] for item in statuses[0].get('values',[])}
+        if metadata.get('detected') != 'true':
+            misses += 1; continue
+        detected += 1
+        pose=poses.get(record['source_stamp'])
+        if pose is None or pose['payload']['header'] != record['payload']['header']:
+            continue
+        paired += 1
+        index=bisect.bisect_left(sample_by_stamp,record['source_stamp'],key=lambda s:s['stamp'])
+        choices=sample_by_stamp[max(0,index-1):index+1]
+        if not choices:
+            continue
+        truth=min(choices,key=lambda s:abs(s['stamp']-record['source_stamp']))
+        if abs(truth['stamp']-record['source_stamp']) > .04:
+            continue
+        relative=pose['payload']['pose']['pose']; p=oracle.point(relative)
+        heading=audit['native_dock_pose'][2]-oracle.yaw(oracle.quaternion(relative))
+        c,s=math.cos(heading),math.sin(heading)
+        estimate=[audit['native_dock_pose'][0]-c*p[0]+s*p[1],audit['native_dock_pose'][1]-s*p[0]-c*p[1]]
+        position_errors.append(math.hypot(estimate[0]-truth['car'][0],estimate[1]-truth['car'][1]))
+        angle_errors.append(oracle.yaw_error(heading,truth['car_yaw']))
+    return {'raw_pose_count':len(poses),'raw_diagnostic_count':len(diagnostics),'detected_count':detected,
+        'miss_count':misses,'exact_pair_count':paired,'independent_error_sample_count':len(position_errors),
+        'observation_position_error_p95_m':percentile(position_errors),'observation_yaw_error_p95_rad':percentile(angle_errors),
+        'camera_metadata_count':sum(r['topic']=='camera_metadata' for r in records),
+        'vision_quality_count':sum(r['topic']=='vision_quality' for r in records),
+        'admission_decisions_are_native_consumption_ack':False}
+
+
+def camera_checks(records, expected_episode):
+    physics=next((r['payload'] for r in records if r['topic']=='physics'),{})
+    source=physics.get('source',{});config=source.get('manifest',{}).get('station_camera',{})
+    expected={'scene_sha256':source.get('scene_sha256'),'manifest_sha256':source.get('manifest_sha256'),
+              'episode_id':expected_episode}
+    images={r['source_stamp']:r for r in records if r['topic']=='camera_image'}
+    infos={r['source_stamp']:r for r in records if r['topic']=='camera_info'}
+    metadata=[r for r in records if r['topic']=='camera_metadata'];quality=[r for r in records if r['topic']=='vision_quality']
+    pairs=bad=unmatched=0;sequences=[];capture_ages=[];source_ages=[];inference=[];reasons={}
+    for record in metadata:
+        payload=record['payload'];statuses=payload.get('status',[])
+        if len(statuses)!=1:bad+=1;continue
+        fields={item['key']:item['value'] for item in statuses[0].get('values',[])}
+        identity_ok=all(isinstance(value,str) and fields.get(key)==value for key,value in expected.items())
+        identity_ok &= payload.get('header',{}).get('frame_id')=='cooperation_camera_optical_frame'
+        identity_ok &= statuses[0].get('hardware_id')=='cooperation_camera'
+        identity_ok &= not any(key in fields for key in ('car_pose','cargo_pose','qpos','truth_pose'))
+        try:
+            sequence=int(fields.get('sequence',''));capture=int(fields.get('capture_steady_ns',''))
+            identity_ok &= sequence>0 and capture>0
+        except (TypeError,ValueError):identity_ok=False
+        if not identity_ok:bad+=1;continue
+        sequences.append(sequence)
+        image=images.get(record['source_stamp']);info=infos.get(record['source_stamp'])
+        if image and info and image['payload']['header']==info['payload']['header']==payload['header']:
+            image_payload=image['payload'];info_payload=info['payload']
+            calibrated=(image_payload.get('encoding')=='rgb8'
+                and image_payload.get('width')==info_payload.get('width')==config.get('width')
+                and image_payload.get('height')==info_payload.get('height')==config.get('height')
+                and info_payload.get('k')==config.get('k') and info_payload.get('d')==config.get('d'))
+            if calibrated:pairs+=1
+            else:bad+=1
+        else:unmatched+=1
+    for record in quality:
+        for status in record['payload'].get('status',[]):
+            fields={}
+            for item in status.get('values',[]):
+                try:fields[item['key']]=json.loads(item['value'])
+                except (TypeError,ValueError):fields[item['key']]=item['value']
+            if any(fields.get(key)!=value for key,value in expected.items()):bad+=1
+            reason=str(fields.get('reason',status.get('message','unknown')));reasons[reason]=reasons.get(reason,0)+1
+            for key,target in (('capture_age_s',capture_ages),('source_age_s',source_ages),('inference_duration_s',inference)):
+                if finite(fields.get(key)):target.append(fields[key])
+    monotonic=bool(sequences) and all(b>a for a,b in zip(sequences,sequences[1:]))
+    return {'passed':bool(config) and pairs>0 and bool(quality) and bad==0 and monotonic,
+        'exact_calibrated_image_metadata_pairs':pairs,'bad_identity_or_calibration_count':bad,
+        'metadata_sequence_monotonic':monotonic,'quality_count':len(quality),'quality_reasons':reasons,
+        'capture_age_p95_s':percentile(capture_ages),'source_age_p95_s':percentile(source_ages),
+        'inference_duration_p95_s':percentile(inference),'quality_is_probability':False,
+        'metadata_count':len(metadata),'unmatched_image_info_metadata_count':unmatched,
+        'complete_rgb_pairing_claimed':False,'expected_camera_sample_coverage':'unknown',
+        'native_consumption_ack_claimed':False,'pixel_bytes_recorded_in_oracle':False}
+
+
+def camera_artifacts(directory):
+    """Read the existing runner layout; missing or partial logs stay explicit."""
+    root=Path(directory).resolve().parent/'runtime'/'vision'
+    result={'directory':str(root),'renderer':[],'detector':[], 'read_errors':{}, 'missing':[], 'sha256':{}}
+    for key,name in (('renderer','camera.jsonl'),('detector','vision.jsonl')):
+        path=root/name
+        if not path.is_file():
+            result['missing'].append(name);continue
+        try:
+            digest=hashlib.sha256()
+            with path.open('rb') as stream:
+                for line in stream:
+                    digest.update(line)
+                    try:
+                        value=json.loads(line)
+                        if not isinstance(value,dict):raise ValueError('camera artifact must be an object')
+                        result[key].append(value)
+                    except (ValueError,TypeError):
+                        result['read_errors'][name]=result['read_errors'].get(name,0)+1
+            result['sha256'][name]=digest.hexdigest()
+        except OSError as error:
+            result['read_errors'][name]=str(error)
+    result['readback']='missing' if result['missing'] else 'partial' if result['read_errors'] else 'complete'
+    return result
+
+
+def camera_frame_key(fields, source_stamp):
+    """Join original source stamps at nanosecond precision, without restamping."""
+    sequence=fields.get('sequence')
+    if isinstance(sequence,str) and sequence.isdigit():sequence=int(sequence)
+    if type(sequence) is not int or sequence<=0 or not finite(source_stamp) or source_stamp<=0:
+        return None
+    identity=tuple(fields.get(key) for key in ('scene_sha256','manifest_sha256','episode_id'))
+    if not all(isinstance(value,str) and value for value in identity):return None
+    return (*identity,sequence,int(round(source_stamp*1e9)))
+
+
+def diagnostic_fields(record, *, camera=False):
+    payload=record.get('payload',{});statuses=payload.get('status',[])
+    if len(statuses)!=1:return None
+    pairs=statuses[0].get('values',[])
+    try:
+        fields={item['key']:item['value'] if camera else json.loads(item['value']) for item in pairs}
+        if len(fields)!=len(pairs):return None
+        header=payload['header'];stamp=header['stamp']
+        if type(stamp['sec']) is not int or type(stamp['nanosec']) is not int or not 0<=stamp['nanosec']<1_000_000_000:return None
+        source=stamp['sec']+stamp['nanosec']*1e-9
+        if header['frame_id']!=('cooperation_camera_optical_frame' if camera else 'base_footprint'):return None
+        key=camera_frame_key(fields,source)
+        if key is None or not finite(record.get('source_stamp')) or key[-1]!=int(round(record['source_stamp']*1e9)):return None
+        if not camera and camera_frame_key(fields,fields.get('stamp'))!=key:return None
+        return key,fields,header
+    except (KeyError,TypeError,ValueError):return None
+
+
+def rgb_occlusion_checks(records, source, status, artifacts):
+    """Prove an opaque rendered frame caused a same-frame RGB detection miss."""
+    artifacts=artifacts or {'renderer':[],'detector':[],'missing':['camera.jsonl','vision.jsonl'],
+                            'read_errors':{},'readback':'missing','directory':None}
+    expected=tuple(source.get(key) for key in ('scene_sha256','manifest_sha256','episode_id'))
+    metadata={};quality={};images={};detector={}
+    for record in records:
+        if record['topic'] in ('camera_metadata','vision_quality'):
+            parsed=diagnostic_fields(record,camera=record['topic']=='camera_metadata')
+            if parsed is not None:(metadata if record['topic']=='camera_metadata' else quality)[parsed[0]]=parsed
+        elif record['topic']=='camera_image' and finite(record.get('source_stamp')):
+            images[int(round(record['source_stamp']*1e9))]=record['payload']
+    for row in artifacts['detector']:
+        key=camera_frame_key(row,row.get('stamp'))
+        if key is not None:detector[key]=row
+    matched=[];occluded=hash_verified=hash_unknown=hash_mismatch=0;hash_cache={}
+    config=source.get('manifest',{}).get('station_camera',{})
+    start=status.get('started_monotonic');duration=status.get('config',{}).get('duration_wall_s')
+    for frame in artifacts['renderer']:
+        if frame.get('occluded') is not True:continue
+        occluded+=1;key=camera_frame_key(frame,frame.get('stamp'))
+        capture=frame.get('capture_steady_ns')
+        if (key is None or key[:3]!=expected or status.get('episode_id')!=expected[2] or type(capture) is not int or
+                not finite(start) or not finite(duration) or not start<=capture*1e-9<=start+duration):continue
+        joined=metadata.get(key);metric=quality.get(key);row=detector.get(key)
+        if joined is None or metric is None or row is None:continue
+        if joined[1].get('capture_steady_ns')!=str(capture):continue
+        if (metric[1].get('detected') is not False or metric[1].get('reason')!='not_detected' or
+                row.get('detected') is not False or row.get('reason')!='not_detected' or
+                row.get('relative') is not None or row.get('covariance') is not None):continue
+        if artifacts['directory'] is None:continue
+        expected_path=Path(artifacts['directory'])/'rgb'/f'vision-{key[2]}-{key[3]}.png'
+        if row.get('rgb_file')!=str(expected_path):continue
+        try:
+            # Reuse Pillow, already used by the camera. No OpenCV/NumPy ABI is
+            # imported into the planning-venv oracle process.
+            if expected_path not in hash_cache:
+                from PIL import Image
+                with Image.open(expected_path) as pixels:
+                    if pixels.size!=(config.get('width'),config.get('height')):raise ValueError('RGB dimensions changed')
+                    hash_cache[expected_path]=hashlib.sha256(pixels.convert('RGB').tobytes()).hexdigest()
+            independent=images.get(key[-1])
+            if independent is not None:
+                if (independent.get('header')!=joined[2] or independent.get('encoding')!='rgb8' or
+                        independent.get('step')!=config.get('width',0)*3):
+                    hash_mismatch+=1;continue
+                if independent.get('data_sha256') is None:
+                    hash_unknown+=1;hash_status='unknown_independent_hash_not_recorded'
+                elif independent['data_sha256']!=hash_cache[expected_path]:
+                    hash_mismatch+=1;continue
+                else:hash_verified+=1;hash_status='verified'
+            else:hash_unknown+=1;hash_status='unknown_independent_image_not_sampled'
+        except (OSError,ValueError,ImportError):
+            hash_unknown+=1;continue
+        matched.append({'episode_id':key[2],'sequence':key[3],'stamp':key[-1]*1e-9,
+                        'rgb_sha256':hash_cache[expected_path],'independent_image_hash':hash_status})
+    return {'passed':bool(matched),'renderer_occluded_frame_count':occluded,
+            'same_frame_not_detected_count':len(matched),'matched_frames':matched,
+            'independent_rgb_hash_verified_count':hash_verified,'independent_rgb_hash_unknown_count':hash_unknown,
+            'independent_rgb_hash_mismatch_count':hash_mismatch,'artifact_readback':artifacts['readback'],
+            'artifact_missing':artifacts['missing'],'artifact_read_errors':artifacts['read_errors'],
+            'artifact_directory':artifacts['directory'],'artifact_log_sha256':artifacts.get('sha256',{}),
+            'complete_rgb_pairing_claimed':False}
+
+
+def fault_checks(records, events, accepted_windows, *, artifacts=None):
+    """Prove the declared injection actually ran and reached the admission gate."""
+    physics=[r for r in records if r['topic']=='physics']
+    manifest=physics[0]['payload'].get('source',{}).get('manifest',{}) if physics else {}
+    declaration=manifest.get('observation_faults',{'kind':'none'});kind=declaration.get('kind','none')
+    if kind=='none':return {'passed':True,'kind':'none','injection_required':False}
+    statuses=[r['payload']['observation_faults'] for r in physics if isinstance(r['payload'].get('observation_faults'),dict)]
+    if not statuses:return {'passed':False,'kind':kind,'reason':'No independently sampled fault status'}
+    status=statuses[-1];counts=status.get('counts',{});goal=status.get('native_goal_uuid')
+    if not isinstance(counts,dict) or any(type(counts.get(key)) is not int or counts[key]<0 for key in ('triggers','input','output','dropped','mutated')):
+        return {'passed':False,'kind':kind,'reason':'Malformed injection counters'}
+    windows=[window for window in accepted_windows if any(action['kind']=='dock' and action['uuid']==goal
+             for action in window['native_actions']) and window.get('accepted_handle_uuid_bound') is True]
+    started=status.get('started_wall_time');triggered=status.get('trigger_wall_time')
+    bound=(len(windows)==1 and finite(started) and finite(triggered)
+           and windows[0]['wall_start'] <= triggered <= started <= (windows[0]['wall_end'] or math.inf)
+           and status.get('config')==declaration and counts.get('triggers')==1)
+    reasons={}
+    for record in records:
+        if record['topic']=='http_state':data=record['payload'].get('station_perception',{})
+        elif record['topic']=='station_admission':data=record['payload']
+        else:continue
+        for reason,count in data.get('rejection_reason_counts',{}).items():
+            if type(count) is int and count>0:reasons[reason]=max(reasons.get(reason,0),count)
+    # Direct standard diagnostics preserve intermediate rejection reasons too.
+    direct={}
+    for record in records:
+        if record['topic']!='station_admission_event':continue
+        for item in record['payload'].get('status',[]):
+            values={}
+            for pair in item.get('values',[]):
+                try:values[pair['key']]=json.loads(pair['value'])
+                except (TypeError,ValueError):values[pair['key']]=pair['value']
+            if values.get('outcome')=='rejected' and isinstance(values.get('reason'),str):
+                reason=values['reason'];direct[reason]=direct.get(reason,0)+1
+    for reason,count in direct.items():reasons[reason]=max(reasons.get(reason,0),count)
+    coverage={};actual=False
+    if kind=='replay_identity':
+        coverage={key:any(key in reason and count>0 for reason,count in reasons.items())
+                  for key in ('sequence','episode','frame','station_id','manifest_sha256')}
+        actual=(status.get('replay_packets')==6 and counts.get('mutated',0)>=6
+                and sum(reasons.values())>=6 and all(coverage.values()))
+    elif kind=='delay':
+        coverage={'stale_source_rejected':any(('source time' in reason or 'source stamp' in reason)
+                                             and count>0 for reason,count in reasons.items())}
+        actual=counts.get('dropped',0)>0 and status.get('delay_released') is True and coverage['stale_source_rejected']
+    elif kind in ('short_occlusion','long_occlusion'):
+        mode=manifest.get('station_perception',{}).get('mode','ideal')
+        if mode=='vision':
+            rgb=rgb_occlusion_checks(records,physics[0]['payload'].get('source',{}),status,artifacts)
+            coverage={'actual_rgb_miss_during_window':rgb['passed'],'same_frame_rgb_evidence':rgb};actual=rgb['passed']
+        else:actual=counts.get('mutated',0)>0
+    return {'passed':bool(bound and actual),'kind':kind,'injection_required':True,
+        'declared_config':declaration,'actual_status':status,'native_uuid_bound':bound,
+        'rejection_reason_counts':reasons,'rejection_coverage':coverage,'actual_injection_proved':bool(actual),
+        'admission_is_native_consumption_ack':False}
+
+
+def plant_guard_telemetry(records, events):
+    """Describe observed ideal plant assistance without changing any verdict."""
+    physics=[r for r in records if r['topic']=='physics'];windows=[]
+    for start in events:
+        if start.get('kind') not in ('dock_started','full_started'):continue
+        prefix=start['kind'].split('_')[0]
+        finishes=[e['wall_time'] for e in events if e.get('kind')==prefix+'_finished'
+                  and e.get('task_id')==start['task_id'] and e['wall_time']>=start['wall_time']]
+        end=min(finishes,default=None)
+        samples=[r for r in physics if start['wall_time']<=r['received_wall_time']<=(end or math.inf)]
+        enabled=tripped=enable_edges=disable_edges=trip_edges=invalid=gap_count=0
+        enabled_duration=tripped_duration=0.;previous=None;methods=set();hardware=set();margins=set()
+        for record in samples:
+            guard=record['payload'].get('docking_guard',{});stamp=record.get('source_stamp')
+            if (not finite(stamp) or type(guard.get('enabled')) is not bool or type(guard.get('tripped')) is not bool):
+                invalid+=1;previous=None;continue
+            enabled+=int(guard['enabled']);tripped+=int(guard['tripped'])
+            if isinstance(guard.get('method'),str):methods.add(guard['method'])
+            if type(guard.get('hardware_validated')) is bool:hardware.add(guard['hardware_validated'])
+            if finite(guard.get('margin_m')):margins.add(guard['margin_m'])
+            if previous is not None:
+                old_t,old=previous;delta=stamp-old_t
+                enable_edges+=int(old['enabled'] is False and guard['enabled'] is True)
+                disable_edges+=int(old['enabled'] is True and guard['enabled'] is False)
+                trip_edges+=int(old['tripped'] is False and guard['tripped'] is True)
+                if 0<delta<=.1:
+                    if old['enabled'] and guard['enabled']:enabled_duration+=delta
+                    if old['tripped'] and guard['tripped']:tripped_duration+=delta
+                else:gap_count+=1
+            previous=(stamp,guard)
+        first=samples[0]['payload'].get('docking_guard',{}) if samples else {}
+        windows.append({'task_id':start['task_id'],'scope':'dock' if prefix=='dock' else 'transport',
+            'wall_start':start['wall_time'],'wall_end':end,'closed':end is not None,
+            'physics_sample_count':len(samples),'enabled_sample_count':enabled,'tripped_sample_count':tripped,
+            'observed_enable_transitions':enable_edges,'observed_disable_transitions':disable_edges,
+            'observed_trip_transitions':trip_edges,'initial_sample_tripped':first.get('tripped'),
+            'enabled_observed_contiguous_source_duration_s':enabled_duration,
+            'tripped_observed_contiguous_source_duration_s':tripped_duration,
+            'invalid_guard_sample_count':invalid,'source_gap_or_nonadvance_count':gap_count,
+            'maximum_accumulated_source_gap_s':.1,'methods':sorted(methods),
+            'hardware_validated_values':sorted(hardware),'margin_m_values':sorted(margins),
+            'plant_assistance_observed':tripped>0,'pure_vision_precision_claimed':False})
+    return {'windows':windows,'changes_acceptance_verdict':False,
+        'source':'independently received physics raw.docking_guard within task marker windows',
+        'boundary':'Ideal plant velocity guard remains available; observed intervention is separate from sensor/native/physical success.',
+        'sampling_limit':'Durations sum adjacent same-state source intervals <=0.1s; gaps are omitted, not interpolated. An initially tripped sample is not a within-window rising edge.'}
+
+
 def augment_score(value, records, samples, audit, events):
+    scope=getattr(options,'scope','transport'); outcome=getattr(options,'expected_outcome','success')
     extra = extra_checks(records, options.markers, options.expected_episode,
                          reset_receipt=options.reset_receipt,
-                         allow_initial_episode=options.allow_initial_episode)
+                         allow_initial_episode=options.allow_initial_episode,scope=scope,expected_outcome=outcome)
     handoff = transport_checks(samples, audit, value.get('full_attempts', []), events) if audit else {'passed': False, 'windows': []}
     value['original_k_oracle_passed'] = value['passed']
     value['repeated_episode_acceptance'] = extra
@@ -221,7 +658,34 @@ def augment_score(value, records, samples, audit, events):
     value['callback_errors'] = callback_errors
     integrity = value.get('source_integrity', {})
     current_ok = bool(options.score_only) or integrity.get('current_driver_matches_collection_end') is True
-    value['passed'] = bool(value['passed'] and extra['passed'] and handoff['passed'] and not callback_errors and current_ok)
+    value['observation_metrics']=observation_metrics(records,samples,audit) if audit else {}
+    value['scope']=scope;value['expected_outcome']=outcome
+    if scope == 'dock':
+        docking=dock_checks(records,samples,audit,events,expected_outcome=outcome) if audit else {'passed':False,'attempts':[]}
+        value['docking_acceptance']=docking
+        value['full_transport_acceptance_claimed']=False
+        value['passed']=bool(docking['passed'] and extra['passed'] and integrity.get('passed') is True and not callback_errors and current_ok)
+        value['task_completion_passed']=bool(outcome == 'success' and value['passed'])
+        value['expected_safety_passed']=bool(outcome == 'safe_cancel' and value['passed'])
+    else:
+        value['passed'] = bool(value['passed'] and extra['passed'] and handoff['passed'] and not callback_errors and current_ok)
+    first_physics=next((r['payload'] for r in records if r['topic']=='physics'),{})
+    mode=first_physics.get('source',{}).get('manifest',{}).get('station_perception',{}).get('mode','ideal')
+    if mode=='vision':
+        value['camera_acceptance']=camera_checks(records,options.expected_episode)
+        value['passed']=bool(value['passed'] and value['camera_acceptance']['passed'])
+        if scope=='dock':
+            value['task_completion_passed']=bool(outcome=='success' and value['passed'])
+            value['expected_safety_passed']=bool(outcome=='safe_cancel' and value['passed'])
+    fault_kind=first_physics.get('source',{}).get('manifest',{}).get('observation_faults',{}).get('kind')
+    artifacts=(camera_artifacts(options.score_only or options.output)
+               if mode=='vision' and fault_kind in ('short_occlusion','long_occlusion') else None)
+    value['fault_acceptance']=fault_checks(records,events,extra['windows'],artifacts=artifacts)
+    value['passed']=bool(value['passed'] and value['fault_acceptance']['passed'])
+    if scope=='dock':
+        value['task_completion_passed']=bool(outcome=='success' and value['passed'])
+        value['expected_safety_passed']=bool(outcome=='safe_cancel' and value['passed'])
+    value['plant_guard_telemetry']=plant_guard_telemetry(records,events)
     value['live_runtime_acceptance_claimed'] = not bool(options.score_only) and value['passed']
     return value
 
@@ -243,6 +707,8 @@ def parse_options(argv=None):
     parser.add_argument('--markers', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--score-only', type=Path)
+    parser.add_argument('--scope',choices=('dock','transport'),default='transport')
+    parser.add_argument('--expected-outcome',choices=('success','safe_cancel'),default='success')
     result = parser.parse_args(argv)
     if not result.expected_episode.strip():
         parser.error('--expected-episode must be nonempty')

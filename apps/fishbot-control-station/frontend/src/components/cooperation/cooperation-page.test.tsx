@@ -10,7 +10,7 @@ const hooks = vi.hoisted(() => ({ active: false, cursor: 0, values: [] as unknow
 vi.mock('@/lib/cooperation-frame', async (original) => {
   const actual = await original<typeof import('@/lib/cooperation-frame')>()
   return { CooperationFrameBuffer: class extends actual.CooperationFrameBuffer {
-    constructor(options: ConstructorParameters<typeof actual.CooperationFrameBuffer>[0]) { super(options); if (hooks.active) hooks.frames = options }
+    constructor(options: ConstructorParameters<typeof actual.CooperationFrameBuffer>[0]) { super(options); if (hooks.active && options.endpoint !== 'vision-frame.jpg') hooks.frames = options }
     request(scene: string | null, stamp: number | null) { if (!hooks.active) super.request(scene, stamp) }
   } }
 })
@@ -73,6 +73,15 @@ describe('cooperation page evidence rendering', () => {
     expect(workflow).toContain('当前阶段')
   })
 
+  it.each(['vision', 'perturbed'])('discloses the actual %s mode instead of retaining the ideal-beacon claim', (mode) => {
+    const html = render({ state: { ...state, perception: { mode, publisher: 'actual-publisher', detected: false,
+      reason: '等待已确认观测', confidence: null, stamp: null, received_age_s: null, source_age_s: null,
+      counts: {}, reprojection_error_px: null } } })
+    expect(html).toContain(mode === 'vision' ? '近距离精停靠使用 AprilTag 图像观测' : '近距离精停靠使用受扰仿真信标')
+    expect(html).not.toContain('近距离精停靠使用理想化仿真信标；未接入视觉识别')
+    expect(html).toContain('等待已确认观测')
+  })
+
   it('rejects the previous source in the first render before camera effects clear it', () => {
     const html = render({ state: { ...state, source: { scene_sha: 'replacement-scene' } } })
     expect(html).toContain('画面来源已变化，等待新帧')
@@ -115,6 +124,47 @@ describe('cooperation page evidence rendering', () => {
     expect(html).toContain('正在取消，等待停稳')
     expect(html.match(/disabled=""/g)).toHaveLength(2)
     expect(html).not.toContain('装货运输完成')
+  })
+
+  it.each(['running', 'succeeded'] as const)('shows %s dock feedback without claiming arm loading or full transport', (status) => {
+    const html = render({ state: { ...state, task: { ...state.task, scope: 'dock', status,
+      stage: status === 'succeeded' ? 'succeeded' : 'car_to_dock', message: status === 'succeeded' ? '停靠完成' : '正在停靠' } } })
+    expect(html).toContain('停靠任务')
+    expect(html).toContain(status === 'succeeded' ? '停靠完成' : '停靠进行中')
+    expect(html).toContain('本回合未执行装货')
+    expect(html).not.toContain('机械臂已退出')
+    expect(html).not.toContain('装货运输完成')
+    expect(html).not.toContain('装货运输流程')
+    const flow = html.match(/<div class="cooperation-process">([\s\S]*?)<\/ol>/)?.[1]
+    expect(flow).toContain('停靠流程')
+    expect(flow).toContain('确认小车停稳')
+    expect(flow).not.toContain('机械臂抓取')
+    expect(flow).not.toContain('小车运输')
+    if (status === 'succeeded') expect(html).toContain('停靠停稳验证完成')
+    // The existing start action still requests a complete transport task.
+    expect(html).toContain('开始装货运输')
+  })
+
+  it.each([undefined, 'transport'] as const)('retains complete transport wording for scope %s', (scope) => {
+    const html = render({ state: { ...state, task: { ...state.task, scope, status: 'succeeded',
+      stage: 'delivery_stopped', message: '实际装货运输完成' } } })
+    expect(html).toContain('装货运输任务')
+    expect(html).toContain('装货运输流程')
+    expect(html).toContain('装货运输完成')
+    expect(html).toContain('机械臂已退出')
+    expect(html).not.toContain('本回合未执行装货')
+  })
+
+  it('labels archived dock success independently from legacy transport success', () => {
+    const task = { ...state.task, status: 'succeeded' as const, stage: 'succeeded', message: '历史任务已完成' }
+    const html = render({ state: { ...state, history: [
+      { episode_id: 'dock-episode', task: { ...task, id: 'dock-task', scope: 'dock' }, events: [], completed_at: 10000 },
+      { episode_id: 'transport-episode', task: { ...task, id: 'transport-task' }, events: [], completed_at: 10001 },
+    ] } })
+    const summaries = [...html.matchAll(/<summary>(.*?)<\/summary>/g)].map((match) => match[1])
+    expect(summaries).toHaveLength(2)
+    expect(summaries.find((summary) => summary.startsWith('停靠完成'))).toBeDefined()
+    expect(summaries.find((summary) => summary.startsWith('装货运输完成'))).toBeDefined()
   })
 
   it('explains why a delivered round cannot start again without resetting the synthetic scene', () => {

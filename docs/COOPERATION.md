@@ -1,10 +1,10 @@
 # 固定 SO101 工位与小车运输
 
-控制站 `/cooperation` 使用同一 MuJoCo 世界中的 FishBot、固定 SO101 和一件自由货物。车先到工位附近，再通过理想仿真信标进行原生精停靠。机械臂把货物放到车载托盘并退出后，车辆运输到交付点。页面相机来自实际物理世界；合作对话由执行阶段及接触反馈产生。
+控制站 `/cooperation` 使用同一 MuJoCo 世界中的 FishBot、固定 SO101 和一件自由货物。车先到工位附近，再通过选定的ideal／perturbed信标或后向RGB AprilTag进行原生精停靠。机械臂把货物放到车载托盘并退出后，车辆运输到交付点。页面相机来自实际物理世界；合作对话由执行阶段及接触反馈产生。
 
 入口在 `/simulation` 标题旁的“固定工位 · 车臂协同”。协同默认使用独立 ROS domain114，HTTP 端口9086。原巡逻 domain107 与地图规则保持独立。
 
-相机保留上一张已显示图片，新JPEG下载并解码成功后才替换，正常换帧不重建图片节点、不切半透明加载样式。单次下载/解码超过3.5秒时丢弃该请求并读取最新目标，保留旧图片的原时间并明确标记失效；仅排队最新一帧。来源改变或仿真时间回退时，显示层立即隐藏旧图；迟到请求不能覆盖新来源。图片缓冲与任务状态独立，刷新画面不重发任务。
+相机保留上一张已显示图片，新JPEG下载并解码成功后才替换，正常换帧不重建图片节点、不切半透明加载样式。单次下载/解码超过3.5秒时丢弃该请求并读取最新目标，保留旧图片的原时间并明确标记失效；仅排队最新一帧。来源改变或仿真时间回退时，显示层立即隐藏旧图；迟到请求不能覆盖新来源。图片缓冲与任务状态独立，刷新画面不重发任务。后向查看保留32组不可变JPEG/元数据，请求按原episode/sequence读同一帧；过期或已回收时拒绝，不替换成另一帧。
 
 ## 再次运行
 
@@ -22,7 +22,7 @@
 - 复用 SO101 原模型、IK、OMPL、碰撞检查和载荷规划。SO101 checkout 是只读依赖。
 - 一件10g货物使用自由关节。执行世界仅在进程初始化或显式新回合边界初始化 `qpos`；活动任务中由执行器、重力和接触推进。没有吸附、任务内传送或跨世界货物复制。
 - 薄 ROS 适配发布编码器里程计、激光、关节状态和仿真时钟，并把速度与关节参考交给 MuJoCo 执行器。新世界没有宣称使用 `ros2_control`。
-- 近距离精停靠默认使用真值派生的理想仿真信标。P0新增显式受扰配置和标准观测合同；没有 RGB 或 AprilTag 识别，也没有硬件验收。受扰单元检查与完整扰动面板分别判断。
+- 近距离精停靠默认使用真值派生的理想仿真信标。P1–P3已接实际RGB/AprilTag与完整有限面板；本轮56例覆盖完整，但11例未通过。各模式与独立物理评分分别判断，没有硬件验收。
 - 合成工位、接触材料和位置误差只在仿真验收。没有实车、SO101硬件、策略训练或宇树行走控制验收。
 
 ## 启动
@@ -49,6 +49,20 @@ FISHBOT_COOP_DOMAIN=114 ./tools/fishbot_cooperation.sh run \
 
 前端 Vite/preview 的 `/coop-api` 默认代理到本机9086。更改端口时，在启动前端前设置 `FISHBOT_COOP_PORT`。原仿真页的域继续由 `VITE_FISHBOT_SIM_DOMAIN` 配置；协同页独立显示114。
 
+## 后向视觉与有限面板
+
+后向相机为640×480、垂直视角55°，安装于base_link(-0.06,0,0.168)。OpenGL像素中心对应OpenCV主点319.5/239.5。工位标记为AprilTag36h11/ID0，黑框0.12m、含留白板宽0.15m。原臂回位几何会遮挡名义中心；实际板横向+0.03m，固定标定同步变化。最终停车点与原车臂碰撞几何不变。
+
+相机快照来自原50Hz源周期，后向渲染墙钟上限20Hz。渲染和检测各保留最新待处理帧。标准Image、CameraInfo和帧身份使用完全相同的源时间；检测的标准SingleThreadedExecutor持续接收，推理单独消费最新帧。PNG保留参与检测的实际像素。系统Python排除规划venv的NumPy，检测节点不订阅车体真值。
+
+OpenCV的IPPE双解与LM只使用实际RGB角点。固定变换为T_base_dock=T_base_camera×T_camera_tag×T_tag_dock。默认采用完整六维解并传播协方差，避免硬平地先验拒绝真实俯仰。检测失败只发布失检；旧帧不重复更新时间。质量分是确定性的图像质量指标，不是任务成功概率。部分遮挡的ID正确仍可能产生错误位姿；本轮不宣称已解决通用遮挡定位。
+
+vision先由原生NavigateToPose与AMCL到达准备点，再由RGB驱动DockRobot。视觉准备点距工位0.65m，为Nav2到达容差保留60px分辨率余量；ideal/perturbed仍为0.70m。每回合派发前使用实际manifest检查完整足迹和扫掠。最终停车要求仍为0.04m、0.05rad、0.7源秒，原保护和清理保留。
+
+`POST /coop-api/start`可选`scope=dock|transport`，默认transport。dock复用相同动作与清理，在机械臂加载前结束，不声称装货。网页显示后向帧、检测框、观测模式、具体拒绝原因和独立报告。图像与框在相同episode/sequence解码后一起更新；过期画面不会标成实时。API新字段保持可选，原114/9086默认兼容；实验页5180独立绑定120/9090。
+
+预声明面板与串行验收入口为`tools/cooperation_acceptance.py`。面板包含6基线、24条件、8故障、12RGB短停靠和6完整运输。阈值只从三个开发基线确定，留出不调参；同控制器parent/candidate仅称复现。观测质量、同UUID原生终态、独立物理评分和保护介入分别报告。失败、unknown、采样缺口与额外调试尝试完整保留。当前实际进度回源[视觉计划progress](../plans/visual-docking-robustness-20261014/progress.md)。
+
 ## 任务确认
 
 停靠前通过独立 ROS Bool `/cooperation/docking_guard` 启用执行端停车平面保护。桥接器收到当前场景的新鲜使能回执后才释放车辆保持。仿真执行端在500Hz读取实际车体原点；沿程到停车平面剩余不超过0.01m时锁存，仅把轮速度执行器目标归零，接触、惯性及重力继续积分。该保护属于理想 plant 观测，不代表硬件停靠传感已实现。
@@ -57,7 +71,7 @@ FISHBOT_COOP_DOMAIN=114 ./tools/fishbot_cooperation.sh run \
 
 ## 工位观测合同
 
-准备器将 `station_perception` 固定到 manifest。`ideal` 是原默认观测；`perturbed` 声明噪声、偏差、丢检概率、seed和回合相对时间遮挡；`vision` 要求独立发布者、置信度与方差上界。当前没有视觉生产器；选择vision时，物理节点不创建真值观测发布者，也不回退ideal。
+准备器将 `station_perception` 固定到 manifest。`ideal` 是原默认观测；`perturbed` 声明噪声、偏差、丢检概率、seed和回合相对时间遮挡；`vision` 要求独立发布者、置信度与方差上界。vision由独立系统Python/OpenCV4.6检测真实后向RGB；物理节点不创建真值观测发布者，也不回退ideal。
 
 生产器使用 `/cooperation/station_pose` 的 `PoseWithCovarianceStamped` 和 `/cooperation/station_detection` 的 `DiagnosticArray`。两者使用同一源时间和 `base_footprint`；桥接器复用 Exact TimeSynchronizer，并在转发前校验工位、scene/manifest/episode、序号、来源和协方差。只有本桥发布 `/detected_dock_pose`，原生停靠继续消费 `PoseStamped`。
 
@@ -65,7 +79,7 @@ FISHBOT_COOP_DOMAIN=114 ./tools/fishbot_cooperation.sh run \
 
 工位观测复用50Hz源时间状态周期，每周期读取一次当前物理快照并在扫描前发布；scan仍为10Hz。低实时因子会放大源周期的墙钟间隔，因此不能把10Hz源频率当作10Hz接收频率。状态读取只读已采样缓存，不额外推进随机数或改动世界。
 
-ideal保留原AMCL协方差0.0001。perturbed/vision将相对协方差按定位变换传播到map；未知置信度与方差门槛须在实施前显式声明。不同模式不能通过改字段冒充真实视觉。
+ideal保留原AMCL协方差0.0001；perturbed将相对协方差按定位变换传播到map。vision保留AMCL激光地图定位，不用远处PnP反复重置AMCL；RGB位姿只作为原生Dock目标，其完整六维协方差按固定标定传播到平面观测。置信度与方差门槛在20帧静态预检后冻结；不同模式不能改字段冒充真实视觉。
 
 在新的场景输出中声明受扰条件；参数与面板由当前计划冻结。
 
@@ -182,7 +196,7 @@ FISHBOT_SO101_PYTHON="$FISHBOT_COOP_PYTHON" \
 
 ## 下一步
 
-[视觉停靠鲁棒性计划](../plans/visual-docking-robustness-20261014/task_plan.md) 的P0已完成。观测合同、受扰配置与独立评分入口已接入；隔离120完成运动取消和一次完整运输，原生与独立物理评分通过，货物1.789564m、34源冻结、测试进程已清理。先前默认10Hz观测过期失败保留；50Hz修复保持原门槛。详细边界回源progress。后续完整基线面板、受扰对照、实际RGB与泛化实验分别验收。
+[视觉停靠鲁棒性计划](../plans/visual-docking-robustness-20261014/task_plan.md)已执行50短回合和6运输。34短停靠完成、7正确取消、9短失败；运输ideal1/2、perturbed2/2、vision1/2。整体验收未通过，11失败、83原result与额外尝试全部保留。AMCL接近、实际RGB驱动Dock、独立物理门槛保持；后续只用新开发输出调查偏航持续停稳、时龄与RGB可见性，不用本轮留出调参。详见计划progress。
 
 ## 独立评分入口
 

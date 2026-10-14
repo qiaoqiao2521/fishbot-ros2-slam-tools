@@ -37,6 +37,8 @@ The simulation extensions reuse the same ROS 2 and MuJoCo stack:
 - [Web runtime acceptance](docs/WEB_RUNTIME_ACCEPTANCE.md): isolated Goal dispatch, cancellation and observed Collision Monitor states.
 - [Map rules and route templates](docs/MAP_RULES.md): edit software keepouts, save routes, and inspect actual task records in `/simulation`.
 - [Fixed SO101 cooperation](docs/COOPERATION.md): share one physical world, dock, load a free payload, and transport it through `/cooperation`.
+  Rear RGB AprilTag docking, optional dock-only tasks, and a frozen acceptance panel reuse the same stack.
+  Current native and physical results are recorded in the [visual docking progress](plans/visual-docking-robustness-20261014/progress.md).
 
 The optional [Arena evaluation deployment](experiments/arena/README.md) provides
 pinned upstream preparation and a two-condition policy evaluation configuration.

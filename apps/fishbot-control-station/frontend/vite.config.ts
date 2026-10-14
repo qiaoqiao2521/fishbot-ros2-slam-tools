@@ -2,6 +2,9 @@ import path from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const frontendPort = Number(process.env.FRONTEND_PORT || '5173')
+if (!Number.isInteger(frontendPort) || frontendPort < 1 || frontendPort > 65535) throw new Error('FRONTEND_PORT must be a valid TCP port.')
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -10,7 +13,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: frontendPort,
     proxy: {
       '/coop-api': {
         target: `http://127.0.0.1:${process.env.FISHBOT_COOP_PORT || '9086'}`,

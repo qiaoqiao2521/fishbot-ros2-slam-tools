@@ -19,6 +19,23 @@ function response(value: unknown, status = 200) { return new Response(JSON.strin
 function snapshot(state = idle): CooperationSnapshot { return { ...EMPTY_COOPERATION_SNAPSHOT, state, receivedAt: 10000 } }
 
 describe('cooperation service validation and action gates', () => {
+  it('accepts declared dock and transport scope while preserving legacy responses without scope', () => {
+    expect(validateCooperationState(idle)).toEqual(idle)
+    for (const scope of ['dock', 'transport'] as const) {
+      const scoped = { ...idle, task: { ...idle.task, scope } }
+      expect(validateCooperationState(scoped).task.scope).toBe(scope)
+    }
+  })
+
+  it('rejects malformed scope in current tasks and archived tasks instead of claiming transport', () => {
+    for (const scope of [null, 'unknown', true, {}]) {
+      const task = { ...idle.task, scope }
+      expect(() => validateCooperationState({ ...idle, task })).toThrow('状态不完整')
+      expect(() => validateCooperationState({ ...idle, history: [{ episode_id: 'episode-a', task,
+        events: [], completed_at: 10000 }] })).toThrow('状态不完整')
+    }
+  })
+
   it('rejects another domain and malformed actual feedback while accepting startup nulls', () => {
     expect(validateCooperationState(idle)).toEqual(idle)
     expect(validateCooperationState({ ...idle, ready: false, physics: null, source: null, nav: null, stations: null }).ready).toBe(false)

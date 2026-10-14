@@ -40,6 +40,17 @@ class CooperationEvidenceTests(unittest.TestCase):
             with self.assertRaises(core.Rejected):core.request_identity({'task_id':task,'issued_at':issued},now=10)
         with self.assertRaises(core.Rejected):core.request_identity({'task_id':'not-a-task','issued_at':10},now=10)
 
+    def test_optional_scope_keeps_legacy_transport_and_rejects_invalid_cancel(self):
+        task=str(uuid.uuid4());body={'task_id':task,'issued_at':10}
+        self.assertEqual(core.task_scope(body),'transport')
+        self.assertEqual(core.request_identity(dict(body,scope='dock'),now=10),task)
+        self.assertEqual(core.task_scope(dict(body,scope='dock')),'dock')
+        for value in (None,False,'full','',[]):
+            with self.subTest(scope=value),self.assertRaises(core.Rejected):
+                core.request_identity(dict(body,scope=value),now=10)
+        with self.assertRaises(core.Rejected):
+            core.request_identity(dict(body,scope='dock'),cancel=True,now=10)
+
     def test_settled_cargo_requires_support_released_tips_and_full_extent(self):
         raw={'cargo':{'position_relative_tray':[0,0,.01],'quaternion_wxyz':[1,0,0,0],'velocity_relative_tray':[0,0,0]},
              'tray':{'rotation_world':[[1,0,0],[0,1,0],[0,0,1]]},'cargo_tray_floor_contact':True,
@@ -197,7 +208,8 @@ class BridgeRaceTests(unittest.TestCase):
                 'native_docking':{'dock_id':'so101_station'},
                 'arm_home_qpos6':[0.]*6,'arm_joint_names':['joint']*6},
             'scene_sha':'a'*64,'manifest_sha':'b'*64,
-            'args':NS(frame_dir=Path('/nonexistent/cooperation-race-test'),domain=114),
+            'args':NS(frame_dir=Path('/nonexistent/cooperation-race-test'),domain=114,
+                      output=Path('/nonexistent/cooperation-race-test/tasks')),
             'Bool':lambda **kwargs:NS(**kwargs),'JointState':lambda:NS(header=NS()),
             'Canceled':type('Canceled',(RuntimeError,),{}),'NavigateToPose':NS(Goal=lambda:NS()),
             'DockRobot':NS(Goal=lambda:NS()),
@@ -223,9 +235,11 @@ class BridgeRaceTests(unittest.TestCase):
         p.localized=lambda:{'x':0.,'y':0.,'yaw':0.}
         p.nav=NS(server_is_ready=lambda:True)
         p.docking=NS(server_is_ready=lambda:True)
+        p.native_readiness=NS(update=lambda:None,active=lambda:True,snapshot=lambda:{'ready':True})
         p.beacon=None;p.last_station_pose_stamp=-math.inf;p.poses=[]
         p.perception_config=perception.normalize_config();p.station_last_seen=None;p.station_detection=None
         p.station_rejection=None;p.station_counts={'accepted':0,'unavailable':0,'rejected':0,'forwarded':0}
+        p.station_rejection_reason_counts={}
         p.dock_poses=[];p.dock_pose_pub=NS(publish=lambda msg:p.dock_poses.append(msg))
         p.pose_pub=NS(publish=lambda message:p.poses.append(message))
         p.get_name=lambda:'fishbot_so101_cooperation'
@@ -277,6 +291,7 @@ class BridgeRaceTests(unittest.TestCase):
 
     def test_reset_preserves_history_then_confirms_new_episode_and_never_repeats_same_request(self):
         p,body=self.reset_probe();old=p.episode_id;old_task=copy.deepcopy(p.task)
+        p.cleanup_summary={'state':'verified'};p.vision_quality={'episode_id':old,'reprojection_error_px':.1}
         p.reset_episode(body)
         self.assertEqual(p.history[0]['task'],old_task)
         self.assertTrue((p.history_dir/'task-a.json').is_file())
@@ -285,6 +300,7 @@ class BridgeRaceTests(unittest.TestCase):
         receipt=p.reset_record(body['request_id'])
         self.assertEqual(receipt['status'],'succeeded');self.assertNotEqual(p.episode_id,old)
         self.assertEqual(p.task['status'],'idle');self.assertEqual(p.reset_state(p.raw)['last']['to_episode'],p.episode_id)
+        self.assertEqual(p.cleanup_summary['state'],'not_started');self.assertIsNone(p.vision_quality)
         self.assertEqual(p.reset_state(p.raw)['last']['from_episode'],old)
         self.assertEqual(len(p.reset_requests),1);self.assertEqual(len(p.clear_requests),1)
         body['issued_at']-=100
@@ -509,6 +525,25 @@ class BridgeRaceTests(unittest.TestCase):
                 self.assertEqual(p.task['status'],'failed' if distance<.5 else 'succeeded')
                 if distance<.5:self.assertIn('运输位移不足0.5米',p.task['stop_reason'])
 
+    def test_vision_dock_uses_native_staging_before_rgb_alignment_without_loading(self):
+        for mode in ('ideal','vision'):
+            with self.subTest(mode=mode):
+                self.setUp();p=self.bridge;p.task['scope']='dock';p.perception_config['mode']=mode
+                steps=[];p.station_capture_ready=lambda:True
+                p.navigate=lambda goal,**kw:steps.append(('nav',goal,kw))
+                p.align_station_map=lambda:steps.append(('align_rgb',))
+                def dock():steps.append(('dock',));return p.check()
+                p.dock_at_station=dock;p.cleanup=lambda token:steps.append(('cleanup',)) or True
+                def forbidden_planner(*args,**kw):raise AssertionError('dock scope must not load')
+                self.namespace['ArmPlanner']=forbidden_planner
+                p.execute(p.execution_token)
+                self.assertEqual(p.task['status'],'succeeded')
+                self.assertEqual(steps[-3:],[('align_rgb',),('dock',),('cleanup',)])
+                nav=[item for item in steps if item[0]=='nav']
+                self.assertEqual(len(nav),1 if mode=='vision' else 0)
+                if nav:self.assertEqual(nav[0][1:],({'x':.7,'y':0.,'yaw':0.},{'station_localization':False}))
+                self.assertFalse(any('请 SO101 装货' in item['message'] for item in p.events))
+
     def test_dock_action_has_no_hidden_staging_and_requires_payload_success(self):
         p=self.bridge;handle=ControlledHandle();requests=[]
         handle.result_future.resolve(NS(status=4,result=NS(success=False,error_code=905,error_msg='Dock control failed')))
@@ -570,6 +605,13 @@ class BridgeRaceTests(unittest.TestCase):
         self.assertEqual(len(p.dock_poses),1)
         self.assertEqual(p.station_counts['rejected'],1)
         self.assertEqual(p.beacon[0]['sequence'],2)
+        reason='station sequence and source time must advance together'
+        self.assertEqual(p.station_rejection_reason_counts,{reason:1})
+        fresh={**new,'sequence':3,'stamp':10.12,'stamp_ns':10_120_000_000}
+        p.raw['stamp']=p.raw['time_s']=10.12
+        p.observe_station_pair(*self.station_messages(fresh))
+        self.assertIsNone(p.station_rejection)
+        self.assertEqual(p.station_rejection_reason_counts,{reason:1})
 
     def test_loss_diagnostic_never_republishes_or_restamps_last_pose(self):
         p=self.bridge;previous=copy.deepcopy(self.station_measurement())
@@ -621,6 +663,70 @@ class BridgeRaceTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError,'传感器来源'):
                     p.update_station_localization(force=True)
         self.assertEqual(p.poses,[])
+
+    def test_rgb_target_keeps_amcl_localization_and_original_expiry(self):
+        p=self.bridge;measured=self.station_measurement()
+        p.perception_config=self.namespace['normalize_config']({'mode':'vision','publisher':'station_camera',
+            'min_confidence':.75,'max_covariance':[.0013,.0014,.019]})
+        measured.update(mode='vision',publisher='station_camera',idealized_truth_derived=False)
+        p.get_publishers_info_by_topic=lambda topic:[NS(node_name=
+            'fishbot_so101_cooperation' if topic=='/detected_dock_pose' else 'station_camera')]
+        self.assertEqual(p.update_station_localization(force=True),{'x':.7,'y':0.,'yaw':0.})
+        self.assertEqual(p.poses,[])
+        p.localized=lambda: (_ for _ in ()).throw(AssertionError('RGB must not reset or require AMCL to match PnP'))
+        def new_frame():
+            raw=p.raw
+            measured['stamp']=raw['stamp'];measured['stamp_ns']=round(raw['stamp']*1e9)
+            measured['sequence']+=1;p.beacon=(measured,self.clock,NS(sec=10,nanosec=0))
+        self.on_sleep=new_frame
+        p.align_station_map()
+        self.assertEqual(p.poses,[])
+        measured['stamp']=9.;measured['stamp_ns']=9_000_000_000
+        with self.assertRaisesRegex(RuntimeError,'过期'):p.update_station_localization()
+        self.assertEqual(p.poses,[])
+
+
+    def test_viewer_reads_exact_retained_frame_after_latest_changes(self):
+        p=self.bridge;self.station_measurement()
+        with tempfile.TemporaryDirectory() as directory:
+            self.namespace['args'].frame_dir=Path(directory)
+            def write_frame(sequence,stamp,pixels):
+                name=f'vision-{p.episode_id}-{sequence}'
+                info={'episode_id':p.episode_id,'sequence':sequence,'stamp':stamp,
+                    'wall_time':self.epoch,'scene_sha256':'a'*64,'manifest_sha256':'b'*64,
+                    'image_file':name+'.jpg','image_width':640,'image_height':480,
+                    'corners':[[10.,10.],[30.,10.],[30.,30.],[10.,30.]]}
+                (Path(directory)/(name+'.jpg')).write_bytes(pixels)
+                (Path(directory)/(name+'.json')).write_text(json.dumps(info))
+                (Path(directory)/'vision-latest.json').write_text(json.dumps(info))
+            write_frame(123,9.9,b'old-frame');write_frame(124,10.,b'new-frame')
+            self.assertEqual(p.vision_frame_state()['sequence'],124)
+            query={'episode_id':[p.episode_id],'sequence':['123'],'stamp':['9.9']}
+            info=p.vision_frame_request(query)
+            self.assertEqual(p.vision_frame_image(info).read_bytes(),b'old-frame')
+            self.assertEqual(info['stamp'],9.9)
+            with self.assertRaises(core.Rejected):p.vision_frame_request(dict(query,stamp=['9.8']))
+            with self.assertRaises(core.Rejected):p.vision_frame_request(dict(query,episode_id=[str(uuid.uuid4())]))
+            p.raw['stamp']=p.raw['time_s']=13.
+            with self.assertRaisesRegex(ValueError,'来源或时间'):p.vision_frame_request(query)
+
+    def test_quality_reset_race_cannot_restore_old_epoch_and_display_requires_same_frame(self):
+        p=self.bridge;measured=self.station_measurement();p.perception_config['mode']='vision'
+        p.perception_config['publisher']='station_camera';p.vision_quality=None
+        p.get_publishers_info_by_topic=lambda topic:[NS(node_name='station_camera')]
+        values={'scene_sha256':'a'*64,'manifest_sha256':'b'*64,'episode_id':p.episode_id,
+                'sequence':measured['sequence'],'stamp':measured['stamp'],'reprojection_error_px':.2}
+        message=NS(status=[NS(values=[NS(key=k,value=json.dumps(v))for k,v in values.items()])])
+        class ResetOnAcquire:
+            def __enter__(self):p.episode_id=str(uuid.uuid4())
+            def __exit__(self,*args):return False
+        p.lock=ResetOnAcquire();p.observe_vision_quality(message)
+        self.assertIsNone(p.vision_quality)
+        p.lock=threading.RLock();measured['episode_id']=p.episode_id
+        p.vision_quality={**values,'episode_id':p.episode_id,'sequence':2}
+        self.assertIsNone(p.perception_state()['reprojection_error_px'])
+        p.vision_quality['sequence']=measured['sequence']
+        self.assertEqual(p.perception_state()['reprojection_error_px'],.2)
 
     def test_station_hint_preserves_sensor_stamp_and_requires_this_task_owner(self):
         p=self.bridge;measured=self.station_measurement()
@@ -687,6 +793,25 @@ class BridgeRaceTests(unittest.TestCase):
         p.dock_guard_pub=NS(publish=lambda message:p.guard_requests.append(message.data))
         self.assertFalse(p.cleanup(p.execution_token,timeout=1.))
         self.assertEqual(p.guard_requests,[False]);self.assertTrue(p.raw['docking_guard']['enabled'])
+
+    def test_cleanup_freshness_exception_is_explicitly_unknown(self):
+        p=self.bridge
+        def unavailable(): raise RuntimeError('feedback unavailable')
+        p.fresh=unavailable
+        self.assertFalse(p.cleanup(p.execution_token,timeout=.8))
+        self.assertEqual(p.cleanup_summary['state'],'unknown')
+        self.assertEqual(p.cleanup_summary['last_invalid_feedback'],'feedback unavailable')
+
+    def test_cleanup_transient_invalid_feedback_does_not_end_original_budget(self):
+        p=self.bridge;original=p.fresh;calls=[]
+        def transient():
+            calls.append(True)
+            if len(calls)<=2:raise RuntimeError('feedback unavailable')
+            return original()
+        p.fresh=transient
+        self.assertTrue(p.cleanup(p.execution_token,timeout=1.))
+        self.assertEqual(p.cleanup_summary['state'],'verified')
+        self.assertEqual(p.cleanup_summary['last_invalid_feedback'],'feedback unavailable')
 
     def test_native_success_disable_timeout_cannot_escape_cleanup_actual_ack(self):
         p=self.bridge;handle=ControlledHandle()

@@ -114,7 +114,7 @@ class LoopTiming:
               'clock_publish', 'joint_publish', 'odom_publish', 'tf_publish',
               'truth_publish', 'cargo_publish', 'imu_publish', 'state_publish',
               'record_write', 'record_flush', 'scan', 'scan_publish',
-              'beacon_publish', 'frame_offer')
+              'beacon_publish', 'frame_offer', 'camera_offer')
 
     def __init__(self, source_time=lambda: None):
         self.source_time = source_time
@@ -512,6 +512,11 @@ class Physics:
         self.identity = source_identity(self.scene)
         self.episode_id = str(uuid.uuid4())
         self.identity['episode_id'] = self.episode_id
+        from cooperation_faults import FaultInjector, normalize_fault_config
+        self.observation_faults = FaultInjector(
+            normalize_fault_config(self.identity.get('manifest', {}).get('observation_faults')),
+            identity={key: self.identity[key] for key in ('scene_sha256', 'manifest_sha256')})
+        self.observation_faults.begin_episode(self.episode_id)
         self.station_beacon = StationBeacon(self.identity, self.scene)
         self.docking_guard = DockApproachGuard(self.identity['manifest']['dock_pose'])
         mujoco.mj_resetData(self.model, self.data)
@@ -605,6 +610,7 @@ class Physics:
         self.episode_id = str(uuid.uuid4())
         self.identity = {**self.identity, 'episode_id': self.episode_id}
         self.station_beacon.begin_episode(self.episode_id, preserved_time)
+        self.observation_faults.begin_episode(self.episode_id)
         self.reset_count += 1
         self.reset_stamp = preserved_time
         self.reset_quiet = ContinuousEvidence(.7)
@@ -881,10 +887,11 @@ def run_ros(args):
     from diagnostic_msgs.msg import DiagnosticArray
     from nav_msgs.msg import Odometry
     from rosgraph_msgs.msg import Clock
-    from sensor_msgs.msg import Imu, JointState, LaserScan
+    from sensor_msgs.msg import Imu, JointState, LaserScan, Image, CameraInfo
     from std_msgs.msg import Bool, String
     from action_msgs.msg import GoalStatusArray
     from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
+    from cooperation_camera import CameraRenderer, frame_messages, IMAGE_TOPIC, INFO_TOPIC, METADATA_TOPIC, FAULT_TOPIC
 
     physics = Physics(args.scene)
     timing = LoopTiming(lambda: float(physics.data.time))
@@ -924,12 +931,24 @@ def run_ros(args):
             if physics.station_beacon.perception_config['mode'] != 'vision':
                 self.station_pose_pub = self.create_publisher(PoseWithCovarianceStamped, STATION_POSE_TOPIC, self.latest_qos)
                 self.station_detection_pub = self.create_publisher(DiagnosticArray, STATION_DETECTION_TOPIC, self.latest_qos)
+            self.camera = None
+            if physics.station_beacon.perception_config['mode'] == 'vision':
+                self.image_pub = self.create_publisher(Image, IMAGE_TOPIC, self.latest_qos)
+                self.camera_info_pub = self.create_publisher(CameraInfo, INFO_TOPIC, self.latest_qos)
+                self.camera_metadata_pub = self.create_publisher(DiagnosticArray, METADATA_TOPIC, self.latest_qos)
+                def camera_publish(pixels, snapshot):
+                    for publisher, message in zip((self.image_pub, self.camera_info_pub, self.camera_metadata_pub),
+                                                  frame_messages(pixels, snapshot, physics.identity['manifest']['station_camera'])):
+                        publisher.publish(message)
+                directory = Path(args.frame_dir).parent/'vision' if args.frame_dir else args.scene.parent/'vision'
+                self.camera = CameraRenderer(physics, directory, camera_publish)
             self.state_pub = self.create_publisher(String, '/cooperation/physics_state', self.latest_qos)
             reset_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                                   durability=DurabilityPolicy.VOLATILE)
             self.reset_pub = self.create_publisher(String, RESET_RESULT_TOPIC, reset_qos)
             self.reset_requests = ResetRequests()
             self.create_subscription(String, RESET_REQUEST_TOPIC, self.reset_command, reset_qos)
+            self.create_subscription(String, FAULT_TOPIC, self.fault_trigger, 10)
             from rclpy.utilities import get_rmw_implementation_identifier
             self.runtime_observation = {'rmw': get_rmw_implementation_identifier(),
                 'ephemeral_qos': {topic: {'depth': pub.qos_profile.depth,
@@ -958,6 +977,13 @@ def run_ros(args):
         def car_hold(self, message):
             physics.wheels.set_hold(message.data)
 
+        def fault_trigger(self, message):
+            try:
+                unique_arm_publisher(self.get_publishers_info_by_topic(FAULT_TOPIC), args.arm_publisher_node)
+                physics.observation_faults.trigger(json.loads(message.data))
+            except (ValueError, TypeError, KeyError) as error:
+                self.reject('observation_fault_trigger', error)
+
         def native_status(self, topic, message):
             self.native_busy[topic] = any(item.status not in (4, 5, 6) for item in message.status_list)
             physics.native_actions_busy = any(self.native_busy.values())
@@ -985,6 +1011,8 @@ def run_ros(args):
                     raise ValueError('reset request expired before the physics boundary')
                 begin = frames.reset_episode if frames else physics.reset_episode
                 episode_id, reset_stamp = begin(request['episode_id'])
+                if self.camera:
+                    self.camera.slot.fence(episode_id)
                 reply = reset_result(request, episode_id=episode_id, reset_stamp=reset_stamp,
                                      message='new synthetic episode initialized; previous records retained')
                 self.last_rejected = None
@@ -1043,6 +1071,15 @@ def run_ros(args):
                 transform.transform.rotation.w = 1.
                 transforms.append(transform)
             self.static_tf.sendTransform(transforms)
+            camera_config = physics.identity['manifest'].get('station_camera')
+            if camera_config:
+                transform = TransformStamped()
+                transform.header.frame_id, transform.child_frame_id = 'base_footprint', camera_config['frame_id']
+                transform.transform.translation.x, transform.transform.translation.y, transform.transform.translation.z = camera_config['base_camera_translation']
+                # Rear optical axes (+Y,-Z,-X), quaternion xyzw=(-.5,-.5,.5,.5).
+                transform.transform.rotation.x, transform.transform.rotation.y = -.5, -.5
+                transform.transform.rotation.z, transform.transform.rotation.w = .5, .5
+                self.static_tf.sendTransform([transform])
 
         def publish(self, include_scan):
             timing.measure('snapshot_refresh', physics.refresh_snapshot)
@@ -1105,6 +1142,11 @@ def run_ros(args):
             state = physics.state()
             state['last_rejected_reference'] = self.last_rejected
             state['frame_error'] = frames.error if frames else None
+            if getattr(self, 'camera', None):
+                state['camera_error'] = self.camera.error
+                state['camera_rendered_frames'] = self.camera.rendered
+            if hasattr(physics, 'observation_faults'):
+                state['observation_faults'] = physics.observation_faults.status()
             state['loop_diagnostics'] = {**timing.snapshot(), **self.runtime_observation}
             state_json = json.dumps(state, allow_nan=False, separators=(',', ':'))
             timing.measure('state_publish', self.state_pub.publish, String(data=state_json))
@@ -1112,10 +1154,18 @@ def run_ros(args):
                 timing.measure('record_write', record.write, state_json+'\n')
                 timing.measure('record_flush', record.flush)
             if station_observation is not None:
-                station_pose, station_detection = station_messages(station_observation)
-                if station_pose is not None:
-                    timing.measure('beacon_publish', self.station_pose_pub.publish, station_pose)
-                timing.measure('beacon_publish', self.station_detection_pub.publish, station_detection)
+                outgoing = [station_observation]
+                if hasattr(physics, 'observation_faults'):
+                    velocity = physics.body_velocity(physics.car_body)
+                    moving = math.hypot(*velocity[3:5]) > .005 or abs(velocity[2]) > .005
+                    outgoing = physics.observation_faults.apply(station_observation,
+                        wall_time=time.monotonic(), source_stamp=float(physics.data.time),
+                        episode_id=physics.episode_id, moving=moving)
+                for observed in outgoing:
+                    station_pose, station_detection = station_messages(observed)
+                    if station_pose is not None:
+                        timing.measure('beacon_publish', self.station_pose_pub.publish, station_pose)
+                    timing.measure('beacon_publish', self.station_detection_pub.publish, station_detection)
             if include_scan:
                 scan = LaserScan()
                 scan.header.stamp, scan.header.frame_id = current_stamp, 'laser_link'
@@ -1126,6 +1176,8 @@ def run_ros(args):
                 timing.measure('scan_publish', self.scan_pub.publish, scan)
             if frames:
                 timing.measure('frame_offer', frames.offer)
+            if getattr(self, 'camera', None):
+                timing.measure('camera_offer', self.camera.offer)
 
     def fill_pose(pose, body):
         pose.position.x, pose.position.y, pose.position.z = map(float, physics.data.xpos[body])
@@ -1157,6 +1209,8 @@ def run_ros(args):
         try:
             if frames:
                 frames.close()
+            if node.camera:
+                node.camera.close()
             if record:
                 record.close()
             if timing_record:

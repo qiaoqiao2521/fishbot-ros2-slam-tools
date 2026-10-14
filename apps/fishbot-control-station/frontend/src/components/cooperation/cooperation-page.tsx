@@ -9,6 +9,7 @@ import {
 } from '@/lib/cooperation'
 import './cooperation.css'
 import { CooperationFrameBuffer } from '@/lib/cooperation-frame'
+import { CooperationPerceptionPanel } from './cooperation-perception-panel'
 
 export function CooperationPage({ onBack, controller: suppliedController }: { onBack: () => void; controller?: CooperationController }) {
   const [controller] = useState(() => {
@@ -21,10 +22,14 @@ export function CooperationPage({ onBack, controller: suppliedController }: { on
   const [now, setNow] = useState(Date.now)
   const [frame, setFrame] = useState<CooperationFrameObservation | null>(null)
   const [displayedFrameSrc, setDisplayedFrameSrc] = useState<string | null>(null)
+  const [visionFrame, setVisionFrame] = useState<CooperationFrameObservation | null>(null)
+  const [displayedVisionSrc, setDisplayedVisionSrc] = useState<string | null>(null)
   const frameStamp = snapshot.state?.frame.available ? snapshot.state.frame.stamp : null
   const frameScene = cooperationFrameSourceKey(snapshot.state)
   const episodeId = snapshot.state?.episode_id
   const frameBuffer = useRef<CooperationFrameBuffer | null>(null)
+  const visionBuffer = useRef<CooperationFrameBuffer | null>(null)
+  const vision = snapshot.state?.vision_frame
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 250)
@@ -49,11 +54,20 @@ export function CooperationPage({ onBack, controller: suppliedController }: { on
     return () => { buffer.dispose(); frameBuffer.current = null }
   }, [])
   useEffect(() => { frameBuffer.current?.request(frameScene, frameStamp, episodeId) }, [frameScene, frameStamp, episodeId])
+  useEffect(() => {
+    const buffer = new CooperationFrameBuffer({ display: setDisplayedVisionSrc, observe: setVisionFrame, endpoint: 'vision-frame.jpg' })
+    visionBuffer.current = buffer
+    return () => { buffer.dispose(); visionBuffer.current = null }
+  }, [])
+  useEffect(() => {
+    visionBuffer.current?.request(frameScene, vision?.available ? vision.stamp : null, episodeId, vision)
+  }, [frameScene, vision, episodeId])
 
   return <CooperationView snapshot={snapshot} now={now} frame={frame} onBack={onBack}
     onStart={() => { void controller.act('start') }} onCancel={() => { void controller.act('cancel') }}
     onReset={() => { void controller.reset() }}
-    onRefresh={() => { void controller.refresh() }} displayedFrameSrc={displayedFrameSrc} />
+    onRefresh={() => { void controller.refresh() }} displayedFrameSrc={displayedFrameSrc}
+    visionFrame={visionFrame} displayedVisionSrc={displayedVisionSrc} />
 }
 
 type CooperationViewProps = {
@@ -66,13 +80,15 @@ type CooperationViewProps = {
   onReset?: () => void
   onRefresh: () => void
   displayedFrameSrc?: string | null
+  visionFrame?: CooperationFrameObservation | null
+  displayedVisionSrc?: string | null
 }
 
 function metric(value: number | undefined, digits = 3): string {
   return value === undefined ? '未收到' : value.toFixed(digits)
 }
 
-export function CooperationView({ snapshot, now, frame, onBack, onStart, onCancel, onReset, onRefresh, displayedFrameSrc }: CooperationViewProps) {
+export function CooperationView({ snapshot, now, frame, onBack, onStart, onCancel, onReset, onRefresh, displayedFrameSrc, visionFrame = null, displayedVisionSrc = null }: CooperationViewProps) {
   const { state, pending, receipt, resetReceipt, actionError, connectionError } = snapshot
   const connected = cooperationConnected(snapshot, now)
   const ready = connected && !!state?.ready
@@ -85,7 +101,9 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
   const imageSrc = !frameMatchesSource ? null : displayedFrameSrc === undefined && frameStamp !== null
     ? `/coop-api/frame.jpg?stamp=${encodeURIComponent(frame?.loadedStamp ?? frameStamp)}${state?.episode_id ? `&episode_id=${encodeURIComponent(state.episode_id)}` : ''}` : displayedFrameSrc
   const task = state?.task
-  const stageLabel = cooperationStageLabel(task?.stage)
+  const dockOnly = task?.scope === 'dock'
+  const stages = dockOnly ? COOPERATION_STAGES.slice(0, 2) : COOPERATION_STAGES
+  const stageLabel = cooperationStageLabel(task?.stage, task?.scope)
   const canStart = cooperationCanStart(snapshot, now)
   const canCancel = cooperationCanCancel(snapshot, now)
   const canReset = cooperationCanReset(snapshot, now)
@@ -94,7 +112,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
     .sort((first, second) => first.sequence - second.sequence)
   const carStopped = !!physics && Math.abs(physics.car.linear_speed) < 0.01 && Math.abs(physics.car.angular_speed) < 0.03
   const stageRole = COOPERATION_STAGES.find((item) => item.key === task?.stage)?.role
-  const armPhase = stageRole === 'arm' ? stageLabel : task?.status === 'succeeded' ? '机械臂已退出' : '等待机械臂阶段反馈'
+  const armPhase = dockOnly ? '本回合未执行装货' : stageRole === 'arm' ? stageLabel : task?.status === 'succeeded' ? '机械臂已退出' : '等待机械臂阶段反馈'
   const startReason = resetReceipt || state?.reset?.pending ? '正在核对场景重置，暂不能派发新任务。'
     : receipt ? '正在核对原任务，暂不能重复派发。' : !connected ? '等待有效的协同服务状态。'
     : !state?.ready ? state?.reason : !canStart ? '当前任务尚未结束。' : '小车到固定工位装货，再驶向交付点。'
@@ -108,7 +126,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
       <div>
         <div className="cooperation-mode"><span aria-hidden="true" />共享 MuJoCo 仿真<span>ROS 域 {COOPERATION_DOMAIN}</span></div>
         <h1>车臂协同</h1>
-        <p>固定 SO101 工位装货，FishBot 运输到交付点。</p>
+        <p>{dockOnly ? 'FishBot 接近固定工位，完成停靠与停稳验证。' : '固定 SO101 工位装货，FishBot 运输到交付点。'}</p>
       </div>
       <div className="cooperation-header-actions">
         <button type="button" className="cooperation-button cooperation-quiet" onClick={onRefresh}><RefreshCw size={16} aria-hidden="true" />读取最新反馈</button>
@@ -147,21 +165,25 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
           <span>物理反馈 {physics ? `${physics.stamp.toFixed(3)} s` : '未收到'}</span>
           <span>{connected ? '状态每秒读取' : '当前显示为历史反馈'}</span>
         </div>
+        <CooperationPerceptionPanel state={state} connected={connected} now={now} frame={visionFrame} imageSrc={displayedVisionSrc} />
         <div className="cooperation-process">
-          <h2>装货运输流程</h2>
-          <ol>{COOPERATION_STAGES.map((stage, index) => <li key={stage.key} aria-current={stage.key === task?.stage ? 'step' : undefined}>
+          <h2>{dockOnly ? '停靠流程' : '装货运输流程'}</h2>
+          <ol>{stages.map((stage, index) => <li key={stage.key} aria-current={stage.key === task?.stage || (dockOnly && task?.status === 'succeeded' && stage.key === 'dock_stopped') ? 'step' : undefined}>
             <span>{index + 1}</span><strong>{stage.label}</strong>
           </li>)}</ol>
           <p>当前阶段：<strong>{stageLabel}</strong>。阶段由协同服务的实际反馈更新。</p>
-          <p>近距离精停靠使用理想化仿真信标；未接入视觉识别。</p>
+          <p>{state?.perception?.mode === 'vision' ? '近距离精停靠使用 AprilTag 图像观测；检测失败时不回退到理想信标。'
+            : state?.perception?.mode === 'perturbed' ? '近距离精停靠使用受扰仿真信标；未接入视觉识别。'
+              : state?.perception && state.perception.mode !== 'ideal' ? `当前停靠感知模式：${state.perception.mode}。等待已确认的感知来源。`
+                : '近距离精停靠使用理想化仿真信标；未接入视觉识别。'}</p>
         </div>
       </section>
 
       <aside className="cooperation-sidebar">
         <section className="cooperation-task" aria-labelledby="cooperation-task-heading">
-          <div className="cooperation-section-heading"><h2 id="cooperation-task-heading">装货运输任务</h2><Truck size={20} aria-hidden="true" /></div>
+          <div className="cooperation-section-heading"><h2 id="cooperation-task-heading">{dockOnly ? '停靠任务' : '装货运输任务'}</h2><Truck size={20} aria-hidden="true" /></div>
           <div className={`cooperation-task-state cooperation-task-${task?.status ?? 'idle'}`} role="status">
-            <strong>{pending === 'reset' ? '正在提交场景重置' : pending === 'start' ? '正在派发任务' : pending === 'cancel' ? '正在发送取消' : cooperationStatusLabel(task?.status)}</strong>
+            <strong>{pending === 'reset' ? '正在提交场景重置' : pending === 'start' ? '正在派发任务' : pending === 'cancel' ? '正在发送取消' : cooperationStatusLabel(task?.status, task?.scope)}</strong>
             <p>{task?.message || '开始后，小车先驶向固定 SO101 工位。'}</p>
             {task?.id && <small>任务 {task.id}</small>}
             {state?.episode_id && <small>当前回合 {state.episode_id}</small>}
@@ -193,7 +215,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
           <div className="cooperation-section-heading"><div><h2 id="cooperation-history-heading">历史回合</h2><p>以下记录由协同服务保存，场景重置不会删除已完成记录。</p></div><span>{state.history.length} 条</span></div>
           <ol>{[...state.history].reverse().map((entry) => <li key={`${entry.episode_id}-${entry.task.id}`}>
             <details>
-              <summary>{cooperationStatusLabel(entry.task.status)} · 记录时间 {new Date(typeof entry.completed_at === 'number' ? entry.completed_at * 1000 : entry.completed_at).toLocaleString('zh-CN')}</summary>
+              <summary>{cooperationStatusLabel(entry.task.status, entry.task.scope)} · 记录时间 {new Date(typeof entry.completed_at === 'number' ? entry.completed_at * 1000 : entry.completed_at).toLocaleString('zh-CN')}</summary>
               <p>回合 {entry.episode_id}{entry.task.id ? `，任务 ${entry.task.id}` : ''}</p>
               <p>{entry.task.message}</p>
               {entry.task.stop_reason && <p>停止原因：{entry.task.stop_reason}</p>}
@@ -224,7 +246,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
         <dl><div><dt>关节数量</dt><dd>{physics ? physics.arm.q.length : '未收到'}</dd></div>
           <div><dt>最大关节速度</dt><dd>{physics && physics.arm.velocity.length ? `${metric(Math.max(...physics.arm.velocity.map(Math.abs)))} rad/s` : '未收到'}</dd></div>
           <div className="cooperation-joints"><dt>实际关节角度</dt><dd>{physics && physics.arm.q.length ? physics.arm.q.map((value) => `${(value * 180 / Math.PI).toFixed(1)}°`).join(' / ') : '未收到'}</dd></div></dl>
-        <p>只有机械臂退出与货物放稳均确认后，小车才能出发。</p>
+        <p>{dockOnly ? '本回合仅验证停靠与停稳，不执行机械臂装货。' : '只有机械臂退出与货物放稳均确认后，小车才能出发。'}</p>
       </div>
       <div>
         <h2><Box size={19} aria-hidden="true" />自由货物</h2>

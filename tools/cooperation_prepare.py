@@ -108,6 +108,11 @@ def prepare(args):
     perception_path = getattr(args, 'perception_config', None)
     perception_input = json.loads(Path(perception_path).read_text()) if perception_path else None
     station_perception = normalize_config(perception_input)
+    fault_path = getattr(args, 'observation_faults', None)
+    observation_faults = None
+    if fault_path:
+        from cooperation_faults import normalize_fault_config
+        observation_faults = normalize_fault_config(json.loads(Path(fault_path).read_text()))
     if station_perception['station_id'] != 'so101_station':
         raise ValueError('station perception identity must match the native so101_station dock')
     docking_version=require_native_docking_version()
@@ -115,7 +120,12 @@ def prepare(args):
     import numpy as np
     import yaml
     from cooperation_scene import build_scene
-    manifest=build_scene(args.so101_project,args.fishbot_project,args.output)
+    spawn=getattr(args,'spawn',(0.,-2.))
+    spawn_yaw=getattr(args,'spawn_yaw',0.)
+    manifest=build_scene(args.so101_project,args.fishbot_project,args.output,
+                         spawn=spawn,spawn_yaw=spawn_yaw,camera=station_perception['mode']=='vision',
+                         camera_light_scale=getattr(args,'camera_light_scale',1.),
+                         tag_lateral_offset=getattr(args,'tag_lateral_offset',.03))
     model=mujoco.MjModel.from_xml_path(manifest['world_xml'])
     data=mujoco.MjData(model);mujoco.mj_forward(model,data)
     rectangles=[];slices=[]
@@ -159,7 +169,7 @@ def prepare(args):
         rasterize_slices(slices,resolution,size,origin),resolution,size,origin)
     source=args.fishbot_project/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/config/nav2.yaml'
     params=yaml.safe_load(source.read_text())
-    params['amcl']['ros__parameters']['initial_pose'].update(x=manifest['spawn'][0],y=manifest['spawn'][1],yaw=0.)
+    params['amcl']['ros__parameters']['initial_pose'].update(x=manifest['spawn'][0],y=manifest['spawn'][1],yaw=spawn_yaw)
     # The shared ideal lidar and 2 cm map need workcell localization precision.
     # Native probability accumulation penalizes jointly inconsistent endpoints;
     # the original navigation model's sum of cubed scores was almost indifferent
@@ -197,8 +207,11 @@ def prepare(args):
     robot_dock=[float(value) for value in manifest['dock_pose']]
     native_dock=[robot_dock[0],robot_dock[1],
                  math.atan2(math.sin(robot_dock[2]+math.pi),math.cos(robot_dock[2]+math.pi))]
-    staging=[robot_dock[0]+.7*math.cos(robot_dock[2]),
-             robot_dock[1]+.7*math.sin(robot_dock[2]),robot_dock[2]]
+    # Reserve 5 cm for Nav2's arrival tolerance before the frozen 60 px
+    # camera-resolution boundary. Final robot dock and legacy staging stay fixed.
+    staging_distance=.65 if station_perception['mode']=='vision' else .7
+    staging=[robot_dock[0]+staging_distance*math.cos(robot_dock[2]),
+             robot_dock[1]+staging_distance*math.sin(robot_dock[2]),robot_dock[2]]
     docking=params['docking_server']['ros__parameters']
     docking.pop('simple_charging_dock',None)
     docking.update(base_frame='base_footprint',fixed_frame='odom',dock_backwards=True,max_retries=0,
@@ -209,7 +222,7 @@ def prepare(args):
             'external_detection_timeout':.5,'external_detection_translation_x':0.,
             'external_detection_translation_y':0.,'external_detection_rotation_roll':0.,
             'external_detection_rotation_pitch':0.,'external_detection_rotation_yaw':0.,
-            'filter_coef':1.,'docking_threshold':.02,'staging_x_offset':-.7,
+            'filter_coef':1.,'docking_threshold':.02,'staging_x_offset':-staging_distance,
             'staging_yaw_offset':math.pi})
     # Native 1.3.13 checks distance to its target 25 cm beyond the real dock.
     # Match that offset so the complete approach remains checked, without
@@ -252,6 +265,8 @@ def prepare(args):
             'max_range_m':station_perception['range_limit_m'],'noise_std_m':0.,'noise_std_yaw_rad':0.,
             'occlusion_model':'none','native_station_pose':native_dock,
             'assumption':'Ideal simulation-relative perception; not camera or real-hardware evidence'}
+    if observation_faults is not None:
+        manifest['observation_faults'] = observation_faults
     (args.output/'scene-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     return manifest
 
@@ -263,6 +278,11 @@ def main():
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--perception-config',type=Path,
                         help='JSON station observation contract; ideal by default, no vision truth fallback')
+    parser.add_argument('--spawn',type=float,nargs=2,default=(0.,-2.),metavar=('X','Y'))
+    parser.add_argument('--spawn-yaw',type=float,default=0.,help='initial robot yaw in radians')
+    parser.add_argument('--observation-faults',type=Path,help='accepted-Dock fault declaration JSON')
+    parser.add_argument('--camera-light-scale',type=float,default=1.,help='actual renderer light attenuation (.1..1)')
+    parser.add_argument('--tag-lateral-offset',type=float,default=.03,help='calibrated marker offset along world +Y (m)')
     args=parser.parse_args()
     if args.output.exists():parser.error('输出目录必须是新的，以保留已有回合')
     manifest=prepare(args)

@@ -20,6 +20,11 @@ PYTHON_GROUPS = {
         'test_sim_scan_relay.py', 'test_simulation_suite.py', 'test_simulation_report.py',
         'test_simulation_campaign.py', 'test_sampling_trace.py', 'test_keepout_launch.py',
         'test_cooperation_core.py', 'test_cooperation_perception.py', 'test_cooperation_oracle.py',
+        'test_cooperation_faults.py', 'test_cooperation_acceptance.py',
+        'test_cooperation_camera.py', 'test_cooperation_station_vision.py',
+        'test_cooperation_readiness.py', 'test_cooperation_prepare.py',
+        'test_cooperation_scene.py', 'test_cooperation_geometry.py',
+        'test_cooperation_launch.py',
         'test_stack_gate.py', 'test_arena.py',
         'test_arena_bootstrap.py', 'test_arena_colab.py')),
     'mission': (ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests'
@@ -100,6 +105,10 @@ def frontend_group():
     with tempfile.TemporaryDirectory(prefix='fishbot-feedback-vitest-') as temporary:
         output_file = Path(temporary) / 'result.json'
         command = [npm, 'test', '--', 'src/lib/simulation.test.ts',
+                   'src/lib/cooperation.test.ts', 'src/lib/cooperation-reset.test.ts',
+                   'src/lib/cooperation-frame.test.ts', 'src/lib/cooperation-perception.test.ts',
+                   'src/components/cooperation/cooperation-page.test.tsx',
+                   'src/components/cooperation/cooperation-perception-panel.test.tsx',
                    'src/lib/simulation-errors.test.ts',
                    'src/lib/simulation-workspace.test.ts',
                    'src/components/simulation/simulation-map.test.tsx',

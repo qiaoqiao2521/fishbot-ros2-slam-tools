@@ -26,6 +26,8 @@ DRIVER = BASE / 'cooperation_sim.py'
 
 
 def clean(value):
+    if isinstance(value, (bytes, bytearray)):
+        return list(value)
     if isinstance(value, float) and not math.isfinite(value):
         return str(value)
     if isinstance(value, dict):
@@ -77,7 +79,7 @@ def stamp(message):
 def topic_stamp(topic, payload):
     if topic == 'physics': return float(payload['stamp'])
     if topic == 'clock': return stamp(payload['clock'])
-    if topic in ('truth', 'cargo', 'beacon', 'plan', 'received_global_plan', 'lookahead_collision_arc', 'docking_trajectory', 'initialpose', 'encoder_odom', 'cmd_vel', 'amcl_pose'): return stamp(payload['header']['stamp'])
+    if topic in ('truth', 'cargo', 'beacon', 'station_pose', 'station_detection', 'vision_quality', 'camera_metadata', 'camera_image', 'camera_info', 'plan', 'received_global_plan', 'lookahead_collision_arc', 'docking_trajectory', 'initialpose', 'encoder_odom', 'cmd_vel', 'amcl_pose'): return stamp(payload['header']['stamp'])
     if topic == 'tf' and payload.get('transforms'):return stamp(payload['transforms'][0]['header']['stamp'])
     if topic == 'nav_feedback': return stamp(payload['feedback']['current_pose']['header']['stamp'])
     if topic == 'nav_status': return None
@@ -440,6 +442,8 @@ def observe(args):
     from std_msgs.msg import String,Bool
     from action_msgs.msg import GoalStatusArray
     from nav2_msgs.action import NavigateToPose,DockRobot
+    from diagnostic_msgs.msg import DiagnosticArray
+    from sensor_msgs.msg import Image,CameraInfo
     directory=args.output or BASE/f'run-{time.time_ns()}'
     directory.mkdir(parents=True,exist_ok=False,mode=0o700)
     private_json(directory/'source-start.json',driver_audit())
@@ -460,6 +464,7 @@ def observe(args):
     from rclpy.qos import qos_profile_sensor_data
     import copy
     clockq=copy.copy(qos_profile_sensor_data);clockq.depth=1
+    observationq=copy.copy(qos_profile_sensor_data);observationq.depth=100
     statusq=QoSProfile(depth=100,durability=DurabilityPolicy.TRANSIENT_LOCAL,reliability=ReliabilityPolicy.RELIABLE)
     resetq=QoSProfile(depth=100,durability=DurabilityPolicy.VOLATILE,reliability=ReliabilityPolicy.RELIABLE)
     subscriptions=[]
@@ -473,6 +478,13 @@ def observe(args):
             ('/dock_robot/_action/status',GoalStatusArray,'dock_status',statusq),
             ('/dock_robot/_action/feedback',DockRobot.Impl.FeedbackMessage,'dock_feedback',reliable),
             ('/detected_dock_pose',PoseStamped,'beacon',reliable),
+            ('/cooperation/station_pose',PoseWithCovarianceStamped,'station_pose',observationq),
+            ('/cooperation/station_detection',DiagnosticArray,'station_detection',observationq),
+            ('/cooperation/station_admission',DiagnosticArray,'station_admission_event',reliable),
+            ('/cooperation/perception_status',String,'perception_status',reliable),
+            ('/cooperation/camera/camera_info',CameraInfo,'camera_info',observationq),
+            ('/cooperation/camera/frame_metadata',DiagnosticArray,'camera_metadata',observationq),
+            ('/cooperation/vision_quality',DiagnosticArray,'vision_quality',observationq),
             ('/initialpose',PoseWithCovarianceStamped,'initialpose',reliable),
             ('/cooperation/docking_guard',Bool,'guard_enable',statusq),
             ('/cooperation/reset_result',String,'reset_receipt',resetq),
@@ -481,15 +493,32 @@ def observe(args):
             ('/amcl_pose',PoseWithCovarianceStamped,'amcl_pose',reliable),
             ('/tf',TFMessage,'tf',reliable)]:
         def callback(message,name=name):
-            try:record(name,json.loads(message.data) if name in ('physics','reset_receipt') else message_to_ordereddict(message))
+            try:record(name,json.loads(message.data) if name in ('physics','reset_receipt','perception_status') else message_to_ordereddict(message))
             except Exception as error:
                 errors.append(f'{name}: {type(error).__name__}: {error}');record('callback_error',{'topic':name,'error':errors[-1]})
         subscriptions.append(node.create_subscription(msg_type,topic,callback,qos))
+    def image_callback(message):
+        try:
+            # Pixels remain in the camera producer's private image sequence.
+            record('camera_image',{'header':message_to_ordereddict(message.header),
+                'width':message.width,'height':message.height,'encoding':message.encoding,
+                'step':message.step,'data_size':len(message.data),
+                'data_sha256':hashlib.sha256(bytes(message.data)).hexdigest()})
+        except Exception as error:
+            errors.append(f'camera_image: {type(error).__name__}: {error}')
+            record('callback_error',{'topic':'camera_image','error':errors[-1]})
+    subscriptions.append(node.create_subscription(Image,'/cooperation/camera/image_raw',image_callback,clockq))
     def http_worker():
         while not done.is_set():
             try:
                 with urllib.request.urlopen(args.api+'/state',timeout=.8) as response:
-                    record('http_state',json.load(response))
+                    state=json.load(response)
+                    record('http_state',state)
+                    if isinstance(state.get('station_perception'),dict):
+                        record('station_admission',{'native_consumption_ack_claimed':False,
+                            'episode_id':state.get('episode_id'),**state['station_perception']})
+                    if isinstance(state.get('frame'),dict):
+                        record('camera_identity',state['frame'])
             except Exception as error:record('http_error',{'error':f'{type(error).__name__}: {error}'})
             done.wait(.5)
     worker=threading.Thread(target=http_worker,daemon=True);worker.start()
@@ -509,7 +538,11 @@ def observe(args):
                 inventory={topic:[{'node':info.node_name,'namespace':info.node_namespace,'gid':list(info.endpoint_gid)}
                                    for info in node.get_publishers_info_by_topic(topic)]
                            for topic in ('/cooperation/physics_state','/ground_truth/odom','/cooperation/cargo_pose','/clock',
-                                         '/cmd_vel','/detected_dock_pose','/initialpose','/cooperation/docking_guard')}
+                                         '/cmd_vel','/detected_dock_pose','/initialpose','/cooperation/docking_guard',
+                                         '/cooperation/station_pose','/cooperation/station_detection','/cooperation/perception_status',
+                                         '/cooperation/station_admission',
+                                         '/cooperation/camera/image_raw','/cooperation/camera/camera_info',
+                                         '/cooperation/camera/frame_metadata','/cooperation/vision_quality')}
                 record('publisher_inventory',inventory);last_inventory=time.monotonic()
     finally:
         done.set();worker.join(timeout=1.);node.destroy_node();rclpy.shutdown()

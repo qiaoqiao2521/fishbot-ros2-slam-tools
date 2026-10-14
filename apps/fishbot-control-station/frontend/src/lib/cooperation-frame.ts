@@ -1,6 +1,6 @@
-import { COOPERATION_STALE_MS, type CooperationFrameObservation } from './cooperation'
+import { COOPERATION_STALE_MS, type CooperationFrameObservation, type CooperationVisionFrame } from './cooperation'
 
-type Target = { scene: string; stamp: number; episodeId?: string }
+type Target = { scene: string; stamp: number; episodeId?: string; vision?: CooperationVisionFrame }
 type Decoded = Target & { url: string; requestedAt: number }
 type Options = {
   display: (url: string | null) => void
@@ -10,6 +10,7 @@ type Options = {
   createUrl?: (blob: Blob) => string
   revokeUrl?: (url: string) => void
   now?: () => number
+  endpoint?: 'frame.jpg' | 'vision-frame.jpg'
 }
 
 /** Keep the displayed JPEG until its successor has decoded. Queue only the latest target. */
@@ -38,12 +39,14 @@ export class CooperationFrameBuffer {
     this.now = options.now ?? Date.now
   }
 
-  request(scene: string | null, stamp: number | null, episodeId?: string): void {
+  request(scene: string | null, stamp: number | null, episodeId?: string, vision?: CooperationVisionFrame): void {
     if (this.disposed) return
-    if (scene !== this.target?.scene || episodeId !== this.target?.episodeId || (stamp !== null && this.target && stamp < this.target.stamp)) this.reset()
+    if (scene !== this.target?.scene || episodeId !== this.target?.episodeId
+      || (stamp !== null && this.target && stamp < this.target.stamp)
+      || (stamp !== null && vision && this.target?.vision && vision.sequence < this.target.vision.sequence)) this.reset()
     if (!scene || stamp === null) return
-    const changed = this.target?.stamp !== stamp
-    this.target = { scene, stamp, episodeId }
+    const changed = this.target?.stamp !== stamp || this.target?.vision?.sequence !== vision?.sequence
+    this.target = { scene, stamp, episodeId, ...(vision ? { vision: { ...vision, corners: vision.corners?.map(([x, y]) => [x, y]) ?? null } } : {}) }
     if (changed && !this.active) void this.load()
   }
 
@@ -73,10 +76,11 @@ export class CooperationFrameBuffer {
       }, COOPERATION_STALE_MS)
     })
     const timer = this.activeTimer
-    if (!this.displayed) this.options.observe({ scene: target.scene, stamp: target.stamp, changedAt: requestedAt, loadedStamp: null, error: false })
+    if (!this.displayed) this.options.observe({ scene: target.scene, stamp: target.stamp, changedAt: requestedAt, loadedStamp: null, error: false,
+      ...(target.vision ? { vision: target.vision } : {}) })
     let url: string | null = null
     try {
-      const response = await Promise.race([this.fetcher(`/coop-api/frame.jpg?stamp=${encodeURIComponent(target.stamp)}${target.episodeId ? `&episode_id=${encodeURIComponent(target.episodeId)}` : ''}`, { cache: 'no-store', signal: controller.signal }), interrupted])
+      const response = await Promise.race([this.fetcher(`/coop-api/${this.options.endpoint ?? 'frame.jpg'}?stamp=${encodeURIComponent(target.stamp)}${target.episodeId ? `&episode_id=${encodeURIComponent(target.episodeId)}` : ''}${target.vision ? `&sequence=${target.vision.sequence}` : ''}`, { cache: 'no-store', signal: controller.signal }), interrupted])
       if (!response.ok) throw new Error(`Camera HTTP ${response.status}`)
       const blob = await Promise.race([response.blob(), interrupted])
       if (controller.signal.aborted || generation !== this.generation) return
@@ -86,13 +90,15 @@ export class CooperationFrameBuffer {
       const previous = this.displayed
       this.displayed = { ...target, url, requestedAt }
       this.options.display(url)
-      this.options.observe({ scene: target.scene, stamp: target.stamp, changedAt: requestedAt, loadedStamp: target.stamp, error: false })
+      this.options.observe({ scene: target.scene, stamp: target.stamp, changedAt: requestedAt, loadedStamp: target.stamp, error: false,
+        ...(target.vision ? { vision: target.vision } : {}) })
       if (previous) this.release(previous.url)
       url = null
     } catch {
       if ((!controller.signal.aborted || timedOut) && generation === this.generation) this.options.observe({
         scene: target.scene, stamp: target.stamp, changedAt: this.displayed?.requestedAt ?? requestedAt,
         loadedStamp: this.displayed?.stamp ?? null, error: true,
+        ...(this.displayed?.vision ? { vision: this.displayed.vision } : {}),
       })
     } finally {
       if (timer !== null) clearTimeout(timer)
@@ -100,7 +106,7 @@ export class CooperationFrameBuffer {
       if (this.active === controller) {
         this.active = null
         this.cancelActive = null; this.activeTimer = null
-        if (this.target && this.target.stamp !== target.stamp) void this.load()
+        if (this.target && (this.target.stamp !== target.stamp || this.target.vision?.sequence !== target.vision?.sequence)) void this.load()
       }
     }
   }

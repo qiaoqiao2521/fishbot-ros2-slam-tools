@@ -164,6 +164,9 @@ def request_identity(body, *, cancel=False, now=None, episode_id=None):
     expected = {'task_id', 'issued_at'}
     if episode_id is not None:
         expected.add('episode_id')
+    if not cancel and isinstance(body, dict) and 'scope' in body:
+        expected.add('scope')
+        task_scope(body)
     if not isinstance(body, dict) or set(body) != expected:
         raise Rejected('请求须包含 task_id 和 issued_at')
     if episode_id is not None and body['episode_id'] != episode_id:
@@ -179,6 +182,14 @@ def request_identity(body, *, cancel=False, now=None, episode_id=None):
     if not -2 <= now-issued <= 5:
         raise Rejected('请求已过期，请确认当前状态后重新操作', 409)
     return task_id
+
+
+def task_scope(body):
+    """The legacy start request remains a complete transport task."""
+    value = body.get('scope', 'transport') if isinstance(body, dict) else None
+    if value not in ('dock', 'transport'):
+        raise Rejected('任务范围须为 dock 或 transport')
+    return value
 
 
 def reset_request_identity(body, now=None):
