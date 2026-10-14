@@ -2,7 +2,7 @@
 
 ## Current
 
-本轮官方Arena执行、严格回执和资源回收闭环已通过，Root已独立读回。Colab L4完成20步正常关闭和两个23步回合，39文件manifest校验、上传输入/源码/配置起止一致；真实unassign与独立活动0已确认。zero_action任务success为False/False，完整抓取/训练效果没有通过声明。正在进行最终本机回归、项目/知识与Git收尾。先前SIGSEGV、超时和上传失败保留。
+本轮官方Arena执行、严格回执和资源回收闭环已通过，Root已独立读回。Colab L4完成20步正常关闭和两个23步回合，39文件manifest校验、上传输入/源码/配置起止一致；真实unassign与独立活动0已确认。zero_action任务success为False/False，完整抓取/训练效果没有通过声明。最终632回归、项目/知识与源码Git交付均已完成。先前SIGSEGV、超时和上传失败保留。
 
 ## Done
 
@@ -22,7 +22,7 @@
 
 ## Remaining / Next
 
-本轮运行与回收无必需遗留，owner=root完成最终Git读回。当前GPU已释放，不自动分配下一轮。真实策略、SO101/FishBot embodiment、真机和生产稳定性仍需各自验收。固件release.sh按既有来源/板型/分区/工具版本阻碍保留，owner=root，最短接续入口见协同计划Retained work，不执行或提交。
+本轮运行与回收无必需遗留，root已完成源码Git读回。当前GPU已释放，不自动分配下一轮。真实策略、SO101/FishBot embodiment、真机和生产稳定性仍需各自验收。固件release.sh按既有来源/板型/分区/工具版本阻碍保留，owner=root，最短接续入口见协同计划Retained work，不执行或提交。
 
 ## Evidence
 
@@ -81,3 +81,9 @@ Root独立读取closure-20261014-native-transfer的原生日志、聚合JSON、�
 最终全反馈632/632（control352/mission145/autonomy61/frontend74），零跳过、缺依赖与错误0；Root在最终代码后独立执行。GPU原生运行无skip替代；Bash/12路径/diff与选定文档相对链接检查通过。
 
 knowledge updated：Root补写并实际读回既有Wiki/ROS2 与 FishBot.md第20节的JSONL/timings与策略结果分离、不可变证据代际、整组中断、幂等源码PUT读回与未执行产物not_applicable；开发知识入口新增触发词并读回。该恢复规则不授权重复任务/收费调用。没有发布知识库其它累计修改或复制原始会话。
+
+## Verified source delivery
+
+本轮13个明确审查文件提交ca506c6931dda86a0f1aa4b0153c7094c8445474，已推送qiaoqiao2521/fishbot-ros2-slam-tools main；有效账号qiaoqiao2521/id238822818和fetch/push目的地已核对，GitHub API读回同SHA。本条收尾状态作为后续文档提交，源码与GPU验收不变。认证、原生日志、cache及release.sh未入Git；release.sh保留原阻碍与root接续责任。
+
+后续研究协调通知已收到：选题事实回项目SpecMesh，根研究线程串行维护根研究计划。本任务不编辑根研究三文件、不申请额外GPU。视觉停靠鲁棒性计划仍为pending，owner=root后续规划；最短入口为docs/COOPERATION.md与根研究REPORT，不把该规划未建立混成本轮Arena失败，也不启动新实验。
