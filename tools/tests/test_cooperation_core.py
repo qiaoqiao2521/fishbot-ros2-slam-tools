@@ -193,15 +193,24 @@ class BridgeRaceTests(unittest.TestCase):
         parsed=ast.parse((Path(__file__).parents[1]/'cooperation_bridge.py').read_text())
         original=next(node for node in ast.walk(parsed) if isinstance(node,ast.ClassDef) and node.name=='Bridge')
         methods=[copy.deepcopy(node) for node in original.body if isinstance(node,ast.FunctionDef) and node.name!='__init__']
-        extracted=ast.Module(body=[ast.ClassDef(name='BridgeProbe',bases=[],keywords=[],body=methods,decorator_list=[])],type_ignores=[])
+        extracted=ast.Module(body=[ast.ClassDef(name='BridgeProbe',bases=[ast.Name(id='SubscriptionProbeBase',ctx=ast.Load())],keywords=[],body=methods,decorator_list=[])],type_ignores=[])
         self.clock=100.;self.epoch=time.time();self.on_sleep=None;self.threads=[]
         test=self
         class Thread:
             def __init__(self,**kwargs):self.kwargs=kwargs
             def start(self):test.threads.append(self.kwargs)
             def is_alive(self):return False
+        class SubscriptionProbeBase:
+            def create_subscription(self,*values,**options):
+                call=NS(values=values,options=options)
+                self.subscription_calls=getattr(self,'subscription_calls',[])+[call]
+                return call
+        class Clock:pass
+        class TimeSource:
+            def clock_callback(self,message):return message
         import cooperation_perception as perception
         self.namespace={**vars(core),**vars(perception),'copy':copy,'json':json,'math':math,
+            'SubscriptionProbeBase':SubscriptionProbeBase,'Clock':Clock,'TimeSource':TimeSource,
             'np':np,
             'time':NS(monotonic=lambda:self.clock,time=lambda:self.epoch+self.clock-100.,sleep=self.sleep),
             'threading':NS(Thread=Thread), 'String':lambda **kw:NS(**kw), 'ClearEntireCostmap':NS(Request=lambda:NS()),'manifest':{'station_offset':[0.,0.,0.],'dock_pose':[0.,0.,0.],
@@ -262,6 +271,80 @@ class BridgeRaceTests(unittest.TestCase):
         value['episode_id']=p.episode_id;value['source']['episode_id']=p.episode_id
         value['sequence']=73
         return p,value
+
+    def test_builtin_clock_subscription_routes_once_and_preserves_qos_and_options(self):
+        p=self.bridge;p.clock_callbacks=object()
+        source=self.namespace['TimeSource']();callback=source.clock_callback;qos=object()
+        options={'event_callbacks':object(),'qos_overriding_options':object(),
+                 'raw':False,'content_filter_options':object()}
+        call=p.create_subscription(self.namespace['Clock'],'/clock',callback,qos,**options)
+        self.assertIs(call.values[0],self.namespace['Clock']);self.assertEqual(call.values[1],'/clock')
+        self.assertIs(call.values[3],qos)
+        self.assertIs(call.options['callback_group'],p.clock_callbacks)
+        for name,value in options.items():self.assertIs(call.options[name],value)
+        self.assertEqual(len(p.subscription_calls),1)
+        observed=[];p.observe_clock=lambda *values:observed.append(values)
+        message=object();info={'source_timestamp':99}
+        import inspect
+        with self.assertRaises(TypeError):inspect.signature(call.values[2]).bind(message)
+        call.values[2](message,info)
+        self.assertEqual(observed,[(message,info,callback)])
+
+    def test_clock_routing_keeps_explicit_groups_other_subscriptions_and_callbacks(self):
+        p=self.bridge;p.clock_callbacks=object();source=self.namespace['TimeSource']()
+        class DifferentSource(self.namespace['TimeSource']):
+            def clock_callback(self,message):return message
+        cases=[(object(),'/clock',source.clock_callback,None),
+               (self.namespace['Clock'],'/another_clock',source.clock_callback,None),
+               (self.namespace['Clock'],'/clock',lambda message:None,None),
+               (self.namespace['Clock'],'/clock',self.namespace['TimeSource'].clock_callback,None),
+               (self.namespace['Clock'],'/clock',DifferentSource().clock_callback,None),
+               (self.namespace['Clock'],'/clock',source.clock_callback,object())]
+        for msg_type,topic,callback,group in cases:
+            with self.subTest(topic=topic,callback=callback,group=group):
+                call=p.create_subscription(msg_type,topic,callback,7,callback_group=group,raw=True)
+                self.assertIs(call.values[0],msg_type);self.assertEqual(call.values[1],topic)
+                self.assertIs(call.values[2],callback);self.assertEqual(call.values[3],7)
+                self.assertIs(call.options['callback_group'],group);self.assertTrue(call.options['raw'])
+
+    def test_clock_timing_binds_original_stamp_and_labels_inherited_physics_context(self):
+        p,value=self.timed_physics();p.raw=value
+        now=[9.];p.get_clock=lambda:NS(now=lambda:NS(nanoseconds=int(now[0]*1e9)))
+        message=NS(clock=NS(sec=10,nanosec=123456789));calls=[]
+        def original(sample):
+            calls.append(sample);self.clock+=.14;now[0]=10.123456789
+            return 'original-return'
+        self.assertEqual(p.observe_clock(message,{'source_timestamp':91,'received_timestamp':92},original),'original-return')
+        self.assertEqual(calls,[message]);self.assertEqual(p.raw,value);self.assertEqual(p.received,100.)
+        timing=p.bridge_timing.snapshot();event=timing['last']['clock_update']
+        self.assertAlmostEqual(event['duration_s'],.14)
+        self.assertEqual(event['source_stamp_ns'],10123456789)
+        self.assertAlmostEqual(event['source_stamp'],10.123456789)
+        self.assertEqual(event['node_clock_stamp_at_entry'],9.)
+        self.assertAlmostEqual(event['node_clock_stamp_after_update'],10.123456789)
+        self.assertEqual(event['dds_source_timestamp_ns'],91);self.assertEqual(event['dds_received_timestamp_ns'],92)
+        for field in ('scene_sha256','manifest_sha256','episode_id','sequence','producer_wall_time'):
+            self.assertIsNone(event[field])
+        self.assertEqual(event['inherited_physics_scene_sha256'],'a'*64)
+        self.assertEqual(event['inherited_physics_episode_id'],value['episode_id'])
+        self.assertEqual(event['inherited_physics_sequence'],73)
+        self.assertEqual(event['inherited_physics_source_stamp'],10.)
+        self.assertEqual(event['inherited_physics_producer_wall_time'],value['wall_time'])
+        self.assertIn('cached bridge context',event['identity_binding'])
+        self.assertFalse(timing['native_consumption_ack'])
+        self.assertEqual({event['stage'] for event in timing['slow_tail']},{'clock_update','clock_callback'})
+
+    def test_clock_callback_keeps_original_error_and_old_fixture_without_diagnostics(self):
+        p=self.bridge;message=NS(clock=NS(sec=0,nanosec=0));error=RuntimeError('clock failure')
+        def original(sample):raise error
+        with self.assertRaises(RuntimeError) as raised:p.observe_clock(message,None,original)
+        self.assertIs(raised.exception,error)
+        self.assertNotIn('bridge_timing',p.__dict__)
+        p.bridge_timing=BridgeTiming()
+        with self.assertRaises(RuntimeError):p.observe_clock(message,None,original)
+        event=p.bridge_timing.snapshot()['last']['clock_update']
+        self.assertEqual(event['source_stamp_ns'],0);self.assertFalse(event['dds_info_available'])
+        self.assertIsNone(event['dds_source_timestamp_ns'])
 
     def test_physics_timing_attributes_slow_readiness_to_exact_input_without_restamping(self):
         p,value=self.timed_physics()

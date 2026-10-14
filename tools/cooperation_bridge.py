@@ -32,7 +32,7 @@ class BridgeTiming(LoopTiming):
               'physics_readiness', 'physics_lock_wait', 'physics_cache_commit',
               'station_detection', 'station_pair', 'station_lock_wait',
               'station_parse', 'station_admission', 'station_publisher_query',
-              'http_lock_wait', 'http_assembly')
+              'http_lock_wait', 'http_assembly', 'clock_callback', 'clock_update')
 
     def __init__(self):
         super().__init__()
@@ -73,12 +73,14 @@ def run(args):
     from rclpy.node import Node
     from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy, qos_profile_sensor_data
     from rclpy.time import Time
+    from rclpy.time_source import TimeSource
     from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
     from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
     from message_filters import Subscriber, TimeSynchronizer
     from nav2_msgs.action import NavigateToPose, DockRobot
     from nav2_msgs.srv import ClearEntireCostmap
     from sensor_msgs.msg import JointState
+    from rosgraph_msgs.msg import Clock
     from std_msgs.msg import Bool, String
     from tf2_ros import Buffer, TransformListener
     from cooperation_arm import ArmPlanner
@@ -89,6 +91,9 @@ def run(args):
 
     class Bridge(Node):
         def __init__(self):
+            # TimeSource subscribes during Node construction. Keep its standard
+            # clock update independent of native action callbacks in the default group.
+            self.clock_callbacks = MutuallyExclusiveCallbackGroup()
             super().__init__('fishbot_so101_cooperation', parameter_overrides=[rclpy.parameter.Parameter('use_sim_time', value=True)])
             self.lock = threading.RLock()
             self.bridge_timing = BridgeTiming()
@@ -182,6 +187,43 @@ def run(args):
                 if record['task'].get('id'): self.known_ids.add(record['task']['id'])
             self.hold(True)
             self.dock_guard_pub.publish(Bool(data=False))
+
+        def create_subscription(self, msg_type, topic, callback, qos_profile, *,
+                                callback_group=None, event_callbacks=None,
+                                qos_overriding_options=None, raw=False,
+                                content_filter_options=None):
+            if (msg_type is Clock and topic == '/clock' and callback_group is None
+                    and isinstance(getattr(callback, '__self__', None), TimeSource)
+                    and getattr(callback, '__func__', None) is TimeSource.clock_callback):
+                callback_group = self.clock_callbacks
+                original_callback = callback
+                # A required second argument selects the real RMW metadata.
+                def traced_clock(message, info):
+                    return self.observe_clock(message, info, original_callback)
+                callback = traced_clock
+            return super().create_subscription(
+                msg_type, topic, callback, qos_profile, callback_group=callback_group,
+                event_callbacks=event_callbacks, qos_overriding_options=qos_overriding_options,
+                raw=raw, content_filter_options=content_filter_options)
+
+        def observe_clock(self, message, info, original_callback):
+            started = time.monotonic()
+            context = self.timing_context(info=info)
+            inherited = self.timing_context(getattr(self, 'raw', None))
+            for name in ('scene_sha256', 'manifest_sha256', 'episode_id', 'sequence',
+                         'source_stamp', 'producer_wall_time'):
+                context['inherited_physics_'+name] = inherited[name]
+            context['identity_binding'] = 'Clock has no scene/episode; inherited_physics_* is cached bridge context'
+            context['source_stamp_ns'] = message.clock.sec*1_000_000_000+message.clock.nanosec
+            context['source_stamp'] = context['source_stamp_ns']*1e-9
+            context['node_clock_stamp_at_entry'] = self.get_clock().now().nanoseconds*1e-9
+            update_at = time.monotonic()
+            try:
+                return original_callback(message)
+            finally:
+                context['node_clock_stamp_after_update'] = self.get_clock().now().nanoseconds*1e-9
+                self.timing_record('clock_update', update_at, context)
+                self.timing_record('clock_callback', started, context)
 
         def persist(self):
             path = self.ledger.with_suffix('.tmp')
