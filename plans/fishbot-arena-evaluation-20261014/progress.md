@@ -36,4 +36,4 @@ updated：root已补写并读回知识库既有Wiki/ROS2 与 FishBot.md第19节�
 
 ## Git delivery
 
-准备阶段有效代码与文档由root串行提交推送；实际GPU部署保持pending，不以Git交付冒充运行完成。
+准备阶段13个已审查文件提交149447f129beca79414a586bc44eacb10030ad52，已推送qiaoqiao2521/fishbot-ros2-slam-tools main，并经GitHub API读回同SHA。此接续记录单独提交；实际GPU部署保持pending，root等待GPU目标与许可确认。固件release.sh仍是唯一未提交保留项，不以Git交付冒充运行完成。

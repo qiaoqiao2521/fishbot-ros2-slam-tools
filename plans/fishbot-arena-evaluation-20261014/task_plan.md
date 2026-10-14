@@ -16,7 +16,7 @@
 2. 锁版源码、独立部署入口、两Run配置与预检：complete。
 3. 选择GPU目标并确认Isaac Sim许可：pending。
 4. 安装、实际预检、组合评测与原生结果读回：pending。
-5. 准备阶段验证、项目/知识记录与Git交付：in_progress；运行阶段验收仍pending。
+5. 准备阶段验证、项目/知识记录与Git交付：complete；运行阶段验收仍pending。
 
 ## Acceptance
 
