@@ -2,7 +2,7 @@
 
 ## Current
 
-软件转换、编辑器和真实MuJoCo验收完成。最终65项测试、100物理步、源码指纹与网页负例已读回，根正在完成scoped提交和交接。
+软件转换、编辑器和真实MuJoCo验收完成。最终65项测试、100物理步、源码指纹与网页负例已读回。19文件代码提交`03e37eb166eeff553d9149d55a934e4d6db7c13b`已推送至独立特性分支并由`git ls-remote`读回一致；此收尾记录仅更新计划。
 官方单例推理尚未运行。已联系FishBot owner，等待其RGB时序批次安全收尾后的GPU窗口。
 
 ## Done
@@ -54,10 +54,21 @@
 
 ## Remaining
 
-最终文档审查、scoped本地提交和交接。
 官方推理由根在owner提供GPU窗口后接续；若窗口尚不可用，将此条件和最短运行入口一并交接。
 接续入口为`experiments/spatiallm/INFERENCE.md`，命令尚未执行，当前不声称模型推理或评测通过。
 主区整合由FishBot owner串行执行，当前分支不同时推main。
+
+## Delivery
+
+- 分支：`codex/spatiallm-scene-import-20261014`。
+- 既有目标：`qiaoqiao2521/fishbot-ros2-slam-tools`，未更改可见性。
+- 代码提交：`03e37eb166eeff553d9149d55a934e4d6db7c13b`。
+- 基线：`aab0da4`。只包含本模块和本计划，不包含主区视觉停靠改动。
+- `experiments/spatiallm/README.md`提供安装、准备、运行和测试入口。
+- 当前本地演示：`http://127.0.0.1:8867`，独立服务，不连接ROS。
+- 项目总协调对话：`01a13a98-c3ea-7760-aeb8-e5a7396a5574`。
+- FishBot主区整合及GPU窗口协调：`01a101eb-92b4-78b3-a725-361dc7342c05`。
+- 软件交付完成，官方推理和main整合仍明确待接续。此模块没有改变107/114运行实例。
 
 ## Knowledge closeout
 

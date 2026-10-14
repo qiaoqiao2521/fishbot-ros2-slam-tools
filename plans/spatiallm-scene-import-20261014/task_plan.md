@@ -15,7 +15,7 @@
 3. 人工编辑UI与本地软件入口：complete；空坐标拒绝和纯场景导出表单已读回。
 4. 官方样例实际加载、渲染与负例验收：complete；最终65项测试、100物理步及执行源码指纹读回通过。
 5. 推理条件评估：complete。官方环境与模型缓存准备完成；单例推理待FishBot owner提供GPU空闲窗口。
-6. scoped提交和交接：in_progress。main串行整合归FishBot owner。
+6. scoped提交和特性分支交付：complete。代码提交`03e37eb166eeff553d9149d55a934e4d6db7c13b`已推送并独立读回；main串行整合归FishBot owner，仍待其验收。
 
 ## Assignments
 
