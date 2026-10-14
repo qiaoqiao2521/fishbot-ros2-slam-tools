@@ -14,6 +14,7 @@ import json
 import math
 import os
 from pathlib import Path
+import random
 import shutil
 import threading
 import time
@@ -21,8 +22,12 @@ import uuid
 from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 
-from fishbot_sim_power import BEACON_LABEL, BEACON_TOPIC, PowerModel, Truth
+from fishbot_sim_power import BEACON_LABEL, PowerModel, Truth
 from cooperation_core import ContinuousEvidence
+from cooperation_perception import (
+    DETECTION_TOPIC as STATION_DETECTION_TOPIC, DIAGNOSTIC_NAME,
+    POSE_TOPIC as STATION_POSE_TOPIC, normalize_config,
+)
 
 ARM_JOINTS = ('shoulder_pan', 'shoulder_lift', 'elbow_flex', 'wrist_flex',
               'wrist_roll', 'gripper')
@@ -149,8 +154,8 @@ class LoopTiming:
 class StationBeacon:
     """Reuse the existing relative-beacon math, without its battery runtime.
 
-    This idealized, range-limited truth-derived sensor has no RGB/AprilTag,
-    occlusion, noise or hardware validation. It never changes physics state.
+    Ideal and declared perturbed modes derive geometry from the shared world.
+    Vision mode has no simulated observation or truth fallback.
     """
     mapped_pose = PowerModel.mapped_pose
     relative_beacon = PowerModel.relative_beacon
@@ -167,12 +172,21 @@ class StationBeacon:
         if any(abs(a-b)>1e-9 for a,b in zip(self.world_dock[:2], physical_dock[:2])):
             raise ValueError('native dock frame and physical robot target must share the station point')
         self.config = SimpleNamespace(dock_pose=self.world_dock, truth_to_dock_frame=(0., 0., 0.))
+        self.perception_config = normalize_config(manifest.get('station_perception'))
+        if self.perception_config['station_id'] != manifest.get('native_docking', {}).get('dock_id', 'so101_station'):
+            raise ValueError('station perception identity does not match the compiled native dock')
         self.truth = None
         self.description = {
-            'topic': BEACON_TOPIC, 'frame_id': 'base_footprint', 'method': BEACON_LABEL,
-            'idealized_truth_derived': True, 'rgb_or_apriltag': False,
-            'noise_model': 'none', 'occlusion_model': 'none', 'hardware_validated': False,
-            'range_limit_m': BEACON_RANGE_M, 'publish_hz_source_time': 10,
+            'topic': STATION_POSE_TOPIC, 'detection_topic': STATION_DETECTION_TOPIC,
+            'frame_id': self.perception_config['frame_id'],
+            'method': 'independent vision producer required' if self.perception_config['mode'] == 'vision' else BEACON_LABEL,
+            'mode': self.perception_config['mode'],
+            'idealized_truth_derived': self.perception_config['mode'] != 'vision',
+            'rgb_or_apriltag': False,
+            'noise_model': 'declared Gaussian noise and bias' if self.perception_config['mode'] == 'perturbed' else 'none',
+            'occlusion_model': 'declared episode-relative windows' if self.perception_config.get('occlusion_windows') else 'none',
+            'hardware_validated': False,
+            'range_limit_m': self.perception_config['range_limit_m'], 'publish_hz_source_time': 50,
             'world_dock': list(self.world_dock), 'scene_sha256': identity['scene_sha256'],
             'world_dock_source_field': field, 'physical_robot_dock_pose': list(physical_dock),
             'orientation_semantics': 'native dock face, not necessarily the final robot heading',
@@ -180,14 +194,107 @@ class StationBeacon:
             'reused_source': 'fishbot_sim_power.py',
             'reused_source_sha256': hashlib.sha256(
                 Path(__file__).with_name('fishbot_sim_power.py').read_bytes()).hexdigest()}
+        self.begin_episode(identity.get('episode_id') or str(uuid.uuid4()), 0.)
+
+    def begin_episode(self, episode_id, source_stamp):
+        self.episode_id = episode_id
+        self.episode_start, = finite_vector((source_stamp,), 1, 'perception episode start')
+        self.sequence = 0
+        self.rng = random.Random(self.perception_config.get('seed', 0))
+        self.last_observation = None
+        self.truth = None
+
+    def sample(self, car_pose, source_stamp):
+        """Sample once per source stamp; reading state never advances this RNG."""
+        if self.perception_config['mode'] == 'vision':
+            return None
+        source_stamp, = finite_vector((source_stamp,), 1, 'perception source stamp')
+        previous = self.last_observation
+        if previous is not None:
+            if source_stamp < previous['stamp']:
+                raise ValueError('perception source time moved backwards within the episode')
+            if source_stamp == previous['stamp']:
+                return copy.deepcopy(previous)
+        self.sequence += 1
+        relative = self.measure(car_pose, source_stamp)
+        detected = relative is not None
+        reason = 'detected' if detected else ('invalid_source_stamp' if source_stamp <= 0 else 'out_of_range')
+        in_range = detected
+        config = self.perception_config
+        elapsed = source_stamp-self.episode_start
+        if detected and any(start <= elapsed < end for start, end in config.get('occlusion_windows', [])):
+            detected, reason = False, 'occluded'
+        if detected and config['mode'] == 'perturbed' and self.rng.random() < config['dropout_probability']:
+            detected, reason = False, 'dropout'
+        covariance = [0.]*36
+        variances = [.0001]*3
+        if config['mode'] == 'perturbed':
+            variances = [.0001+std**2 for std in config['noise_std']]
+            if detected:
+                relative = tuple(value+bias+self.rng.gauss(0., std)
+                                 for value, bias, std in zip(relative, config['bias'], config['noise_std']))
+                relative = (*relative[:2], math.atan2(math.sin(relative[2]), math.cos(relative[2])))
+        for index, variance in zip((0, 7, 35), variances):
+            covariance[index] = variance
+        self.last_observation = {
+            'schema': 1, 'publisher': config['publisher'], 'mode': config['mode'],
+            'station_id': config['station_id'], 'frame_id': config['frame_id'],
+            'scene_sha256': self.description['scene_sha256'],
+            'manifest_sha256': self.description['manifest_sha256'],
+            'episode_id': self.episode_id, 'sequence': self.sequence,
+            'stamp': source_stamp, 'detected': detected,
+            'confidence': 1. if detected else 0., 'reason': reason,
+            'idealized_truth_derived': True, 'in_range': in_range,
+            'relative': list(relative) if detected else None,
+            'covariance': covariance if detected else None,
+            'episode_elapsed_s': elapsed}
+        return copy.deepcopy(self.last_observation)
+
+    def status(self):
+        """Return the latest sample without geometry reads or random draws."""
+        observed = self.last_observation or {}
+        return {**self.description, 'in_range': observed.get('in_range', False),
+                'source_stamp': observed.get('stamp'), 'sequence': self.sequence,
+                'episode_id': self.episode_id, 'episode_start': self.episode_start,
+                'seed_reset_per_episode': self.perception_config['mode'] == 'perturbed',
+                'observation': copy.deepcopy(self.last_observation),
+                'reason': observed.get('reason', 'awaiting_external_producer' if self.perception_config['mode'] == 'vision' else 'not_sampled')}
 
     def measure(self, car_pose, source_stamp):
         x, y, yaw = finite_vector(car_pose, 3, 'beacon car pose')
         source_stamp, = finite_vector((source_stamp,), 1, 'beacon source stamp')
-        if source_stamp <= 0 or math.hypot(self.world_dock[0]-x, self.world_dock[1]-y) > BEACON_RANGE_M:
+        if source_stamp <= 0 or math.hypot(self.world_dock[0]-x, self.world_dock[1]-y) > self.perception_config['range_limit_m']:
             return None
         self.truth = Truth(source_stamp, time.monotonic(), x, y, yaw, 0., 0., 0.)
         return finite_vector(self.relative_beacon(), 3, 'relative dock beacon')
+
+
+def station_messages(observation):
+    """Build paired standard ROS messages, or diagnostics alone for a miss."""
+    from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
+    from geometry_msgs.msg import PoseWithCovarianceStamped
+    detection = DiagnosticArray()
+    detection.header.frame_id = observation['frame_id']
+    seconds, nanoseconds = divmod(int(round(observation['stamp']*1_000_000_000)), 1_000_000_000)
+    detection.header.stamp.sec, detection.header.stamp.nanosec = seconds, nanoseconds
+    status = DiagnosticStatus()
+    status.name, status.hardware_id = DIAGNOSTIC_NAME, observation['station_id']
+    status.level = DiagnosticStatus.OK if observation['detected'] else DiagnosticStatus.WARN
+    status.message = observation['reason']
+    keys = ('schema', 'publisher', 'mode', 'station_id', 'scene_sha256', 'manifest_sha256',
+            'episode_id', 'sequence', 'detected', 'confidence', 'reason', 'idealized_truth_derived')
+    status.values = [KeyValue(key=key, value=(str(observation[key]).lower()
+                     if isinstance(observation[key], bool) else str(observation[key]))) for key in keys]
+    detection.status = [status]
+    pose = None
+    if observation['detected']:
+        pose = PoseWithCovarianceStamped()
+        pose.header = copy.deepcopy(detection.header)
+        x, y, yaw = observation['relative']
+        pose.pose.pose.position.x, pose.pose.pose.position.y = x, y
+        pose.pose.pose.orientation.z, pose.pose.pose.orientation.w = math.sin(yaw/2), math.cos(yaw/2)
+        pose.pose.covariance = observation['covariance']
+    return pose, detection
 
 
 def finite_vector(values, length, label):
@@ -497,6 +604,7 @@ class Physics:
         self.max_normal_forces = {name: 0. for name in self.finger_geoms}
         self.episode_id = str(uuid.uuid4())
         self.identity = {**self.identity, 'episode_id': self.episode_id}
+        self.station_beacon.begin_episode(self.episode_id, preserved_time)
         self.reset_count += 1
         self.reset_stamp = preserved_time
         self.reset_quiet = ContinuousEvidence(.7)
@@ -655,17 +763,19 @@ class Physics:
                                 self.np.array([0., 0., self.model.geom_size[self.tray_floor, 2]])).tolist(),
                             'velocity_world_angular_linear': tray_velocity},
                    'finite': True, 'source': self.identity,
-                   'dock_beacon': {**self.station_beacon.description,
-                                   'in_range': self.beacon() is not None,
-                                   'source_stamp': float(self.data.time)}}
+                   'dock_beacon': self.station_beacon.status()}
         payload.update(self.contacts)
         self.state_sequence += 1
         return payload
 
     def beacon(self):
+        observation = self.observe_station()
+        return None if observation is None else observation['relative']
+
+    def observe_station(self):
         w, x, y, z = map(float, self.data.xquat[self.car_body])
         yaw = math.atan2(2*(w*z+x*y), 1-2*(y*y+z*z))
-        return self.station_beacon.measure(
+        return self.station_beacon.sample(
             (*map(float, self.data.xpos[self.car_body][:2]), yaw), float(self.data.time))
 
     def scan(self, count=360, range_min=.12, range_max=3.5):
@@ -767,7 +877,8 @@ def run_ros(args):
     from rclpy.node import Node
     from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
     from builtin_interfaces.msg import Time
-    from geometry_msgs.msg import Twist, TwistStamped, TransformStamped, PoseStamped
+    from geometry_msgs.msg import Twist, TwistStamped, TransformStamped, PoseStamped, PoseWithCovarianceStamped
+    from diagnostic_msgs.msg import DiagnosticArray
     from nav_msgs.msg import Odometry
     from rosgraph_msgs.msg import Clock
     from sensor_msgs.msg import Imu, JointState, LaserScan
@@ -810,7 +921,9 @@ def run_ros(args):
             self.odom_pub = self.create_publisher(Odometry, '/odom', 10)
             self.truth_pub = self.create_publisher(Odometry, '/ground_truth/odom', 10)
             self.cargo_pub = self.create_publisher(PoseStamped, '/cooperation/cargo_pose', 10)
-            self.beacon_pub = self.create_publisher(PoseStamped, BEACON_TOPIC, 1)
+            if physics.station_beacon.perception_config['mode'] != 'vision':
+                self.station_pose_pub = self.create_publisher(PoseWithCovarianceStamped, STATION_POSE_TOPIC, self.latest_qos)
+                self.station_detection_pub = self.create_publisher(DiagnosticArray, STATION_DETECTION_TOPIC, self.latest_qos)
             self.state_pub = self.create_publisher(String, '/cooperation/physics_state', self.latest_qos)
             reset_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                                   durability=DurabilityPolicy.VOLATILE)
@@ -934,6 +1047,9 @@ def run_ros(args):
         def publish(self, include_scan):
             timing.measure('snapshot_refresh', physics.refresh_snapshot)
             current_stamp = stamp(float(physics.data.time))
+            # Reuse the 50 Hz state cycle; slow scan cadence is not freshness.
+            # Cache the current measurement once, then expose that same sample.
+            station_observation = physics.observe_station()
             clock = Clock()
             clock.clock = current_stamp
             timing.measure('clock_publish', self.clock_pub.publish, clock)
@@ -995,6 +1111,11 @@ def run_ros(args):
             if record:
                 timing.measure('record_write', record.write, state_json+'\n')
                 timing.measure('record_flush', record.flush)
+            if station_observation is not None:
+                station_pose, station_detection = station_messages(station_observation)
+                if station_pose is not None:
+                    timing.measure('beacon_publish', self.station_pose_pub.publish, station_pose)
+                timing.measure('beacon_publish', self.station_detection_pub.publish, station_detection)
             if include_scan:
                 scan = LaserScan()
                 scan.header.stamp, scan.header.frame_id = current_stamp, 'laser_link'
@@ -1003,14 +1124,6 @@ def run_ros(args):
                 scan.scan_time, scan.range_min, scan.range_max = .1, .12, 3.5
                 scan.ranges = timing.measure('scan', physics.scan)
                 timing.measure('scan_publish', self.scan_pub.publish, scan)
-                relative = physics.beacon()
-                if relative is not None:
-                    beacon = PoseStamped()
-                    beacon.header.stamp, beacon.header.frame_id = current_stamp, 'base_footprint'
-                    beacon.pose.position.x, beacon.pose.position.y = relative[:2]
-                    beacon.pose.orientation.z = math.sin(relative[2]/2)
-                    beacon.pose.orientation.w = math.cos(relative[2]/2)
-                    timing.measure('beacon_publish', self.beacon_pub.publish, beacon)
             if frames:
                 timing.measure('frame_offer', frames.offer)
 

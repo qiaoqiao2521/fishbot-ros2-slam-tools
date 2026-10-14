@@ -19,7 +19,8 @@ PYTHON_GROUPS = {
         'test_passage_replay.py', 'test_passage_timing_tree.py',
         'test_sim_scan_relay.py', 'test_simulation_suite.py', 'test_simulation_report.py',
         'test_simulation_campaign.py', 'test_sampling_trace.py', 'test_keepout_launch.py',
-        'test_cooperation_core.py', 'test_stack_gate.py', 'test_arena.py',
+        'test_cooperation_core.py', 'test_cooperation_perception.py', 'test_cooperation_oracle.py',
+        'test_stack_gate.py', 'test_arena.py',
         'test_arena_bootstrap.py', 'test_arena_colab.py')),
     'mission': (ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests'
                 / 'test_mission_bridge.py', ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests/test_map_rules.py',

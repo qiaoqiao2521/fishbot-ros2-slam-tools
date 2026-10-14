@@ -188,7 +188,8 @@ class BridgeRaceTests(unittest.TestCase):
             def __init__(self,**kwargs):self.kwargs=kwargs
             def start(self):test.threads.append(self.kwargs)
             def is_alive(self):return False
-        self.namespace={**vars(core),'copy':copy,'json':json,'math':math,
+        import cooperation_perception as perception
+        self.namespace={**vars(core),**vars(perception),'copy':copy,'json':json,'math':math,
             'np':np,
             'time':NS(monotonic=lambda:self.clock,time=lambda:self.epoch+self.clock-100.,sleep=self.sleep),
             'threading':NS(Thread=Thread), 'String':lambda **kw:NS(**kw), 'ClearEntireCostmap':NS(Request=lambda:NS()),'manifest':{'station_offset':[0.,0.,0.],'dock_pose':[0.,0.,0.],
@@ -223,8 +224,12 @@ class BridgeRaceTests(unittest.TestCase):
         p.nav=NS(server_is_ready=lambda:True)
         p.docking=NS(server_is_ready=lambda:True)
         p.beacon=None;p.last_station_pose_stamp=-math.inf;p.poses=[]
+        p.perception_config=perception.normalize_config();p.station_last_seen=None;p.station_detection=None
+        p.station_rejection=None;p.station_counts={'accepted':0,'unavailable':0,'rejected':0,'forwarded':0}
+        p.dock_poses=[];p.dock_pose_pub=NS(publish=lambda msg:p.dock_poses.append(msg))
         p.pose_pub=NS(publish=lambda message:p.poses.append(message))
-        p.get_publishers_info_by_topic=lambda name:[NS(node_name='cooperation_physics')]
+        p.get_name=lambda:'fishbot_so101_cooperation'
+        p.get_publishers_info_by_topic=lambda name:[NS(node_name=p.get_name() if name=='/detected_dock_pose' else 'cooperation_physics')]
 
     def sleep(self,seconds):
         self.clock+=seconds
@@ -522,19 +527,107 @@ class BridgeRaceTests(unittest.TestCase):
 
     def station_measurement(self):
         p=self.bridge
-        p.raw['dock_beacon']={'idealized_truth_derived':True,'scene_sha256':'a'*64,
-                             'manifest_sha256':'b'*64,'in_range':True}
-        measured=NS(header=NS(frame_id='base_footprint',stamp=NS(sec=10,nanosec=0)),
-            pose=NS(position=NS(x=-.7,y=0.,z=0.),orientation=NS(w=0.,x=0.,y=0.,z=1.)))
-        p.beacon=(measured,self.clock)
+        p.episode_id=str(uuid.uuid4());p.raw['episode_id']=p.episode_id;p.raw['source']['episode_id']=p.episode_id
+        p.raw['dock_beacon']={'mode':'ideal','idealized_truth_derived':True,'scene_sha256':'a'*64,
+                             'manifest_sha256':'b'*64,'episode_id':p.episode_id}
+        covariance=[0.]*36
+        for index in (0,7,35):covariance[index]=.0001
+        measured={'schema':1,'publisher':'cooperation_physics','mode':'ideal','station_id':'so101_station',
+            'frame_id':'base_footprint','scene_sha256':'a'*64,'manifest_sha256':'b'*64,'episode_id':p.episode_id,
+            'sequence':1,'detected':True,'confidence':1.,'reason':'','idealized_truth_derived':True,
+            'stamp':10.,'stamp_ns':10_000_000_000,'relative':(-.7,0.,math.pi),'covariance':covariance}
+        p.beacon=(measured,self.clock,NS(sec=10,nanosec=0))
+        p.station_last_seen=measured;p.station_detection=(measured,self.clock)
         return measured
+
+    def station_messages(self, observation):
+        stamp=NS(sec=int(observation['stamp_ns']//1_000_000_000),nanosec=int(observation['stamp_ns']%1_000_000_000))
+        header=NS(stamp=stamp,frame_id='base_footprint')
+        fields=('schema','publisher','mode','station_id','scene_sha256','manifest_sha256','episode_id',
+                'sequence','detected','confidence','reason','idealized_truth_derived')
+        values=[NS(key=key,value=str(observation[key]).lower() if isinstance(observation[key],bool)
+                   else str(observation[key])) for key in fields]
+        diag=NS(header=header,status=[NS(name='station_detection',hardware_id='so101_station',
+            level=b'\x00' if observation['detected'] else b'\x01',values=values)])
+        pose=None
+        if observation['detected']:
+            x,y,yaw=observation['relative']
+            pose=NS(header=copy.deepcopy(header),pose=NS(pose=NS(position=NS(x=x,y=y,z=0.),
+                orientation=NS(w=math.cos(yaw/2),x=0.,y=0.,z=math.sin(yaw/2))),covariance=observation['covariance']))
+        return pose,diag
+
+    def test_gateway_forwards_only_new_valid_paired_observations(self):
+        p=self.bridge;previous=copy.deepcopy(self.station_measurement())
+        new={**previous,'sequence':2,'stamp':10.1,'stamp_ns':10_100_000_000}
+        p.raw['stamp']=p.raw['time_s']=10.1
+        pose,diagnostics=self.station_messages(new)
+        p.observe_station_detection(diagnostics)
+        self.assertEqual(p.station_counts['rejected'],0)
+        p.observe_station_pair(pose,diagnostics)
+        self.assertEqual(len(p.dock_poses),1)
+        self.assertEqual(p.dock_poses[0].header.stamp.nanosec,100_000_000)
+        p.observe_station_pair(pose,diagnostics)
+        self.assertEqual(len(p.dock_poses),1)
+        self.assertEqual(p.station_counts['rejected'],1)
+        self.assertEqual(p.beacon[0]['sequence'],2)
+
+    def test_loss_diagnostic_never_republishes_or_restamps_last_pose(self):
+        p=self.bridge;previous=copy.deepcopy(self.station_measurement())
+        lost={**previous,'sequence':2,'stamp':10.1,'stamp_ns':10_100_000_000,'detected':False,
+              'confidence':0.,'reason':'occluded','relative':None,'covariance':None}
+        p.raw['stamp']=p.raw['time_s']=10.1
+        _,diagnostics=self.station_messages(lost);p.observe_station_detection(diagnostics)
+        self.assertEqual(p.station_counts['unavailable'],1)
+        self.assertEqual(p.beacon[0]['stamp'],10.)
+        self.assertEqual(p.dock_poses,[])
+        p.update_station_localization(force=True)
+        self.assertEqual(p.poses[0].header.stamp.sec,10)
+        p.raw['stamp']=p.raw['time_s']=10.3
+        self.assertIsNone(p.update_station_localization(optional=True))
+        self.assertEqual(len(p.poses),1)
+
+    def test_late_loss_and_foreign_episode_cannot_replace_new_observation(self):
+        p=self.bridge;previous=copy.deepcopy(self.station_measurement())
+        lost={**previous,'sequence':0,'stamp':9.99,'stamp_ns':9_990_000_000,'detected':False,
+              'reason':'out_of_range','relative':None,'covariance':None}
+        _,diagnostics=self.station_messages(lost);p.observe_station_detection(diagnostics)
+        self.assertTrue(p.station_detection[0]['detected'])
+        foreign={**previous,'sequence':2,'stamp':10.1,'stamp_ns':10_100_000_000,'episode_id':str(uuid.uuid4())}
+        pose,diagnostics=self.station_messages(foreign);p.observe_station_pair(pose,diagnostics)
+        self.assertEqual(p.dock_poses,[])
+        self.assertEqual(p.station_counts['rejected'],2)
+        self.assertEqual(p.beacon[0]['episode_id'],p.episode_id)
+
+    def test_uncertain_observation_covariance_reaches_amcl_in_map_axes(self):
+        p=self.bridge;measured=self.station_measurement()
+        p.perception_config=self.namespace['normalize_config']({'mode':'perturbed','max_covariance':[.0001,.0002,.0003]})
+        measured['mode']='perturbed';measured['covariance'][7]=.0002;measured['covariance'][35]=.0003
+        p.raw['dock_beacon']['mode']='perturbed'
+        p.update_station_localization(force=True)
+        covariance=p.poses[0].pose.covariance
+        self.assertAlmostEqual(covariance[0],.0001)
+        self.assertAlmostEqual(covariance[7],.0002+.49*.0003)
+        self.assertAlmostEqual(covariance[11],.7*.0003)
+        self.assertAlmostEqual(covariance[35],.0003)
+
+    def test_simulated_sensor_requires_matching_physics_provenance(self):
+        p=self.bridge;self.station_measurement()
+        expected=copy.deepcopy(p.raw['dock_beacon'])
+        corruptions={'mode':'vision','idealized_truth_derived':False,'scene_sha256':'c'*64,
+                     'manifest_sha256':'c'*64,'episode_id':str(uuid.uuid4())}
+        for key,value in corruptions.items():
+            with self.subTest(key=key):
+                p.raw['dock_beacon']={**expected,key:value}
+                with self.assertRaisesRegex(RuntimeError,'传感器来源'):
+                    p.update_station_localization(force=True)
+        self.assertEqual(p.poses,[])
 
     def test_station_hint_preserves_sensor_stamp_and_requires_this_task_owner(self):
         p=self.bridge;measured=self.station_measurement()
         self.assertEqual(p.update_station_localization(force=True),{'x':.7,'y':0.,'yaw':0.})
         self.assertEqual(len(p.poses),1)
         self.assertEqual(p.poses[0].header.frame_id,'map')
-        self.assertEqual(p.poses[0].header.stamp.sec,measured.header.stamp.sec)
+        self.assertEqual(p.poses[0].header.stamp.sec,int(measured['stamp']))
         self.assertEqual(p.poses[0].pose.pose.position.x,.7)
         p.update_station_localization();self.assertEqual(len(p.poses),1)
         p.cancel_event.set()
@@ -543,25 +636,25 @@ class BridgeRaceTests(unittest.TestCase):
 
     def test_transit_station_hint_only_uses_fresh_in_range_observations(self):
         p=self.bridge;measured=self.station_measurement()
-        p.raw['dock_beacon']['in_range']=False
+        p.station_detection=({'detected':False,'reason':'out_of_range','stamp':10.},self.clock)
         self.assertIsNone(p.update_station_localization(optional=True))
         with self.assertRaisesRegex(RuntimeError,'有效范围'):p.update_station_localization()
-        p.raw['dock_beacon']['in_range']=True;measured.header.stamp.sec=9
+        p.station_detection=(measured,self.clock);measured['stamp']=9.;measured['stamp_ns']=9_000_000_000
         self.assertIsNone(p.update_station_localization(optional=True))
         self.assertEqual(p.poses,[])
-        measured.header.stamp.sec=10
+        measured['stamp']=10.;measured['stamp_ns']=10_000_000_000
         self.assertEqual(p.update_station_localization(optional=True),{'x':.7,'y':0.,'yaw':0.})
         self.assertEqual(p.poses[0].header.stamp.sec,10)
-        p.raw['dock_beacon']['manifest_sha256']='c'*64
+        measured['manifest_sha256']='c'*64
         with self.assertRaisesRegex(RuntimeError,'来源'):p.update_station_localization(optional=True)
 
     def test_capture_never_uses_moving_stale_or_outside_station_observations(self):
         p=self.bridge;self.station_measurement()
         p.raw['car']['speed']=.1
         self.assertFalse(p.station_capture_ready());self.assertEqual(p.poses,[])
-        p.raw['car']['speed']=0.;p.raw['dock_beacon']['in_range']=False
+        p.raw['car']['speed']=0.;p.station_detection=({'detected':False,'reason':'out_of_range','stamp':10.},self.clock)
         self.assertFalse(p.station_capture_ready());self.assertEqual(p.poses,[])
-        p.raw['dock_beacon']['in_range']=True
+        p.station_detection=(p.beacon[0],self.clock)
         self.assertTrue(p.station_capture_ready())
         p.cancel_event.set()
         with self.assertRaises(self.namespace['Canceled']):p.station_capture_ready()
@@ -649,13 +742,13 @@ class BridgeRaceTests(unittest.TestCase):
         self.assertLess(self.clock-100.,20.1)
 
     def test_foreign_stale_or_out_of_range_station_never_changes_localization(self):
-        p=self.bridge;measured=self.station_measurement();measured.header.stamp.sec=9
+        p=self.bridge;measured=self.station_measurement();measured['stamp']=9.;measured['stamp_ns']=9_000_000_000
         with self.assertRaisesRegex(RuntimeError,'过期'):p.update_station_localization(force=True)
-        measured.header.stamp.sec=10;measured.pose.position.x=-1.1
-        with self.assertRaisesRegex(RuntimeError,'有效范围'):p.update_station_localization(force=True)
-        measured.pose.position.x=-.7;p.raw['dock_beacon']['manifest_sha256']='c'*64
+        measured['stamp']=10.;measured['stamp_ns']=10_000_000_000;measured['relative']=(-1.1,0.,math.pi)
+        with self.assertRaisesRegex(RuntimeError,'capture range'):p.update_station_localization(force=True)
+        measured['relative']=(-.7,0.,math.pi);measured['manifest_sha256']='c'*64
         with self.assertRaisesRegex(RuntimeError,'来源'):p.update_station_localization(force=True)
-        p.raw['dock_beacon']['manifest_sha256']='b'*64
+        measured['manifest_sha256']='b'*64
         p.get_publishers_info_by_topic=lambda name:[NS(node_name='other')]
         with self.assertRaisesRegex(RuntimeError,'唯一'):p.update_station_localization(force=True)
         self.assertEqual(p.poses,[])

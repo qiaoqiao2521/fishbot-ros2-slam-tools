@@ -1,5 +1,6 @@
 """Control boundaries and independent sensor evidence for the shared world."""
 import importlib.util
+import ast
 import copy
 import hashlib
 import json
@@ -28,6 +29,131 @@ def load(name, path):
 
 
 sim = load('cooperation_sim', TOOLS/'cooperation_sim.py')
+
+
+class StationObservationProducerTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.scene = Path(self.folder.name)/'world.xml'
+        self.scene.write_text('<mujoco/>')
+        self.identity = {
+            'scene_sha256': hashlib.sha256(self.scene.read_bytes()).hexdigest(),
+            'manifest_sha256': 'a'*64, 'episode_id': str(uuid.uuid4()),
+            'manifest': {'world_xml': str(self.scene), 'dock_pose': [-1.8,-1.84,0.],
+                         'native_dock_pose': [-1.8,-1.84,math.pi]}}
+
+    def beacon(self, config=None):
+        identity = copy.deepcopy(self.identity)
+        if config is not None:
+            identity['manifest']['station_perception'] = config
+        return sim.StationBeacon(identity, self.scene)
+
+    def perturbed(self, **values):
+        return {'mode': 'perturbed', 'max_covariance': [.01]*3,
+                'seed': 73, 'noise_std': [.02,.03,.04],
+                'bias': [.04,-.03,.02], **values}
+
+    def test_default_observation_keeps_original_geometry_and_covariance(self):
+        beacon = self.beacon()
+        observation = beacon.sample((-1.1,-1.84,math.pi/2), .1)
+        self.assertTrue(observation['detected'])
+        for actual, expected in zip(observation['relative'], (0.,.7,math.pi/2)):
+            self.assertAlmostEqual(actual, expected)
+        self.assertEqual([observation['covariance'][i] for i in (0,7,35)], [.0001]*3)
+        self.assertEqual(observation['episode_id'], self.identity['episode_id'])
+        self.assertEqual(observation['sequence'], 1)
+        self.assertEqual(observation['mode'], 'ideal')
+        self.assertEqual(observation['publisher'], 'cooperation_physics')
+        self.assertEqual(beacon.status()['publish_hz_source_time'], 50)
+
+    def test_duplicate_sample_and_status_reads_never_advance_randomness(self):
+        beacon = self.beacon(self.perturbed())
+        observed = beacon.sample((-1.1,-1.84,0.), .1)
+        rng_state = beacon.rng.getstate()
+        for _ in range(5):
+            self.assertEqual(beacon.sample((-1.1,-1.84,0.), .1), observed)
+            beacon.status()
+        self.assertEqual(beacon.rng.getstate(), rng_state)
+        self.assertEqual(beacon.sequence, 1)
+        with self.assertRaises(ValueError):
+            beacon.sample((-1.1,-1.84,0.), .099)
+        observed['relative'][0] = 100.
+        self.assertNotEqual(beacon.status()['observation']['relative'][0], 100.)
+
+    def test_perturbation_seed_is_repeatable_and_variance_reports_declared_noise(self):
+        left, right = self.beacon(self.perturbed()), self.beacon(self.perturbed())
+        samples = [left.sample((-1.1,-1.84,0.), i*.1) for i in range(1,4)]
+        other = [right.sample((-1.1,-1.84,0.), i*.1) for i in range(1,4)]
+        self.assertEqual(samples, other)
+        self.assertNotEqual(samples[0]['relative'], samples[1]['relative'])
+        for index, expected in zip((0,7,35), (.0005,.001,.0017)):
+            self.assertAlmostEqual(samples[0]['covariance'][index], expected)
+        epoch = str(uuid.uuid4())
+        left.begin_episode(epoch, 10.)
+        self.assertIsNone(left.status()['observation'])
+        self.assertEqual(left.sequence, 0)
+        repeated = left.sample((-1.1,-1.84,0.), 10.1)
+        self.assertEqual(repeated['relative'], samples[0]['relative'])
+        self.assertEqual(repeated['sequence'], 1)
+        self.assertEqual(repeated['episode_id'], epoch)
+        self.assertAlmostEqual(repeated['episode_elapsed_s'], .1)
+        self.assertTrue(left.status()['seed_reset_per_episode'])
+
+    def test_occlusion_and_dropout_do_not_retimestamp_the_last_detected_pose(self):
+        beacon = self.beacon(self.perturbed(occlusion_windows=[[.2,.4]], dropout_probability=0.))
+        self.assertTrue(beacon.sample((-1.1,-1.84,0.), .1)['detected'])
+        for sequence, stamp in ((2,.2), (3,.399)):
+            missing = beacon.sample((-1.1,-1.84,0.), stamp)
+            self.assertFalse(missing['detected'])
+            self.assertEqual(missing['reason'], 'occluded')
+            self.assertIsNone(missing['relative'])
+            self.assertIsNone(missing['covariance'])
+            self.assertEqual(missing['stamp'], stamp)
+            self.assertEqual(missing['sequence'], sequence)
+        self.assertTrue(beacon.sample((-1.1,-1.84,0.), .4)['detected'])
+        dropout = self.beacon(self.perturbed(dropout_probability=1.))
+        self.assertEqual(dropout.sample((-1.1,-1.84,0.), .1)['reason'], 'dropout')
+        self.assertEqual(dropout.sample((-4.,-1.84,0.), .2)['reason'], 'out_of_range')
+
+    def test_vision_never_calls_truth_geometry_or_samples_randomness(self):
+        beacon = self.beacon({'mode': 'vision', 'publisher': 'station_camera',
+                             'min_confidence': .8, 'max_covariance': [.01]*3})
+        def forbidden(*args):
+            self.fail('vision called the truth-derived measurement')
+        beacon.measure = forbidden
+        rng_state = beacon.rng.getstate()
+        self.assertIsNone(beacon.sample((-1.1,-1.84,0.), .1))
+        self.assertIsNone(beacon.sample((-1.1,-1.84,0.), .2))
+        self.assertEqual(beacon.rng.getstate(), rng_state)
+        self.assertEqual(beacon.sequence, 0)
+        self.assertIsNone(beacon.status()['observation'])
+        self.assertEqual(beacon.status()['reason'], 'awaiting_external_producer')
+        self.assertFalse(beacon.status()['idealized_truth_derived'])
+
+    def test_perception_cannot_rename_the_compiled_station(self):
+        with self.assertRaisesRegex(ValueError, 'identity does not match'):
+            self.beacon({'station_id': 'other_station'})
+
+    def test_standard_messages_have_exact_pairing_and_misses_have_diagnostics_only(self):
+        from cooperation_perception import messages_to_observation
+        beacon = self.beacon()
+        observation = beacon.sample((-1.1,-1.84,0.), .123456789)
+        pose, diagnostic = sim.station_messages(observation)
+        self.assertEqual(pose.header, diagnostic.header)
+        self.assertEqual(pose.header.stamp.nanosec, 123456789)
+        parsed = messages_to_observation(pose, diagnostic)
+        self.assertEqual(parsed['sequence'], 1)
+        self.assertEqual(parsed['relative'], tuple(observation['relative']))
+        self.assertTrue(parsed['detected'])
+        missing = beacon.sample((-4.,-1.84,0.), .2)
+        pose, diagnostic = sim.station_messages(missing)
+        self.assertIsNone(pose)
+        self.assertEqual(diagnostic.status[0].level, b'\x01')
+        parsed = messages_to_observation(None, diagnostic)
+        self.assertFalse(parsed['detected'])
+        self.assertEqual(parsed['reason'], 'out_of_range')
+        self.assertEqual(parsed['stamp'], .2)
 
 
 class ReferencesTest(unittest.TestCase):
@@ -301,6 +427,8 @@ class SharedWorldTest(unittest.TestCase):
         for index in range(1000):physics.step()
         self.assertTrue(physics.reset_ready)
         self.assertGreater(abs(physics.odom.x), .05)
+        physics.observe_station()
+        self.assertEqual(physics.station_beacon.sequence, 1)
         before = physics.state()
         # Explicit terminal-fixture mutation in this private model: a carried
         # object at delivery. It is never a live-world movement command.
@@ -330,6 +458,10 @@ class SharedWorldTest(unittest.TestCase):
         self.assertEqual(raw['episode_id'], new_episode)
         self.assertEqual(raw['source']['scene_sha256'],before['source']['scene_sha256'])
         self.assertEqual(raw['episode_reset']['count'],1)
+        self.assertIsNone(raw['dock_beacon']['observation'])
+        self.assertEqual(raw['dock_beacon']['sequence'], 0)
+        self.assertEqual(raw['dock_beacon']['episode_id'], new_episode)
+        self.assertEqual(raw['dock_beacon']['episode_start'], clock)
         self.assertTrue(raw['car_hold'])
         self.assertFalse(raw['docking_guard']['enabled'])
         self.assertFalse(raw['episode_reset']['ready'])
@@ -780,6 +912,90 @@ class SharedWorldTest(unittest.TestCase):
             self.assertTrue(physics.state()['dock_beacon']['in_range'])
             self.assertTrue(all(physics.np.array_equal(a,b) for a,b in zip(primary,
                 (physics.data.qpos,physics.data.qvel,physics.data.ctrl))))
+
+    def test_physical_state_reads_do_not_resample_declared_station_noise(self):
+        scene = load('cooperation_station_noise_scene', TOOLS/'cooperation_scene.py')
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            manifest = scene.build_scene(TOOLS.parent.parent/'so101', TOOLS.parent,
+                                         directory, spawn=(-1.1,-1.84))
+            manifest['station_perception'] = {
+                'mode': 'perturbed', 'max_covariance': [.01]*3,
+                'noise_std': [.02,.03,.04], 'seed': 37}
+            (directory/'scene-manifest.json').write_text(json.dumps(manifest))
+            physics = sim.Physics(manifest['world_xml'])
+            for _ in range(50):physics.step()
+            physics.refresh_snapshot()
+            snapshot = [physics.data.qpos.copy(),physics.data.qvel.copy(),physics.data.ctrl.copy()]
+            sample = physics.observe_station()
+            rng_state = physics.station_beacon.rng.getstate()
+            for _ in range(5):
+                self.assertEqual(physics.state()['dock_beacon']['observation'], sample)
+            self.assertEqual(physics.station_beacon.rng.getstate(), rng_state)
+            self.assertEqual(physics.station_beacon.sequence, 1)
+            for before, after in zip(snapshot, (physics.data.qpos,physics.data.qvel,physics.data.ctrl)):
+                physics.np.testing.assert_array_equal(before, after)
+            # Advancing physics does not itself generate a detector sample.
+            physics.step()
+            self.assertEqual(physics.state()['dock_beacon']['observation'], sample)
+            self.assertEqual(physics.station_beacon.sequence, 1)
+            next_sample = physics.observe_station()
+            self.assertEqual(next_sample['sequence'], 2)
+            self.assertGreater(next_sample['stamp'], sample['stamp'])
+
+    def test_actual_publish_samples_station_on_every_state_cycle_without_scan(self):
+        """Exercise the production method without ROS initialization or DDS."""
+        from builtin_interfaces.msg import Time
+        from geometry_msgs.msg import PoseStamped, TransformStamped
+        from nav_msgs.msg import Odometry
+        from rosgraph_msgs.msg import Clock
+        from sensor_msgs.msg import Imu, JointState, LaserScan
+        from std_msgs.msg import String
+        physics = self.physics()
+        dock = self.manifest['dock_pose']
+        physics.data.qpos[physics.car_free_q:physics.car_free_q+2] = [dock[0]+.7, dock[1]]
+        # Compile the actual closure method. Only its DDS sinks are substituted.
+        tree = ast.parse((TOOLS/'cooperation_sim.py').read_text())
+        runtime = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'run_ros')
+        adapter = next(node for node in runtime.body if isinstance(node, ast.ClassDef) and node.name == 'Adapter')
+        methods = [next(node for node in adapter.body if isinstance(node, ast.FunctionDef) and node.name == 'publish'),
+                   next(node for node in runtime.body if isinstance(node, ast.FunctionDef) and node.name == 'fill_pose'),
+                   next(node for node in runtime.body if isinstance(node, ast.FunctionDef) and node.name == 'stamp')]
+        timing = sim.LoopTiming(lambda: float(physics.data.time))
+        scope = {'physics': physics, 'timing': timing, 'record': None, 'frames': None,
+                 'Time': Time, 'TransformStamped': TransformStamped, 'PoseStamped': PoseStamped,
+                 'Odometry': Odometry, 'Clock': Clock, 'Imu': Imu, 'JointState': JointState,
+                 'LaserScan': LaserScan, 'String': String, 'math': math, 'json': json,
+                 'ARM_JOINTS': sim.ARM_JOINTS, 'WHEEL_JOINTS': sim.WHEEL_JOINTS,
+                 'station_messages': sim.station_messages}
+        exec(compile(ast.Module(body=methods, type_ignores=[]), str(TOOLS/'cooperation_sim.py'), 'exec'), scope)
+        sinks = {name: [] for name in ('clock','scan','imu','joint','odom','truth','cargo','state',
+                                       'station_pose','station_detection')}
+        node = SimpleNamespace(last_rejected=None, runtime_observation={}, tf=SimpleNamespace(sendTransform=lambda message: None))
+        for name, messages in sinks.items():
+            setattr(node, name+'_pub', SimpleNamespace(publish=messages.append))
+        measurements = []
+        original = physics.station_beacon.measure
+        def observed_measure(car_pose, source_stamp):
+            measurements.append(source_stamp)
+            return original(car_pose, source_stamp)
+        physics.station_beacon.measure = observed_measure
+        for include_scan in (False, True, False):
+            for _ in range(10):physics.step()
+            scope['publish'](node, include_scan)
+        self.assertEqual(len(measurements), 3)
+        self.assertEqual(physics.station_beacon.sequence, 3)
+        self.assertEqual(len(sinks['scan']), 1)
+        self.assertEqual(len(sinks['station_pose']), 3)
+        self.assertEqual(len(sinks['station_detection']), 3)
+        for sequence, (pose, detection, state) in enumerate(zip(
+                sinks['station_pose'], sinks['station_detection'], sinks['state']), start=1):
+            cached = json.loads(state.data)['dock_beacon']['observation']
+            self.assertEqual(pose.header, detection.header)
+            self.assertEqual(cached['sequence'], sequence)
+            self.assertAlmostEqual(cached['stamp'], measurements[sequence-1])
+            self.assertEqual(detection.header.stamp.sec*1_000_000_000+detection.header.stamp.nanosec,
+                             round(measurements[sequence-1]*1_000_000_000))
 
 
 if __name__ == '__main__':

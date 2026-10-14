@@ -8,6 +8,8 @@ import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from cooperation_perception import normalize_config
+
 
 NATIVE_DOCKING_TARGET_PROJECTION_M=.25
 NATIVE_DOCKING_PRIMARY_SOURCES=[
@@ -103,6 +105,11 @@ def write_map(output, stem, pixels, resolution, size, origin):
 
 
 def prepare(args):
+    perception_path = getattr(args, 'perception_config', None)
+    perception_input = json.loads(Path(perception_path).read_text()) if perception_path else None
+    station_perception = normalize_config(perception_input)
+    if station_perception['station_id'] != 'so101_station':
+        raise ValueError('station perception identity must match the native so101_station dock')
     docking_version=require_native_docking_version()
     import mujoco
     import numpy as np
@@ -232,14 +239,19 @@ def prepare(args):
             'collision_threshold_reference':'projected virtual target, not actual dock',
             'primary_sources':NATIVE_DOCKING_PRIMARY_SOURCES,
             'physical_robot_dock_pose':robot_dock,'native_station_pose':native_dock},
-        ideal_station_perception={'topic':'/detected_dock_pose','frame':'base_footprint',
-            'source':'shared MuJoCo station pose relative to the current physical robot',
-            'max_range_m':1.,'noise_std_m':0.,'noise_std_yaw_rad':0.,
-            'occlusion_model':'none','native_station_pose':native_dock,
-            'assumption':'Ideal simulation-relative perception; not camera or real-hardware evidence'},
+        station_perception=station_perception,
         map_resolution_m=resolution,source_nav2_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
         generated_map_sha256=localization_hash,generated_collision_map_sha256=collision_hash,
         generated_nav2_sha256=hashlib.sha256(nav_path.read_bytes()).hexdigest())
+    if station_perception['mode'] == 'ideal':
+        manifest['ideal_station_perception'] = {
+            'topic':'/cooperation/station_pose','detection_topic':'/cooperation/station_detection',
+            'native_pose_topic':'/detected_dock_pose','native_pose_publisher':'fishbot_so101_cooperation',
+            'frame':'base_footprint',
+            'source':'shared MuJoCo station pose relative to the current physical robot',
+            'max_range_m':station_perception['range_limit_m'],'noise_std_m':0.,'noise_std_yaw_rad':0.,
+            'occlusion_model':'none','native_station_pose':native_dock,
+            'assumption':'Ideal simulation-relative perception; not camera or real-hardware evidence'}
     (args.output/'scene-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     return manifest
 
@@ -249,6 +261,8 @@ def main():
     parser.add_argument('--so101-project',type=Path,required=True)
     parser.add_argument('--fishbot-project',type=Path,default=Path(__file__).resolve().parents[1])
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--perception-config',type=Path,
+                        help='JSON station observation contract; ideal by default, no vision truth fallback')
     args=parser.parse_args()
     if args.output.exists():parser.error('输出目录必须是新的，以保留已有回合')
     manifest=prepare(args)

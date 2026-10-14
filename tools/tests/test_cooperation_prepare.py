@@ -30,6 +30,30 @@ from scipy.spatial import ConvexHull
 from cooperation_prepare import prepare,require_native_docking_version
 project=Path(sys.argv[1]);out=Path(sys.argv[2])
 m=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,output=out))
+declared={'mode':'perturbed','max_covariance':[.01,.01,.01],
+          'noise_std':[.01,.02,.03],'bias':[.02,-.01,.01],
+          'dropout_probability':.25,'seed':37,'occlusion_windows':[[2.,3.]]}
+declaration=out/'declared-perception.json';declaration.write_text(json.dumps(declared))
+condition=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
+                                output=out/'perturbed',perception_config=declaration))
+default_nav=yaml.safe_load(Path(m['nav2_yaml']).read_text())
+perturbed_nav=yaml.safe_load(Path(condition['nav2_yaml']).read_text())
+for configured in (default_nav,perturbed_nav):
+ configured['bt_navigator']['ros__parameters'].pop('default_nav_to_pose_bt_xml')
+loaded_condition=json.loads((out/'perturbed/scene-manifest.json').read_text())
+condition_result={'config':condition['station_perception'],
+                  'persisted_matches':loaded_condition['station_perception']==condition['station_perception'],
+                  'no_ideal_claim':'ideal_station_perception' not in condition,
+                  'world_xml_unchanged':hashlib.sha256(Path(m['world_xml']).read_bytes()).hexdigest()==hashlib.sha256(Path(condition['world_xml']).read_bytes()).hexdigest(),
+                  'map_pixels_unchanged':all(m[key]==condition[key] for key in ('generated_map_sha256','generated_collision_map_sha256')),
+                  'nav2_parameters_unchanged':default_nav==perturbed_nav}
+invalid=out/'invalid-perception.json';invalid.write_text(json.dumps({'station_id':'other_station'}))
+try:
+ prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
+                         output=out/'invalid',perception_config=invalid))
+ condition_result['wrong_station_rejected_before_generation']=False
+except ValueError:
+ condition_result['wrong_station_rejected_before_generation']=not (out/'invalid').exists()
 maps={name:np.asarray(Image.open(yaml.safe_load(Path(m[key]).read_text())['image']))[::-1]
       for name,key in [('localization','localization_map_yaml'),('collision','collision_map_yaml')]}
 def pixel(name,x,y):return int(maps[name][int((y+4.2)/.02),int((x+4.2)/.02)])
@@ -137,6 +161,7 @@ result={'height':m['localization_laser_height_m'],'different_maps':m['localizati
         'native_docking':m['native_docking'],'staging_pose':m['staging_pose'],
         'robot_dock_pose':m['dock_pose'],'native_dock_pose':m['native_dock_pose'],
         'ideal_station_perception':m['ideal_station_perception'],
+        'station_perception':m['station_perception'],'condition_result':condition_result,
         'localization_parameters':m['localization_parameters'],
         'configured_footprints':configured_footprints,'manifest_footprint':m['car_footprint_xy'],
         'stop_sweep':stop_sweep,
@@ -162,6 +187,24 @@ print('RESULT_JSON:'+json.dumps(result))
         self.assertTrue(self.evidence['different_maps'])
         self.assertTrue(self.evidence['map_alias'])
         self.assertEqual(self.evidence['map_topics'], ['/cooperation_collision_map']*2)
+
+    def test_default_and_declared_perception_are_persisted_without_changing_physics(self):
+        default = self.evidence['station_perception']
+        self.assertEqual(default['mode'], 'ideal')
+        self.assertEqual(default['publisher'], 'cooperation_physics')
+        self.assertEqual(default['max_covariance'], [.0001]*3)
+        self.assertEqual(default['min_confidence'], 1.)
+        declared = self.evidence['condition_result']
+        for key in ('persisted_matches','no_ideal_claim','world_xml_unchanged',
+                    'map_pixels_unchanged','nav2_parameters_unchanged',
+                    'wrong_station_rejected_before_generation'):
+            self.assertTrue(declared[key], key)
+        self.assertEqual(declared['config']['mode'], 'perturbed')
+        self.assertEqual(declared['config']['noise_std'], [.01,.02,.03])
+        self.assertEqual(declared['config']['bias'], [.02,-.01,.01])
+        self.assertEqual(declared['config']['dropout_probability'], .25)
+        self.assertEqual(declared['config']['seed'], 37)
+        self.assertEqual(declared['config']['occlusion_windows'], [[2.,3.]])
 
     def test_laser_slice_omits_low_bench_but_collision_map_retains_it(self):
         self.assertAlmostEqual(self.evidence['height'], .167)

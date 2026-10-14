@@ -19,6 +19,8 @@ from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, arm_home_qui
                               reset_request_identity,
                               settled_cargo, stopped, tip_forces, transport_handoff_ready, validate_physics)
 from cooperation_core import station_robot_pose, within_station_capture
+from cooperation_perception import (map_covariance, messages_to_observation,
+                                    normalize_config, validate_observation)
 
 
 class Canceled(RuntimeError):
@@ -33,9 +35,11 @@ def run(args):
     from rclpy.action import ActionClient
     from rclpy.executors import MultiThreadedExecutor
     from rclpy.node import Node
-    from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy
+    from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy, qos_profile_sensor_data
     from rclpy.time import Time
     from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+    from diagnostic_msgs.msg import DiagnosticArray
+    from message_filters import Subscriber, TimeSynchronizer
     from nav2_msgs.action import NavigateToPose, DockRobot
     from nav2_msgs.srv import ClearEntireCostmap
     from sensor_msgs.msg import JointState
@@ -79,9 +83,27 @@ def run(args):
             self.nav = ActionClient(self, NavigateToPose, '/navigate_to_pose')
             self.docking = ActionClient(self, DockRobot, '/dock_robot')
             self.beacon = None
+            self.perception_config = normalize_config(manifest.get('station_perception'))
+            if self.perception_config['station_id'] != manifest['native_docking']['dock_id']:
+                raise ValueError('观测工位与原生停靠工位不一致')
+            self.station_last_seen = None
+            self.station_detection = None
+            self.station_rejection = None
+            self.station_counts = {'accepted': 0, 'unavailable': 0, 'rejected': 0, 'forwarded': 0}
             self.last_station_pose_stamp = -math.inf
             self.pose_pub = self.create_publisher(PoseWithCovarianceStamped, '/initialpose', 1)
-            self.create_subscription(PoseStamped, '/detected_dock_pose', self.observe_beacon, 1)
+            self.dock_pose_pub = self.create_publisher(PoseStamped, '/detected_dock_pose', 1)
+            # Exact source stamps, bounded queues, and standard ROS messages.
+            perception_qos = copy.copy(qos_profile_sensor_data)
+            perception_qos.depth = 1
+            self.station_pose_filter = Subscriber(self, PoseWithCovarianceStamped,
+                                                  '/cooperation/station_pose', qos_profile=perception_qos)
+            self.station_detection_filter = Subscriber(self, DiagnosticArray,
+                                                       '/cooperation/station_detection', qos_profile=perception_qos)
+            self.station_detection_filter.registerCallback(self.observe_station_detection)
+            self.station_sync = TimeSynchronizer(
+                [self.station_pose_filter, self.station_detection_filter], queue_size=5)
+            self.station_sync.registerCallback(self.observe_station_pair)
             hold_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL, reliability=ReliabilityPolicy.RELIABLE)
             self.hold_pub = self.create_publisher(Bool, '/cooperation/car_hold', hold_qos)
             self.dock_guard_pub = self.create_publisher(Bool, '/cooperation/docking_guard', hold_qos)
@@ -303,59 +325,126 @@ def run(args):
                     raise RuntimeError('原生Nav2动作回执超时')
                 time.sleep(.02)
 
-        def observe_beacon(self,message):
+        def station_identity(self):
+            raw = self.fresh()
+            if self.perception_config['mode'] != 'vision':
+                source = raw.get('dock_beacon', {})
+                expected = {'mode': self.perception_config['mode'],
+                            'idealized_truth_derived': True,
+                            'scene_sha256': scene_sha, 'manifest_sha256': manifest_sha,
+                            'episode_id': self.episode_id}
+                if any(type(source.get(key)) is not type(value) or source.get(key) != value
+                       for key, value in expected.items()):
+                    raise RuntimeError('物理工位传感器来源与当前观测合同不一致')
+            return {'scene_sha256': scene_sha, 'manifest_sha256': manifest_sha,
+                    'episode_id': self.episode_id,
+                    'reset_stamp': raw.get('episode_reset', {}).get('stamp', 0.)}
+
+        def station_publishers(self):
+            for topic in ('/cooperation/station_pose', '/cooperation/station_detection'):
+                publishers = self.get_publishers_info_by_topic(topic)
+                if len(publishers) != 1 or publishers[0].node_name != self.perception_config['publisher']:
+                    raise ValueError('工位观测必须来自配置的本域唯一传感器')
+            publishers = self.get_publishers_info_by_topic('/detected_dock_pose')
+            if len(publishers) != 1 or publishers[0].node_name != self.get_name():
+                raise ValueError('原生停靠位姿必须由本桥唯一转发')
+
+        def reject_station_observation(self, error):
+            # A late rejected packet cannot erase a newer accepted observation.
+            self.station_counts['rejected'] += 1
+            self.station_rejection = str(error)
+
+        def admit_station_observation(self, observation):
+            self.station_publishers()
+            admitted = validate_observation(observation, self.perception_config,
+                self.station_identity(), self.get_clock().now().nanoseconds*1e-9,
+                0., self.station_last_seen)
+            self.station_last_seen = admitted
+            self.station_detection = (admitted, time.monotonic())
+            self.station_rejection = None
+            return admitted
+
+        def observe_station_detection(self, diagnostics):
+            # A lost detection has no pose to synchronize. Preserve the last
+            # valid pose's original time; never republish or restamp that pose.
+            if len(diagnostics.status) == 1 and diagnostics.status[0].level in (0, b'\x00'):
+                return
             with self.lock:
-                self.beacon=(message,time.monotonic())
+                try:
+                    admitted = self.admit_station_observation(messages_to_observation(None, diagnostics))
+                    if admitted['detected']:
+                        raise ValueError('失检诊断不能携带有效检测')
+                    self.station_counts['unavailable'] += 1
+                except (RuntimeError, ValueError, KeyError, TypeError, AttributeError) as error:
+                    self.reject_station_observation(error)
+
+        def observe_station_pair(self, pose, diagnostics):
+            with self.lock:
+                try:
+                    admitted = self.admit_station_observation(messages_to_observation(pose, diagnostics))
+                    if not admitted['detected']:
+                        raise ValueError('失检不能产生停靠位姿')
+                    # Only admitted, fresh, same-episode observations reach Nav2.
+                    message = PoseStamped()
+                    message.header = copy.deepcopy(pose.header)
+                    message.pose = copy.deepcopy(pose.pose.pose)
+                    self.dock_pose_pub.publish(message)
+                    self.beacon = (admitted, time.monotonic(), copy.deepcopy(pose.header.stamp))
+                    self.station_counts['accepted'] += 1
+                    self.station_counts['forwarded'] += 1
+                except (RuntimeError, ValueError, KeyError, TypeError, AttributeError) as error:
+                    self.reject_station_observation(error)
 
         def update_station_localization(self,*,force=False,optional=False):
-            """Feed the explicitly idealized station observation to native AMCL.
+            """Use an admitted sensor observation, only under this task's ownership.
 
-            Only near the fixed station, while this task owns the robot. Neither
-            world qpos nor ground_truth topics are used to derive this pose.
-            The sensor itself is truth-derived simulation, disclosed in the UI.
+            Ideal/perturbed simulation and vision retain distinct provenance.
+            This transform never substitutes physics qpos for a detection.
             """
             with self.lock:
                 self.owner()
-                raw=self.fresh()
-                source=raw.get('dock_beacon',{})
-                if (source.get('idealized_truth_derived') is not True
-                        or source.get('scene_sha256') != scene_sha
-                        or source.get('manifest_sha256') != manifest_sha):
-                    raise RuntimeError('工位信标来源与当前仿真场景不一致')
-                if source.get('in_range') is False:
-                    if optional:return None
-                    raise RuntimeError('工位观测超出1米有效范围')
-                if source.get('in_range') is not True:
-                    raise RuntimeError('工位信标缺少有效范围状态')
-                publishers=self.get_publishers_info_by_topic('/detected_dock_pose')
-                if len(publishers)!=1 or publishers[0].node_name!='cooperation_physics':
-                    raise RuntimeError('工位信标必须来自本域唯一物理传感器')
+                identity = self.station_identity()
+                try:
+                    self.station_publishers()
+                except ValueError as error:
+                    raise RuntimeError(str(error)) from error
+                if self.station_detection is not None:
+                    latest, detected_at = self.station_detection
+                    # An expired loss flag cannot indefinitely suppress a newer
+                    # sensor epoch; it retains the same original freshness limit.
+                    if (not latest['detected'] and latest['reason'] == 'out_of_range'
+                            and time.monotonic()-detected_at <= .5
+                            and -.1 <= self.get_clock().now().nanoseconds*1e-9-latest['stamp'] <= .25):
+                        if optional:return None
+                        raise RuntimeError('工位观测超出1米有效范围')
                 if self.beacon is None:
                     if optional:return None
-                    raise RuntimeError('尚未收到工位相对观测')
-                measured,received=self.beacon
-                stamp=measured.header.stamp.sec+measured.header.stamp.nanosec*1e-9
+                    raise RuntimeError(self.station_rejection or '尚未收到有效工位相对观测')
+                measured, received, source_stamp = self.beacon
+                stamp = measured['stamp']
                 now=self.get_clock().now().nanoseconds*1e-9
-                if measured.header.frame_id!='base_footprint':
-                    raise RuntimeError('工位相对观测坐标系错误')
                 if time.monotonic()-received>.5 or not -.1<=now-stamp<=.25:
                     if optional:return None
-                    raise RuntimeError('工位相对观测已过期或坐标系错误')
-                position=measured.pose.position;rotation=measured.pose.orientation
-                q=quaternion([rotation.w,rotation.x,rotation.y,rotation.z],'工位观测朝向')
-                relative=finite_vector([position.x,position.y,
-                    math.atan2(2*(q[0]*q[3]+q[1]*q[2]),1-2*(q[2]*q[2]+q[3]*q[3]))],3,'工位观测')
-                if math.hypot(*relative[:2])>1.:
-                    raise RuntimeError('工位观测超出1米有效范围')
+                    raise RuntimeError('工位相对观测已过期')
+                try:
+                    validate_observation(measured, self.perception_config, identity, now,
+                                         time.monotonic()-received)
+                except ValueError as error:
+                    raise RuntimeError(f'工位观测来源或内容无效：{error}') from error
+                relative=measured['relative']
                 pose=station_robot_pose(relative,manifest['native_dock_pose'])
                 if not force and stamp-self.last_station_pose_stamp<.3:
                     return pose
                 message=PoseWithCovarianceStamped()
-                message.header.frame_id='map';message.header.stamp=copy.deepcopy(measured.header.stamp)
+                message.header.frame_id='map';message.header.stamp=copy.deepcopy(source_stamp)
                 message.pose.pose.position.x,message.pose.pose.position.y=pose['x'],pose['y']
                 message.pose.pose.orientation.z=math.sin(pose['yaw']/2)
                 message.pose.pose.orientation.w=math.cos(pose['yaw']/2)
-                for index in (0,7,35):message.pose.covariance[index]=.0001
+                if self.perception_config['mode'] == 'ideal':
+                    for index in (0,7,35):message.pose.covariance[index]=.0001
+                else:
+                    message.pose.covariance=list(map_covariance(relative,manifest['native_dock_pose'],
+                                                               measured['covariance']))
                 self.pose_pub.publish(message)
                 self.last_station_pose_stamp=stamp
                 return pose
@@ -786,6 +875,9 @@ def run(args):
                     self.episode_id = ack['new_episode_id']
                     self.execution_token = None
                     self.beacon = None
+                    self.station_last_seen = None
+                    self.station_detection = None
+                    self.station_rejection = None
                     self.last_station_pose_stamp = -math.inf
                     record['new_episode_id'] = self.episode_id
                 raw = self.wait_reset_condition(lambda raw: raw['episode_id'] == self.episode_id
@@ -845,6 +937,7 @@ def run(args):
                     nav_ready=self.nav.server_is_ready() and self.docking.server_is_ready()
                     ready=nav_ready
                     reason='共享物理世界与 Nav2 已就绪' if ready else '等待原生导航服务'
+                    self.station_publishers()
                     station=manifest['station_offset']; target=raw['cargo']['position']
                     if math.hypot(target[0]-station[0]-.24,target[1]-station[1]+.13)>.035:
                         ready=False; reason='物体已离开取货盘；本回合完成后需重置合成场景'
@@ -859,6 +952,10 @@ def run(args):
                 return {'mode':'mujoco','domain':args.domain,'ready':ready,'reason':reason,'task':copy.deepcopy(self.task),
                     'events':copy.deepcopy(self.events),'physics':physics,'frame':frame,'source':{'scene_sha':raw['source']['scene_sha256']} if raw else None,
                     'nav':{'ready':nav_ready,'pose':pose},'stations':self.stations(),
+                    'station_perception':{'mode':self.perception_config['mode'],
+                        'publisher':self.perception_config['publisher'],
+                        'last_rejection':self.station_rejection,'counts':dict(self.station_counts),
+                        'last_detection':copy.deepcopy(self.station_detection[0]) if self.station_detection else None},
                     **({'episode_id': self.episode_id} if self.episode_id else {}),
                     'reset': self.reset_state(raw), 'history': copy.deepcopy(self.history[-10:])}
 

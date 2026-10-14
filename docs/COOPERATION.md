@@ -22,7 +22,7 @@
 - 复用 SO101 原模型、IK、OMPL、碰撞检查和载荷规划。SO101 checkout 是只读依赖。
 - 一件10g货物使用自由关节。执行世界仅在进程初始化或显式新回合边界初始化 `qpos`；活动任务中由执行器、重力和接触推进。没有吸附、任务内传送或跨世界货物复制。
 - 薄 ROS 适配发布编码器里程计、激光、关节状态和仿真时钟，并把速度与关节参考交给 MuJoCo 执行器。新世界没有宣称使用 `ros2_control`。
-- 近距离精停靠使用真值派生的理想仿真信标。没有 RGB 或 AprilTag 识别，没有噪声和遮挡模型，也没有硬件验收。
+- 近距离精停靠默认使用真值派生的理想仿真信标。P0新增显式受扰配置和标准观测合同；没有 RGB 或 AprilTag 识别，也没有硬件验收。受扰单元检查与完整扰动面板分别判断。
 - 合成工位、接触材料和位置误差只在仿真验收。没有实车、SO101硬件、策略训练或宇树行走控制验收。
 
 ## 启动
@@ -54,6 +54,26 @@ FISHBOT_COOP_DOMAIN=114 ./tools/fishbot_cooperation.sh run \
 停靠前通过独立 ROS Bool `/cooperation/docking_guard` 启用执行端停车平面保护。桥接器收到当前场景的新鲜使能回执后才释放车辆保持。仿真执行端在500Hz读取实际车体原点；沿程到停车平面剩余不超过0.01m时锁存，仅把轮速度执行器目标归零，接触、惯性及重力继续积分。该保护属于理想 plant 观测，不代表硬件停靠传感已实现。
 
 原生停靠成功仍必须单独确认。保护触发后2秒未获成功回执，任务取消并报失败；保护停车不会伪造成功。正常退场先确认原生终态、实际车体保持与停稳，再发送禁用保护，等待源时间更新的禁用回执后才继续。清理也必须确认禁用，超时保留unknown与车辆保持。原生停靠自动重试为0，当前合作不派发UndockRobot；该参数组合不能外推到其他停靠模式。
+
+## 工位观测合同
+
+准备器将 `station_perception` 固定到 manifest。`ideal` 是原默认观测；`perturbed` 声明噪声、偏差、丢检概率、seed和回合相对时间遮挡；`vision` 要求独立发布者、置信度与方差上界。当前没有视觉生产器；选择vision时，物理节点不创建真值观测发布者，也不回退ideal。
+
+生产器使用 `/cooperation/station_pose` 的 `PoseWithCovarianceStamped` 和 `/cooperation/station_detection` 的 `DiagnosticArray`。两者使用同一源时间和 `base_footprint`；桥接器复用 Exact TimeSynchronizer，并在转发前校验工位、scene/manifest/episode、序号、来源和协方差。只有本桥发布 `/detected_dock_pose`，原生停靠继续消费 `PoseStamped`。
+
+失检只发布诊断，不给旧位姿换时间。最新检测和拒绝原因在API的 `station_perception` 字段中保留；迟到失检不能覆盖更新观测。范围1m、源龄−0.1至0.25s、接收龄0.5s保持。ideal/perturbed仍核对物理信标来源；vision不从物理真值计算检测，但交接安全条件与机械臂碰撞查询继续使用披露的物理反馈。
+
+工位观测复用50Hz源时间状态周期，每周期读取一次当前物理快照并在扫描前发布；scan仍为10Hz。低实时因子会放大源周期的墙钟间隔，因此不能把10Hz源频率当作10Hz接收频率。状态读取只读已采样缓存，不额外推进随机数或改动世界。
+
+ideal保留原AMCL协方差0.0001。perturbed/vision将相对协方差按定位变换传播到map；未知置信度与方差门槛须在实施前显式声明。不同模式不能通过改字段冒充真实视觉。
+
+在新的场景输出中声明受扰条件；参数与面板由当前计划冻结。
+
+```bash
+./tools/fishbot_cooperation.sh prepare \
+  --so101-project /path/to/so101 --output /path/to/new-scene \
+  --perception-config /path/to/declared-perception.json
+```
 
 ```mermaid
 flowchart LR
@@ -114,7 +134,7 @@ flowchart LR
 
 上述语义对应 Nav2 tag `1.3.13` 原始文件：`docking_server.cpp` SHA256 `9401e8fec77668e4d4ed3fd44707d4a423b350d45422ad59700b807279ef81ac`，`controller.cpp` SHA256 `8ff965a3dfd3ead0e576bab4b1d71a26cf494c36fbd8e9aea5fa7e7988d4e8bc`。准备器读取实际安装包版本；其他版本明确拒绝，要求重新验证目标与阈值语义。场景 manifest 记录原始来源与哈希。回归使用实际编译场景的碰撞栅格和完整 padding 足迹，按5mm步长验证真实停靠点之前没有 lethal overlap，停靠点之后的虚拟段确实碰到工位结构。
 
-当前近端定位与停靠属于理想仿真传感器辅助。页面实际相机用于观察；本轮未接入 RGB 或 AprilTag 识别。信标没有噪声、遮挡或丢检模型，也没有实车与硬件验收。
+当前近端定位与停靠默认属于理想仿真传感器辅助。页面实际相机用于观察；本轮未接入 RGB 或 AprilTag 识别。默认ideal没有噪声、遮挡或丢检；P0受扰配置只表示合成传感器条件，完整对照与真实视觉另行验收。
 
 ## 定位图与避障图
 
@@ -162,4 +182,20 @@ FISHBOT_SO101_PYTHON="$FISHBOT_COOP_PYTHON" \
 
 ## 下一步
 
-[视觉停靠鲁棒性计划](../plans/visual-docking-robustness-20261014/task_plan.md) 已建立。先冻结观测与独立评分合同，再做无扰动基线、受扰信标和实际 RGB 定位。当前仅完成规划；噪声、遮挡、真实视觉与泛化实验尚未运行。来源、私有 oracle 依赖和接续负责人见该计划的 findings 与 progress。
+[视觉停靠鲁棒性计划](../plans/visual-docking-robustness-20261014/task_plan.md) 的P0已完成。观测合同、受扰配置与独立评分入口已接入；隔离120完成运动取消和一次完整运输，原生与独立物理评分通过，货物1.789564m、34源冻结、测试进程已清理。先前默认10Hz观测过期失败保留；50Hz修复保持原门槛。详细边界回源progress。后续完整基线面板、受扰对照、实际RGB与泛化实验分别验收。
+
+## 独立评分入口
+
+原K数学/采样/评分已迁入 `tools/cooperation_oracle_base.py`；`tools/cooperation_oracle.py` 保留episode、原生UUID、reset与完整交接/携货检查。它只订阅与HTTP GET，不控制、取消或重置任务。评分与执行端代码分开，原始缓存和失败保持。
+
+观察必须指定新输出、当前episode、预声明markers及独立domain；0/107/114拒绝。使用已有ROS/Python环境，避免直接启动缺系统依赖的venv。
+
+```bash
+FISHBOT_COOP_DOMAIN=120 ./tools/fishbot_cooperation.sh oracle \
+  --domain 120 --api http://127.0.0.1:9090/coop-api \
+  --expected-episode UUID --allow-initial-episode \
+  --markers /path/to/declared-markers.json --output /path/to/new-observer \
+  --duration 700
+```
+
+离线重放使用 `--score-only /path/to/old-observer`，结果必须写入新的外部目录，不改旧记录。`offline_replay`不等于本轮ROS验收；`live_observation`仍要核对完整原生/物理评分、外部执行源冻结与清理。当前stack-gate只消费导航报告，不直接消费此结果。
