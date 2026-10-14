@@ -24,8 +24,9 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.max_points <= 1000000:
         parser.error('max-points must be between 1 and 1000000')
-    if args.output.exists():
-        parser.error('choose a new .rrd output path')
+    manifest_path = args.output.with_suffix('.manifest.json')
+    if args.output.exists() or manifest_path.exists():
+        parser.error('choose a new .rrd output path and manifest path')
     script = args.source_dir / 'visualize.py'
     if hashlib.sha256(script.read_bytes()).hexdigest() != _VISUALIZE_HASH:
         raise ValueError('upstream visualize.py differs from the pinned source')
@@ -39,26 +40,36 @@ def main():
     previous = sys.modules.get('spatiallm')
     old_argv = sys.argv
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    import rerun as rr
+
     try:
         sys.modules['spatiallm'] = package
         sys.argv = [str(script), '--point_cloud', str(args.point_cloud), '--layout', str(args.layout),
                     '--save', str(args.output), '--max_points', str(args.max_points)]
         runpy.run_path(str(script), run_name='__main__')
     finally:
-        sys.argv = old_argv
-        if previous is None:
-            sys.modules.pop('spatiallm', None)
-        else:
-            sys.modules['spatiallm'] = previous
+        try:
+            # Upstream script_teardown does not close --save recordings. Close
+            # the SDK file sink before hashing; shutdown otherwise adds a footer.
+            rr.disconnect()
+        finally:
+            sys.argv = old_argv
+            if previous is None:
+                sys.modules.pop('spatiallm', None)
+            else:
+                sys.modules['spatiallm'] = previous
     if not args.output.is_file() or args.output.stat().st_size == 0:
         raise RuntimeError('upstream viewer did not write a nonempty recording')
+    recording = args.output.read_bytes()
     manifest = {'official_visualize_sha256': _VISUALIZE_HASH, 'layout_source': doc['source'],
                 'point_cloud_sha256': hashlib.sha256(args.point_cloud.read_bytes()).hexdigest(),
-                'recording_sha256': hashlib.sha256(args.output.read_bytes()).hexdigest(),
+                'recording_sha256': hashlib.sha256(recording).hexdigest(),
+                'recording_bytes': len(recording),
+                'recording_finalization': 'rerun.disconnect completed before hashing',
                 'max_points': args.max_points,
                 'limits': 'Native upstream Rerun visualization; not MuJoCo collision or model inference acceptance.'}
-    args.output.with_suffix('.manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
-    print(json.dumps({'recording': str(args.output), 'bytes': args.output.stat().st_size}, indent=2))
+    manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+    print(json.dumps({'recording': str(args.output), 'bytes': len(recording)}, indent=2))
 
 
 if __name__ == '__main__':
