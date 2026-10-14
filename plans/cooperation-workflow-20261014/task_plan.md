@@ -22,8 +22,8 @@
 ## Phases
 1. 接口核对与独立边界：complete。
 2. 薄层实施与 CPU 回归：complete，36 项无跳过。
-3. 独立审查与 scoped 交付：in_progress。
+3. 独立审查与 scoped 交付：complete，根独立36项与源SHA核对通过，特性分支远端读回一致。
 4. FishBot owner 串行整合与物理验收：pending。
 
 ## Next Step
-冻结源码供根独立 CPU 复审，并完成特性分支交付。
+根在原生 queue 可接续后交 FishBot owner 串行整合，执行隔离实际运输与独立 oracle 验收。
