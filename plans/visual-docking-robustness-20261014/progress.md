@@ -2,7 +2,7 @@
 
 ## Current
 
-三文件规划、源码合同和实验协议已建立；标准入口与索引已补齐，文档交付 in_progress。视觉停靠实现与实验 pending。没有启动实验、GPU 或运动。
+本次规划交付 complete。三文件规划、源码合同和实验协议已建立；标准入口与索引已补齐，文档已提交推送并经GitHub API读回。视觉停靠实现与实验 pending。没有启动实验、GPU 或运动。
 
 ## Done
 
@@ -14,11 +14,10 @@
 - 补CLAUDE.md、docs/DECISIONS.md与README/PROJECT/ARCHITECTURE/COOPERATION渐进入口；纠正README仍称Arena待GPU/许可的旧状态。
 - 独立审查指出视觉观测与既有物理安全反馈不可混称、基线面板须预声明；root已修正两处。
 - root检查6个标准核心文件、10份文档及49个相对链接，缺文件/断链均0；git diff --check通过。本轮只改文档，不重复运行代码回归或仿真。
-- 有效GitHub账号qiaoqiao2521/id238822818与既有public目标仓库/main均已读回；Git提交与推送接续。
+- 有效GitHub账号qiaoqiao2521/id238822818与既有public目标仓库/main均已读回。10份文档提交954be89e723e77982691e69a4219e45256fe7691，已推送并经GitHub API确认同SHA；本条状态收尾随后单独同步，最新版本以远端Git为准。
 
 ## Remaining
 
-- 提交并读回既有远端。
 - 后续实现与实验 pending，owner=root；本次不执行。
 
 ## Issues
@@ -35,4 +34,4 @@ already_covered：已核对Wiki/ROS2 与 FishBot第19、20节，原文准确覆�
 
 ## Next
 
-完成当前文档验证与Git远端读回。后续实施唯一入口是task_plan的P0；root负责，实验未开始。
+后续实施唯一入口是task_plan的P0传感器与评分合同；root负责，实验未开始。本次SpecMesh补漏无需再等待额外运行验收。
