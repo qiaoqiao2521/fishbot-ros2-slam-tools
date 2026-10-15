@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
+import { MapZonesManager } from '@/lib/map-zones'
 
 import { posesEquivalent, requestSimulation, simulationRequestRejected, SimulationRejectedRequest, type Pose, type SimulationMap } from '@/lib/simulation'
 import {
@@ -16,6 +17,9 @@ export function useSimulationWorkspace(map: SimulationMap | null, blocked: boole
   const [routeWrite, setRouteWrite] = useState<'idle' | 'saving' | 'unknown' | 'rejected'>('idle')
   const [routeMessage, setRouteMessage] = useState('')
   const [refreshing, setRefreshing] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportMessage, setExportMessage] = useState('')
+  const exportBusy = useRef(false)
   const generation = mapGeneration(map)
   const editorRef = useRef(editor)
   const blockedRef = useRef(blocked)
@@ -74,6 +78,7 @@ export function useSimulationWorkspace(map: SimulationMap | null, blocked: boole
     setRuns([])
     setRouteWrite('idle')
     setRouteMessage('')
+    setExportMessage('')
     setRulesError(null)
     setRoutesError(null)
     setRunsError(null)
@@ -109,6 +114,9 @@ export function useSimulationWorkspace(map: SimulationMap | null, blocked: boole
     if (writeBusy.current || blockedRef.current || !current.saved || !rulesDirty(current) || current.anchor
       || current.writeState === 'unknown' || current.writeState === 'saving'
       || current.baseRevision !== current.saved.revision || rulesError) return
+    let zones
+    try { zones = MapZonesManager.fromMapRulesZones(current.zones).toMapRulesZones() }
+    catch (error) { dispatch({ type: 'rejected', message: error instanceof Error ? error.message : '规则草稿无效。' }); return }
     const expectedGeneration = generation
     writeBusy.current = true
     ++readSequence.current
@@ -118,7 +126,7 @@ export function useSimulationWorkspace(map: SimulationMap | null, blocked: boole
     const timeout = setTimeout(() => controller.abort(), 5000)
     try {
       const value = validateMapRules(await requestSimulation<MapRules>('map-rules', {
-        map_id: current.saved.map_id, base_revision: current.baseRevision, zones: current.zones,
+        map_id: current.saved.map_id, base_revision: current.baseRevision, zones,
       }, controller.signal), current.saved.map_id)
       if (value.revision <= (current.baseRevision ?? -1) || !zonesEqual(value.zones, current.zones)) throw new Error('保存回执未确认新版本。')
       if (mounted.current && liveGeneration.current === expectedGeneration) {
@@ -187,6 +195,41 @@ export function useSimulationWorkspace(map: SimulationMap | null, blocked: boole
     }
   }
 
+  async function exportRules() {
+    const current = editorRef.current
+    if (exportBusy.current || !current.saved || rulesDirty(current) || current.saved.apply_state !== 'applied') return
+    exportBusy.current = true
+    setExporting(true)
+    setExportMessage('')
+    const expectedGeneration = generation
+    const controller = new AbortController()
+    controllers.current.add(controller)
+    const timeout = setTimeout(() => controller.abort(), 5000)
+    try {
+      const raw = await requestSimulation<unknown>('map-rules/export', undefined, controller.signal)
+      const latest = editorRef.current
+      if (!mounted.current || liveGeneration.current !== expectedGeneration) return
+      if (latest.saved?.revision !== current.saved.revision || rulesDirty(latest)) throw new Error('导出期间规则已变化，请重新确认。')
+      const value = MapZonesManager.fromMapRulesZones(current.saved.zones)
+        .toCostmapFilterPayload(raw, current.saved.map_id, current.saved.revision)
+      const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' }))
+      try {
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `fishbot-nav2-keepout-r${value.revision}.json`
+        link.click()
+      } finally { URL.revokeObjectURL(url) }
+      setExportMessage(`已导出导航实际发布的规则版本 ${value.revision}，包含 OccupancyGrid 与 CostmapFilterInfo。`)
+    } catch (error) {
+      if (mounted.current && liveGeneration.current === expectedGeneration) setExportMessage(error instanceof Error ? error.message : '导出失败，请重新读取规则。')
+    } finally {
+      clearTimeout(timeout)
+      controllers.current.delete(controller)
+      exportBusy.current = false
+      if (mounted.current) setExporting(false)
+    }
+  }
+
   return { editor, dispatch, rulesError, routes, routesError, runs, runsError, routeWrite, routeMessage,
-    refreshing, refresh, saveRules, saveRoute }
+    refreshing, refresh, saveRules, saveRoute, exporting, exportMessage, exportRules }
 }

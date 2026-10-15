@@ -24,6 +24,8 @@
 
 `/simulation` 的虚拟墙与禁区使用独立版本化规则。mission bridge 发布 mask 与 filter info，Nav2 global/local 的 KeepoutFilter 和后置原生 InflationLayer 实际应用规则；软件规则不成为 MuJoCo 墙体、雷达回波或 AMCL 原地图。路线模板只保存任务输入，实际执行仍由原 FollowWaypoints 所有者派发并记录终态。配置、应用读回、未知回执与独立物理验收见 [MAP_RULES.md](MAP_RULES.md)。
 
+纯TypeScript的PatrolMissionTracker负责草稿/演练及标准Goal、现有HTTP任务转换；MapZonesManager负责几何、对象隔离与既有规则转换。页面不使用演练completed判断真实任务完成。地图导出直接返回原发布者的实际FilterInfo与OccupancyGrid快照，按地图和版本校验后下载；没有第二个ROS栅格器或任务执行者。
+
 连续过窄口入口使用 `Nav2 → 速度平滑 → Collision Monitor → 最终命令守卫 → 底盘`，统一官方模型外廓，区分限速余量和硬碰撞范围，并记录可回放的停车数据。配置、仿真和实车接入边界见 [PASSAGE_CONTROL.md](PASSAGE_CONTROL.md)。原短段控制脚本保留；两套入口不可同时控制最终速度。
 
 虚拟视觉巡检使用独立 domain 97：AMCL/Nav2 到点、停稳、三帧新鲜车载 RGB、像素判断、图文报告、返航。相机与三工位场景位于 `workspaces/fishbot_mujoco_ws`；入口和验收边界见 [VISUAL_INSPECTION.md](VISUAL_INSPECTION.md)。物理真值只核验拍摄位姿和到点误差，不输入图像识别。

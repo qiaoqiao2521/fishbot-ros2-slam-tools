@@ -27,6 +27,7 @@ from lifecycle_msgs.srv import GetState
 from mujoco_ros2_control_msgs.msg import FreeJointStateArray
 from nav2_msgs.action import BackUp, FollowWaypoints
 from nav2_msgs.msg import CollisionMonitorState, CostmapFilterInfo
+from rosidl_runtime_py.convert import message_to_ordereddict
 from nav2_msgs.srv import GetCostmap
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from rclpy.action import ActionClient
@@ -607,6 +608,7 @@ class MissionBridge(Node):
             self.get_logger().error(f'Rules refresh unavailable: {error}')
 
     def publish_rules(self):
+        self.rules_native_export = None
         self.rules_epoch += 1
         for check in self.rules_checks.values():
             check.update(params_ok=False, config_invalid=False, config_reason='', costmap_ok=False, wall=0.,
@@ -637,6 +639,9 @@ class MissionBridge(Node):
             info.base, info.multiplier = 0., 1.
             self.rules_mask_publisher.publish(mask)
             self.rules_info_publisher.publish(info)
+            self.rules_native_export = {'map_id': self.rules_store.map_id,
+                'revision': self.rules_store.document['revision'],
+                'info': message_to_ordereddict(info), 'mask': message_to_ordereddict(mask)}
             self.rules_published_map_id = self.rules_store.map_id
             self.rules_published_revision = self.rules_store.document['revision']
             self.rules_apply_state = 'published'
@@ -645,6 +650,15 @@ class MissionBridge(Node):
             self.rules_mask = None
             self.rules_apply_state = 'unavailable'
             self.rules_apply_message = f'禁区发布失败：{error}'
+
+    def export_rules(self):
+        """Return the messages actually published for this exact rules revision."""
+        value = getattr(self, 'rules_native_export', None)
+        if (self.rules_store.error or not self.published_rules_current()
+                or not value or value['map_id'] != self.rules_store.map_id
+                or value['revision'] != self.rules_store.document['revision']):
+            raise MapRulesError('Current rules have no confirmed native publication', 409)
+        return copy.deepcopy(value)
 
     def rules_subscribers_present(self):
         required = {'/global_costmap/global_costmap', '/local_costmap/local_costmap'}
@@ -1489,10 +1503,12 @@ class Handler(BaseHTTPRequestHandler):
                 if grid and hasattr(self.server.bridge, 'rules_store'):
                     grid['map_id'] = self.server.bridge.rules_store.map_id
             self.reply(200, grid) if grid else self.reply(503, {'error': 'Map is not available'})
-        elif path in {'/sim-api/map-rules', '/sim-api/routes', '/sim-api/runs'}:
+        elif path in {'/sim-api/map-rules', '/sim-api/map-rules/export', '/sim-api/routes', '/sim-api/runs'}:
             try:
                 with self.server.bridge.lock:
-                    if path == '/sim-api/map-rules':
+                    if path == '/sim-api/map-rules/export':
+                        result = self.server.bridge.export_rules()
+                    elif path == '/sim-api/map-rules':
                         result = self.server.bridge.rules_state()
                     elif path == '/sim-api/routes':
                         result = self.server.bridge.rules_store.routes()

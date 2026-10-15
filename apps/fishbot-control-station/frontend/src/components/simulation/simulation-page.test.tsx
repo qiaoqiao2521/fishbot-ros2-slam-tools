@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SimulationPage } from '@/components/simulation/simulation-page'
 import { goalDraftIdentity } from '@/lib/simulation-errors'
-import type { SimulationGoalIssue } from '@/lib/simulation'
-import type { MapZone } from '@/lib/simulation-workspace'
+import type { SimulationGoalIssue, SimulationState } from '@/lib/simulation'
+import type { MapZone, MissionRun } from '@/lib/simulation-workspace'
 import { emptyRulesEditor, rulesReducer } from '@/lib/simulation-workspace'
 
 const fixture = vi.hoisted(() => ({ routeWrite: 'idle', seedDraft: false, draftConsumed: false,
   attemptedDraft: null as string | null, goalIssue: null as SimulationGoalIssue | null, zones: [] as MapZone[], revision: 2,
-  home: { x: 0, y: 0, yaw: 0 } }))
+  home: { x: 0, y: 0, yaw: 0 }, mission: null as SimulationState['mission'] | null, runs: null as MissionRun[] | null }))
 vi.mock('react', async (original) => {
   const actual = await original<typeof import('react')>()
   return { ...actual, useState: (initial: unknown) => {
@@ -25,7 +25,7 @@ vi.mock('react', async (original) => {
 vi.mock('@/hooks/use-simulation', () => ({
   useSimulation: () => ({
     state: { mode: 'mujoco', domain: 93, ready: true, reason: '就绪', pose: null, truth: null,
-      path: [], mission: { id: null, status: 'idle', current_index: 0, waypoints: [], return_home: false, message: '等待巡逻任务' },
+      path: [], mission: fixture.mission ?? { id: null, status: 'idle', current_index: 0, waypoints: [], return_home: false, message: '等待巡逻任务' },
       obstacle: { state: 'parked', x: null, y: null, size: 0.36 }, home: fixture.home },
     map: { map_id: 'map-a', width: 4, height: 4, resolution: 1, origin: [0, 0, 0], data: new Array(16).fill(0) },
     connectionError: null, mapError: null, actionError: fixture.goalIssue ? 'rejected' : null, goalIssue: fixture.goalIssue, pending: null, missionRequestUnknown: false, act: vi.fn(),
@@ -40,7 +40,7 @@ vi.mock('@/hooks/use-simulation-workspace', () => ({
     editor: rulesReducer(emptyRulesEditor(), { type: 'received', value: { map_id: 'map-a', revision: fixture.revision,
       zones: fixture.zones, apply_state: 'applied', message: '已确认' } }),
     dispatch: vi.fn(), rulesError: null, routes: [], routesError: null,
-    runs: [{ id: 'interrupted-run', status: 'unknown', map_id: 'map-a', rules_revision: 1,
+    runs: fixture.runs ?? [{ id: 'interrupted-run', status: 'unknown', map_id: 'map-a', rules_revision: 1,
       message: '桥接重启，旧任务实际终态未知；不会恢复或重发', stop_reason: '扫描断流' }],
     runsError: null, routeWrite: fixture.routeWrite, routeMessage: '', refreshing: false,
     refresh: vi.fn(), saveRules: vi.fn(), saveRoute: vi.fn(),
@@ -49,7 +49,7 @@ vi.mock('@/hooks/use-simulation-workspace', () => ({
 
 afterEach(() => { fixture.routeWrite = 'idle'; fixture.seedDraft = false; fixture.draftConsumed = false;
   fixture.attemptedDraft = null; fixture.goalIssue = null; fixture.zones = []; fixture.revision = 2;
-  fixture.home = { x: 0, y: 0, yaw: 0 } })
+  fixture.home = { x: 0, y: 0, yaw: 0 }; fixture.mission = null; fixture.runs = null; vi.restoreAllMocks() })
 
 const issue: SimulationGoalIssue = { kind: 'map_rule', target: 'waypoint', waypoint_index: 1,
   point: { x: 1, y: 1, yaw: 0 }, rule_id: 'wall-a', rule_kind: 'wall', rule_index: 1,
@@ -145,5 +145,21 @@ describe('simulation historical task record presentation', () => {
     expect(html).toContain('地图已不同，不在当前地图标记')
     expect(html).not.toContain('定位上次问题')
     expect(html).not.toContain('simulation-goal-issue-overlay')
+  })
+})
+
+
+describe('native route metrics', () => {
+  it('renders twelve accepted waypoints plus the backend return point without a draft-limit crash', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(12_000)
+    fixture.mission = { id: 'native-route', status: 'running', dispatch_state: 'accepted',
+      current_index: 0, waypoints: Array.from({ length: 13 }, (_, x) => ({ x, y: 0, yaw: 0 })),
+      return_home: true, message: '原生执行' }
+    fixture.runs = [{ id: 'native-route', map_id: 'map-a', status: 'running', started_at: 10 }]
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('航点间直线 12.00 米')
+    expect(html).toContain('任务耗时 2.0 秒')
+    expect(html).toContain('返回本次出发点')
+    expect(html).not.toContain('巡逻完成')
   })
 })

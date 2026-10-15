@@ -1676,5 +1676,52 @@ class NativeBackupTests(unittest.TestCase):
         self.assertEqual(bridge.mission.value['message'], 'collision ahead')
 
 
+
+class NativeRulesExportTests(unittest.TestCase):
+    def bridge(self, fail=False):
+        from builtin_interfaces.msg import Time
+        messages = []
+        def publish(message):
+            if fail: raise RuntimeError('publisher failed')
+            messages.append(copy.deepcopy(message))
+        bridge = SimpleNamespace(rules_epoch=0, rules_checks={}, rules_mask=None,
+            rules_published_map_id=None, rules_published_revision=None,
+            rules_store=SimpleNamespace(error=None, map_id='map-export', document={'map_id': 'map-export', 'revision': 2, 'zones': []}),
+            grid=fixture_grid(), rules_mask_publisher=SimpleNamespace(publish=publish),
+            rules_info_publisher=SimpleNamespace(publish=publish),
+            get_clock=lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: Time(sec=42))))
+        bridge.published_rules_current = MethodType(MissionBridge.published_rules_current, bridge)
+        return bridge, messages
+
+    def test_exports_actual_published_messages_and_isolates_the_snapshot(self):
+        from nav_msgs.msg import OccupancyGrid
+        from nav2_msgs.msg import CostmapFilterInfo
+        from rosidl_runtime_py.set_message import set_message_fields
+        bridge, sent = self.bridge()
+        MissionBridge.publish_rules(bridge)
+        value = MissionBridge.export_rules(bridge)
+        self.assertEqual((value['map_id'], value['revision']), ('map-export', 2))
+        self.assertEqual(len(sent), 2)
+        mask, info = OccupancyGrid(), CostmapFilterInfo()
+        set_message_fields(mask, value['mask']); set_message_fields(info, value['info'])
+        self.assertEqual(mask, sent[0]); self.assertEqual(info, sent[1])
+        json.dumps(value, allow_nan=False)
+        value['mask']['data'][0] = 100
+        self.assertEqual(MissionBridge.export_rules(bridge)['mask']['data'][0], 0)
+
+    def test_unpublished_or_stale_revision_is_rejected(self):
+        bridge, _ = self.bridge()
+        with self.assertRaises(MapRulesError): MissionBridge.export_rules(bridge)
+        MissionBridge.publish_rules(bridge)
+        bridge.rules_store.document['revision'] += 1
+        with self.assertRaises(MapRulesError): MissionBridge.export_rules(bridge)
+
+    def test_failed_publication_cannot_export_an_old_snapshot(self):
+        bridge, _ = self.bridge(fail=True)
+        MissionBridge.publish_rules(bridge)
+        self.assertEqual(bridge.rules_apply_state, 'unavailable')
+        with self.assertRaises(MapRulesError): MissionBridge.export_rules(bridge)
+
+
 if __name__ == '__main__':
     unittest.main()

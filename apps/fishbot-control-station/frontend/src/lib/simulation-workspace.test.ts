@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { requestSimulation, SimulationRejectedRequest, type SimulationMap } from '@/lib/simulation'
 import {
-  emptyRulesEditor, mapGeneration, rectanglePoints, routeDraft, ruleStartBlock, rulesDirty, rulesReducer,
+  emptyRulesEditor, mapGeneration, missionElapsedSeconds, rectanglePoints, routeDraft, ruleStartBlock, rulesDirty, rulesReducer,
   validateMapRules, validateRoutes, validateRuns, zoneFromSelection, zonesEqual,
   type MapRules, type MapZone, type RulesEditor, type SavedRoute,
 } from '@/lib/simulation-workspace'
@@ -165,5 +165,49 @@ describe('workspace resource contracts and route-only drafts', () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ error: '规则版本冲突，请重新读取' }), { status: 409 }))))
     await expect(requestSimulation('map-rules', { map_id: 'map-a', base_revision: 0, zones: [] })).rejects.toBeInstanceOf(SimulationRejectedRequest)
     await expect(requestSimulation('map-rules', {})).rejects.toThrow('规则版本冲突')
+  })
+})
+
+
+describe('rule redo transaction boundaries', () => {
+  it('replays a deep snapshot and clears redo on a new edit', () => {
+    const input = { ...wall, points: wall.points.map(p => ({ ...p })) }
+    const added = rulesReducer(editor(), { type: 'add', zone: input })
+    input.points[0].x = 999
+    const undone = rulesReducer(added, { type: 'undo' })
+    expect(undone.zones).toEqual([])
+    const polled = rulesReducer(undone, { type: 'received', value: saved })
+    const redone = rulesReducer(polled, { type: 'redo' })
+    expect(redone.zones).toEqual([wall])
+    expect(redone.future).toEqual([])
+    const branched = rulesReducer(undone, { type: 'add', zone: { ...wall, id: 'branch' } })
+    expect(rulesReducer(branched, { type: 'redo' })).toBe(branched)
+  })
+  it('cannot replay edits across a save or an unknown write', () => {
+    const undone = rulesReducer(rulesReducer(editor(), { type: 'add', zone: wall }), { type: 'undo' })
+    const saving = rulesReducer(undone, { type: 'saving' })
+    const unknown = rulesReducer(saving, { type: 'unknown', message: 'unknown' })
+    expect(rulesReducer(unknown, { type: 'redo' })).toBe(unknown)
+    const confirmed = rulesReducer(undone, { type: 'saved', value: { ...saved, revision: 1 } })
+    expect(rulesReducer(confirmed, { type: 'redo' })).toBe(confirmed)
+  })
+})
+
+
+describe('elapsed native task records', () => {
+  const mission = { id: 'owned', status: 'running' }
+  const run = { id: 'owned', map_id: 'map-a', status: 'running', started_at: 10 }
+  it('uses the original ID and map, and freezes a confirmed terminal duration', () => {
+    expect(missionElapsedSeconds(mission, [run], 'map-a', 12)).toBe(2)
+    const done = { ...run, status: 'succeeded', finished_at: 13 }
+    expect(missionElapsedSeconds({ ...mission, status: 'succeeded' }, [done], 'map-a', 50)).toBe(3)
+    expect(missionElapsedSeconds(mission, [{ ...run, id: 'other' }], 'map-a', 12)).toBeNull()
+    expect(missionElapsedSeconds(mission, [run], 'map-b', 12)).toBeNull()
+  })
+  it('hides missing, delayed and invalid records without inventing a start time', () => {
+    expect(missionElapsedSeconds({ ...mission, status: 'succeeded' }, [run], 'map-a', 12)).toBeNull()
+    expect(missionElapsedSeconds(mission, [], 'map-a', 12)).toBeNull()
+    expect(missionElapsedSeconds(mission, [{ ...run, started_at: NaN }], 'map-a', 12)).toBeNull()
+    expect(missionElapsedSeconds(mission, [run], 'map-a', 9)).toBeNull()
   })
 })

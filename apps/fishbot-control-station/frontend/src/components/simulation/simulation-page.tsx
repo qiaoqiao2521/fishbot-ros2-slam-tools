@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, Box, Check, Eye, Home, MapPin, Monitor, Play, RefreshCw, Route, Save, ShieldBan, Square, Trash2, Undo2, X } from 'lucide-react'
 
 import { SimulationMapView } from '@/components/simulation/simulation-map'
 import { useSimulation } from '@/hooks/use-simulation'
 import { useSimulationWorkspace } from '@/hooks/use-simulation-workspace'
 import { useRviz } from '@/hooks/use-rviz'
+import { calculatePolylineDistance, PatrolMissionTracker } from '@/lib/patrol-mission'
+import { MapZonesManager } from '@/lib/map-zones'
 import { goalDraftIdentity, goalIssueMatchesWaypoint, mapRuleErrorMessage } from '@/lib/simulation-errors'
-import { MAX_MAP_ZONES, mapGeneration, routeDraft, rulesDirty, ruleStartBlock, zoneFromSelection, zonesEqual, type MapEditMode, type SavedRoute } from '@/lib/simulation-workspace'
+import { MAX_MAP_ZONES, mapGeneration, missionElapsedSeconds, routeDraft, rulesDirty, ruleStartBlock, zoneFromSelection, zonesEqual, type MapEditMode, type SavedRoute } from '@/lib/simulation-workspace'
 import {
   MAX_WAYPOINTS, SIMULATION_DOMAIN, collisionMonitorText, isFreeWaypoint, missionCanRetryCancel,
   missionIsActive, missionLabel, missionProgressText,
@@ -31,7 +33,7 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
   const ready = connected && state.ready && !!map && !mapError
   const blocked = active || !!pending || missionRequestUnknown || !connected
   const workspace = useSimulationWorkspace(map, blocked)
-  const { editor, dispatch, rulesError, routes, routesError, runs, runsError, routeWrite, routeMessage, refreshing, refresh, saveRules, saveRoute } = workspace
+  const { editor, dispatch, rulesError, routes, routesError, runs, runsError, routeWrite, routeMessage, refreshing, refresh, saveRules, saveRoute, exporting, exportMessage, exportRules } = workspace
   const writing = editor.writeState === 'saving' || routeWrite === 'saving'
   const editable = !blocked && !writing && editor.writeState !== 'unknown'
   const rulesReady = !!map && editor.mapId === map.map_id && !rulesError
@@ -49,6 +51,19 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
   }, [generation])
   const displayedPoints = active ? state!.mission.waypoints : waypoints
   const mission = state?.mission
+  const elapsedSeconds = missionElapsedSeconds(mission, runs, map?.map_id)
+  const patrolDraft = useMemo(() => {
+    const draft = new PatrolMissionTracker({ returnHomeOnComplete: returnHome, maxDurationSeconds: 360 })
+    for (const point of waypoints) draft.addWaypoint(point, point.yaw)
+    return draft
+  }, [waypoints, returnHome])
+  const routeDistance = useMemo(() => calculatePolylineDistance(displayedPoints), [displayedPoints])
+  let geometryMessage = ''
+  try {
+    const points = active ? state!.path : [...(state?.pose ? [state.pose] : []), ...waypoints]
+    const hit = MapZonesManager.fromMapRulesZones(editor.zones).checkPathCollision(points, .13)
+    if (hit.hasCollision) geometryMessage = `${active ? '收到的导航路径' : '点间直线预览'}与${hit.collisionType === 'wall' ? '虚拟墙' : '禁区'}接触（${hit.collidedEntityId}）。实际绕行与放行以 Nav2 为准。`
+  } catch (error) { geometryMessage = error instanceof Error ? error.message : '草稿几何检查暂不可用。' }
   const awaitingAcceptance = mission?.status === 'running' && mission.dispatch_state === 'pending'
   const unknownAcceptance = mission?.status === 'canceling' && mission.dispatch_state === 'unavailable'
   const canRetryCancel = missionCanRetryCancel(mission)
@@ -137,8 +152,12 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
   }
 
   function startMission() {
-    setAttemptedDraft(goalDraftIdentity(waypoints, returnHome))
-    void act('mission', { waypoints, return_home: returnHome, issued_at: Date.now() / 1000, map_id: editor.mapId, rules_revision: editor.saved?.revision })
+    if (!editor.mapId || !editor.saved) return
+    try {
+      const payload = patrolDraft.toMissionPayload({ issuedAt: Date.now() / 1000, mapId: editor.mapId, rulesRevision: editor.saved.revision })
+      setAttemptedDraft(goalDraftIdentity(waypoints, returnHome))
+      void act('mission', payload)
+    } catch (error) { setSelectionMessage(error instanceof Error ? error.message : '巡逻草稿无效。') }
   }
 
   const ruleStatus = editor.writeState === 'saving' ? '正在保存规则…' : editor.writeState === 'unknown' ? '保存结果未知'
@@ -203,6 +222,7 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
             <span role="status">{ruleStatus}{dirty ? ' · 有未保存草稿' : ''}</span>
             <div>
               <button type="button" className="simulation-button simulation-quiet" disabled={!editable || (!editor.anchor && !editor.history.length)} onClick={() => dispatch({ type: 'undo' })}><Undo2 size={14} />撤销</button>
+              <button type="button" className="simulation-button simulation-quiet" disabled={!editable || !!editor.anchor || !editor.future.length} onClick={() => dispatch({ type: 'redo' })}>重做</button>
               <button type="button" className="simulation-button simulation-primary" disabled={!editable || !rulesReady || !dirty || !!editor.anchor || editor.baseRevision !== editor.saved?.revision}
                 onClick={() => void saveRules()}><Save size={14} />保存规则</button>
             </div>
@@ -247,10 +267,15 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
             <div className="simulation-resource-actions">
               <button type="button" className="simulation-button simulation-quiet" disabled={!editable || !editor.saved || !dirty} onClick={() => dispatch({ type: 'restore' })}>恢复已保存</button>
               <button type="button" className="simulation-button simulation-quiet" disabled={!map || refreshing || writing} onClick={() => void refresh()}><RefreshCw size={14} />{refreshing ? '正在读取…' : '读取规则与路线'}</button>
+              <button type="button" className="simulation-button simulation-quiet" disabled={!editor.saved || dirty || editor.saved.apply_state !== 'applied' || exporting} onClick={() => void exportRules()}>{exporting ? '正在导出…' : '导出 Nav2 规则'}</button>
             </div>
+            {exportMessage && <p className="simulation-panel-note" role="status">{exportMessage}</p>}
           </section>
           <section className="simulation-task">
             <div className="simulation-task-heading"><h2>巡逻路线</h2><span>{active ? displayedPoints.length : waypoints.length} 个点</span></div>
+            <p className="simulation-panel-note">航点间直线 {routeDistance.toFixed(2)} 米，不含绕障。任务终态以 ROS 回执为准。</p>
+            {elapsedSeconds !== null && <p className="simulation-panel-note">任务耗时 {elapsedSeconds.toFixed(1)} 秒</p>}
+            {geometryMessage && <p className="simulation-panel-note" role="status">{geometryMessage}</p>}
             <div className={`simulation-mission-state simulation-mission-${mission?.status ?? 'idle'}`} aria-live="polite">
               <strong>{missionLabel(mission?.status, mission?.dispatch_state)}</strong>
               <p>{progressText}</p>

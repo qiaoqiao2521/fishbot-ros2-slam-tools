@@ -22,12 +22,23 @@ export type MissionRun = {
   started_at?: number; finished_at?: number | null
 }
 export type RunCollection = { runs: MissionRun[] }
+
+/** Pair only the original task and map; delayed records never keep a terminal clock running. */
+export function missionElapsedSeconds(mission: { id: string | null; status: string } | undefined,
+  runs: MissionRun[], mapId: string | undefined, nowSeconds = Date.now() / 1000): number | null {
+  if (!mission?.id || !mapId || !Number.isFinite(nowSeconds)) return null
+  const run = runs.find((item) => item.id === mission.id && item.map_id === mapId && item.status === mission.status)
+  if (!run || typeof run.started_at !== 'number' || !Number.isFinite(run.started_at) || run.started_at < 0) return null
+  const end = ['running', 'canceling'].includes(mission.status) ? nowSeconds : run.finished_at
+  return typeof end === 'number' && Number.isFinite(end) && end >= run.started_at ? end - run.started_at : null
+}
 export type RulesEditor = {
   mapId: string | null
   saved: MapRules | null
   baseRevision: number | null
   zones: MapZone[]
   history: MapZone[][]
+  future: MapZone[][]
   anchor: Point | null
   writeState: 'idle' | 'saving' | 'unknown' | 'rejected'
   error: string | null
@@ -35,7 +46,7 @@ export type RulesEditor = {
 }
 
 export const emptyRulesEditor = (): RulesEditor => ({
-  mapId: null, saved: null, baseRevision: null, zones: [], history: [], anchor: null,
+  mapId: null, saved: null, baseRevision: null, zones: [], history: [], future: [], anchor: null,
   writeState: 'idle', error: null, attempted: null,
 })
 const pointValid = (point: Point): boolean => !!point && Number.isFinite(point.x) && Number.isFinite(point.y)
@@ -119,6 +130,7 @@ export type RulesEdit =
   | { type: 'add'; zone: MapZone }
   | { type: 'remove'; id: string }
   | { type: 'undo' }
+  | { type: 'redo' }
   | { type: 'restore' }
   | { type: 'saving' }
   | { type: 'unknown'; message: string }
@@ -134,29 +146,37 @@ export function rulesReducer(editor: RulesEditor, edit: RulesEdit): RulesEditor 
     if (editor.writeState === 'unknown') {
       const confirmed = editor.attempted && value.revision > editor.attempted.baseRevision
         && zonesEqual(value.zones, editor.attempted.zones)
-      return confirmed ? { ...editor, saved: value, baseRevision: value.revision, zones: cloneZones(value.zones), history: [],
+      return confirmed ? { ...editor, saved: value, baseRevision: value.revision, zones: cloneZones(value.zones), history: [], future: [],
         anchor: null, writeState: 'idle', attempted: null, error: null } : { ...editor, saved: value }
     }
     if (editor.writeState === 'saving') return editor
     const dirty = rulesDirty(editor)
-    return { ...editor, saved: value, ...(dirty ? {} : { zones: cloneZones(value.zones), baseRevision: value.revision, history: [], anchor: null }) }
+    const unchanged = editor.saved?.revision === value.revision && zonesEqual(editor.saved.zones, value.zones)
+    return { ...editor, saved: value, ...(dirty || unchanged ? {} : { zones: cloneZones(value.zones), baseRevision: value.revision, history: [], future: [], anchor: null }) }
   }
   if (edit.type === 'saved') return { ...editor, saved: edit.value, baseRevision: edit.value.revision, zones: cloneZones(edit.value.zones),
-    history: [], anchor: null, writeState: 'idle', attempted: null, error: null }
+    history: [], future: [], anchor: null, writeState: 'idle', attempted: null, error: null }
   if (edit.type === 'rejected') return { ...editor, writeState: 'rejected', error: edit.message, attempted: null }
   if (edit.type === 'unknown') return { ...editor, writeState: 'unknown', error: edit.message }
   if (editor.writeState === 'saving' || editor.writeState === 'unknown') return editor
   if (edit.type === 'anchor') return { ...editor, anchor: edit.point, error: null }
   if (edit.type === 'saving') return editor.saved && !editor.anchor
     ? { ...editor, writeState: 'saving', error: null, attempted: { baseRevision: editor.baseRevision ?? editor.saved.revision, zones: cloneZones(editor.zones) } } : editor
-  if (edit.type === 'restore') return { ...editor, zones: cloneZones(editor.saved?.zones ?? []), baseRevision: editor.saved?.revision ?? null, history: [], anchor: null, error: null, writeState: 'idle' }
+  if (edit.type === 'restore') return { ...editor, zones: cloneZones(editor.saved?.zones ?? []), baseRevision: editor.saved?.revision ?? null, history: [], future: [], anchor: null, error: null, writeState: 'idle' }
   if (edit.type === 'undo') {
     if (editor.anchor) return { ...editor, anchor: null }
     const previous = editor.history.at(-1)
-    return previous ? { ...editor, zones: cloneZones(previous), history: editor.history.slice(0, -1), error: null, writeState: 'idle' } : editor
+    return previous ? { ...editor, zones: cloneZones(previous), history: editor.history.slice(0, -1),
+      future: [...editor.future.slice(-49), cloneZones(editor.zones)], error: null, writeState: 'idle' } : editor
+  }
+  if (edit.type === 'redo') {
+    if (editor.anchor) return editor
+    const next = editor.future.at(-1)
+    return next ? { ...editor, zones: cloneZones(next), future: editor.future.slice(0, -1),
+      history: [...editor.history.slice(-49), cloneZones(editor.zones)], error: null, writeState: 'idle' } : editor
   }
   const zones = edit.type === 'add' ? [...editor.zones, edit.zone] : editor.zones.filter((zone) => zone.id !== edit.id)
-  return { ...editor, zones, history: [...editor.history.slice(-49), cloneZones(editor.zones)], anchor: null,
+  return { ...editor, zones: cloneZones(zones), history: [...editor.history.slice(-49), cloneZones(editor.zones)], future: [], anchor: null,
     error: null, writeState: 'idle' }
 }
 
