@@ -1,7 +1,7 @@
 # Progress
 
 ## Current
-实现、限定验收与独立审查完成，Git交付进行中。保留原类思路和原ROS owner。
+实现、限定验收、独立审查与Git交付完成。实施提交d041060已推送qiaoqiao2521/fishbot-ros2-slam-tools的main。保留原类思路和原ROS owner。
 
 ## Done
 - 原反例均修复；map-zones37、patrol46项行为测试通过。覆盖共线/端点/单点/圆足迹、引用隔离、停留/期限/停表、两点循环、真实Goal、支持范围拒绝。
@@ -13,7 +13,7 @@
 - 独立复核发现13点观测崩溃和时间字段来源错误，均修复后再读回；最终额外75项复跑通过，无阻断。原生Goal的实际TS输出交真实Jazzy set_message_fields已成功，无动作发送。
 
 ## Remaining
-仅Git交付。不支持的真实逐点等待、HTTP循环、任意多边形/no_clean/speed规则没有实现或验收；明确拒绝，不静默转换。演练completed不外推ROS/真机成功。
+本轮无剩余实施项。不支持的真实逐点等待、HTTP循环、任意多边形/no_clean/speed规则没有实现或验收；明确拒绝，不静默转换。演练completed不外推ROS/真机成功。
 
 ## Retained evidence and runtime
 本机证据位于`~/.cache/fishbot/navigation-modules-20261016/run-617828f1/`，含声明/逐帧真值/原生状态/实际导出消息/浏览器/评分/最终源哈希，全部不入库。
