@@ -145,3 +145,4 @@
   .workbench-quick-links a { padding: 6px 9px; border: 1px solid #cbd9ec; border-radius: 6px; color: #1d4ed8; background: #fff; font-size: 11px; text-decoration: none; }
   .workbench-quick-links a:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
 }
+.workbench-heading-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }

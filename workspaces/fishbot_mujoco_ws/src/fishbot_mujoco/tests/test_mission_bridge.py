@@ -18,7 +18,8 @@ from rclpy.task import Future as ROSFuture
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from map_rules import MapRulesError, MapRulesStore, build_mask, validate_zones
 from mission_bridge import (APIError, GoalStatus, MissionBridge, MissionRecord,
-                            Handler, require_free_point, simulation_domain, validate_mission)
+                            Handler, require_free_point, simulation_domain, validate_mission,
+                            validate_backup, validate_cancel)
 
 
 def fixture_grid():
@@ -55,6 +56,28 @@ class IsolationTests(unittest.TestCase):
             self.assertFalse(Handler.allowed(handler))
         handler.headers = {'Host': '192.168.0.1:9076'}
         self.assertFalse(Handler.allowed(handler))
+
+
+class IdentifiedVoiceTaskTests(unittest.TestCase):
+    def test_optional_id_reaches_original_record_and_cannot_be_reused(self):
+        record = MissionRecord()
+        original = 'd44b9ba6-ac8e-49dc-83c4-86caf4a14390'
+        self.assertEqual(record.begin([], False, mission_id=original), original)
+        record.finish(GoalStatus.STATUS_SUCCEEDED, 0, [])
+        with self.assertRaises(APIError):
+            record.begin([], False, mission_id=original)
+
+    def test_cancel_requires_matching_fresh_original_id(self):
+        original = 'd44b9ba6-ac8e-49dc-83c4-86caf4a14390'
+        validate_cancel({}, original, now=100.)
+        validate_cancel({'mission_id': original, 'issued_at': 100.}, original, now=100.)
+        for body, status in [({'mission_id': original, 'issued_at': 96.9}, 408),
+                ({'mission_id': original, 'issued_at': 101.1}, 408),
+                ({'mission_id': 'db7de024-1f05-4b78-8d6f-088e94f4eae9', 'issued_at': 100.}, 409),
+                ({'mission_id': original}, 400), ({'issued_at': 100.}, 400)]:
+            with self.subTest(body=body), self.assertRaises(APIError) as caught:
+                validate_cancel(body, original, now=100.)
+            self.assertEqual(caught.exception.status, status)
 
 
 class GoalBoundaryTests(unittest.TestCase):
@@ -1481,6 +1504,176 @@ class MapRulesFilterRecoveryTests(unittest.TestCase):
         self.costmap_result(bridge, 100.75, 0, frame='odom')
         self.assertEqual(requested, [100_750_000_000])
         self.assertIsNone(bridge.rules_checks['global']['mismatch_since'])
+
+
+class NativeBackupTests(unittest.TestCase):
+    identity = 'd44b9ba6-ac8e-49dc-83c4-86caf4a14390'
+
+    def body(self, **changes):
+        return {'mission_id': self.identity, 'operation': 'backup', 'distance_m': .3,
+                'issued_at': 100., **changes}
+
+    def test_derives_rear_endpoint_from_localization_and_preserves_heading(self):
+        start = {'x': .4, 'y': .6, 'yaw': math.pi/2}
+        points, returning = validate_backup(self.body(), fixture_grid(), start, now=100.)
+        self.assertFalse(returning)
+        self.assertAlmostEqual(points[0]['x'], .4)
+        self.assertAlmostEqual(points[0]['y'], .3)
+        self.assertAlmostEqual(points[0]['yaw'], math.pi/2)
+        self.assertEqual(start, {'x': .4, 'y': .6, 'yaw': math.pi/2})
+
+    def test_rejects_mixed_goals_unbounded_motion_and_stale_requests(self):
+        start = {'x': 0., 'y': 0., 'yaw': 0.}
+        for changed in ({'distance_m': 0.}, {'distance_m': -.3}, {'distance_m': 1.01},
+                {'distance_m': True}, {'distance_m': math.nan}, {'mission_id': None},
+                {'operation': 'forward'}, {'waypoints': []}, {'return_home': False},
+                {'issued_at': 96.9}, {'issued_at': 101.1}, {'timeout_s': .49},
+                {'timeout_s': 360.1}, {'timeout_s': True}):
+            with self.subTest(changed=changed), self.assertRaises(APIError):
+                validate_backup(self.body(**changed), fixture_grid(), start, now=100.)
+        for distance in (.05, 1.):
+            points, _returning = validate_backup(self.body(distance_m=distance),
+                fixture_grid(), start, now=100.)
+            self.assertAlmostEqual(points[0]['x'], -distance)
+
+    def test_sweep_rejects_occupied_middle_even_when_endpoint_is_free(self):
+        grid = fixture_grid()
+        grid['data'][20*40+20] = 100
+        end = {'x': -.5, 'y': 0., 'yaw': 0.}
+        require_free_point(end, grid)
+        with self.assertRaises(APIError) as caught:
+            validate_backup(self.body(distance_m=1.), grid,
+                            {'x': .5, 'y': 0., 'yaw': 0.}, now=100.)
+        self.assertEqual(caught.exception.issue['target'], 'backup_sweep')
+        self.assertEqual(caught.exception.issue['kind'], 'occupied_cell')
+        self.assertEqual(caught.exception.issue['destination'], end)
+        self.assertGreater(caught.exception.issue['sweep_fraction'], 0.)
+        self.assertLess(caught.exception.issue['sweep_fraction'], 1.)
+
+    def test_sweep_rejects_thin_virtual_wall_and_map_start_boundary(self):
+        wall = {'id': 'rear_wall', 'kind': 'wall', 'width': .01,
+                'points': [{'x': 0., 'y': -.5}, {'x': 0., 'y': .5}]}
+        with self.assertRaises(MapRulesError) as caught:
+            validate_backup(self.body(distance_m=1.), fixture_grid(),
+                {'x': .5, 'y': 0., 'yaw': 0.}, now=100., zones=[wall])
+        self.assertEqual(caught.exception.issue['target'], 'backup_sweep')
+        self.assertEqual(caught.exception.issue['rule_id'], 'rear_wall')
+        with self.assertRaises(APIError) as boundary:
+            validate_backup(self.body(), fixture_grid(),
+                {'x': 1.9, 'y': 0., 'yaw': 0.}, now=100.)
+        self.assertEqual(boundary.exception.issue['kind'], 'map_boundary')
+        self.assertEqual(boundary.exception.issue['sweep_fraction'], 0.)
+
+    def bridge(self):
+        existing = MapRulesIntegrationBoundaryTests()
+        existing.setUp()
+        self.addCleanup(existing.directory.cleanup)
+        bridge, source, reads, waypoint_goals = existing.dispatch_bridge()
+        backup_goals = []
+        bridge.lifecycle['behavior_server'] = {'active': True, 'wall': time.monotonic()}
+        bridge.backup_client = SimpleNamespace(server_is_ready=lambda: True,
+            send_goal_async=lambda goal, **_kwargs: backup_goals.append(goal) or Future())
+        return bridge, source, reads, waypoint_goals, backup_goals
+
+    def test_dispatch_uses_native_negative_target_and_one_original_owner(self):
+        from nav2_msgs.action import BackUp
+        bridge, source, reads, waypoint_goals, backup_goals = self.bridge()
+        body = self.body(issued_at=time.time(), timeout_s=30.75,
+                         map_id=bridge.rules_store.map_id, rules_revision=0)
+        MissionBridge.start_mission(bridge, body)
+        self.assertEqual(len(backup_goals), 1)
+        self.assertEqual(waypoint_goals, [])
+        self.assertIsInstance(backup_goals[0], BackUp.Goal)
+        self.assertAlmostEqual(backup_goals[0].target.x, -.3)
+        self.assertEqual((backup_goals[0].target.y, backup_goals[0].target.z), (0., 0.))
+        self.assertAlmostEqual(backup_goals[0].speed, .08)
+        self.assertEqual((backup_goals[0].time_allowance.sec,
+                          backup_goals[0].time_allowance.nanosec), (30, 750_000_000))
+        self.assertEqual(reads, [True])
+        self.assertEqual(bridge.mission.value['id'], self.identity)
+        self.assertEqual(bridge.mission.value['native_action'], '/backup')
+        self.assertEqual(bridge.mission.value['operation'], 'backup')
+        self.assertEqual(bridge.mission.value['start_pose'], source)
+        self.assertAlmostEqual(bridge.mission.value['waypoints'][0]['x'],
+                               source['x']-.3*math.cos(source['yaw']))
+        self.assertEqual(bridge.rules_store.runs()['runs'][0]['native_action'], '/backup')
+        with self.assertRaises(APIError):
+            MissionBridge.start_mission(bridge, body)
+        self.assertEqual(len(backup_goals), 1)
+
+    def test_default_backup_timeout_is_bounded_and_duration_rounding_is_normalized(self):
+        for requested, expected in ((None, (30, 0)), (1.9999999999, (2, 0))):
+            with self.subTest(requested=requested):
+                bridge, _source, _reads, _waypoint, goals = self.bridge()
+                body = self.body(issued_at=time.time())
+                if requested is not None:
+                    body['timeout_s'] = requested
+                MissionBridge.start_mission(bridge, body)
+                self.assertEqual((goals[0].time_allowance.sec, goals[0].time_allowance.nanosec), expected)
+                self.assertEqual(bridge.mission.value['timeout_s'], requested or 30.)
+
+    def test_backup_readiness_is_specific_and_rejection_never_dispatches(self):
+        for failure in ('inactive', 'stale', 'unavailable', 'changed_map', 'changed_rules'):
+            with self.subTest(failure=failure):
+                bridge, _source, _reads, _waypoint, goals = self.bridge()
+                body = self.body(issued_at=time.time())
+                if failure == 'inactive':
+                    bridge.lifecycle['behavior_server']['active'] = False
+                elif failure == 'stale':
+                    bridge.lifecycle['behavior_server']['wall'] -= 3.1
+                elif failure == 'unavailable':
+                    bridge.backup_client.server_is_ready = lambda: False
+                elif failure == 'changed_map':
+                    body['map_id'] = 'different'
+                else:
+                    body['rules_revision'] = 1
+                with self.assertRaises(APIError) as caught:
+                    MissionBridge.start_mission(bridge, body)
+                self.assertEqual(caught.exception.outcome, 'rejected')
+                self.assertEqual(goals, [])
+                self.assertEqual(bridge.mission.value['status'], 'idle')
+
+    def test_waypoint_readiness_does_not_require_backup_server(self):
+        bridge, _source, _reads, _waypoint, _goals = self.bridge()
+        bridge.lifecycle = {'amcl': {'active': True, 'wall': 100.},
+                            'behavior_server': {'active': False, 'wall': 0.}}
+        bridge.backup_client.server_is_ready = lambda: False
+        bridge.mission = MissionRecord()
+        with patch('mission_bridge.time.monotonic', return_value=100.):
+            self.assertTrue(MissionBridge.evaluate_ready(bridge, 100.)[0])
+        bridge.mission.begin([{'x': -.3, 'y': 0., 'yaw': 0.}], False)
+        bridge.mission.value['operation'] = 'backup'
+        self.assertFalse(MissionBridge.evaluate_ready(bridge, 100.)[0])
+
+    def test_backup_feedback_and_native_terminal_need_no_waypoint_result_fields(self):
+        result, cancel = Future(), Future()
+        bridge, handle = AcceptedCleanupTests().harness(lambda: result, lambda: cancel)
+        original = bridge.mission.value['id']
+        bridge.mission.value.update(operation='backup', native_action='/backup')
+        MissionBridge.feedback(bridge, original,
+            SimpleNamespace(feedback=SimpleNamespace(distance_traveled=.12)))
+        self.assertAlmostEqual(bridge.mission.value['distance_traveled_m'], .12)
+        with patch('mission_bridge.time.monotonic', return_value=11.):
+            bridge.request_cancel('用户请求取消')
+        self.assertIs(bridge.goal_handle, handle)
+        cancel.set_result(SimpleNamespace(goals_canceling=[object()]))
+        result.set_result(SimpleNamespace(status=GoalStatus.STATUS_CANCELED,
+            result=SimpleNamespace(error_code=0, error_msg='')))
+        self.assertEqual(bridge.mission.value['id'], original)
+        self.assertEqual(bridge.mission.value['native_status'], GoalStatus.STATUS_CANCELED)
+        self.assertEqual(bridge.mission.value['status'], 'canceled')
+        self.assertEqual(bridge.mission.value['message'], 'Nav2 已取消倒车')
+        self.assertIsNone(bridge.goal_handle)
+
+    def test_backup_native_error_cannot_be_reported_as_success(self):
+        result, cancel = Future(), Future()
+        bridge, _handle = AcceptedCleanupTests().harness(lambda: result, lambda: cancel)
+        bridge.mission.value['operation'] = 'backup'
+        result.set_result(SimpleNamespace(status=GoalStatus.STATUS_SUCCEEDED,
+            result=SimpleNamespace(error_code=714, error_msg='collision ahead')))
+        self.assertEqual(bridge.mission.value['status'], 'failed')
+        self.assertEqual(bridge.mission.value['native_error_code'], 714)
+        self.assertEqual(bridge.mission.value['message'], 'collision ahead')
 
 
 if __name__ == '__main__':

@@ -2,8 +2,8 @@
 """Loopback-only HTTP mission API for an explicitly isolated MuJoCo domain.
 
 HTTP workers never spin or mutate the ROS node. Their short-lived requests enter
-one executor-owned queue; navigation remains a FollowWaypoints action, with no
-velocity publisher and no ground-truth TF.
+one executor-owned queue; navigation uses FollowWaypoints or a bounded native
+BackUp action, with no velocity publisher and no ground-truth TF.
 """
 import argparse
 import copy
@@ -25,7 +25,7 @@ from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped, TwistStamped
 from lifecycle_msgs.srv import GetState
 from mujoco_ros2_control_msgs.msg import FreeJointStateArray
-from nav2_msgs.action import FollowWaypoints
+from nav2_msgs.action import BackUp, FollowWaypoints
 from nav2_msgs.msg import CollisionMonitorState, CostmapFilterInfo
 from nav2_msgs.srv import GetCostmap
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
@@ -134,9 +134,40 @@ def require_free_point(point, grid, radius=ROBOT_RADIUS):
                         'blocking_point': {'x': bx, 'y': by}})
 
 
+def validate_mission_id(value):
+    if not isinstance(value, str):
+        raise APIError('mission_id must be a UUID')
+    try:
+        parsed = uuid.UUID(value)
+    except (ValueError, AttributeError) as error:
+        raise APIError('mission_id must be a UUID') from error
+    if value not in {str(parsed), parsed.hex}:
+        raise APIError('mission_id must be a canonical UUID')
+    return value
+
+
+def validate_cancel(body, current_id, now=None):
+    """Legacy empty cancel stays compatible; identified requests cannot cancel another owner."""
+    if not isinstance(body, dict) or set(body)-{'mission_id', 'issued_at'}:
+        raise APIError('Cancel expects mission_id and issued_at, or a legacy empty object')
+    if not body:
+        return
+    if validate_mission_id(body.get('mission_id')) != current_id:
+        raise APIError('Cancel mission identity changed; refresh the original task', 409)
+    age = (time.time() if now is None else now)-finite_number(body.get('issued_at'), 'issued_at')
+    if age > 3. or age < -1.:
+        raise APIError('Cancel request expired or has a future timestamp', 408)
+
+
 def validate_mission(body, grid, now=None, zones=None, return_point=None):
-    if not isinstance(body, dict) or set(body)-{'waypoints', 'return_home', 'issued_at'}:
+    if not isinstance(body, dict) or set(body)-{'waypoints', 'return_home', 'issued_at', 'mission_id', 'timeout_s'}:
         raise APIError('Expected waypoints, return_home and issued_at')
+    if 'mission_id' in body:
+        validate_mission_id(body['mission_id'])
+    if 'timeout_s' in body:
+        timeout = finite_number(body['timeout_s'], 'timeout_s')
+        if not .5 <= timeout <= 360.:
+            raise APIError('timeout_s must be between 0.5 and 360 seconds')
     issued = finite_number(body.get('issued_at'), 'issued_at')
     age = (time.time() if now is None else now)-issued
     if age > 3.0 or age < -1.0:
@@ -180,6 +211,43 @@ def validate_mission(body, grid, now=None, zones=None, return_point=None):
     return points, return_home
 
 
+def validate_backup(body, grid, start_pose, now=None, zones=None):
+    """Derive a rearward target once, checking the whole circular-footprint sweep."""
+    allowed = {'operation', 'distance_m', 'issued_at', 'mission_id', 'timeout_s'}
+    if not isinstance(body, dict) or set(body)-allowed or body.get('operation') != 'backup':
+        raise APIError('Backup expects operation, distance_m, mission_id and issued_at')
+    validate_mission_id(body.get('mission_id'))
+    distance = finite_number(body.get('distance_m'), 'distance_m')
+    if not .05 <= distance <= 1.:
+        raise APIError('distance_m must be between 0.05 and 1 metre')
+    start = {axis: finite_number(start_pose.get(axis), f'backup start {axis}')
+             for axis in ('x', 'y', 'yaw')}
+    end = {'x': start['x']-distance*math.cos(start['yaw']),
+           'y': start['y']-distance*math.sin(start['yaw']), 'yaw': start['yaw']}
+    normalized = {key: body[key] for key in ('mission_id', 'issued_at', 'timeout_s') if key in body}
+    points, returning = validate_mission({**normalized, 'waypoints': [end]}, grid,
+                                         now=now, zones=zones)
+    # Overlapping discs cover the continuous straight-line capsule. The tiny
+    # hypotenuse allowance covers between-sample edges rather than skipping thin
+    # map cells or walls; it is at most 0.1 mm at the 1 cm sampling spacing.
+    steps = max(1, math.ceil(distance/min(.01, grid['resolution']/2)))
+    coverage_radius = math.hypot(ROBOT_RADIUS, distance/steps/2)
+    for index in range(steps+1):
+        fraction = index/steps
+        point = {'x': start['x']+(end['x']-start['x'])*fraction,
+                 'y': start['y']+(end['y']-start['y'])*fraction, 'yaw': points[0]['yaw']}
+        try:
+            require_free_point(point, grid, coverage_radius)
+            require_outside_rules(point, zones or [], coverage_radius)
+        except (APIError, MapRulesError) as error:
+            if error.issue is not None:
+                error.issue.update(target='backup_sweep', waypoint_index=None,
+                                   point=point, sweep_fraction=fraction,
+                                   destination=copy.deepcopy(points[0]))
+            raise
+    return points, returning
+
+
 class PreparedMission(tuple):
     """Keep the two-value preparation API while carrying one immutable-source snapshot."""
     def __new__(cls, points, return_home, start_pose):
@@ -195,11 +263,19 @@ class MissionRecord:
                       'return_home': False, 'start_pose': None, 'message': '等待巡逻任务', 'missed_waypoints': [],
                       'dispatch_state': None, 'stop_reason': None, 'cleanup_state': None}
 
-    def begin(self, points, return_home, start_pose=None):
+    def begin(self, points, return_home, start_pose=None, mission_id=None):
         if self.value['status'] in ACTIVE_STATUSES:
             raise APIError('A mission is already running or canceling', 409)
+        if mission_id is not None:
+            validate_mission_id(mission_id)
+            if mission_id in getattr(self, '_issued_ids', set()):
+                raise APIError('Mission identity has already been used; do not resend', 409)
+        mission_id = mission_id or uuid.uuid4().hex
+        if not hasattr(self, '_issued_ids'):
+            self._issued_ids = set()
+        self._issued_ids.add(mission_id)
         # Keep the legacy active-status contract; dispatch_state carries the Nav2 receipt.
-        self.value = {'id': uuid.uuid4().hex, 'status': 'running', 'current_index': 0,
+        self.value = {'id': mission_id, 'status': 'running', 'current_index': 0,
                       'waypoints': points, 'return_home': return_home,
                       'start_pose': copy.deepcopy(start_pose),
                       'message': '任务已提交，等待 Nav2 接收回执', 'missed_waypoints': [],
@@ -215,6 +291,8 @@ class MissionRecord:
         self.value['message'] = '正在请求取消，等待 Nav2 实际结果'
 
     def finish(self, status, error_code, missed, error_msg=''):
+        self.value['native_status'] = int(status)
+        self.value['native_error_code'] = int(error_code)
         self.value['cleanup_state'] = None
         self.value['missed_waypoints'] = missed
         if status == GoalStatus.STATUS_CANCELED:
@@ -225,6 +303,10 @@ class MissionRecord:
         else:
             self.value.update(status='failed', message=error_msg or
                               f'巡逻失败：action={status}, error={error_code}, missed={len(missed)}')
+        if self.value.get('operation') == 'backup':
+            messages = {'canceled': 'Nav2 已取消倒车', 'succeeded': 'Nav2 已确认倒车完成',
+                        'failed': error_msg or f'倒车失败：action={status}, error={error_code}'}
+            self.value['message'] = messages[self.value['status']]
 
 
 @dataclass
@@ -289,6 +371,7 @@ class MissionBridge(Node):
         self.lifecycle = {name: {'active': False, 'wall': 0.0, 'future': None}
                           for name in ('amcl', 'controller_server', 'bt_navigator',
                                        'collision_monitor', 'waypoint_follower',
+                                       'behavior_server',
                                        'global_costmap/global_costmap', 'local_costmap/local_costmap')}
         self.lifecycle_clients = {name: self.create_client(GetState, f'/{name}/get_state')
                                   for name in self.lifecycle}
@@ -297,6 +380,7 @@ class MissionBridge(Node):
             'clear': self.create_client(Trigger, '/sim/obstacle/clear')}
         self.pending_services = []
         self.client = ActionClient(self, FollowWaypoints, '/follow_waypoints')
+        self.backup_client = ActionClient(self, BackUp, '/backup')
         self.buffer = Buffer()
         self.listener = TransformListener(self.buffer, self)
         rules_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
@@ -486,6 +570,9 @@ class MissionBridge(Node):
                             current_index=unknown['current_index'], dispatch_state='unavailable',
                             cleanup_state='unresolved', stop_reason=unknown.get('stop_reason'),
                             message=unknown['message'])
+                        for key in ('operation', 'native_action', 'distance_m', 'native_goal_id'):
+                            if key in unknown:
+                                self.mission.value[key] = copy.deepcopy(unknown[key])
 
     def rules_state(self):
         with self.lock:
@@ -751,6 +838,10 @@ class MissionBridge(Node):
         self.rules_run.update({key: copy.deepcopy(mission.get(key)) for key in
                                ('status', 'current_index', 'dispatch_state', 'cleanup_state',
                                 'stop_reason', 'message', 'missed_waypoints')})
+        for key in ('operation', 'native_action', 'distance_m', 'native_goal_id',
+                    'native_status', 'native_error_code', 'distance_traveled_m'):
+            if key in mission:
+                self.rules_run[key] = copy.deepcopy(mission[key])
         self.rules_run['truth'] = copy.deepcopy(self.truth)
         if changed:
             self.rules_run['events'].append({'time_unix': time.time(), 'sim_time': self.clock_last,
@@ -838,6 +929,8 @@ class MissionBridge(Node):
         if hasattr(self, 'rules_store') and self.rules_hard_failure:
             return False, self.rules_apply_message
         for name, state in self.lifecycle.items():
+            if name == 'behavior_server':
+                continue  # Only a requested/active backup depends on this server.
             if not state['active'] or wall-state['wall'] > 3:
                 return False, f'{name} 未处于 ACTIVE 状态'
         if not self.client.server_is_ready():
@@ -846,7 +939,20 @@ class MissionBridge(Node):
             self.pose = MissionBridge.localized_pose(self, ros_now)
         except APIError as error:
             return False, str(error)
+        if (self.mission.value['status'] in ACTIVE_STATUSES
+                and self.mission.value.get('operation') == 'backup'):
+            try:
+                MissionBridge.require_backup_ready(self, wall)
+            except APIError as error:
+                return False, str(error)
         return True, '仿真传感器、定位和 Nav2 已就绪'
+
+    def require_backup_ready(self, wall):
+        state = self.lifecycle.get('behavior_server', {})
+        if not state.get('active') or wall-state.get('wall', 0.) > 3.:
+            raise APIError('behavior_server 未处于 ACTIVE 状态，不能倒车', 503)
+        if not self.backup_client.server_is_ready():
+            raise APIError('BackUp 服务未就绪', 503)
 
     def localized_pose(self, ros_now):
         """Use the same fresh Nav2 localization source for readiness and dispatch."""
@@ -920,6 +1026,10 @@ class MissionBridge(Node):
             if (self.mission.value['status'] == 'running' and not self.ready
                     and self.goal_sent_wall is not None and wall-self.goal_sent_wall > 1):
                 self.request_cancel(f'仿真未就绪：{self.reason}')
+            timeout = self.mission.value.get('timeout_s')
+            if (self.mission.value['status'] == 'running' and timeout is not None
+                    and self.goal_sent_wall is not None and wall-self.goal_sent_wall >= timeout):
+                self.request_cancel('任务超过执行期限，正在取消原目标')
             if (self.goal_send_future is not None and not self.goal_send_future.done()
                     and wall-self.goal_sent_wall > 5 and not self.cancel_requested):
                 self.request_cancel('任务接收超时，等待响应后取消')
@@ -946,8 +1056,7 @@ class MissionBridge(Node):
                         self.start_mission(op.body)
                         op.future.set_result((202, self.state()))
                     elif op.kind == 'cancel':
-                        if op.body:
-                            raise APIError('Cancel request must be an empty object')
+                        validate_cancel(op.body, self.mission.value['id'])
                         if self.mission.value['status'] not in ACTIVE_STATUSES:
                             raise APIError('There is no active mission to cancel', 409)
                         self.request_cancel('用户请求取消',
@@ -1012,7 +1121,11 @@ class MissionBridge(Node):
                 body = {key: value for key, value in body.items() if key not in {'map_id', 'rules_revision'}}
                 zones = rules['zones']
             start_pose = MissionBridge.capture_start_pose(self)
-            points, returning = validate_mission(body, self.grid, zones=zones, return_point=start_pose)
+            if isinstance(body, dict) and body.get('operation') == 'backup':
+                MissionBridge.require_backup_ready(self, time.monotonic())
+                points, returning = validate_backup(body, self.grid, start_pose, zones=zones)
+            else:
+                points, returning = validate_mission(body, self.grid, zones=zones, return_point=start_pose)
             return PreparedMission(points, returning, start_pose)
         except (APIError, MapRulesError) as error:
             error.outcome = 'rejected'
@@ -1026,19 +1139,35 @@ class MissionBridge(Node):
     def start_mission(self, body):
         prepared = MissionBridge.prepare_mission(self, body)
         points, return_home = prepared
-        goal = FollowWaypoints.Goal()
-        goal.number_of_loops = 0
-        goal.goal_index = 0
-        for point in points:
-            pose = PoseStamped()
-            pose.header.frame_id = 'map'
-            pose.header.stamp = self.get_clock().now().to_msg()
-            pose.pose.position.x, pose.pose.position.y = point['x'], point['y']
-            pose.pose.orientation.z = math.sin(point['yaw']/2)
-            pose.pose.orientation.w = math.cos(point['yaw']/2)
-            goal.poses.append(pose)
+        backup = body.get('operation') == 'backup'
+        if backup:
+            goal = BackUp.Goal()
+            goal.target.x = -float(body['distance_m'])
+            goal.speed = .08
+            timeout = float(body.get('timeout_s', 30.))
+            goal.time_allowance.sec, goal.time_allowance.nanosec = divmod(round(timeout*1e9), 1_000_000_000)
+            client = self.backup_client
+        else:
+            goal = FollowWaypoints.Goal()
+            goal.number_of_loops = 0
+            goal.goal_index = 0
+            for point in points:
+                pose = PoseStamped()
+                pose.header.frame_id = 'map'
+                pose.header.stamp = self.get_clock().now().to_msg()
+                pose.pose.position.x, pose.pose.position.y = point['x'], point['y']
+                pose.pose.orientation.z = math.sin(point['yaw']/2)
+                pose.pose.orientation.w = math.cos(point['yaw']/2)
+                goal.poses.append(pose)
+            client = self.client
         previous_mission = copy.deepcopy(self.mission.value)
-        mission_id = self.mission.begin(points, return_home, prepared.start_pose)
+        mission_id = self.mission.begin(points, return_home, prepared.start_pose,
+                                        mission_id=body.get('mission_id'))
+        if 'timeout_s' in body:
+            self.mission.value['timeout_s'] = float(body['timeout_s'])
+        if backup:
+            self.mission.value.update(operation='backup', native_action='/backup',
+                                      distance_m=float(body['distance_m']), timeout_s=timeout)
         self.mission.value['map_id'] = map_identity(self.grid)
         if hasattr(self, 'rules_store'):
             self.rules_run_store = self.rules_store
@@ -1050,6 +1179,9 @@ class MissionBridge(Node):
                 'stop_reason': None, 'message': self.mission.value['message'],
                 'dispatch_state': 'pending', 'cleanup_state': None,
                 'events': [], 'observations': [], 'truth': copy.deepcopy(self.truth)}
+            if backup:
+                self.rules_run.update(operation='backup', native_action='/backup',
+                                      distance_m=float(body['distance_m']))
             self.mission.value.update(map_id=self.rules_store.map_id,
                                       rules_revision=self.rules_store.document['revision'])
             self.rules_run_signature = None
@@ -1071,7 +1203,7 @@ class MissionBridge(Node):
                                 or {key: prepared.start_pose[key] for key in ('x', 'y')})]
         self.path = []
         try:
-            self.goal_send_future = self.client.send_goal_async(
+            self.goal_send_future = client.send_goal_async(
                 goal, feedback_callback=lambda msg: self.feedback(mission_id, msg))
         except Exception as error:
             # A local send error does not establish whether Nav2 received the goal.
@@ -1083,6 +1215,11 @@ class MissionBridge(Node):
     def feedback(self, mission_id, msg):
         with self.lock:
             if self.mission.value['id'] == mission_id:
+                if self.mission.value.get('operation') == 'backup':
+                    distance = float(msg.feedback.distance_traveled)
+                    if math.isfinite(distance):
+                        self.mission.value['distance_traveled_m'] = distance
+                    return
                 index = int(msg.feedback.current_waypoint)
                 if 0 <= index < len(self.mission.value['waypoints']):
                     self.mission.value['current_index'] = index
@@ -1100,9 +1237,13 @@ class MissionBridge(Node):
                         self.record_run(force=True)
                     return
                 self.goal_handle = handle
+                goal_id = getattr(getattr(handle, 'goal_id', None), 'uuid', None)
+                if goal_id is not None and len(goal_id) == 16:
+                    self.mission.value['native_goal_id'] = bytes(goal_id).hex()
                 self.mission.value['dispatch_state'] = 'accepted'
                 if not self.cancel_requested:
-                    self.mission.value['message'] = 'Nav2 已接受，巡逻进行中'
+                    self.mission.value['message'] = ('Nav2 已接受，倒车进行中'
+                        if self.mission.value.get('operation') == 'backup' else 'Nav2 已接受，巡逻进行中')
                 self.subscribe_result()
                 if self.cancel_requested and self.goal_handle is not None:
                     self.send_cancel()
@@ -1144,8 +1285,9 @@ class MissionBridge(Node):
                 if response.status not in (GoalStatus.STATUS_SUCCEEDED,
                                             GoalStatus.STATUS_CANCELED, GoalStatus.STATUS_ABORTED):
                     raise RuntimeError(f'Nav2 未返回终态：{response.status}')
-                missed = [{'index': int(m.index), 'error_code': int(m.error_code)}
-                          for m in response.result.missed_waypoints]
+                missed = ([] if self.mission.value.get('operation') == 'backup' else
+                    [{'index': int(m.index), 'error_code': int(m.error_code)}
+                     for m in response.result.missed_waypoints])
                 self.mission.finish(response.status, response.result.error_code, missed,
                                     response.result.error_msg)
                 if hasattr(self, 'rules_store'):

@@ -1,0 +1,2 @@
+# Official Vosk Python API; CPU inference, Apache-2.0. Model installed separately.
+vosk==0.3.45

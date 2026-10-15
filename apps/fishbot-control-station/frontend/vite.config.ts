@@ -15,6 +15,10 @@ export default defineConfig({
   server: {
     port: frontendPort,
     proxy: {
+      '/voice-api': {
+        target: `http://127.0.0.1:${process.env.FISHBOT_VOICE_PORT || '9094'}`,
+        changeOrigin: true,
+      },
       '/workbench-service/spatiallm': {
         target: 'http://127.0.0.1:8867',
         changeOrigin: true,

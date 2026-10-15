@@ -12,7 +12,9 @@
 
 源码向内收敛，旧路径向新项目链接。保留Git目录以保护历史，暂不自动压平为单仓。旧安装目录中的绝对路径可能经兼容链接工作；fresh build验收应另行记录，不能用布局通过替代。
 
-`/workbench` 是现有React控制站的只读成果入口。页面从同一静态JSON读取六项能力和冻结评分摘要，不挂载控制站遥测/运动初始化。原四操作页保持原所有权；SpatialLM与视频工具保留独立仓库和写协议。显式服务检查仅发GET，代理固定只读路径并校验响应身份，上次检查时刻不代表持续在线。原56例与新增三回合分开展示，完整边界见[WORKBENCH](WORKBENCH.md)。
+`/workbench` 汇总六项能力和冻结评分摘要；成果区从同一静态JSON读取，不初始化运动控制。另有显式连接的语音任务面板，初次打开不录音、不请求权限、不派发任务。原四操作页保持原所有权；SpatialLM与视频工具保留独立仓库和写协议。工具检查仅发GET，上次检查时刻不代表持续在线。原56例与新增三回合分开展示，完整边界见[WORKBENCH](WORKBENCH.md)。
+
+语音面板通过固定loopback代理连接`fishbot_voice_bridge.py`。真实音频复用Vosk CPU识别与FFmpeg，识别后先预览，再显式确认。网关校验原时间、会话、序号和UUID，将任务交回既有MissionBridge或cooperation bridge；没有语音Twist发布者。取消只针对原任务，未知回执禁止重发，任务期限由原owner执行。默认独占仿真域121，模型和音频留在项目外。回充适配器未配置时明确禁用。协议和运行入口见[VOICE](VOICE.md)。
 
 控制站 `/radar` 使用 React → Java → rosbridge，提供初位姿、导航目标和真实 `/plan` 叠层。显式提交前只保留位置与朝向草稿。模拟环境采用实际 `/clock`，连接代次隔离旧路径和旧时钟。`/simulation` 继续复用 Python mission bridge 的巡逻与 Goal 所有权，两页分别标识运行环境。数据契约和本轮验收见 [map-navigation.md](../apps/fishbot-control-station/docs/map-navigation.md)。
 

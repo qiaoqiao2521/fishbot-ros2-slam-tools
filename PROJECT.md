@@ -10,6 +10,7 @@
 ## Constraints
 Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。历史无线延迟与专项验收边界继续保留，不再作为已售实车的当前阻塞项。
 ## Current State
+2026-10-16 语音原型已补成工作台任务入口：官方Vosk离线音频、录音/上传/文字预览、显式确认、来源TTL/UUID去重、原任务取消与期限。独占121实测前进、ASR左转、返航、原生BackUp及网页确认；完整车臂运输独立评分通过，同一货物1.789525m。最新倒车/网页/取消/期限四项通过，1030反馈回归与261全前端通过。旧识别失败、几何拒绝与视觉11失败保留；回充默认未配置，不宣称实机或生产ASR精度。入口[VOICE](docs/VOICE.md)，源码/运行与交付见[本轮进度](plans/edge-voice-framework-20261015/progress.md)。
 2026-10-15 近期成果统一到网页`/workbench`：地图导航、车臂运输、RGB停靠、SpatialLM、视频事件和Arena六项入口，复用原四操作页。原56例保持38完成/7正确取消/11失败；新三回合单列。总览不挂载运动控制，工具状态只由显式GET确认；本轮恢复5180工作台、8867场景编辑器和18089公开样本复核网页，不启动推理、渲染、ROS或GPU。实际桌面/390px导航、过滤、同源快照和工具页面验证通过，零写请求；最终测试与交付见[本轮进度](plans/workbench-harvest-20261015/progress.md)。
 2026-10-14 视觉停靠P0已完成实施与隔离120验收：显式ideal/perturbed/vision合同、标准位姿/诊断配对、来源/回合/时龄/协方差校验与独立oracle持久化。修复低实时因子下10Hz源采样跨0.5墙钟门槛，改复用50Hz状态测量，门槛与模型保持。运动取消同UUID终态5；新完整任务1Dock+2Nav均4，货物1.789564m、完整抓放/交接/运输评分通过，越界/接触0；34源起止/当前一致，120已清理，107/114原进程保持。最终696回归、54原物理/场景检查与8新采样检查通过；物理记录10缺序号保留，未声称无孔洞/泛化/真实RGB。知识已回写；源码交付见plans/visual-docking-robustness-20261014/progress.md。
 2026-10-14 SpecMesh责任核对发现视觉停靠计划尚未建立，CLAUDE与DECISIONS入口缺失，README的Arena状态滞后；本轮补齐规划、标准入口与索引。视觉停靠只完成源码合同和实验协议，受扰/真实RGB实验未开始；原生停靠、完整运输与Arena结果保持各自验收边界。见plans/visual-docking-robustness-20261014/。
@@ -62,6 +63,7 @@ Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。
 2026-10-07 用户确认先在虚拟环境实现三点视觉巡检，现已完成：MuJoCo车载RGB→三点导航拍摄→绿灯/红灯/空位像素识别→图文报告→返航。最终整轮73.703秒，九帧带拍摄位姿证据，返航误差12.29cm且停稳；独立超时取消通过。入口tools/fishbot_inspection.sh，仅domain97；见docs/VISUAL_INSPECTION.md。识别限定合成工位，实车相机与巡检尚未验收。
 2026-10-06 用户确认直接采用FishBot开源模型，不以现场测量作为前置步骤；连续本地控制、分级限速/停车、触发记录与回放已实现。新入口 tools/fishbot_passage.launch.py 在隔离MuJoCo domain 96完成整段过门、硬停车及取消测试，74项聚焦测试通过；见docs/PASSAGE_CONTROL.md。当前小车充电，本次未操作实车。原domain 93仿真与旧实车脚本保留。接续使用新入口验收实际过门和建图；实车源时间戳、转角反馈、板端断流停车和旧命令拒绝仍需实际反馈验证。
 ## Knowledge Map
+[语音任务入口](docs/VOICE.md)；[语音框架计划](plans/edge-voice-framework-20261015/task_plan.md)；[验收与保留边界](plans/edge-voice-framework-20261015/progress.md)。
 [近期成果工作台](docs/WORKBENCH.md)；[本轮计划](plans/workbench-harvest-20261015/task_plan.md)；[交付进度](plans/workbench-harvest-20261015/progress.md)。
 [SpatialLM场景输入](experiments/spatiallm/README.md)；[官方单例推理](experiments/spatiallm/INFERENCE.md)；[两作业编排](docs/COOPERATION_WORKFLOW.md)。
 docs/DECISIONS.md；[视觉停靠鲁棒性计划](plans/visual-docking-robustness-20261014/task_plan.md)；[当前进度](plans/visual-docking-robustness-20261014/progress.md)。

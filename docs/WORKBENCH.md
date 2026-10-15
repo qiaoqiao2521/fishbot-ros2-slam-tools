@@ -15,6 +15,12 @@
 
 原56例明细可按全部、完成、正确取消、失败筛选。案例采用中文名称，原ID、原因和评分指纹保留。新增三回合单列，取消不计任务完成，旧失败不被新成功覆盖。
 
+## 语音任务
+
+标题栏“语音任务”跳到同页面板。先显式连接服务，再输入文字、上传音频或录音。转写只生成预览，核对意图和参数后点击确认执行。停止录音不会自动派发；页面失焦或离开会丢弃录音并关闭麦克风。任务取消绑定原ID，原生动作终态与停稳反馈分别判断。
+
+该面板默认绑定独占仿真域121，不改六项冻结成果。首次打开没有自动请求或写操作；只有用户主动操作才连接或提交。真实ASR、启动配置、未配置回充和验收边界见[语音入口](VOICE.md)。
+
 ## 快照与当前入口
 
 `frontend/public/workbench/recent-results.json` 是唯一经过审定的成果快照源。页面直接读取它，网页和手机可下载同源JSON。数据绑定冻结日期、来源版本、原报告及59份评分指纹；不包含本机绝对路径、地图、媒体、原始日志或凭据。未来更新必须回源报告审定，不按页面“成功”或进程退出码改判。
@@ -31,6 +37,6 @@
 FRONTEND_PORT=5180 npm run dev -- --host 127.0.0.1 --strictPort
 ```
 
-本轮工作台入口为 `http://127.0.0.1:5180/workbench`。场景编辑器 `http://127.0.0.1:8867/` 不带render标记启动；视频复核台 `http://127.0.0.1:18089/` 读取已有公开样本。启动原工具分别见 [SpatialLM](../experiments/spatiallm/README.md) 与 [视频仓库使用说明](https://github.com/qiaoqiao2521/uw-yolo-code-assets/blob/908f5bd8e40241bb74ec1bf384205c638edf7b1d/docs/OFFLINE_VIDEO_EVENTS.md)。本次不运行分析、推理或物理任务。
+工作台入口为 `http://127.0.0.1:5180/workbench`。成果区的历史工具地址为场景编辑器 `http://127.0.0.1:8867/` 和视频复核台 `http://127.0.0.1:18089/`；是否在线由显式检查确认。启动原工具分别见 [SpatialLM](../experiments/spatiallm/README.md) 与 [视频仓库使用说明](https://github.com/qiaoqiao2521/uw-yolo-code-assets/blob/908f5bd8e40241bb74ec1bf384205c638edf7b1d/docs/OFFLINE_VIDEO_EVENTS.md)。语音仿真使用独立配置，见[启动说明](VOICE.md#启动)。
 
 前端运行 `npm test`、`npm run typecheck`、`npm run lint`、`npm run build`。项目 `./fishbot.sh check-feedback` 已纳入工作台数据与页面合同。实际桌面/390px只读QA验证过滤、五区导航、同源快照、两个本机页面与零写请求；记录在项目外缓存，具体进度见 [本轮计划](../plans/workbench-harvest-20261015/progress.md)。

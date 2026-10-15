@@ -3,6 +3,7 @@ import { ArrowUpRight, Box, Camera, Check, FileDown, FlaskConical, Map, RefreshC
 
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
+import { VoicePanel } from '@/components/voice/voice-panel'
 import { useWorkbenchServices } from '@/hooks/use-workbench-services'
 import type { AppRoute } from '@/lib/app-route'
 import {
@@ -93,7 +94,10 @@ export function WorkbenchPage({ onNavigate }: { onNavigate: (route: AppRoute) =>
   return <main className="station-dashboard workbench-page">
     <header className="station-page-heading workbench-heading">
       <div><h1>成果工作台</h1><p>从空间准备到运输交接，集中查看最近可用的能力与验收。</p></div>
-      <a className="workbench-download" href="/workbench/recent-results.json" download="fishbot-recent-results.json"><FileDown size={15} aria-hidden="true" />下载验收快照</a>
+      <div className="workbench-heading-actions">
+        <a className="workbench-download" href="#workbench-voice">语音任务</a>
+        <a className="workbench-download" href="/workbench/recent-results.json" download="fishbot-recent-results.json"><FileDown size={15} aria-hidden="true" />下载验收快照</a>
+      </div>
     </header>
 
     <div className="workbench-snapshot-note"><span>{snapshot.snapshotLabel}</span><time dateTime={snapshot.updatedAt}>更新于 {snapshot.updatedAt}</time><small>整理范围：{snapshot.period}。当前运行状态到各操作页查看。</small></div>
@@ -116,6 +120,8 @@ export function WorkbenchPage({ onNavigate }: { onNavigate: (route: AppRoute) =>
       })}</ol>
       {!local && <p className="workbench-local-note">本机编辑器和视频复核台需在运行工作台的电脑打开。这里的快照、报告与工作区导航仍可查看。</p>}
     </section>
+
+    <VoicePanel />
 
     <section className="workbench-supporting" aria-labelledby="workbench-supporting-heading">
       <div className="workbench-section-heading"><div><h2 id="workbench-supporting-heading">验证与反馈</h2><p>停靠感知补相对位姿；组合评测用固定条件检验策略。两者保留各自验收边界。</p></div></div>

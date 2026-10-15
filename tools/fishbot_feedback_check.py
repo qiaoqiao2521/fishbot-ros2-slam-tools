@@ -13,6 +13,9 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    # Package-style tests and direct tools imports share this checkout only.
+    sys.path.insert(0, str(ROOT))
 PYTHON_GROUPS = {
     'control': tuple(ROOT / 'tools/tests' / name for name in (
         'test_command_guard.py', 'test_passage_goal.py', 'test_passage_goal_runtime.py', 'test_passage_config.py',
@@ -26,6 +29,7 @@ PYTHON_GROUPS = {
         'test_cooperation_scene.py', 'test_cooperation_geometry.py',
         'test_cooperation_launch.py',
         'test_stack_gate.py', 'test_arena.py',
+        'test_edge_voice_node.py', 'test_voice_asr.py', 'test_voice_bridge.py',
         'test_arena_bootstrap.py', 'test_arena_colab.py')),
     'mission': (ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests'
                 / 'test_mission_bridge.py', ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests/test_map_rules.py',
@@ -105,6 +109,7 @@ def frontend_group():
     with tempfile.TemporaryDirectory(prefix='fishbot-feedback-vitest-') as temporary:
         output_file = Path(temporary) / 'result.json'
         command = [npm, 'test', '--', 'src/lib/simulation.test.ts',
+                   'src/lib/voice.test.ts', 'src/components/voice/voice-panel.test.tsx',
                    'src/lib/workbench.test.ts',
                    'src/components/workbench/workbench-page.test.tsx',
                    'src/lib/cooperation.test.ts', 'src/lib/cooperation-reset.test.ts',
