@@ -68,7 +68,7 @@ export function buildRadarWorkbenchMetrics(scan: LaserScanSnapshot): RadarWorkbe
 // ---------------------------------------------------------------------------
 // Map-frame projection (scan+map layer)
 //
-// The map layer mirrors the Unitree Go2 app's SLAM view approach: occupancy
+// The map layer mirrors high-performance industrial robotics SLAM visualization: occupancy
 // grid + live scan in the map frame + robot pose + operator selection. Coordinates
 // here are world meters (ROS map frame); the viewport is the shared 100x100
 // SVG viewBox, scaled uniformly so the map never distorts.
