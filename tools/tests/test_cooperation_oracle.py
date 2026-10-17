@@ -218,6 +218,60 @@ class IdentityAndCancellationTests(unittest.TestCase):
 
 
 class PortableEntryTests(unittest.TestCase):
+    def test_live_recording_limits_have_finite_defaults_and_reject_unbounded_values(self):
+        args = ['--expected-episode','episode','--allow-initial-episode','--domain','120',
+                '--markers','markers.json','--output','/nonexistent/new-oracle-output']
+        parsed = oracle.parse_options(args)
+        self.assertEqual(parsed.duration, 900.)
+        self.assertEqual(parsed.max_record_bytes, 1024**3)
+        for flag, value in [('--duration','inf'),('--duration','0'),('--duration','901'),
+                            ('--max-record-bytes','1023'),('--max-record-bytes',str(4*1024**3+1))]:
+            with self.subTest(flag=flag,value=value), self.assertRaises(SystemExit), patch('sys.stderr'):
+                oracle.parse_options(args+[flag,value])
+
+    def test_incomplete_capture_overrides_even_a_successful_physical_augmentation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root/'observer.jsonl').write_text('')
+            (root/'source-start.json').write_text(json.dumps({'collection_policy':{
+                'kind':'complete_bounded','max_record_bytes':4096}}))
+            good = {'capture_complete':True,'closed':True,'failed':False,'truncated':False,
+                    'offered':10,'written':10,'bytes':1000,'bytes_uncertain':False,'incomplete':0}
+            cases = [None, {'errors':[], 'recording':{**good,'truncated':True}},
+                     {'errors':[], 'recording':{**good,'failed':True}},
+                     {'errors':[], 'recording':{**good,'closed':False}},
+                     {'errors':[], 'recording':{**good,'written':9,'incomplete':1}},
+                     {'errors':[], 'recording':{**good,'bytes':4097}},
+                     {'errors':['HTTP observer worker did not stop'], 'recording':good},
+                     {'errors':[], 'recording':{k:v for k,v in good.items() if k!='bytes'}},
+                     {'errors':[], 'recording':good}]
+            for index, ended in enumerate(cases):
+                with self.subTest(index=index):
+                    if ended is not None:(root/'collection-end.json').write_text(json.dumps(ended))
+                    with patch('builtins.print'):
+                        result = oracle.original_score(root,root/'markers.json',augment=lambda *unused:{'passed':True,
+                            'live_runtime_acceptance_claimed':True,'task_completion_passed':True,
+                            'expected_safety_passed':True,'full_transport_acceptance_claimed':True})
+                    self.assertEqual(result['passed'],index==len(cases)-1)
+                    if not result['passed']:
+                        for key in ('live_runtime_acceptance_claimed','task_completion_passed','expected_safety_passed','full_transport_acceptance_claimed'):
+                            self.assertFalse(result[key])
+                    self.assertTrue(result['recording_integrity']['required'])
+
+    def test_partial_io_tail_produces_a_failure_report_without_parsing_or_claiming_physics(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root/'observer.jsonl').write_text('{partial')
+            (root/'source-start.json').write_text(json.dumps({'collection_policy':{
+                'kind':'complete_bounded','max_record_bytes':4096}}))
+            (root/'collection-end.json').write_text(json.dumps({'errors':[], 'recording':{
+                'capture_complete':False,'closed':True,'failed':True,'truncated':True,'error':'write_failed'}}))
+            with patch('builtins.print'):
+                result = oracle.original_score(root,root/'markers.json')
+            self.assertFalse(result['passed'])
+            self.assertFalse(result['physical_evaluation_performed'])
+            self.assertEqual(len(list(root.glob('score-*.json'))),1)
+
     def test_modules_do_not_import_control_helpers_or_ros_for_offline_scoring(self):
         for module_path in (TOOLS/'cooperation_oracle.py', TOOLS/'cooperation_oracle_base.py'):
             tree = ast.parse(module_path.read_text())

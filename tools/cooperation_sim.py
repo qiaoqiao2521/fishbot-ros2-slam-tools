@@ -24,6 +24,7 @@ import xml.etree.ElementTree as ET
 
 from fishbot_sim_power import BEACON_LABEL, PowerModel, Truth
 from cooperation_core import ContinuousEvidence
+from cooperation_recording import BoundedDiagnosticLog
 from cooperation_perception import (
     DETECTION_TOPIC as STATION_DETECTION_TOPIC, DIAGNOSTIC_NAME,
     POSE_TOPIC as STATION_POSE_TOPIC, normalize_config,
@@ -899,9 +900,8 @@ def run_ros(args):
     record = None
     timing_record = None
     if args.state_log:
-        destination = Path(args.state_log).resolve()
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        record = os.fdopen(os.open(destination, os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600), 'w')
+        record = BoundedDiagnosticLog(args.state_log, hz=args.state_log_hz,
+            max_bytes=args.state_log_max_bytes, backups=args.state_log_backups)
     if args.timing_log:
         destination = Path(args.timing_log).resolve()
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -919,6 +919,7 @@ def run_ros(args):
     class Adapter(Node):
         def __init__(self):
             super().__init__('cooperation_physics')
+            self.recording_error_reported = None
             self.sensor_qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
             self.latest_qos = latest_sensor_qos()
             self.clock_pub = self.create_publisher(Clock, '/clock', self.latest_qos)
@@ -951,6 +952,7 @@ def run_ros(args):
             self.create_subscription(String, FAULT_TOPIC, self.fault_trigger, 10)
             from rclpy.utilities import get_rmw_implementation_identifier
             self.runtime_observation = {'rmw': get_rmw_implementation_identifier(),
+                'record_write_includes_handler_flush': True,
                 'ephemeral_qos': {topic: {'depth': pub.qos_profile.depth,
                     'reliability': pub.qos_profile.reliability.name,
                     'history': pub.qos_profile.history.name,
@@ -1148,11 +1150,16 @@ def run_ros(args):
             if hasattr(physics, 'observation_faults'):
                 state['observation_faults'] = physics.observation_faults.status()
             state['loop_diagnostics'] = {**timing.snapshot(), **self.runtime_observation}
+            state['diagnostic_recording'] = record.snapshot() if record else {
+                'kind': 'disabled', 'enabled': False, 'complete_evidence': False}
             state_json = json.dumps(state, allow_nan=False, separators=(',', ':'))
             timing.measure('state_publish', self.state_pub.publish, String(data=state_json))
             if record:
-                timing.measure('record_write', record.write, state_json+'\n')
-                timing.measure('record_flush', record.flush)
+                timing.measure('record_write', record.offer, state_json)
+                recording_error = record.snapshot()['error']
+                if recording_error and recording_error != self.recording_error_reported:
+                    self.get_logger().error('Diagnostic recording disabled: '+recording_error)
+                    self.recording_error_reported = recording_error
             if station_observation is not None:
                 outgoing = [station_observation]
                 if hasattr(physics, 'observation_faults'):
@@ -1214,7 +1221,9 @@ def run_ros(args):
             if record:
                 record.close()
             if timing_record:
-                json.dump({**timing.snapshot(), **node.runtime_observation}, timing_record, allow_nan=False)
+                json.dump({**timing.snapshot(), **node.runtime_observation,
+                           'diagnostic_recording': record.snapshot() if record else {'kind': 'disabled', 'enabled': False}},
+                          timing_record, allow_nan=False)
         finally:
             if timing_record:
                 timing_record.close()
@@ -1229,7 +1238,10 @@ def parser():
     result.add_argument('--frame-dir', type=Path)
     result.add_argument('--frame-fps', type=float, default=3.)
     result.add_argument('--camera', default='cooperation_overview')
-    result.add_argument('--state-log', type=Path)
+    result.add_argument('--state-log', type=Path, help='opt-in rolling diagnostic JSONL, never complete scoring evidence')
+    result.add_argument('--state-log-hz', type=float, default=2.)
+    result.add_argument('--state-log-max-bytes', type=int, default=8*1024*1024)
+    result.add_argument('--state-log-backups', type=int, default=3)
     result.add_argument('--timing-log', type=Path, help='optional final bounded timing observations')
     result.add_argument('--duration', type=float)
     result.add_argument('--stamped-cmd-vel', action='store_true')
@@ -1245,6 +1257,12 @@ def main():
         raise SystemExit('--frame-fps must be 0.1..10')
     if args.duration is not None and (not math.isfinite(args.duration) or args.duration <= 0):
         raise SystemExit('--duration must be finite and positive')
+    if not math.isfinite(args.state_log_hz) or not .1 <= args.state_log_hz <= 50:
+        raise SystemExit('--state-log-hz must be 0.1..50')
+    if not 1024 <= args.state_log_max_bytes <= 64*1024*1024:
+        raise SystemExit('--state-log-max-bytes must be 1024..67108864')
+    if not 1 <= args.state_log_backups <= 7:
+        raise SystemExit('--state-log-backups must be 1..7; zero would disable rotation')
     os.environ['ROS_DOMAIN_ID'] = str(args.domain)
     os.environ['ROS_AUTOMATIC_DISCOVERY_RANGE'] = 'LOCALHOST'
     os.environ['ROS_LOCALHOST_ONLY'] = '1'

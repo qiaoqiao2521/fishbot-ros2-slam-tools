@@ -28,12 +28,20 @@ def start(context):
         raise RuntimeError('已有任务账本，不能复用旧物理回合；保留记录并创建新场景与运行目录')
     frames=output/'frames'
     port=LaunchConfiguration('port').perform(context)
+    record_state=LaunchConfiguration('record_state',default='false').perform(context).lower()
+    if record_state not in ('true','false'):
+        raise RuntimeError('record_state must be true or false')
+    simulation=[python,str(root/'cooperation_sim.py'),'--scene',manifest['world_xml'],'--domain',domain,
+        '--stamped-cmd-vel','--frame-dir',str(frames),'--frame-fps','2',
+        '--timing-log',str(output/'loop-timing.json')]
+    if record_state=='true':
+        simulation += ['--state-log',str(output/'physics.jsonl'),
+            '--state-log-hz',LaunchConfiguration('state_log_hz',default='2').perform(context),
+            '--state-log-max-bytes',LaunchConfiguration('state_log_max_bytes',default='8388608').perform(context),
+            '--state-log-backups',LaunchConfiguration('state_log_backups',default='3').perform(context)]
     actions=[SetEnvironmentVariable('ROS_DOMAIN_ID',domain),
         SetEnvironmentVariable('ROS_AUTOMATIC_DISCOVERY_RANGE','LOCALHOST'),SetEnvironmentVariable('ROS_LOCALHOST_ONLY','1'),
-        ExecuteProcess(cmd=[python,str(root/'cooperation_sim.py'),'--scene',manifest['world_xml'],'--domain',domain,
-            '--stamped-cmd-vel','--frame-dir',str(frames),'--frame-fps','2',
-            '--state-log',str(output/'physics.jsonl'),'--timing-log',str(output/'loop-timing.json')],
-            output='screen',on_exit=Shutdown()),
+        ExecuteProcess(cmd=simulation,output='screen',on_exit=Shutdown()),
         ExecuteProcess(cmd=[python,str(root/'cooperation_bridge.py'),'--manifest',str(manifest_path),'--domain',domain,
             '--port',port,'--frame-dir',str(frames),'--output',str(output/'tasks')],output='screen',on_exit=Shutdown()),
         Node(package='nav2_map_server',executable='map_server',name='cooperation_collision_map_server',
@@ -69,4 +77,8 @@ def start(context):
 def generate_launch_description():
     return LaunchDescription([DeclareLaunchArgument('manifest'),DeclareLaunchArgument('python'),
         DeclareLaunchArgument('output'),DeclareLaunchArgument('domain',default_value='114'),
+        DeclareLaunchArgument('record_state',default_value='false',description='Enable bounded rolling diagnostics, not scoring evidence'),
+        DeclareLaunchArgument('state_log_hz',default_value='2'),
+        DeclareLaunchArgument('state_log_max_bytes',default_value='8388608'),
+        DeclareLaunchArgument('state_log_backups',default_value='3'),
         DeclareLaunchArgument('port',default_value='9086'),OpaqueFunction(function=start)])

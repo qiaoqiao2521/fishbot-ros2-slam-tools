@@ -34,6 +34,7 @@ POSES = (
     ('holdout-1','holdout',[.35,-.04,-.14],131),('holdout-2','holdout',[.65,-.02,.07],167))
 SOURCE_FILES = ('tools/cooperation_acceptance.py','tools/cooperation_oracle.py',
     'tools/cooperation_oracle_base.py','tools/cooperation_sim.py','tools/cooperation_bridge.py',
+    'tools/cooperation_recording.py','tools/cooperation_evidence_recording.py',
     'tools/cooperation_core.py','tools/cooperation_arm.py','tools/cooperation_perception.py',
     'tools/cooperation_prepare.py','tools/cooperation_scene.py','tools/cooperation.launch.py',
     'tools/fishbot_cooperation.sh','tools/fishbot_sim_power.py','tools/fishbot_mujoco_env.sh',

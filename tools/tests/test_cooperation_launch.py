@@ -21,6 +21,7 @@ from launch import LaunchContext
 from launch.actions import GroupAction,IncludeLaunchDescription,TimerAction
 from launch.actions import ExecuteProcess
 from launch_ros.actions import Node,SetRemap
+from launch.utilities import perform_substitutions
 module=runpy.run_path(sys.argv[1]+'/tools/cooperation.launch.py')
 with tempfile.TemporaryDirectory() as directory:
  p=Path(directory)/'manifest.json'
@@ -33,6 +34,20 @@ with tempfile.TemporaryDirectory() as directory:
  context.launch_configurations.update({'domain':'114','manifest':str(p),'python':sys.executable,
      'output':'/unused/output','port':'9086'})
  actions=module['start'](context)
+ def simulation_cmd(actions):
+  process=next(a for a in actions if isinstance(a,ExecuteProcess) and not isinstance(a,Node))
+  return [perform_substitutions(context,part) for part in process.cmd]
+ assert '--state-log' not in simulation_cmd(actions)
+ context.launch_configurations['record_state']='true'
+ configured=simulation_cmd(module['start'](context))
+ assert configured[configured.index('--state-log-hz')+1]=='2'
+ assert configured[configured.index('--state-log-max-bytes')+1]=='8388608'
+ assert configured[configured.index('--state-log-backups')+1]=='3'
+ context.launch_configurations['record_state']='invalid'
+ try:module['start'](context)
+ except RuntimeError:pass
+ else:raise AssertionError('invalid logging profile admitted')
+ context.launch_configurations['record_state']='false'
  nodes=[a for a in actions if isinstance(a,Node)]
  context.environment.update(os.environ)
  for node in nodes:node._perform_substitutions(context)

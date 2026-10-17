@@ -192,7 +192,25 @@ FISHBOT_SO101_PYTHON="$FISHBOT_COOP_PYTHON" \
 
 桌面入口、实际960px相机、390px手机、完成页与只读刷新通过。完整流程只有两次显式start和一次同任务cancel，无页面异常或自动重发。K的执行源码10项SHA在采集前后均一致；完整运输之后，只修正禁用超时后cleanup漏验实际ACK的异常分支，正常轨迹、物理和Nav2参数未改。两条对应负例与当前36项编排回归通过；不把K的源码哈希冒充这次异常修复后的哈希。
 
-本机验收资料位于 `~/.cache/fishbot/cooperation/session-20261014/`，含 `ui-k-result.json`、`oracle/run-1791919665149152720/score-1791920037922113535.json`、`oracle/k-native-guard-end-proof.json` 和 `runtime-k/accepted-source/`。场景、地图、逐帧记录与原相机仍私下保存，不进入Git。所有失败与最终检查见 [任务进度](../plans/fishbot-so101-cooperation-20261014/progress.md)。
+当时的本机验收资料位于 `~/.cache/fishbot/cooperation/session-20261014/`，含 `ui-k-result.json`、`oracle/run-1791919665149152720/score-1791920037922113535.json`、`oracle/k-native-guard-end-proof.json` 和 `runtime-k/accepted-source/`。2026-10-17检查时该session目录已清理，不再保证这些本机原件可读。历史结论与当时的来源、失败和检查记录见[任务进度](../plans/fishbot-so101-cooperation-20261014/progress.md)；本轮没有重新执行K运输，也没有把清理当作重新验收。
+
+## 日志与容量
+
+演示启动默认 `record_state:=false`，不创建 `physics.jsonl`。物理/ROS状态仍按原周期发布，独立评分合同不变。任务完成或关闭网页不结束仿真进程，因此不能依赖页面生命周期停止磁盘日志。需要排障时显式启用：
+
+```bash
+FISHBOT_COOP_DOMAIN=120 ./tools/fishbot_cooperation.sh run \
+  manifest:=/path/to/scene-manifest.json output:=/path/to/new-runtime \
+  domain:=120 port:=9090 record_state:=true
+```
+
+滚动诊断默认墙钟2Hz、每片8MiB、3个备份加当前片，合计最多32MiB。配置项为 `state_log_hz`、`state_log_max_bytes`、`state_log_backups`；直接运行sim使用对应 `--state-log-*`。频率0.1–50Hz、单片1KiB–64MiB、备份1–7；不能用0备份关闭轮转上限。复用Python标准RotatingFileHandler，不覆盖预先存在的日志/分片；本次滚动旧片可被覆盖，原始stamp与sequence不改。限频不追赶旧帧。单条超限、磁盘满或写/flush错误会停止该诊断写入，通过ROS状态和最终timing报告显示首错，物理循环继续。原record_flush阶段不再单独测量，标准库emit内的flush计入record_write，报告明确标记。
+
+滚动诊断始终标记 `complete_evidence=false`，不能用于完整评分。独立observer不轮转、不主动抽样；按实际manifest内容保留首份完整身份，后续只去掉重复manifest并记录引用摘要，其余source、时间、序号与动态观测保持。默认 `--duration 900 --max-record-bytes 1073741824`，最长900秒，预算可设1KiB–4GiB；到期正常结束，字节超限或IO失败立即结束采集并保留已有行。`collection-end.json`报告写入计数、字节、不完整原因与关闭结果。这里的capture_complete表示收到的每条offer均写入并成功关闭，不证明DDS源序列无缺口，原序列/双时钟/物理评分仍独立执行。
+
+新采集在source-start声明预算。预算/IO/关闭失败、缺少最终元数据或HTTP线程未退出，都生成正式失败报告；可能存在半行JSON时先拒绝验收，不解析尾部冒充物理评分。四个最终验收声明随失败统一为false。旧离线记录未声明预算时标记legacy_budget_not_declared，不伪称已验证新上限。原物理与时间门槛保持。
+
+上述32MiB只约束物理诊断文件，不是整个实验目录的上限。RGB素材、相机/检测日志与独立证据各有用途，本轮不删除其历史文件，也不把滚动诊断替代这些材料。当前运行证据、抽样估算和源冻结见[容量修复进度](../plans/cooperation-log-budget-20261017/progress.md)。
 
 ## 下一步
 

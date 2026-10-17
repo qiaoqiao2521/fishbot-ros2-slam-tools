@@ -363,6 +363,17 @@ def cancellation_score(records,samples,event,next_start):
 
 
 def score(directory,marker_path,*,output_directory=None,augment=None):
+    collection = collection_integrity(directory)
+    if collection['required'] and not collection['passed']:
+        result = {'passed': False, 'recording_integrity': collection,
+            'reason': 'Collection incomplete or unconfirmed; physical acceptance was not evaluated',
+            'physical_evaluation_performed': False, 'live_runtime_acceptance_claimed': False,
+            'task_completion_passed': False, 'expected_safety_passed': False,
+            'full_transport_acceptance_claimed': False}
+        target = (output_directory or directory)/f'score-{time.time_ns()}.json'
+        private_json(target, result)
+        print(json.dumps({'score_file':str(target),'passed':False,'reason':result['reason']}))
+        return result
     records=[]; first_physics=True
     with (directory/'observer.jsonl').open() as source_file:
         for line in source_file:
@@ -425,12 +436,50 @@ def score(directory,marker_path,*,output_directory=None,augment=None):
                 'car_motion_scoring_source':'independently received truth body origin position and yaw finite differences'}
     if augment is not None:
         result=augment(result,records,samples if physics else [],audit if physics else None,events if physics else [])
+    collection = collection_integrity(directory)
+    result['recording_integrity'] = collection
+    if collection['required'] and not collection['passed']:
+        result['passed'] = False
+        for key in ('live_runtime_acceptance_claimed', 'task_completion_passed',
+                    'expected_safety_passed', 'full_transport_acceptance_claimed'):
+            if key in result:result[key] = False
     target=(output_directory or directory)/f'score-{time.time_ns()}.json';private_json(target,result)
     print(json.dumps({'score_file':str(target),'passed':result['passed'], 'full_attempts':[{'task_id':x['task_id'],'passed':x['passed']} for x in result.get('full_attempts',[])]},ensure_ascii=False))
     return result
 
 
+def collection_integrity(directory):
+    """New bounded collections cannot pass after truncation, IO failure or missing closeout."""
+    try:
+        start_path = directory/'source-start.json'
+        started = json.loads(start_path.read_text()) if start_path.exists() else {}
+        required = 'collection_policy' in started
+        end_path = directory/'collection-end.json'
+        ended = json.loads(end_path.read_text()) if end_path.exists() else {}
+        recording = ended.get('recording')
+        if not required:
+            return {'required': False, 'passed': False, 'mode': 'legacy_budget_not_declared'}
+        policy = started['collection_policy']
+        if not isinstance(policy, dict) or policy.get('kind') != 'complete_bounded':
+            return {'required': True, 'passed': False, 'reason': 'collection policy invalid'}
+        budget = policy.get('max_record_bytes')
+        bounded = isinstance(budget, int) and not isinstance(budget, bool) and 1024 <= budget <= 4*1024**3
+        counts = [recording.get(key) for key in ('offered', 'written', 'bytes')] if isinstance(recording, dict) else []
+        counts_valid = len(counts) == 3 and all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in counts)
+        valid = (isinstance(recording, dict) and recording.get('capture_complete') is True
+            and recording.get('closed') is True and recording.get('failed') is False
+            and recording.get('truncated') is False and not ended.get('errors')
+            and bounded and counts_valid and counts[0] == counts[1] and counts[2] <= budget
+            and recording.get('bytes_uncertain') is False and recording.get('incomplete') == 0
+            and recording.get('error') is None and recording.get('error_code') is None)
+        return {'required': True, 'passed': bool(valid), 'recording': recording,
+                'callback_errors': ended.get('errors'), 'mode': 'complete_bounded'}
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {'required': True, 'passed': False, 'reason': 'collection metadata invalid or unavailable'}
+
+
 def observe(args):
+    from cooperation_evidence_recording import EvidenceRecorder
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import QoSProfile,ReliabilityPolicy,DurabilityPolicy
@@ -446,9 +495,11 @@ def observe(args):
     from sensor_msgs.msg import Image,CameraInfo
     directory=args.output or BASE/f'run-{time.time_ns()}'
     directory.mkdir(parents=True,exist_ok=False,mode=0o700)
-    private_json(directory/'source-start.json',driver_audit())
+    private_json(directory/'source-start.json',{**driver_audit(), 'collection_policy': {
+        'kind': 'complete_bounded', 'duration_limit_s': args.duration, 'max_record_bytes': args.max_record_bytes,
+        'manifest_storage': 'first full identity per content digest, subsequent references', 'sampling_reduced': False}})
     descriptor=os.open(directory/'observer.jsonl',os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-    output=os.fdopen(descriptor,'w',buffering=1)
+    output=EvidenceRecorder(os.fdopen(descriptor,'w',buffering=1,encoding='utf-8'), max_bytes=args.max_record_bytes)
     lock=threading.Lock();done=threading.Event();errors=[]
     def record(topic,payload):
         received=time.monotonic();wall=time.time()
@@ -457,8 +508,8 @@ def observe(args):
         value={'topic':topic,'received_monotonic':received,'received_wall_time':wall,
                'source_stamp':source,'payload':clean(payload)}
         with lock:
-            output.write(json.dumps(value,ensure_ascii=False,allow_nan=False,separators=(',',':'))+'\n')
-            output.flush()
+            if not output.record(value):
+                done.set()
     rclpy.init(args=[]);node=Node('independent_cooperation_oracle')
     reliable=QoSProfile(depth=500,reliability=ReliabilityPolicy.RELIABLE)
     from rclpy.qos import qos_profile_sensor_data
@@ -527,7 +578,7 @@ def observe(args):
     start=time.monotonic();last_markers=None;last_inventory=0.
     print(json.dumps({'ready_to_observe':True,'domain':args.domain,'output':str(directory),'marker_file':str(args.markers)},ensure_ascii=False),flush=True)
     try:
-        while rclpy.ok() and not done.is_set() and (args.duration is None or time.monotonic()-start<args.duration):
+        while rclpy.ok() and not done.is_set() and time.monotonic()-start<args.duration:
             rclpy.spin_once(node,timeout_sec=.01)
             if args.markers.exists():
                 content=args.markers.read_text()
@@ -545,10 +596,13 @@ def observe(args):
                                          '/cooperation/camera/frame_metadata','/cooperation/vision_quality')}
                 record('publisher_inventory',inventory);last_inventory=time.monotonic()
     finally:
-        done.set();worker.join(timeout=1.);node.destroy_node();rclpy.shutdown()
-        with lock:output.flush();output.close()
+        done.set();worker.join(timeout=2.)
+        if worker.is_alive():errors.append('HTTP observer worker did not stop before closeout')
+        node.destroy_node();rclpy.shutdown()
+        with lock:output.close()
         private_json(directory/'source-end.json',driver_audit())
-        private_json(directory/'collection-end.json',{'errors':errors,'wall_duration_s':time.monotonic()-start,'finished_wall_time':time.time()})
+        private_json(directory/'collection-end.json',{'errors':errors,'wall_duration_s':time.monotonic()-start,
+            'finished_wall_time':time.time(),'recording':output.snapshot()})
         score(directory,args.markers)
 
 

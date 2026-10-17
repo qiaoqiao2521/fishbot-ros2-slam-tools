@@ -703,7 +703,8 @@ def parse_options(argv=None):
     parser.add_argument('--driver', type=Path, default=BASE/'cooperation_sim.py')
     parser.add_argument('--domain', type=int)
     parser.add_argument('--api', default='http://127.0.0.1:9088/coop-api')
-    parser.add_argument('--duration', type=float)
+    parser.add_argument('--duration', type=float, default=900., help='finite wall-clock collection limit, at most 900 seconds')
+    parser.add_argument('--max-record-bytes', type=int, default=1024**3, help='observer byte budget; exhaustion fails collection')
     parser.add_argument('--markers', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--score-only', type=Path)
@@ -712,8 +713,10 @@ def parse_options(argv=None):
     result = parser.parse_args(argv)
     if not result.expected_episode.strip():
         parser.error('--expected-episode must be nonempty')
-    if result.duration is not None and (not finite(result.duration) or result.duration <= 0):
-        parser.error('--duration must be finite and positive')
+    if not finite(result.duration) or not 0 < result.duration <= 900:
+        parser.error('--duration must be finite and in (0, 900]')
+    if not 1024 <= result.max_record_bytes <= 4*1024**3:
+        parser.error('--max-record-bytes must be 1024..4294967296')
     if result.score_only is None and (result.domain is None or result.domain in (0, 107, 114) or result.domain < 0):
         parser.error('live observation requires an explicit isolated domain; 0/107/114 are protected')
     if result.score_only is not None:

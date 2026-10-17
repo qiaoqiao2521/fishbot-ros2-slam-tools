@@ -28,6 +28,7 @@ PYTHON_GROUPS = {
         'test_cooperation_readiness.py', 'test_cooperation_prepare.py',
         'test_cooperation_scene.py', 'test_cooperation_geometry.py',
         'test_cooperation_launch.py',
+        'test_cooperation_recording.py', 'test_cooperation_evidence_recording.py',
         'test_stack_gate.py', 'test_arena.py',
         'test_edge_voice_node.py', 'test_voice_asr.py', 'test_voice_bridge.py',
         'test_arena_bootstrap.py', 'test_arena_colab.py')),

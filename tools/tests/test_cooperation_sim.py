@@ -542,7 +542,7 @@ class SharedWorldTest(unittest.TestCase):
             timing_path, state_path = Path(folder)/'timing.json', Path(folder)/'state.jsonl'
             child = subprocess.Popen([sys.executable, str(TOOLS/'cooperation_sim.py'),
                 '--scene', self.manifest['world_xml'], '--domain', '116', '--duration', '4',
-                '--state-log', str(state_path), '--timing-log', str(timing_path)],
+                '--state-log', str(state_path), '--state-log-hz', '50', '--timing-log', str(timing_path)],
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
             context = Context()
             rclpy.init(args=[], context=context, domain_id=116)
@@ -624,9 +624,12 @@ class SharedWorldTest(unittest.TestCase):
                 self.assertEqual(value['rmw'], get_rmw_implementation_identifier())
                 self.assertLessEqual(len(value['slow_tail']), 32)
                 for stage in ('spin_once','mj_step','publish','clock_publish','truth_publish',
-                              'state_publish','record_write','record_flush','scan'):
+                              'state_publish','record_write','scan'):
                     self.assertGreater(value['stages'][stage]['count'], 0)
                     self.assertTrue(math.isfinite(value['stages'][stage]['max_s']))
+                self.assertTrue(value['record_write_includes_handler_flush'])
+                self.assertEqual(value['stages']['record_flush']['count'], 0,
+                                 'stdlib emit performs flush inside record_write, not in a second measured call')
             finally:
                 if child.poll() is None:
                     child.send_signal(signal.SIGINT)
