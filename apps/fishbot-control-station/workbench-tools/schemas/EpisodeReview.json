@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "so101.EpisodeReview",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "task", "source_kind", "clock", "timestamp", "sim_duration_s", "stage", "stage_events", "success", "independent", "metrics", "provenance", "limitations"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "task": { "type": "string" },
+    "source_kind": { "type": "string", "const": "simulation_recording" },
+    "clock": { "type": "string", "const": "simulation_seconds_not_unix" },
+    "timestamp": {
+      "type": "object", "title": "time", "required": ["sec", "nsec"],
+      "properties": {
+        "sec": { "type": "integer", "minimum": 0 },
+        "nsec": { "type": "integer", "minimum": 0, "maximum": 999999999 }
+      }
+    },
+    "sim_duration_s": { "type": "number", "exclusiveMinimum": 0 },
+    "stage": { "type": "string" },
+    "stage_events": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["stage", "sim_time_s"],
+        "properties": {
+          "stage": { "type": "string" },
+          "sim_time_s": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "success": { "type": "boolean" },
+    "independent": {
+      "type": "object", "required": ["available"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "passed": { "type": "boolean" },
+        "return_max_error_rad": { "type": "number", "minimum": 0 }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "wall_s": { "type": "number" },
+        "physical_lift_passed": { "type": "boolean" },
+        "place_verified": { "type": "boolean" },
+        "controller_done": { "type": "boolean" },
+        "settled_duration_s": { "type": "number" },
+        "max_xy_drift_m": { "type": "number" },
+        "post_detach_peak_force_n": { "type": "number" }
+      },
+      "additionalProperties": { "type": ["number", "boolean"] }
+    },
+    "provenance": {
+      "type": "object", "required": ["trace_sha256", "report_sha256", "source_bound"],
+      "properties": {
+        "trace_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "report_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "source_bound": { "type": "boolean" }
+      }
+    },
+    "limitations": { "type": "array", "items": { "type": "string" } }
+  }
+}

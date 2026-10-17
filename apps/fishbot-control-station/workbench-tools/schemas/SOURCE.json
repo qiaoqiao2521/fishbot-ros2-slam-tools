@@ -1,0 +1,14 @@
+{
+  "package": "@foxglove/schemas",
+  "version": "1.13.0",
+  "package_url": "https://registry.npmjs.org/@foxglove/schemas/-/schemas-1.13.0.tgz",
+  "license": "MIT",
+  "archive_sha256": "f48253d4a155e736904e40b723ccf89fc090aaf269aa533a3173aebee68be3f8",
+  "generation": "Official generateJsonSchema(foxgloveMessageSchemas[name]); package/dist/internal/generateJsonSchema.js and schemas.js",
+  "schema_sha256": {
+    "SceneUpdate.json": "43544a255faf0dcaea4ab7698fa2bec309c35e939218b5d7da1d42a673e6c185",
+    "CompressedImage.json": "7c79bf04079b80108295646a31869e7e5347b1664464cb449c4b75322d397dd9"
+  },
+  "license_source": "https://raw.githubusercontent.com/foxglove/foxglove-sdk/main/LICENSE",
+  "license_sha256": "da11235665c17d4c1634072dae92b8ba1b38d6fdde2ccf19a6bbede33253f58d"
+}

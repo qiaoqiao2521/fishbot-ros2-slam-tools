@@ -42,6 +42,7 @@ export function WebRoot(props: {
       new LocalStorageAppConfiguration({
         defaults: {
           [AppSetting.SHOW_DEBUG_PANELS]: isDevelopment,
+          [AppSetting.TIME_FORMAT]: "SEC",
         },
       }),
     [],

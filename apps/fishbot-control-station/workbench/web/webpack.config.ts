@@ -21,6 +21,9 @@ const params: ConfigParams = {
   entrypoint: "./entrypoint.tsx",
   prodSourceMap: "source-map",
   version: packageJson.version,
+  indexHtmlOptions: {
+    meta: { viewport: "width=device-width, initial-scale=1" },
+  },
 };
 
 // foxglove-depcheck-used: webpack-dev-server

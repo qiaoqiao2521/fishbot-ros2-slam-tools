@@ -135,6 +135,13 @@ export const getBuiltin: (t: TFunction<"panels">) => PanelInfo[] = (t) => [
     hasCustomToolbar: true,
   },
   {
+    title: "SO101 回合复盘",
+    type: "EpisodeReview",
+    description: "历史仿真回合的来源、指标与阶段定位",
+    module: async () => await import("./EpisodeReview"),
+    hasCustomToolbar: true,
+  },
+  {
     title: "Raw Messages Virtual",
     type: "RawMessagesVirtual",
     description: "Virtualized Raw Messages panel",

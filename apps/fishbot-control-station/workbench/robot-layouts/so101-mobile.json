@@ -1,0 +1,24 @@
+{
+  "configById": {
+    "Image!so101camera": {
+      "lichtblickPanelTitle": "SO101 · 原始录像",
+      "imageMode": {
+        "imageTopic": "/so101/camera/overview"
+      }
+    },
+    "EpisodeReview!so101episode": {
+      "lichtblickPanelTitle": "回合结果与阶段"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "column",
+    "splitPercentage": 34,
+    "first": "Image!so101camera",
+    "second": "EpisodeReview!so101episode"
+  }
+}

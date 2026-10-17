@@ -1,0 +1,13 @@
+{
+  "baseUrl": "http://127.0.0.1:5186",
+  "desktopEntryPath": "/so101",
+  "mobileEntryPath": "/so101-mobile",
+  "recordPath": "/records/so101.mcap",
+  "layoutPath": "/layouts/so101-review.json",
+  "mobileLayoutPath": "/layouts/so101-mobile.json",
+  "chromePath": "/usr/bin/google-chrome",
+  "viewport": { "width": 1440, "height": 1000 },
+  "timeoutMs": 60000,
+  "outputRoot": "output",
+  "expectedPanelTypes": ["Image", "3D", "Plot", "EpisodeReview"]
+}
