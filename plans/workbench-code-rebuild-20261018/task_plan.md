@@ -16,7 +16,7 @@
 2. 构建原版 Web，核对真实页面和原生面板：complete。
 3. 官方 MCAP 写入库转换既有 trace/视频，独立读回；注册 EpisodeReview 并接共享时间：complete。
 4. 实际验证同源布局、seek、图像、3D、曲线与只读边界：complete。跨回合换源与实时连接留后续。
-5. 提交推送有效源码，更新总计划：in_progress。产品化与实际仿真接入属于 P2/P3。
+5. 提交推送有效源码，更新总计划：complete。产品化与实际仿真接入属于 P2/P3。
 
 ## Acceptance
 
@@ -28,4 +28,4 @@
 
 ## Next Step
 
-P1 实现与独立验收完成，固化适配提交并推送隔离分支。P2/P3 由根 Codex 继续：复用 FishBot 的 RuntimeRegistry 与 CooperationController；与 SO101 模块 owner 接通现有 full_cycle CLI 的运行身份、显式启动、协作取消和原任务查询，再接新界面的完整抓放。当前 coop-api 的 transport 不能代替独立 SO101 抓放。
+P1 实现与独立验收已提交推送隔离分支。P2/P3 由根 Codex 继续：复用 FishBot 的 RuntimeRegistry 与 CooperationController；与 SO101 模块 owner 接通现有 full_cycle CLI 的运行身份、显式启动、协作取消和原任务查询，再接新界面的完整抓放。当前 coop-api 的 transport 不能代替独立 SO101 抓放。

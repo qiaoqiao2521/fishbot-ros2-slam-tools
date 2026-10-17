@@ -2,7 +2,7 @@
 
 ## Current
 
-2026-10-18，P1 可运行底座、真实记录与原生回合面板已完成独立验收。隔离分支 `codex/workbench-code-rebuild-20261018` 待本轮提交推送。新仿真任务、完整能力迁移与 CY 正式切换仍为 P2–P5。
+2026-10-18，P1 可运行底座、真实记录与原生回合面板已完成独立验收。隔离分支 `codex/workbench-code-rebuild-20261018` 已推送既有远端，适配提交 `fb4a6622d5df024e7851a92f3351b3f223ef584b` 经 GitHub ref 回读一致。新仿真任务、完整能力迁移与 CY 正式切换仍为 P2–P5。
 
 预览：<http://127.0.0.1:5186/so101>。手机浏览器布局：<http://127.0.0.1:5186/so101-mobile>。服务仅监听本机，按 `apps/fishbot-control-station/WORKBENCH.md` 重启。当前读取历史回合，没有发送机器人动作或启动训练。
 
