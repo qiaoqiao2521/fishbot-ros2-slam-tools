@@ -1,7 +1,7 @@
 # Progress
 
 ## Current
-实现、独立审查与限定验收完成；root正在提交推送。
+实现、独立审查与限定验收完成。实施提交e9f36d6已推送qiaoqiao2521/fishbot-ros2-slam-tools的main，远端SHA已读回一致。
 
 ## Done
 - 起始HEAD eea5d51，工作区干净。只读核对目录、打开fd和有限抽样；无删除或服务重启。
@@ -15,7 +15,7 @@
 - 原121 invocation18c9bfab583f46fba894606579d88861/PID366493、122 invocation3fcffd2bb32941c2b07174281475326f/PID525213保持。124/125/126及116定向进程全部owned退出，未停止原服务、改网络或操作实体。
 
 ## Remaining
-Git交付与远端读回。实施无剩余项；RGB/相机素材不在本轮32MiB诊断限额内，独立证据不得换成滚动诊断。
+本轮无剩余项。RGB/相机素材不在本轮32MiB诊断限额内，独立证据不得换成滚动诊断。
 
 ## Issues
 - 首轮QoS旧断言要求record_flush单独正计数，标准库emit已内含flush，断言失败。补充实际计时语义并检查合并阶段后22项通过；没有放宽源进度、QoS或新鲜度门槛。
