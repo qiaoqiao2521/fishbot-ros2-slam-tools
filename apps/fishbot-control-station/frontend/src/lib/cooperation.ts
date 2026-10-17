@@ -1,3 +1,5 @@
+import { runtimeFetch, runtimeJson } from '@/lib/runtime-context'
+
 export function cooperationExpectedDomain(configured: unknown): number {
   if (configured === undefined || configured === '') return 114
   if (typeof configured !== 'string' || !/^\d+$/.test(configured)
@@ -229,7 +231,7 @@ export class CooperationController {
   private requestVersion = 0
 
   constructor(options: ControllerOptions = {}) {
-    this.fetcher = options.fetcher ?? ((input, init) => fetch(input, init))
+    this.fetcher = options.fetcher ?? ((input, init) => runtimeFetch('cooperation', input, init))
     this.now = options.now ?? Date.now
     this.taskId = options.taskId ?? (() => crypto.randomUUID())
     this.resetId = options.resetId ?? (() => crypto.randomUUID())
@@ -272,7 +274,7 @@ export class CooperationController {
         ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
       })
       let value: unknown
-      try { value = await response.json() } catch { throw new CooperationRequestError('协同服务未返回有效 JSON。', false) }
+      try { value = await runtimeJson(response) } catch { throw new CooperationRequestError('协同服务未返回有效 JSON。', false) }
       if (!response.ok) {
         const message = record(value) && (typeof value.reason === 'string' || typeof value.error === 'string')
           ? String(value.reason ?? value.error) : `协同服务请求失败（HTTP ${response.status}）。`

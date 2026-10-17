@@ -1,3 +1,6 @@
+import { EventContinuity } from './event-continuity'
+import { projectCooperationEvidence } from '@/lib/command-evidence'
+import { CommandEvidencePanel } from '@/components/status/command-evidence-panel'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Box, Camera, CircleCheck, MapPin, Play, RefreshCw, Square, Truck } from 'lucide-react'
 
@@ -199,6 +202,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
           {resetCompleted && <p className="cooperation-action-help" role="status">{ready ? '新回合已就绪，请点击开始装货运输。' : '新回合已创建，等待共享物理世界与导航就绪。'}</p>}
           {!resetSupported && task?.status === 'succeeded' && <p className="cooperation-action-help">当前协同服务不支持网页重置；需要启动新的合成回合。</p>}
           {task?.status === 'running' && snapshot.ownedTaskId !== task.id && <p className="cooperation-action-help">当前任务由另一页面发起。这里只读取反馈。</p>}
+          <CommandEvidencePanel evidence={projectCooperationEvidence(task ?? null, snapshot.receipt, { pending: !!pending, expectedTaskId: snapshot.ownedTaskId })} />
           <div className="cooperation-stations">
             <div><MapPin size={15} aria-hidden="true" /><span>固定工位</span><strong>{state?.stations ? `${metric(state.stations.dock.x, 2)}, ${metric(state.stations.dock.y, 2)} m` : '等待坐标'}</strong></div>
             <div><CircleCheck size={15} aria-hidden="true" /><span>交付点</span><strong>{state?.stations ? `${metric(state.stations.delivery.x, 2)}, ${metric(state.stations.delivery.y, 2)} m` : '等待坐标'}</strong></div>
@@ -206,6 +210,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
         </section>
         <section className="cooperation-dialogue" aria-labelledby="cooperation-dialogue-heading">
           <div className="cooperation-section-heading"><div><h2 id="cooperation-dialogue-heading">合作对话</h2><p>每条消息来自实际动作反馈。</p></div><span>{events.length} 条</span></div>
+          {state && <EventContinuity events={state.events} episodeId={state.episode_id ?? null} taskId={state.task.id} />}
           {events.length ? <ol>{events.map((event) => <li key={event.sequence} className={`cooperation-event-${event.role}`}>
             <div><strong>{{ car: 'FishBot', arm: 'SO101', system: '协同服务' }[event.role]}</strong><time>{event.time_s.toFixed(2)} s</time></div>
             <p>{event.message}</p>
@@ -215,7 +220,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
           <div className="cooperation-section-heading"><div><h2 id="cooperation-history-heading">历史回合</h2><p>以下记录由协同服务保存，场景重置不会删除已完成记录。</p></div><span>{state.history.length} 条</span></div>
           <ol>{[...state.history].reverse().map((entry) => <li key={`${entry.episode_id}-${entry.task.id}`}>
             <details>
-              <summary>{cooperationStatusLabel(entry.task.status, entry.task.scope)} · 记录时间 {new Date(typeof entry.completed_at === 'number' ? entry.completed_at * 1000 : entry.completed_at).toLocaleString('zh-CN')}</summary>
+              <summary data-history-task>{cooperationStatusLabel(entry.task.status, entry.task.scope)} · 记录时间 {new Date(typeof entry.completed_at === 'number' ? entry.completed_at * 1000 : entry.completed_at).toLocaleString('zh-CN')}</summary>
               <p>回合 {entry.episode_id}{entry.task.id ? `，任务 ${entry.task.id}` : ''}</p>
               <p>{entry.task.message}</p>
               {entry.task.stop_reason && <p>停止原因：{entry.task.stop_reason}</p>}

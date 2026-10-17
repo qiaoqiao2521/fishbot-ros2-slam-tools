@@ -3,7 +3,7 @@ import { getModePresentation } from '@/lib/station-runtime'
 import { useStationStore } from '@/store/station-store'
 
 export function RuntimeModePanel() {
-  const { connection, usingFallbackData } = useStationStore()
+  const { connection, usingFallbackData, resourceProvenance } = useStationStore()
   const mode = getModePresentation(connection, usingFallbackData)
   const isFallback = usingFallbackData || connection.mode === 'fallback'
   const isOffline = connection.mode === 'offline'
@@ -20,6 +20,11 @@ export function RuntimeModePanel() {
       <RuntimeMetric label="数据来源" value={isFallback ? '前端本地示例' : connection.endpoint} />
       <RuntimeMetric label="服务报告" value={connection.statusLabel} />
     </dl>
+    {resourceProvenance && <dl className="station-data-grid" aria-label="各资源来源">
+      {Object.entries(resourceProvenance).map(([key, value]) => <RuntimeMetric key={key}
+        label={{ connection: '连接', robotState: '位姿', navigation: '导航', perception: '感知', diagnostics: '诊断' }[key] || key}
+        value={`${{ example: '示例数据', received: '已收到服务数据', stale: '上次数据 · 待重连', invalid: '数据校验未通过' }[value.status]}${value.error ? `：${value.error}` : ''}`} />)}
+    </dl>}
     <p className="mt-3 text-xs leading-5 text-muted-foreground">
       {isFallback ? '尚未确认实时数据来源。' : isOffline ? '模拟状态用于界面和控制联调。' : 'ROS 消息可能来自仿真或设备；链路连接不证明实体在线。'}
     </p>

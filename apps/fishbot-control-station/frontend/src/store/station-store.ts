@@ -18,7 +18,18 @@ import type {
   RobotStateSnapshot,
 } from '@/types/station'
 
+export type StationResource = 'connection' | 'robotState' | 'navigation' | 'perception' | 'diagnostics'
+export type ResourceProvenance = { status: 'example' | 'received' | 'stale' | 'invalid'; receivedAt: number | null; error: string | null }
+const resources: StationResource[] = ['connection', 'robotState', 'navigation', 'perception', 'diagnostics']
+const initialProvenance = () => Object.fromEntries(resources.map((name) => [name, { status: 'example', receivedAt: null, error: null }])) as Record<StationResource, ResourceProvenance>
+function received(state: StationStore, resource: StationResource) {
+  const resourceProvenance = { ...state.resourceProvenance, [resource]: { status: 'received' as const, receivedAt: Date.now(), error: null } }
+  return { resourceProvenance, usingFallbackData: resources.some((name) => resourceProvenance[name].receivedAt === null) }
+}
+
 type StationStore = {
+  resourceProvenance: Record<StationResource, ResourceProvenance>
+  markResourceError: (resource: StationResource, error: string, invalid?: boolean) => void
   connection: ConnectionSnapshot
   robotState: RobotStateSnapshot
   navigation: NavigationSnapshot
@@ -49,6 +60,12 @@ function trimEntries(entries: DiagnosticEntry[]) {
 }
 
 export const useStationStore = create<StationStore>((set) => ({
+  resourceProvenance: initialProvenance(),
+  markResourceError: (resource, error, invalid = false) => set((state) => ({
+    resourceProvenance: { ...state.resourceProvenance, [resource]: {
+      ...state.resourceProvenance[resource], status: invalid ? 'invalid' : state.resourceProvenance[resource].receivedAt === null ? 'example' : 'stale', error,
+    } },
+  })),
   connection: mockConnection,
   robotState: mockRobotState,
   navigation: mockNavigation,
@@ -59,11 +76,11 @@ export const useStationStore = create<StationStore>((set) => ({
   angularSpeed: 1.0,
   activeDirection: null,
   usingFallbackData: true,
-  setConnection: (connection) => set({ connection }),
-  setRobotState: (robotState) => set({ robotState }),
-  setNavigation: (navigation) => set({ navigation }),
-  setPerception: (perception) => set({ perception }),
-  setDiagnostics: (diagnostics) => set({ diagnostics }),
+  setConnection: (connection) => set((state) => ({ connection, ...received(state, 'connection') })),
+  setRobotState: (robotState) => set((state) => ({ robotState, ...received(state, 'robotState') })),
+  setNavigation: (navigation) => set((state) => ({ navigation, ...received(state, 'navigation') })),
+  setPerception: (perception) => set((state) => ({ perception, ...received(state, 'perception') })),
+  setDiagnostics: (diagnostics) => set((state) => ({ diagnostics, ...received(state, 'diagnostics') })),
   patchControlFeedback: (feedback) =>
     set((state) => ({
       controlFeedback: {

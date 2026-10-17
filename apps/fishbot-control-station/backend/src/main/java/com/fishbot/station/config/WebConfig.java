@@ -12,6 +12,8 @@ public class WebConfig implements WebFluxConfigurer {
         registry.addMapping("/api/**")
                 .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
                 .allowedMethods("GET", "POST", "OPTIONS")
+                .allowedHeaders("Content-Type", "X-Fishbot-Instance")
+                .exposedHeaders("X-Fishbot-Instance")
                 .allowCredentials(true);
     }
 }

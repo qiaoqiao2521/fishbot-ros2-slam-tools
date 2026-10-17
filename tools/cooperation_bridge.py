@@ -24,6 +24,7 @@ from cooperation_perception import (map_covariance, messages_to_observation,
                                     normalize_config, validate_observation)
 from cooperation_readiness import NativeReadiness
 from cooperation_sim import LoopTiming
+from fishbot_runtime import INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability
 
 
 class BridgeTiming(LoopTiming):
@@ -60,6 +61,78 @@ class BridgeTiming(LoopTiming):
 
 class Canceled(RuntimeError):
     pass
+
+
+def make_server(bridge, args, *, runtime):
+    """HTTP boundary; discovery does not call state() or any ROS operation."""
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self,*unused): pass
+        def send_json(self,status,value):
+            content=json.dumps(value,ensure_ascii=False,allow_nan=False).encode()
+            self.send_response(status);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Cache-Control','no-store')
+            self.send_header(INSTANCE_HEADER, runtime.instance_id)
+            self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content)
+        def do_GET(self):
+            path=urlsplit(self.path).path
+            if path=='/coop-api/runtime':
+                self.send_json(200, runtime.snapshot(episode_id=bridge.episode_id));return
+            if path=='/coop-api/state':self.send_json(200,bridge.state());return
+            if path=='/coop-api/report':
+                try:
+                    report = json.loads((args.output.parent/'acceptance-report.json').read_text())
+                    self.send_json(200, report)
+                except (OSError, ValueError):
+                    self.send_json(404, {'error': '本运行尚无独立验收报告'})
+                return
+            if path=='/coop-api/vision-frame.jpg':
+                try:
+                    query = parse_qs(urlsplit(self.path).query)
+                    with bridge.lock:
+                        info = bridge.vision_frame_request(query)
+                        content = bridge.vision_frame_image(info).read_bytes()
+                except Rejected as error:
+                    self.send_json(error.status, {'error':str(error)});return
+                except (OSError, ValueError, KeyError, TypeError, RuntimeError):
+                    self.send_json(503, {'error': '后向相机图像已更新或不可用'});return
+                self.send_response(200);self.send_header('Content-Type','image/jpeg');self.send_header('Cache-Control','no-store')
+                self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content);return
+            if path.startswith('/coop-api/reset/'):
+                try:self.send_json(200,bridge.reset_record(path.rsplit('/',1)[1]))
+                except Rejected as error:self.send_json(error.status,{'error':str(error),'outcome':'rejected'})
+                return
+            if path=='/coop-api/frame.jpg':
+                try:
+                    with bridge.lock:
+                        episode=parse_qs(urlsplit(self.path).query).get('episode_id',[None])[0]
+                        if episode is not None and episode != bridge.episode_id:
+                            self.send_json(409,{'error':'相机回合已变化'});return
+                        if not bridge.frame_state()['available']:
+                            self.send_json(503,{'error':'共享相机帧缺失、过期或来源不匹配'});return
+                        info=json.loads((args.frame_dir/'latest.json').read_text())
+                        content=bridge.frame_image(info).read_bytes()
+                except (OSError, ValueError, KeyError, TypeError):
+                    self.send_json(503,{'error':'尚无当前回合共享物理世界画面'});return
+                self.send_response(200);self.send_header('Content-Type','image/jpeg');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content);return
+            self.send_json(404,{'error':'未知接口'})
+        def do_POST(self):
+            if not runtime.accepts(self.headers):
+                self.send_json(409, RUNTIME_CHANGED);return
+            try:
+                size=int(self.headers.get('Content-Length','0'))
+                if not 0<size<=4096:raise Rejected('请求长度无效')
+                body=json.loads(self.rfile.read(size))
+                path=urlsplit(self.path).path
+                if path=='/coop-api/start':result=bridge.start(body)
+                elif path=='/coop-api/cancel':result=bridge.cancel(body)
+                elif path=='/coop-api/reset':result=bridge.reset_episode(body)
+                else:raise Rejected('未知接口',404)
+                self.send_json(200,result)
+            except (Rejected,ValueError,TypeError) as error:self.send_json(getattr(error,'status',400),{'error':str(error),'outcome':'rejected'})
+            except Exception as error:self.send_json(500,{'error':str(error),'outcome':'unknown'})
+    server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
+    server.daemon_threads = True
+    server.runtime = runtime
+    return server
 
 
 def run(args):
@@ -1446,65 +1519,10 @@ def run(args):
 
     rclpy.init()
     bridge=Bridge(); executor=MultiThreadedExecutor(num_threads=4);executor.add_node(bridge)
-    class Handler(BaseHTTPRequestHandler):
-        def log_message(self,*unused): pass
-        def send_json(self,status,value):
-            content=json.dumps(value,ensure_ascii=False,allow_nan=False).encode()
-            self.send_response(status);self.send_header('Content-Type','application/json; charset=utf-8');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content)
-        def do_GET(self):
-            path=urlsplit(self.path).path
-            if path=='/coop-api/state':self.send_json(200,bridge.state());return
-            if path=='/coop-api/report':
-                try:
-                    report = json.loads((args.output.parent/'acceptance-report.json').read_text())
-                    self.send_json(200, report)
-                except (OSError, ValueError):
-                    self.send_json(404, {'error': '本运行尚无独立验收报告'})
-                return
-            if path=='/coop-api/vision-frame.jpg':
-                try:
-                    query = parse_qs(urlsplit(self.path).query)
-                    with bridge.lock:
-                        info = bridge.vision_frame_request(query)
-                        content = bridge.vision_frame_image(info).read_bytes()
-                except Rejected as error:
-                    self.send_json(error.status, {'error':str(error)});return
-                except (OSError, ValueError, KeyError, TypeError, RuntimeError):
-                    self.send_json(503, {'error': '后向相机图像已更新或不可用'});return
-                self.send_response(200);self.send_header('Content-Type','image/jpeg');self.send_header('Cache-Control','no-store')
-                self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content);return
-            if path.startswith('/coop-api/reset/'):
-                try:self.send_json(200,bridge.reset_record(path.rsplit('/',1)[1]))
-                except Rejected as error:self.send_json(error.status,{'error':str(error),'outcome':'rejected'})
-                return
-            if path=='/coop-api/frame.jpg':
-                try:
-                    with bridge.lock:
-                        episode=parse_qs(urlsplit(self.path).query).get('episode_id',[None])[0]
-                        if episode is not None and episode != bridge.episode_id:
-                            self.send_json(409,{'error':'相机回合已变化'});return
-                        if not bridge.frame_state()['available']:
-                            self.send_json(503,{'error':'共享相机帧缺失、过期或来源不匹配'});return
-                        info=json.loads((args.frame_dir/'latest.json').read_text())
-                        content=bridge.frame_image(info).read_bytes()
-                except (OSError, ValueError, KeyError, TypeError):
-                    self.send_json(503,{'error':'尚无当前回合共享物理世界画面'});return
-                self.send_response(200);self.send_header('Content-Type','image/jpeg');self.send_header('Cache-Control','no-store');self.send_header('Content-Length',str(len(content)));self.end_headers();self.wfile.write(content);return
-            self.send_json(404,{'error':'未知接口'})
-        def do_POST(self):
-            try:
-                size=int(self.headers.get('Content-Length','0'))
-                if not 0<size<=4096:raise Rejected('请求长度无效')
-                body=json.loads(self.rfile.read(size))
-                path=urlsplit(self.path).path
-                if path=='/coop-api/start':result=bridge.start(body)
-                elif path=='/coop-api/cancel':result=bridge.cancel(body)
-                elif path=='/coop-api/reset':result=bridge.reset_episode(body)
-                else:raise Rejected('未知接口',404)
-                self.send_json(200,result)
-            except (Rejected,ValueError,TypeError) as error:self.send_json(getattr(error,'status',400),{'error':str(error),'outcome':'rejected'})
-            except Exception as error:self.send_json(500,{'error':str(error),'outcome':'unknown'})
-    server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
+    runtime = RuntimeIdentity('cooperation', 'simulation', args.domain, [
+        capability('transport', 'native_action', cancel=True, event_history='bounded'),
+    ], scene_id=scene_sha)
+    server = make_server(bridge, args, runtime=runtime)
     threading.Thread(target=server.serve_forever,daemon=True,name='cooperation-http').start()
     try:executor.spin()
     finally:

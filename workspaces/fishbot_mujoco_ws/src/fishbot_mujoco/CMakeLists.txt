@@ -16,4 +16,6 @@ install(FILES README.md DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS scripts/verify_stack.py scripts/mission_bridge.py
   scripts/obstacle_controller.py scripts/wait_ready.py scripts/map_rules.py
   scripts/rviz_desktop.py DESTINATION lib/${PROJECT_NAME})
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/fishbot_runtime.py
+  DESTINATION lib/${PROJECT_NAME})
 ament_package()

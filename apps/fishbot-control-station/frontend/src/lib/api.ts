@@ -1,3 +1,6 @@
+import { validateStationResource } from '@/lib/station-validation'
+import { runtimeFetch, runtimeJson } from '@/lib/runtime-context'
+
 import type {
   BridgeStatusSnapshot,
   ConnectionSnapshot,
@@ -9,13 +12,13 @@ import type {
   RobotStateSnapshot,
 } from '@/types/station'
 
-async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(path)
+async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const response = await runtimeFetch('station', path, { signal, cache: 'no-store' })
   if (!response.ok) {
     throw new Error(`Request failed: ${path}`)
   }
 
-  return (await response.json()) as T
+  return (await runtimeJson(response)) as T
 }
 
 export type RawConnectionSnapshot = {
@@ -206,28 +209,28 @@ export function mapPerceptionSnapshot(raw: RawPerceptionSnapshot): PerceptionSna
   return raw
 }
 
-export function fetchConnection() {
-  return getJson<RawConnectionSnapshot>('/api/v1/connection').then(mapConnectionSnapshot)
+export function fetchConnection(signal?: AbortSignal) {
+  return getJson<RawConnectionSnapshot>('/api/v1/connection', signal).then((raw) => mapConnectionSnapshot(validateStationResource('connection', raw)))
 }
 
-export function fetchRobotState() {
-  return getJson<RawRobotStateSnapshot>('/api/v1/state').then(mapRobotStateSnapshot)
+export function fetchRobotState(signal?: AbortSignal) {
+  return getJson<RawRobotStateSnapshot>('/api/v1/state', signal).then((raw) => mapRobotStateSnapshot(validateStationResource('robotState', raw)))
 }
 
-export function fetchDiagnostics() {
-  return getJson<RawDiagnosticSnapshot>('/api/v1/diagnostics').then(mapDiagnosticSnapshot)
+export function fetchDiagnostics(signal?: AbortSignal) {
+  return getJson<RawDiagnosticSnapshot>('/api/v1/diagnostics', signal).then((raw) => mapDiagnosticSnapshot(validateStationResource('diagnostics', raw)))
 }
 
-export function fetchNavigation() {
-  return getJson<RawNavigationSnapshot>('/api/v1/navigation').then(mapNavigationSnapshot)
+export function fetchNavigation(signal?: AbortSignal) {
+  return getJson<RawNavigationSnapshot>('/api/v1/navigation', signal).then((raw) => mapNavigationSnapshot(validateStationResource('navigation', raw)))
 }
 
-export function fetchPerception() {
-  return getJson<RawPerceptionSnapshot>('/api/v1/perception').then(mapPerceptionSnapshot)
+export function fetchPerception(signal?: AbortSignal) {
+  return getJson<RawPerceptionSnapshot>('/api/v1/perception', signal).then((raw) => mapPerceptionSnapshot(validateStationResource('perception', raw)))
 }
 
 export async function postCommand(payload: ControlCommandPayload) {
-  const response = await fetch('/api/v1/control/cmd-vel', {
+  const response = await runtimeFetch('station', '/api/v1/control/cmd-vel', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -241,7 +244,7 @@ export async function postCommand(payload: ControlCommandPayload) {
 }
 
 export async function postStop(path: '/api/v1/control/stop' | '/api/v1/control/emergency-stop') {
-  const response = await fetch(path, {
+  const response = await runtimeFetch('station', path, {
     method: 'POST',
   })
 
@@ -257,7 +260,7 @@ export class MapPublicationUnconfirmedError extends Error {
 
 async function fetchMapPublication(path: string, init: RequestInit): Promise<Response> {
   try {
-    return await fetch(path, init)
+    return await runtimeFetch('station', path, init)
   } catch (error) {
     throw new MapPublicationUnconfirmedError(error instanceof Error ? error.message : '未收到发布回执')
   }
@@ -278,7 +281,7 @@ export async function postNavigationGoal(goal: { x: number; y: number; yaw?: num
   })
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null
+    const body = (await runtimeJson(response).catch(() => null)) as { error?: string } | null
     const message = body?.error ?? `goal request failed (${response.status})`
     if (response.status >= 500 && body?.error !== 'clock_unavailable') throw new MapPublicationUnconfirmedError(message)
     throw new Error(message)
@@ -293,7 +296,7 @@ export async function postInitialPose(pose: { x: number; y: number; yaw: number;
   })
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null
+    const body = (await runtimeJson(response).catch(() => null)) as { error?: string } | null
     const message = body?.error ?? `initial pose request failed (${response.status})`
     if (response.status >= 500 && body?.error !== 'clock_unavailable') throw new MapPublicationUnconfirmedError(message)
     throw new Error(message)

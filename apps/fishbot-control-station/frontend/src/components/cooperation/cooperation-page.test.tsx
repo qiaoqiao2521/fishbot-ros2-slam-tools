@@ -161,7 +161,7 @@ describe('cooperation page evidence rendering', () => {
       { episode_id: 'dock-episode', task: { ...task, id: 'dock-task', scope: 'dock' }, events: [], completed_at: 10000 },
       { episode_id: 'transport-episode', task: { ...task, id: 'transport-task' }, events: [], completed_at: 10001 },
     ] } })
-    const summaries = [...html.matchAll(/<summary>(.*?)<\/summary>/g)].map((match) => match[1])
+    const summaries = [...html.matchAll(/<summary data-history-task="true">(.*?)<\/summary>/g)].map((match) => match[1])
     expect(summaries).toHaveLength(2)
     expect(summaries.find((summary) => summary.startsWith('停靠完成'))).toBeDefined()
     expect(summaries.find((summary) => summary.startsWith('装货运输完成'))).toBeDefined()

@@ -12,12 +12,14 @@ import math
 import os
 import queue
 import signal
+import sys
 import threading
 import time
 import uuid
 from concurrent.futures import Future, TimeoutError as FutureTimeout
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path as FilePath
 from urllib.parse import urlsplit
 
 import rclpy
@@ -48,6 +50,15 @@ from wait_ready import validate_sim_domain
 from map_rules import (MapRulesError, MapRulesStore, build_mask, costmap_matches_mask,
                        grid_to_world, grid_value_at, integer, map_identity, require_outside_rules)
 from rviz_desktop import RvizDesktop, RvizDesktopError
+
+try:
+    from fishbot_runtime import INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability
+except ModuleNotFoundError as error:
+    if error.name != 'fishbot_runtime':
+        raise
+    # Source checkout fallback. Colcon installs this helper beside the script.
+    sys.path.insert(0, str(FilePath(__file__).resolve().parents[5] / 'tools'))
+    from fishbot_runtime import INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability
 
 
 ROBOT_RADIUS = 0.13
@@ -1430,6 +1441,10 @@ class LocalHTTPServer(ThreadingHTTPServer):
 
     def __init__(self, port, bridge, ui_port=5173):
         self.bridge = bridge
+        self.runtime = RuntimeIdentity('mission', 'simulation', bridge.domain, [
+            capability('navigation', 'native_action', cancel=True, event_history='snapshot'),
+            capability('map_edit', 'topic_publish', event_history='snapshot'),
+        ])
         self.rviz = RvizDesktop(bridge.domain)
         self.ui_ports = {5173, 5174, 5175, 5176, 5177, ui_port}
         super().__init__(('127.0.0.1', port), Handler)
@@ -1466,6 +1481,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(encoded)))
         self.send_header('Cache-Control', 'no-store')
+        self.send_header(INSTANCE_HEADER, self.server.runtime.instance_id)
+        self.send_header('Access-Control-Expose-Headers', INSTANCE_HEADER)
         self.send_header('X-Content-Type-Options', 'nosniff')
         if self.headers.get('Origin') and self.allowed():
             self.send_header('Access-Control-Allow-Origin', self.headers['Origin'])
@@ -1484,7 +1501,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get('Origin'):
             self.send_header('Access-Control-Allow-Origin', self.headers['Origin'])
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', f'Content-Type, {INSTANCE_HEADER}')
         self.send_header('Content-Length', '0')
         self.end_headers()
 
@@ -1493,7 +1510,9 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(403, {'error': 'Local browser origin required'})
             return
         path = urlsplit(self.path).path
-        if path == '/sim-api/state':
+        if path == '/sim-api/runtime':
+            self.reply(200, self.server.runtime.snapshot())
+        elif path == '/sim-api/state':
             self.reply(200, self.server.bridge.state())
         elif path == '/sim-api/rviz':
             self.reply(200, self.server.rviz.status())
@@ -1523,6 +1542,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed():
             self.reply(403, {'error': 'Local browser origin required'})
+            return
+        if self.headers.get(INSTANCE_HEADER) is not None and not self.server.runtime.accepts(self.headers):
+            self.reply(409, RUNTIME_CHANGED)
             return
         paths = {'/sim-api/mission': 'mission', '/sim-api/cancel': 'cancel',
                  '/sim-api/obstacle': 'obstacle', '/sim-api/map-rules': 'map-rules',

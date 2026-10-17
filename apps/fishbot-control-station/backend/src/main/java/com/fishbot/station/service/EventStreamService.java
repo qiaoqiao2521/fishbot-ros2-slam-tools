@@ -1,6 +1,9 @@
 package com.fishbot.station.service;
 
-import java.time.Instant;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
@@ -18,7 +21,11 @@ import reactor.core.publisher.Sinks;
 @Service
 public class EventStreamService {
 
-    private final Sinks.Many<ServerSentEvent<Object>> sink = Sinks.many().multicast().onBackpressureBuffer();
+    private static final Logger log = LoggerFactory.getLogger(EventStreamService.class);
+    private static final AtomicLong sequence = new AtomicLong();
+    private final AtomicLong rejectedEmissions = new AtomicLong();
+
+    private final Sinks.Many<ServerSentEvent<Object>> sink = Sinks.many().multicast().onBackpressureBuffer(256, false);
 
     public Flux<ServerSentEvent<Object>> stream() {
         return sink.asFlux();
@@ -47,8 +54,16 @@ public class EventStreamService {
     private void publish(EventType type, Object payload) {
         ServerSentEvent<Object> event = ServerSentEvent.builder(payload)
                 .event(type.getValue())
-                .id(String.valueOf(Instant.now().toEpochMilli()))
+                .id(RuntimeService.instanceId() + ":" + sequence.incrementAndGet())
                 .build();
-        sink.tryEmitNext(event);
+        Sinks.EmitResult result = sink.tryEmitNext(event);
+        if (result.isFailure()) {
+            long count = rejectedEmissions.incrementAndGet();
+            if (count == 1 || count % 1000 == 0) {
+                log.warn("Telemetry snapshot emission rejected: {} (total {})", result, count);
+            }
+        }
     }
+
+    public long rejectedEmissionCount() { return rejectedEmissions.get(); }
 }

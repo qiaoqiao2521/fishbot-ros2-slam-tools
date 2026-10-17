@@ -1,3 +1,5 @@
+import { runtimeFetch, runtimeJson } from '@/lib/runtime-context'
+
 export const VOICE_DOMAIN = 121
 export const VOICE_AUDIO_MAX_BYTES = 4 * 1024 * 1024
 export const VOICE_AUDIO_MAX_MS = 15000
@@ -191,7 +193,7 @@ export class VoiceController {
   private commandId: () => string
   readonly expectedDomain: number
   constructor(options: { fetcher?: typeof fetch; now?: () => number; commandId?: () => string; expectedDomain?: number } = {}) {
-    this.fetcher = options.fetcher ?? ((...args) => fetch(...args))
+    this.fetcher = options.fetcher ?? ((input, init) => runtimeFetch('voice', input, init))
     this.now = options.now ?? Date.now
     this.commandId = options.commandId ?? (() => crypto.randomUUID())
     this.expectedDomain = options.expectedDomain ?? VOICE_DOMAIN
@@ -205,7 +207,7 @@ export class VoiceController {
     const timer = setTimeout(() => controller.abort(), 15000)
     try {
       const response = await this.fetcher(`/voice-api/${path}`, { ...init, signal: controller.signal, cache: 'no-store' })
-      const body: unknown = await response.json()
+      const body: unknown = await runtimeJson(response)
       if (path !== 'execute' && record(body) && body.status === 'rejected' && body.accepted === false) {
         throw new VoiceRejectedError(typeof body.reason === 'string' ? body.reason : '语音服务已拒绝本次请求。')
       }

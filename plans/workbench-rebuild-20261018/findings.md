@@ -84,3 +84,13 @@ frontend/backend分别相对 `apps/fishbot-control-station/frontend/src/` 与 `a
 - 后端职责拆分方向已确认；P1实施时冻结具体schema与模块边界，Java保留adapter或退休按兼容迁移证据决定。
 - cy没有新的FishBot部署验收；本计划不自动把研究服务器变成机器人网关。
 - 原视觉11失败仍存在；UI和架构重构不改其评分。
+
+## P1 实施证据与修正
+
+四服务身份与写入检查已实现。Java只证明topic发布，远端domain/scene/episode不猜测。mission/cooperation/voice当前没有任意task_id查询；descriptor的task_lookup=false。详细owner表见[运行合同](../../docs/RUNTIME_CONTEXT.md)。
+
+真实Java浏览器检查发现：Reactor multicast默认autoCancel会在最后一个订阅取消后停止接纳事件，重开网页不能恢复。改为256条有界缓冲、autoCancel=false，增加断开重订阅回归。第一次发现身份晚于HTTP快照时，需要重新读取五类资源，不能只标stale后等待可能不再变化的数据。
+
+独立评审发现两处竞态：畸形高序号SSE不能提前推进接纳水位；实例改变期间的明确runtime_changed拒绝不能退化为unknown。保留负例，不把错误统一包成结果未知。前端和实际Java DTO验证中另补诊断资源入口校验。
+
+P1没有修改ROS控制算法，也没有运行导航/抓放。domain127仅用于真实mission节点的身份、状态和写入拒绝验证；物理验收仍属于P6。原5180/5181是共享源码的Vite开发服务，前端会HMR；原ROS进程没有重启。

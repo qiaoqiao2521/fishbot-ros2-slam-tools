@@ -1,3 +1,5 @@
+import { projectMissionEvidence } from '@/lib/command-evidence'
+import { CommandEvidencePanel } from '@/components/status/command-evidence-panel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowLeft, ArrowUp, Box, Check, Eye, Home, MapPin, Monitor, Play, RefreshCw, Route, Save, ShieldBan, Square, Trash2, Undo2, X } from 'lucide-react'
 
@@ -354,6 +356,7 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
             {geometryMessage && <p className="simulation-panel-note" role="status">{geometryMessage}</p>}
             <div className={`simulation-mission-state simulation-mission-${mission?.status ?? 'idle'}`} aria-live="polite">
               <strong>{missionLabel(mission?.status, mission?.dispatch_state)}</strong>
+              <CommandEvidencePanel evidence={projectMissionEvidence(mission ?? null, { pending: pending === 'mission', receiptUnknown: missionRequestUnknown })} />
               <p>{progressText}</p>
               {mission?.message && mission.status !== 'idle' && <small>{mission.message}</small>}
               {mission?.stop_reason && <small>取消触发原因：{mission.stop_reason}</small>}

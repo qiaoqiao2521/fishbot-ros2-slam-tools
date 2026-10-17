@@ -1,0 +1,8 @@
+.command-evidence { margin-top: 12px; border-top: 1px solid #dbe3ed; font-size: 12px; }
+.command-evidence summary { cursor: pointer; padding: 10px 0; color: #475569; }
+.command-evidence dl { display: grid; gap: 10px; margin: 0 0 12px; }
+.command-evidence dl > div { display: grid; grid-template-columns: 90px 1fr; gap: 8px; }
+.command-evidence dt { color: #64748b; }
+.command-evidence dd { margin: 0; min-width: 0; }
+.command-evidence dd strong, .command-evidence dd span { display: block; overflow-wrap: anywhere; }
+.command-evidence dd span { margin-top: 3px; color: #64748b; line-height: 1.5; }

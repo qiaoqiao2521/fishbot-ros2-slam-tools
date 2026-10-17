@@ -4,6 +4,8 @@
 
 2026-10-18 已启动[跨层重构规划](../plans/workbench-rebuild-20261018/task_plan.md)。下文描述当前已实现结构；目标结构和迁移合同在计划内维护，完成实施后再逐项更新本页。
 
+四个服务已提供独立运行身份与能力。网页共用运行上下文读取器，并按实例/场景/回合代次隔离迟到响应；五类Java资源分别标识来源。任务页面将提交、原生执行、清理停稳和独立评分分开展示。兼容与恢复边界见[RUNTIME_CONTEXT](RUNTIME_CONTEXT.md)。
+
 - `apps/fishbot-control-station/`：Java/React控制台。
 - `fishbot_nav/`：Jazzy导航/描述/接口工作区。
 - `fishbot_laser_ws/`：实际使用的Python网络雷达驱动工作区。

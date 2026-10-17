@@ -1,0 +1,10 @@
+.runtime-context { position: relative; color: #475569; font-size: 12px; }
+.runtime-context > summary { display: flex; gap: 10px; align-items: center; cursor: pointer; list-style: none; padding: 8px; border-radius: 6px; }
+.runtime-context > summary:focus-visible { outline: 2px solid #2359d1; outline-offset: 2px; }
+.runtime-context-popover { position: absolute; top: 100%; right: 0; z-index: 100; width: min(400px, calc(100vw - 36px)); padding: 16px; background: #fff; border: 1px solid #dbe3ed; border-radius: 10px; box-shadow: 0 8px 28px #15273f20; white-space: normal; }
+.runtime-context-popover > strong { color: #1d2736; font-size: 14px; }
+.runtime-context-popover p { margin: 6px 0; line-height: 1.5; color: #64748b; }
+.runtime-context-popover section { padding: 10px 0; border-top: 1px solid #edf1f5; }
+.runtime-context-popover section > div { display: flex; justify-content: space-between; gap: 10px; }
+.runtime-context-popover small { display: block; margin-top: 4px; overflow-wrap: anywhere; color: #64748b; }
+.runtime-context-popover [data-runtime-status="invalid"] p { color: #b84332; }

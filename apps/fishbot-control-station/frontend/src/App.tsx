@@ -15,10 +15,14 @@ import { ConnectionStatusPanel } from '@/components/status/connection-status-pan
 import { RobotStatePanel } from '@/components/status/robot-state-panel'
 import { RuntimeModePanel } from '@/components/status/runtime-mode-panel'
 import { useStationBootstrap } from '@/hooks/use-station-bootstrap'
+import { RuntimeContextStatus } from '@/components/layout/runtime-context-status'
+import { runtimeRegistry } from '@/lib/runtime-context'
 import { resolveAppRoute, type AppRoute } from '@/lib/app-route'
 
 function App() {
   const [route, setRoute] = useState<AppRoute>(() => resolveAppRoute(window.location.pathname))
+
+  useEffect(() => runtimeRegistry.start(), [])
 
   useEffect(() => {
     function handlePopState() {
@@ -84,7 +88,7 @@ function StationFrame({ route, navigate, children }: {
         <div className="station-sidebar-note"><span>FishBot + SO101</span><small>控制 · 感知 · 协作</small></div>
       </aside>
       <div className="station-workspace">
-        <div className="station-topbar"><span>FishBot <ChevronRight size={14} /> <strong>{workspaces.find((item) => item.route === route)?.label}</strong></span><span className="station-topbar-mark">FishBot 控制站</span></div>
+        <div className="station-topbar"><span>FishBot <ChevronRight size={14} /> <strong>{workspaces.find((item) => item.route === route)?.label}</strong></span><RuntimeContextStatus route={route} /></div>
         {children}
       </div>
     </div>

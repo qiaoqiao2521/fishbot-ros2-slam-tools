@@ -1,3 +1,5 @@
+import { projectVoiceEvidence } from '@/lib/command-evidence'
+import { CommandEvidencePanel } from '@/components/status/command-evidence-panel'
 import { useEffect, useRef, useState } from 'react'
 import { Check, FileAudio, Mic, RefreshCw, Square } from 'lucide-react'
 
@@ -249,6 +251,7 @@ export function VoicePanelView({ snapshot = EMPTY_VOICE_SNAPSHOT, now, expectedD
           {!!(task.message || task.reason || task.upstream_record?.message || task.upstream_record?.stop_reason) && <p>{String(task.message || task.reason || task.upstream_record?.message || task.upstream_record?.stop_reason)}</p>}
           {task.upstream_record && <details><summary>查看上游原始任务记录</summary><pre>{JSON.stringify(task.upstream_record, null, 2)}</pre></details>}
         </div>}
+        {(receipt || task) && <CommandEvidencePanel evidence={projectVoiceEvidence(receipt?.command ?? null, task ?? null, { receipt })} />}
         <p className="voice-evidence-note">已接受表示任务已提交。任务终态、停稳与独立物理评分分别确认。</p>
       </div>
     </div>

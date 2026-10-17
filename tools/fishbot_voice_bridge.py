@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from fishbot_edge_voice_node import EdgeVoiceIntentParser
+from fishbot_runtime import INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability
 
 ACTIVE = {'submitting', 'running', 'canceling', 'unknown', 'task_unknown'}
 TERMINAL = {'succeeded', 'failed', 'canceled', 'rejected'}
@@ -570,6 +571,9 @@ class VoiceBridge:
 
 def make_server(bridge, port=9094, allowed_origins=()):
     origins = {local_url(origin, origin=True) for origin in allowed_origins}
+    runtime = RuntimeIdentity('voice', 'simulation', bridge.domain, [
+        capability('voice', 'delegated', cancel=True, event_history='snapshot'),
+    ])
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *unused):
@@ -580,6 +584,8 @@ def make_server(bridge, port=9094, allowed_origins=()):
             self.send_response(status)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Cache-Control', 'no-store')
+            self.send_header(INSTANCE_HEADER, runtime.instance_id)
+            self.send_header('Access-Control-Expose-Headers', INSTANCE_HEADER)
             self.send_header('X-Content-Type-Options', 'nosniff')
             if self.headers.get('Origin') in self.server.origins:
                 self.send_header('Access-Control-Allow-Origin', self.headers['Origin'])
@@ -609,7 +615,7 @@ def make_server(bridge, port=9094, allowed_origins=()):
                 self.send_response(204)
                 self.send_header('Access-Control-Allow-Origin', self.headers.get('Origin', ''))
                 self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-                self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+                self.send_header('Access-Control-Allow-Headers', f'Content-Type, {INSTANCE_HEADER}')
                 self.send_header('Content-Length', '0')
                 self.end_headers()
             except VoiceError as error:
@@ -619,6 +625,9 @@ def make_server(bridge, port=9094, allowed_origins=()):
         def do_GET(self):
             try:
                 self.guard()
+                if self.path == '/voice-api/runtime':
+                    self.reply(200, runtime.snapshot())
+                    return
                 if self.path != '/voice-api/state':
                     raise VoiceError('unknown_endpoint', 404)
                 self.reply(200, bridge.state())
@@ -630,6 +639,9 @@ def make_server(bridge, port=9094, allowed_origins=()):
             received = int(bridge.clock() * 1000)
             try:
                 self.guard()
+                if not runtime.accepts(self.headers):
+                    self.reply(409, RUNTIME_CHANGED)
+                    return
                 if self.path not in {'/voice-api/preview', '/voice-api/execute', '/voice-api/transcribe'}:
                     raise VoiceError('unknown_endpoint', 404)
                 audio = self.path.endswith('/transcribe')
@@ -659,6 +671,7 @@ def make_server(bridge, port=9094, allowed_origins=()):
 
     server = ThreadingHTTPServer(('127.0.0.1', port), Handler)
     server.daemon_threads = True
+    server.runtime = runtime
     server.origins = origins | {f'http://127.0.0.1:{server.server_port}', f'http://localhost:{server.server_port}'}
     return server
 

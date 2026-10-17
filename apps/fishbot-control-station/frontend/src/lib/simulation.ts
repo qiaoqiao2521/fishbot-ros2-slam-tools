@@ -1,3 +1,5 @@
+import { runtimeFetch, runtimeJson } from '@/lib/runtime-context'
+
 export type Point = { x: number; y: number }
 export type Pose = Point & { yaw: number }
 export type SimulationMap = {
@@ -261,7 +263,7 @@ export function posesEquivalent(left: Pose, right: Pose): boolean {
 }
 
 export async function requestSimulation<T>(path: string, body?: object, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`/sim-api/${path}`, {
+  const response = await runtimeFetch('mission', `/sim-api/${path}`, {
     method: body ? 'POST' : 'GET',
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
@@ -269,7 +271,7 @@ export async function requestSimulation<T>(path: string, body?: object, signal?:
   })
   let value: unknown
   try {
-    value = await response.json()
+    value = await runtimeJson(response)
   } catch {
     throw new Error('仿真服务没有返回有效数据，请检查启动窗口。')
   }
