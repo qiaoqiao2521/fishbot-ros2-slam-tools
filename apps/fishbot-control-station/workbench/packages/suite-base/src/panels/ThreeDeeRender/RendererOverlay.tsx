@@ -1,0 +1,529 @@
+// SPDX-FileCopyrightText: Copyright (C) 2023-2026 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)<lichtblick@bmwgroup.com>
+// SPDX-License-Identifier: MPL-2.0
+
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/
+
+import { Ruler20Filled, Ruler20Regular } from "@fluentui/react-icons";
+import {
+  Button,
+  IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
+  Paper,
+  Tooltip,
+  useTheme,
+} from "@mui/material";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useLongPress } from "react-use";
+import tc from "tinycolor2";
+import { makeStyles } from "tss-react/mui";
+
+import { LayoutActions } from "@lichtblick/suite";
+import {
+  PanelContextMenu,
+  PanelContextMenuItem,
+} from "@lichtblick/suite-base/components/PanelContextMenu";
+import PublishGoalIcon from "@lichtblick/suite-base/components/PublishGoalIcon";
+import PublishPointIcon from "@lichtblick/suite-base/components/PublishPointIcon";
+import PublishPoseEstimateIcon from "@lichtblick/suite-base/components/PublishPoseEstimateIcon";
+import { usePanelMousePresence } from "@lichtblick/suite-base/hooks/usePanelMousePresence";
+import { HUD } from "@lichtblick/suite-base/panels/ThreeDeeRender/HUD";
+import { customTypography } from "@lichtblick/theme";
+
+import { InteractionContextMenu, Interactions, SelectionObject, TabType } from "./Interactions";
+import { HoverTooltip } from "./Interactions/HoverTooltip";
+import type { HoverEntityInfo } from "./Interactions/types";
+import type { PickedRenderable } from "./Picker";
+import { Renderable } from "./Renderable";
+import { useRenderer, useRendererEvent } from "./RendererContext";
+import { Stats } from "./Stats";
+import { MouseEventObject } from "./camera";
+import { PublishClickType } from "./renderables/PublishClickTool";
+import { InterfaceMode } from "./types";
+
+const PublishClickIcons: Record<PublishClickType, React.ReactNode> = {
+  pose: <PublishGoalIcon fontSize="small" />,
+  point: <PublishPointIcon fontSize="small" />,
+  pose_estimate: <PublishPoseEstimateIcon fontSize="small" />,
+};
+
+const useStyles = makeStyles()((theme) => ({
+  root: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 10,
+    pointerEvents: "none",
+  },
+  iconButton: {
+    position: "relative",
+    pointerEvents: "auto",
+    aspectRatio: "1/1",
+  },
+  rulerIcon: {
+    transform: "rotate(45deg)",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  threeDeeButton: {
+    fontFamily: customTypography.fontMonospace,
+    fontFeatureSettings: theme.typography.caption.fontFeatureSettings,
+    fontSize: theme.typography.caption.fontSize,
+    fontWeight: theme.typography.fontWeightBold,
+    lineHeight: "1em",
+  },
+  resetViewButton: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    marginBottom: theme.spacing(1),
+    marginRight: theme.spacing(1),
+  },
+  kbd: {
+    fontFamily: customTypography.fontMonospace,
+    background: tc(theme.palette.common.white).darken(45).toString(),
+    padding: theme.spacing(0, 0.5),
+    aspectRatio: 1,
+    borderRadius: theme.shape.borderRadius,
+    marginLeft: theme.spacing(1),
+  },
+}));
+
+type Props = {
+  addPanel: LayoutActions["addPanel"];
+  canPublish: boolean;
+  canvas: HTMLCanvasElement | ReactNull;
+  enableStats: boolean;
+  interfaceMode: InterfaceMode;
+  measureActive: boolean;
+  onChangePublishClickType: (_: PublishClickType) => void;
+  onClickMeasure: () => void;
+  onClickPublish: () => void;
+  onShowTopicSettings: (topic: string) => void;
+  onTogglePerspective: () => void;
+  perspective: boolean;
+  publishActive: boolean;
+  publishClickType: PublishClickType;
+  timezone: string | undefined;
+};
+
+/**
+ * Extracts metadata key-value pairs from a renderable's details object for hover tooltip display.
+ */
+function extractHoverMetadata(
+  details: Record<string, unknown> | undefined,
+): { key: string; value: string }[] {
+  if (details == undefined) {
+    return [];
+  }
+
+  const metadata: { key: string; value: string }[] = [];
+  const entityMeta = details.metadata;
+  if (Array.isArray(entityMeta)) {
+    for (const metadataEntry of entityMeta) {
+      if (
+        metadataEntry != undefined &&
+        typeof metadataEntry === "object" &&
+        "key" in metadataEntry &&
+        "value" in metadataEntry
+      ) {
+        metadata.push({
+          key: String((metadataEntry as { key: unknown }).key),
+          value: String((metadataEntry as { value: unknown }).value),
+        });
+      }
+    }
+  }
+  // Then add any remaining top-level primitive fields (id, frame_id, etc.)
+  for (const [fieldName, fieldValue] of Object.entries(details)) {
+    if (
+      fieldName !== "metadata" &&
+      fieldValue != undefined &&
+      (typeof fieldValue === "string" ||
+        typeof fieldValue === "number" ||
+        typeof fieldValue === "boolean")
+    ) {
+      metadata.push({ key: fieldName, value: String(fieldValue) });
+    }
+  }
+  return metadata;
+}
+
+/**
+ * Provides DOM overlay elements on top of the 3D scene (e.g. stats, debug GUI).
+ */
+export function RendererOverlay(props: Props): React.JSX.Element {
+  const { t } = useTranslation("threeDee");
+  const { classes } = useStyles();
+  const [clickedPosition, setClickedPosition] = useState<{ clientX: number; clientY: number }>({
+    clientX: 0,
+    clientY: 0,
+  });
+  const [selectedRenderables, setSelectedRenderables] = useState<PickedRenderable[]>([]);
+  const [selectedRenderable, setSelectedRenderable] = useState<PickedRenderable | undefined>(
+    undefined,
+  );
+  const [interactionsTabType, setInteractionsTabType] = useState<TabType | undefined>(undefined);
+  const [hoveredEntities, setHoveredEntities] = useState<HoverEntityInfo[]>([]);
+  const [hoverPosition, setHoverPosition] = useState<{ clientX: number; clientY: number }>({
+    clientX: 0,
+    clientY: 0,
+  });
+  const renderer = useRenderer();
+
+  const getHoverEntityId = useCallback((pickedRenderable: PickedRenderable): string => {
+    const entityId = (pickedRenderable.renderable.userData as { entityId?: string }).entityId;
+    if (entityId != undefined) {
+      return entityId;
+    }
+    const name = pickedRenderable.renderable.name;
+    if (name.length === 0) {
+      return `object-${pickedRenderable.instanceIndex ?? 0}`;
+    }
+    return name;
+  }, []);
+
+  // Toggle object selection mode on/off in the renderer
+  useEffect(() => {
+    if (renderer) {
+      renderer.setPickingEnabled(interactionsTabType != undefined);
+    }
+  }, [interactionsTabType, renderer]);
+
+  useRendererEvent(
+    "renderablesClicked",
+    useCallback(
+      (selections, cursorCoords) => {
+        const rect = props.canvas?.getBoundingClientRect();
+        if (rect) {
+          setClickedPosition({
+            clientX: rect.left + cursorCoords.x,
+            clientY: rect.top + cursorCoords.y,
+          });
+        }
+        setSelectedRenderables(selections);
+        setSelectedRenderable(selections.length === 1 ? selections[0] : undefined);
+      },
+      [props.canvas],
+    ),
+  );
+
+  // Track mouse position at full framerate for smooth tooltip following.
+  useRendererEvent(
+    "hoverMoved",
+    useCallback(
+      (cursorCoords) => {
+        const rect = props.canvas?.getBoundingClientRect();
+        if (rect) {
+          setHoverPosition({
+            clientX: rect.left + cursorCoords.x,
+            clientY: rect.top + cursorCoords.y,
+          });
+        }
+      },
+      [props.canvas],
+    ),
+  );
+
+  useRendererEvent(
+    "renderableHovered",
+    useCallback(
+      (selections) => {
+        const infos: HoverEntityInfo[] = [];
+        for (const pickedRenderable of selections) {
+          const topic = pickedRenderable.renderable.topic;
+          const details: Record<string, unknown> | undefined =
+            pickedRenderable.instanceIndex == undefined
+              ? pickedRenderable.renderable.details()
+              : pickedRenderable.renderable.instanceDetails(pickedRenderable.instanceIndex);
+
+          const metadata = extractHoverMetadata(details);
+
+          // Avoid showing tooltips for non-user-facing objects when hovering empty space.
+          // If a renderable has no associated topic and no metadata, it doesn't provide useful info.
+          if (topic == undefined && metadata.length === 0) {
+            continue;
+          }
+
+          infos.push({
+            topic,
+            entityId: getHoverEntityId(pickedRenderable),
+            metadata,
+          });
+        }
+        setHoveredEntities(infos);
+      },
+      [getHoverEntityId],
+    ),
+  );
+
+  const [showResetViewButton, setShowResetViewButton] = useState(renderer?.canResetView() ?? false);
+  useRendererEvent(
+    "resetViewChanged",
+    useCallback(() => {
+      setShowResetViewButton(renderer?.canResetView() ?? false);
+    }, [renderer]),
+  );
+  const onResetView = useCallback(() => {
+    renderer?.resetView();
+  }, [renderer]);
+
+  const stats = props.enableStats ? (
+    <div id="stats" style={{ position: "absolute", top: "10px", left: "10px" }}>
+      <Stats />
+    </div>
+  ) : undefined;
+
+  // Convert the list of selected renderables (if any) into MouseEventObjects
+  // that can be passed to <InteractionContextMenu>, which shows a context menu
+  // of candidate objects to select
+  const clickedObjects = useMemo<MouseEventObject[]>(
+    () =>
+      selectedRenderables.map((selection) => ({
+        object: {
+          pose: selection.renderable.pose,
+          scale: selection.renderable.scale,
+          color: undefined,
+          interactionData: {
+            topic: selection.renderable.name,
+            highlighted: undefined,
+            renderable: selection.renderable,
+          },
+        },
+        instanceIndex: selection.instanceIndex,
+      })),
+    [selectedRenderables],
+  );
+
+  // Once a single renderable is selected, convert it to the SelectionObject
+  // format to populate the object inspection dialog (<Interactions>)
+  const selectedObject = useMemo<SelectionObject | undefined>(
+    () =>
+      selectedRenderable
+        ? {
+            object: {
+              pose: selectedRenderable.renderable.pose,
+              interactionData: {
+                topic: selectedRenderable.renderable.topic,
+                highlighted: true,
+                originalMessage: selectedRenderable.renderable.details(),
+                instanceDetails:
+                  selectedRenderable.instanceIndex != undefined
+                    ? selectedRenderable.renderable.instanceDetails(
+                        selectedRenderable.instanceIndex,
+                      )
+                    : undefined,
+              },
+            },
+            instanceIndex: selectedRenderable.instanceIndex,
+          }
+        : undefined,
+    [selectedRenderable],
+  );
+
+  // Inform the Renderer when a renderable is selected
+  useEffect(() => {
+    renderer?.setSelectedRenderable(selectedRenderable);
+  }, [renderer, selectedRenderable]);
+
+  const publickClickButtonRef = useRef<HTMLButtonElement>(ReactNull);
+  const [publishMenuExpanded, setPublishMenuExpanded] = useState(false);
+  const selectedPublishClickIcon = PublishClickIcons[props.publishClickType];
+
+  const onLongPressPublish = useCallback(() => {
+    setPublishMenuExpanded(true);
+  }, []);
+  const longPressPublishEvent = useLongPress(onLongPressPublish);
+
+  const theme = useTheme();
+
+  // Publish control is only available if the canPublish prop is true and we have a fixed frame in the renderer
+  const showPublishControl =
+    props.interfaceMode === "3d" && props.canPublish && renderer?.fixedFrameId != undefined;
+  const publishControls = showPublishControl && (
+    <>
+      <Tooltip
+        placement="left"
+        title={props.publishActive ? "Click to cancel" : "Click to publish"}
+      >
+        <IconButton
+          {...longPressPublishEvent}
+          className={classes.iconButton}
+          size="small"
+          color={props.publishActive ? "info" : "inherit"}
+          ref={publickClickButtonRef}
+          onClick={props.onClickPublish}
+          data-testid="publish-button"
+        >
+          {selectedPublishClickIcon}
+          <div
+            style={{
+              borderBottom: "6px solid currentColor",
+              borderRight: "6px solid transparent",
+              bottom: 0,
+              left: 0,
+              height: 0,
+              width: 0,
+              margin: theme.spacing(0.25),
+              position: "absolute",
+            }}
+          />
+        </IconButton>
+      </Tooltip>
+      <Menu
+        id="publish-menu"
+        anchorEl={publickClickButtonRef.current}
+        anchorOrigin={{ vertical: "top", horizontal: "left" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        open={publishMenuExpanded}
+        onClose={() => {
+          setPublishMenuExpanded(false);
+        }}
+        slotProps={{ list: { dense: true } }}
+      >
+        <MenuItem
+          selected={props.publishClickType === "pose_estimate"}
+          onClick={() => {
+            props.onChangePublishClickType("pose_estimate");
+            setPublishMenuExpanded(false);
+          }}
+        >
+          <ListItemIcon>{PublishClickIcons.pose_estimate}</ListItemIcon>
+          <ListItemText disableTypography>Publish pose estimate</ListItemText>
+        </MenuItem>
+        <MenuItem
+          selected={props.publishClickType === "pose"}
+          onClick={() => {
+            props.onChangePublishClickType("pose");
+            setPublishMenuExpanded(false);
+          }}
+        >
+          <ListItemIcon>{PublishClickIcons.pose}</ListItemIcon>
+          <ListItemText disableTypography>Publish pose</ListItemText>
+        </MenuItem>
+        <MenuItem
+          selected={props.publishClickType === "point"}
+          onClick={() => {
+            props.onChangePublishClickType("point");
+            setPublishMenuExpanded(false);
+          }}
+        >
+          <ListItemIcon>{PublishClickIcons.point}</ListItemIcon>
+          <ListItemText disableTypography>Publish point</ListItemText>
+        </MenuItem>
+      </Menu>
+    </>
+  );
+
+  const resetViewButton = showResetViewButton && (
+    <Button
+      className={classes.resetViewButton}
+      variant="contained"
+      color="secondary"
+      onClick={onResetView}
+      data-testid="reset-view"
+    >
+      {t("resetView")}
+    </Button>
+  );
+
+  const getContextMenuItems = useCallback((): PanelContextMenuItem[] => {
+    return renderer?.getContextMenuItems() ?? [];
+  }, [renderer]);
+
+  const mousePresenceRef = useRef<HTMLDivElement>(ReactNull);
+  const mousePresent = usePanelMousePresence(mousePresenceRef);
+
+  return (
+    <>
+      {props.interfaceMode === "image" && <PanelContextMenu getItems={getContextMenuItems} />}
+      <div ref={mousePresenceRef} className={classes.root}>
+        {
+          // Only show on hover for image panel
+          (props.interfaceMode === "3d" || mousePresent) && (
+            <Interactions
+              addPanel={props.addPanel}
+              interactionsTabType={interactionsTabType}
+              onShowTopicSettings={props.onShowTopicSettings}
+              selectedObject={selectedObject}
+              setInteractionsTabType={setInteractionsTabType}
+              timezone={props.timezone}
+            />
+          )
+        }
+        {props.interfaceMode === "3d" && (
+          <Paper square={false} elevation={4} style={{ display: "flex", flexDirection: "column" }}>
+            <Tooltip
+              placement="left"
+              title={
+                <>
+                  {`Switch to ${props.perspective ? "2" : "3"}D camera `}
+                  <kbd className={classes.kbd}>3</kbd>
+                </>
+              }
+            >
+              <IconButton
+                className={classes.iconButton}
+                size="small"
+                color={props.perspective ? "info" : "inherit"}
+                onClick={props.onTogglePerspective}
+              >
+                <span className={classes.threeDeeButton}>3D</span>
+              </IconButton>
+            </Tooltip>
+            <Tooltip
+              placement="left"
+              title={props.measureActive ? "Cancel measuring" : "Measure distance"}
+            >
+              <IconButton
+                data-testid="measure-button"
+                className={classes.iconButton}
+                size="small"
+                color={props.measureActive ? "info" : "inherit"}
+                onClick={props.onClickMeasure}
+              >
+                <div className={classes.rulerIcon}>
+                  {props.measureActive ? <Ruler20Filled /> : <Ruler20Regular />}
+                </div>
+              </IconButton>
+            </Tooltip>
+
+            {publishControls}
+          </Paper>
+        )}
+      </div>
+      {clickedObjects.length > 1 && !selectedObject && (
+        <InteractionContextMenu
+          onClose={() => {
+            setSelectedRenderables([]);
+          }}
+          clickedPosition={clickedPosition}
+          clickedObjects={clickedObjects}
+          selectObject={(selection) => {
+            if (selection) {
+              const renderable = (
+                selection.object as unknown as { interactionData: { renderable: Renderable } }
+              ).interactionData.renderable;
+              const instanceIndex = selection.instanceIndex;
+              setSelectedRenderables([]);
+              setSelectedRenderable({ renderable, instanceIndex });
+            }
+          }}
+        />
+      )}
+      <HUD renderer={renderer} />
+      <HoverTooltip entities={hoveredEntities} position={hoverPosition} canvas={props.canvas} />
+      {stats}
+      {resetViewButton}
+    </>
+  );
+}
