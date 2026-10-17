@@ -7,6 +7,8 @@ micro-ROS Agent sources, firmware source and staged runtime tools.
 
 ## Start here
 
+Current development: [workbench rebuild](plans/workbench-rebuild-20261018/task_plan.md), including UI, runtime contracts, rendering, and backend adapters.
+
 Read [PROJECT](PROJECT.md) for current priorities, then follow the relevant plan.
 Open the [results workbench](docs/WORKBENCH.md) at `/workbench` for six capability entrances and frozen acceptance evidence.
 It preserves original failures and keeps tool availability separate from experiment results.
