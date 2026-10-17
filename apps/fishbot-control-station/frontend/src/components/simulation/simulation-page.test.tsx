@@ -8,16 +8,16 @@ import type { MapZone, MissionRun } from '@/lib/simulation-workspace'
 import { emptyRulesEditor, rulesReducer } from '@/lib/simulation-workspace'
 
 const fixture = vi.hoisted(() => ({ routeWrite: 'idle', seedDraft: false, draftConsumed: false,
+  cacheValidation: 'validated', cacheConflict: false, cacheMode: 'persistent_atomic', connectionError: null as string | null,
   attemptedDraft: null as string | null, goalIssue: null as SimulationGoalIssue | null, zones: [] as MapZone[], revision: 2,
   home: { x: 0, y: 0, yaw: 0 }, mission: null as SimulationState['mission'] | null, runs: null as MissionRun[] | null }))
 vi.mock('react', async (original) => {
   const actual = await original<typeof import('react')>()
   return { ...actual, useState: (initial: unknown) => {
-    if (fixture.seedDraft && !fixture.draftConsumed && Array.isArray(initial) && initial.length === 0) {
+    if (initial === null && fixture.attemptedDraft && !fixture.draftConsumed) {
       fixture.draftConsumed = true
-      return actual.useState([{ x: 1, y: 1, yaw: 0 }])
+      return actual.useState(fixture.attemptedDraft)
     }
-    if (initial === null && fixture.attemptedDraft) return actual.useState(fixture.attemptedDraft)
     return actual.useState(initial)
   } }
 })
@@ -28,8 +28,14 @@ vi.mock('@/hooks/use-simulation', () => ({
       path: [], mission: fixture.mission ?? { id: null, status: 'idle', current_index: 0, waypoints: [], return_home: false, message: '等待巡逻任务' },
       obstacle: { state: 'parked', x: null, y: null, size: 0.36 }, home: fixture.home },
     map: { map_id: 'map-a', width: 4, height: 4, resolution: 1, origin: [0, 0, 0], data: new Array(16).fill(0) },
-    connectionError: null, mapError: null, actionError: fixture.goalIssue ? 'rejected' : null, goalIssue: fixture.goalIssue, pending: null, missionRequestUnknown: false, act: vi.fn(),
+    connectionError: fixture.connectionError, mapError: null, actionError: fixture.goalIssue ? 'rejected' : null, goalIssue: fixture.goalIssue, pending: null, missionRequestUnknown: false, act: vi.fn(),
   }),
+}))
+vi.mock('@/hooks/use-patrol-draft-cache', () => ({
+  usePatrolDraftCache: () => ({ draft: { waypoints: fixture.seedDraft ? [{ x: 1, y: 1, yaw: 0 }] : [], returnHome: true, routeName: '' },
+    loaded: true, loading: false, saving: false, revisionId: '00000000-0000-4000-8000-000000000001', mode: fixture.cacheMode,
+    validation: fixture.cacheValidation, validationToken: 'token', conflict: fixture.cacheConflict, message: '草稿已保留',
+    setDraft: vi.fn(), confirmValidated: vi.fn(() => true), reloadCache: vi.fn() }),
 }))
 vi.mock('@/hooks/use-rviz', () => ({
   useRviz: () => ({ status: { available: true, running: false, domain: 107, message: '可打开' },
@@ -48,6 +54,7 @@ vi.mock('@/hooks/use-simulation-workspace', () => ({
 }))
 
 afterEach(() => { fixture.routeWrite = 'idle'; fixture.seedDraft = false; fixture.draftConsumed = false;
+  fixture.cacheValidation = 'validated'; fixture.cacheConflict = false; fixture.cacheMode = 'persistent_atomic'; fixture.connectionError = null;
   fixture.attemptedDraft = null; fixture.goalIssue = null; fixture.zones = []; fixture.revision = 2;
   fixture.home = { x: 0, y: 0, yaw: 0 }; fixture.mission = null; fixture.runs = null; vi.restoreAllMocks() })
 
@@ -58,6 +65,32 @@ const issue: SimulationGoalIssue = { kind: 'map_rule', target: 'waypoint', waypo
 const wall: MapZone = { id: 'wall-a', kind: 'wall', points: [{ x: 0, y: 0 }, { x: 1, y: 0 }], width: 0.02 }
 
 describe('simulation historical task record presentation', () => {
+  it('keeps stale-rule drafts visible but requires an explicit review before start', () => {
+    fixture.seedDraft = true; fixture.cacheValidation = 'stale'
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('巡逻点 1')
+    expect(html).toContain('按当前规则复核')
+    const start = [...html.matchAll(/<button([^>]*)>(.*?)<\/button>/gs)].find((button) => button[2].includes('开始巡逻'))
+    expect(start?.[1]).toContain('disabled')
+  })
+  it('exposes a cache conflict without silently replacing the local route', () => {
+    fixture.seedDraft = true; fixture.cacheConflict = true
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('草稿版本冲突')
+    expect(html).toContain('用缓存替换本页草稿')
+    expect(html).toContain('巡逻点 1')
+    const start = [...html.matchAll(/<button([^>]*)>(.*?)<\/button>/gs)].find((button) => button[2].includes('开始巡逻'))
+    expect(start?.[1]).toContain('disabled')
+  })
+  it('allows offline draft edits but disables execution and discloses the absence of persistence', () => {
+    fixture.seedDraft = true; fixture.connectionError = '断流'; fixture.cacheMode = 'memory_only'
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('离线草稿保留')
+    expect(html).toContain('仅当前页面内存')
+    const buttons = [...html.matchAll(/<button([^>]*)>(.*?)<\/button>/gs)]
+    expect(buttons.find((button) => button[2].includes('开始巡逻'))?.[1]).toContain('disabled')
+    expect(buttons.find((button) => button[1].includes('移除巡逻点 1'))?.[1]).not.toContain('disabled')
+  })
   it('shows the prospective departure coordinate and location action before any waypoint is drafted', () => {
     fixture.home = { x: 0.75, y: 0.25, yaw: 0.3 }
     const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)

@@ -13,6 +13,18 @@ const issue: SimulationGoalIssue = { kind: 'map_rule', target: 'waypoint', waypo
   required_clearance_m: 0.13, blocking_point: { x: -1, y: 0 }, map_id: 'map-a', rules_revision: 2 }
 
 describe('simulation software constraint overlay', () => {
+  it('shows the attempted red segment and the exact snapped point without replacing native navigation data', () => {
+    const html = renderToStaticMarkup(<SimulationMapView map={map} state={null} points={[{ x: -.2, y: 0, yaw: 0 }]} editable onSelect={() => {}}
+      selectionPreview={{ start: { x: -1, y: 0 }, selection: { kind: 'snapped', requested: { x: 1, y: 0 }, point: { x: -.2, y: 0 }, reason: '保留安全间隔' } }}
+      draftConflicts={[{ index: 0, start: { x: -1, y: 0 }, end: { x: 1, y: 0 }, entityId: 'wall-a', collisionType: 'wall' }]} />)
+    expect(html).toContain('data-selection-preview="snapped"')
+    expect(html).toContain('data-draft-conflict="wall-a"')
+    expect(html).toContain('points="10,20 30,20"')
+    expect(html).toContain('原目标')
+    expect(html).toContain('安全吸附点')
+    expect(html).toContain('实际绕行由 Nav2 规划')
+    expect(html).toContain('pointer-events="none"')
+  })
   it('keeps a nonzero departure point visible above the robot and diagnostic overlays at the same exact anchor', () => {
     const home = { x: 0.5, y: -0.5, yaw: 0.3 }
     const state: SimulationState = { mode: 'mujoco', domain: 107, ready: true, reason: '', pose: home,

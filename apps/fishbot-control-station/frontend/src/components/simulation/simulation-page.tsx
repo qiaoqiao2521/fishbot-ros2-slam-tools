@@ -5,6 +5,9 @@ import { SimulationMapView } from '@/components/simulation/simulation-map'
 import { useSimulation } from '@/hooks/use-simulation'
 import { useSimulationWorkspace } from '@/hooks/use-simulation-workspace'
 import { useRviz } from '@/hooks/use-rviz'
+import { usePatrolDraftCache } from '@/hooks/use-patrol-draft-cache'
+import type { PatrolDraft } from '@/lib/patrol-draft-cache'
+import { evaluateWaypointSelection, segmentConflicts, type SegmentConflict, type WaypointSelection } from '@/lib/route-safety'
 import { calculatePolylineDistance, PatrolMissionTracker } from '@/lib/patrol-mission'
 import { MapZonesManager } from '@/lib/map-zones'
 import { goalDraftIdentity, goalIssueMatchesWaypoint, mapRuleErrorMessage } from '@/lib/simulation-errors'
@@ -20,13 +23,13 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
   const { state, map, connectionError, mapError, actionError, goalIssue, pending, missionRequestUnknown, act } = useSimulation()
   const rviz = useRviz()
   const mapStage = useRef<HTMLDivElement>(null)
-  const [waypoints, setWaypoints] = useState<Pose[]>([])
-  const [returnHome, setReturnHome] = useState(true)
   const [homeEmphasized, setHomeEmphasized] = useState(false)
   const [attemptedDraft, setAttemptedDraft] = useState<string | null>(null)
   const [selectionMessage, setSelectionMessage] = useState('')
   const [editMode, setEditMode] = useState<MapEditMode>('waypoint')
-  const [routeName, setRouteName] = useState('')
+  const [draftHistory, setDraftHistory] = useState<PatrolDraft[]>([])
+  const [draftFuture, setDraftFuture] = useState<PatrolDraft[]>([])
+  const [selectionPreview, setSelectionPreview] = useState<{ start: Point; selection: WaypointSelection } | null>(null)
   const generation = mapGeneration(map)
   const active = missionIsActive(state)
   const connected = state !== null && !connectionError
@@ -39,16 +42,22 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
   const rulesReady = !!map && editor.mapId === map.map_id && !rulesError
   const startBlock = ruleStartBlock(editor, rulesReady)
   const dirty = rulesDirty(editor)
+  const draftCache = usePatrolDraftCache({ domain: SIMULATION_DOMAIN, mapId: map?.map_id ?? null,
+    connected, ready: rulesReady && !!editor.saved, rulesRevision: editor.saved?.revision ?? null })
+  const { waypoints, returnHome, routeName } = draftCache.draft
+  const draftEditable = !active && !pending && !missionRequestUnknown && !writing && editor.writeState !== 'unknown'
+    && draftCache.loaded && !draftCache.loading
 
   useEffect(() => {
-    setWaypoints([])
-    setReturnHome(true)
     setEditMode('waypoint')
-    setRouteName('')
+    setDraftHistory([])
+    setDraftFuture([])
+    setSelectionPreview(null)
     setAttemptedDraft(null)
     setHomeEmphasized(false)
-    setSelectionMessage('地图已更换，旧路线和规则草稿已清除。')
+    setSelectionMessage('按当前地图恢复独立草稿；不会恢复或重发运动任务。')
   }, [generation])
+  useEffect(() => { setSelectionPreview(null) }, [editor.zones, editor.baseRevision])
   const displayedPoints = active ? state!.mission.waypoints : waypoints
   const mission = state?.mission
   const elapsedSeconds = missionElapsedSeconds(mission, runs, map?.map_id)
@@ -59,10 +68,12 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
   }, [waypoints, returnHome])
   const routeDistance = useMemo(() => calculatePolylineDistance(displayedPoints), [displayedPoints])
   let geometryMessage = ''
+  let draftConflicts: SegmentConflict[] = []
   try {
     const points = active ? state!.path : [...(state?.pose ? [state.pose] : []), ...waypoints]
-    const hit = MapZonesManager.fromMapRulesZones(editor.zones).checkPathCollision(points, .13)
-    if (hit.hasCollision) geometryMessage = `${active ? '收到的导航路径' : '点间直线预览'}与${hit.collisionType === 'wall' ? '虚拟墙' : '禁区'}接触（${hit.collidedEntityId}）。实际绕行与放行以 Nav2 为准。`
+    draftConflicts = segmentConflicts(points, editor.zones)
+    const hit = draftConflicts[0]
+    if (hit) geometryMessage = `${active ? '收到的导航路径' : '点间直线预览'}与${hit.collisionType === 'wall' ? '虚拟墙' : '禁区'}接触（${hit.entityId}）。实际绕行与放行以 Nav2 为准。`
   } catch (error) { geometryMessage = error instanceof Error ? error.message : '草稿几何检查暂不可用。' }
   const awaitingAcceptance = mission?.status === 'running' && mission.dispatch_state === 'pending'
   const unknownAcceptance = mission?.status === 'canceling' && mission.dispatch_state === 'unavailable'
@@ -79,8 +90,54 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
   }[state?.obstacle.state ?? ''] ?? '等待障碍箱状态'
   const showReturnHome = active ? !!mission?.return_home : returnHome
 
+  function changeDraft(next: PatrolDraft) {
+    if (!draftEditable) return
+    setDraftHistory((values) => [...values.slice(-29), structuredClone(draftCache.draft)])
+    setDraftFuture([])
+    draftCache.setDraft(next)
+    setSelectionPreview(null)
+  }
+
+  function setWaypoints(next: Pose[] | ((points: Pose[]) => Pose[])) {
+    changeDraft({ ...draftCache.draft, waypoints: typeof next === 'function' ? next(waypoints) : next })
+  }
+
+  function undoDraft(redo = false) {
+    const stack = redo ? draftFuture : draftHistory
+    const next = stack.at(-1)
+    if (!draftEditable || !next) return
+    if (redo) {
+      setDraftHistory((values) => [...values, structuredClone(draftCache.draft)])
+      setDraftFuture((values) => values.slice(0, -1))
+    } else {
+      setDraftFuture((values) => [...values, structuredClone(draftCache.draft)])
+      setDraftHistory((values) => values.slice(0, -1))
+    }
+    draftCache.setDraft({ ...next, routeName: draftCache.draft.routeName })
+    setSelectionPreview(null)
+    setSelectionMessage(`${redo ? '已重做' : '已撤销'}航点草稿修改；未发送运动命令。`)
+  }
+
+  function validateDraft() {
+    if (!map || !rulesReady || !editor.saved || !connected || draftCache.conflict) return false
+    try {
+      const manager = MapZonesManager.fromMapRulesZones(editor.zones)
+      const invalid = waypoints.findIndex((point) => !isFreeWaypoint(point, map, .13) || manager.checkPathCollision([point], .13).hasCollision)
+      if (invalid >= 0) {
+        setSelectionMessage(`第 ${invalid + 1} 个航点的车体范围不安全，请移除或重新选择。`)
+        return false
+      }
+      const accepted = draftCache.confirmValidated(draftCache.validationToken)
+      setSelectionMessage(accepted ? `草稿已按当前地图与规则版本 ${editor.saved.revision} 复核；尚未派发。` : '版本核对尚未结束，请稍后复核；草稿仍保留。')
+      return accepted
+    } catch (error) {
+      setSelectionMessage(error instanceof Error ? error.message : '草稿复核暂不可用；未派发任务。')
+      return false
+    }
+  }
+
   function selectPoint(point: Point) {
-    if (!map || !editable || editMode === 'observe') return
+    if (!map || editMode === 'observe' || !(editMode === 'waypoint' ? draftEditable : editable)) return
     if (editMode === 'wall' || editMode === 'no_go') {
       if (!rulesReady) { setSelectionMessage('地图规则未读回，暂不能编辑。'); return }
       if (!editor.anchor) {
@@ -99,16 +156,21 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
       setSelectionMessage(`最多添加 ${MAX_WAYPOINTS} 个点，请先移除一个点。`)
       return
     }
-    if (!isFreeWaypoint(point, map)) {
-      setSelectionMessage('这里太靠近障碍或地图边缘，请选空旷的位置。')
+    const start = waypoints.at(-1) ?? state?.pose
+    if (!start) {
+      setSelectionMessage('尚无定位起点，暂不能校验选点；已有草稿仍保留。')
       return
     }
-    setWaypoints((current) => [...current, { x: Number(point.x.toFixed(2)), y: Number(point.y.toFixed(2)), yaw: 0 }])
-    setSelectionMessage(`已添加第 ${waypoints.length + 1} 个点。`)
+    const selection = evaluateWaypointSelection(start, point, map, editor.zones)
+    if (selection.point && selection.kind !== 'rejected') setWaypoints((current) => [...current, { ...selection.point!, yaw: 0 }])
+    setSelectionPreview({ start, selection })
+    setSelectionMessage(selection.kind === 'snapped'
+      ? `第 ${waypoints.length + 1} 点已从 (${point.x.toFixed(2)}, ${point.y.toFixed(2)}) 吸附到 (${selection.point!.x.toFixed(3)}, ${selection.point!.y.toFixed(3)}) 米。${selection.reason}`
+      : selection.kind === 'accepted' ? `已添加第 ${waypoints.length + 1} 个点。${selection.reason}` : selection.reason)
   }
 
   function changeMode(mode: MapEditMode) {
-    if (!editable) return
+    if (!(mode === 'waypoint' || mode === 'observe' ? draftEditable : editable)) return
     dispatch({ type: 'anchor', point: null })
     setEditMode(mode)
     setSelectionMessage({ waypoint: '点击空旷位置添加巡逻点。', wall: '选择两个点定义虚拟墙；只保存软件规则。',
@@ -116,13 +178,11 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
   }
 
   function loadRoute(route: SavedRoute) {
-    if (!editable || !editor.mapId || !map) return
+    if (!draftEditable || !editor.mapId || !map) return
     try {
       const draft = routeDraft(route, editor.mapId)
-      if (!draft.waypoints.every((point) => isFreeWaypoint(point, map))) throw new Error('路线包含当前地图不可达点，请重新安排。')
-      setWaypoints(draft.waypoints)
-      setReturnHome(draft.returnHome)
-      setRouteName(route.name)
+      if (!draft.waypoints.every((point) => isFreeWaypoint(point, map, .13))) throw new Error('路线包含当前地图不可达点，请重新安排。')
+      changeDraft({ waypoints: draft.waypoints, returnHome: draft.returnHome, routeName: route.name })
       dispatch({ type: 'anchor', point: null })
       setEditMode('waypoint')
       setSelectionMessage(`“${route.name}”已载入草稿；尚未派发任务。`)
@@ -130,7 +190,7 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
   }
 
   function reorderPoint(index: number, delta: number) {
-    if (!editable) return
+    if (!draftEditable) return
     setWaypoints((current) => {
       const next = [...current], other = index + delta
       if (other < 0 || other >= next.length) return current
@@ -152,7 +212,7 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
   }
 
   function startMission() {
-    if (!editor.mapId || !editor.saved) return
+    if (!ready || !editable || !draftEditable || !editor.mapId || !editor.saved || startBlock || draftCache.conflict || draftCache.validation === 'stale' || !validateDraft()) return
     try {
       const payload = patrolDraft.toMissionPayload({ issuedAt: Date.now() / 1000, mapId: editor.mapId, rulesRevision: editor.saved.revision })
       setAttemptedDraft(goalDraftIdentity(waypoints, returnHome))
@@ -196,6 +256,20 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
         <span>{connectionError ? '请检查仿真启动窗口。' : state?.reason || '等待地图、定位与导航服务。'}</span>
       </div>
 
+      <section className={`simulation-draft-cache ${draftCache.conflict || draftCache.validation === 'stale' ? 'simulation-draft-cache-attention' : ''}`} aria-label="航点草稿保护">
+        <div role="status"><strong>{!connected ? '离线草稿保留' : draftCache.conflict ? '草稿版本冲突' : draftCache.saving ? '正在缓存草稿' : draftCache.loaded ? '航点草稿保护' : '正在读取草稿'}</strong>
+          <span>{draftCache.message}</span>
+          {draftCache.error && <span className="simulation-inline-error">缓存未确认：{draftCache.error}；当前页草稿仍保留。</span>}
+          <small>{draftCache.mode === 'memory_only' ? '仅当前页面内存 · 关闭页面不会恢复' : '浏览器本地缓存'} · 规则版本 {editor.saved?.revision ?? '待核对'}{draftCache.revisionId ? ` · 草稿 ${draftCache.revisionId.slice(0, 8)}` : ''} · 不自动补发运动</small>
+        </div>
+        <div className="simulation-draft-cache-actions">
+          {draftCache.conflict || draftCache.error ? <button type="button" className="simulation-button simulation-quiet" disabled={!connected || active || !!pending || draftCache.loading}
+            onClick={() => { setDraftHistory([]); setDraftFuture([]); setSelectionPreview(null); void draftCache.reloadCache() }}>用缓存替换本页草稿</button>
+            : <button type="button" className="simulation-button simulation-quiet" disabled={!connected || !draftEditable || !rulesReady || !!startBlock}
+              onClick={validateDraft}>按当前规则复核</button>}
+        </div>
+      </section>
+
       {missionRequestUnknown && <div className="simulation-error" role="status">派发回执未知，正在读取原任务状态；暂不能重复派发或编辑。</div>}
       {error && <div className="simulation-error" role="alert">
         <p>{error}</p>
@@ -216,7 +290,7 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
             {([{ mode: 'waypoint', label: '巡逻点', icon: MapPin }, { mode: 'wall', label: '虚拟墙', icon: Route },
               { mode: 'no_go', label: '禁区', icon: ShieldBan }, { mode: 'observe', label: '观察', icon: Eye }] as const).map(({ mode, label, icon: Icon }) =>
               <button key={mode} type="button" className={`simulation-button simulation-quiet ${editMode === mode ? 'simulation-tool-selected' : ''}`}
-                disabled={!map || !editable || ((mode === 'wall' || mode === 'no_go') && !rulesReady)} aria-pressed={editMode === mode} onClick={() => changeMode(mode)}><Icon size={15} />{label}</button>)}
+                disabled={!map || ((mode === 'wall' || mode === 'no_go') ? !editable || !rulesReady : !draftEditable)} aria-pressed={editMode === mode} onClick={() => changeMode(mode)}><Icon size={15} />{label}</button>)}
           </div>
           <div className="simulation-rule-strip">
             <span role="status">{ruleStatus}{dirty ? ' · 有未保存草稿' : ''}</span>
@@ -229,7 +303,8 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
           </div>
           <p className="simulation-map-guidance" aria-live="polite">{selectionMessage || (editMode === 'wall' ? '选择墙的两个端点。' : editMode === 'no_go' ? '选择矩形的两个对角。' : editMode === 'observe' ? '只观察，不发送指令。' : '点击空旷处添加巡逻点。')}</p>
           <div className="simulation-map-stage" ref={mapStage} tabIndex={-1} aria-label="巡逻地图视图">
-            {map ? <SimulationMapView map={map} state={state} points={displayedPoints} editable={editable && editMode !== 'observe'} onSelect={selectPoint} mode={editMode}
+            {map ? <SimulationMapView map={map} state={state} points={displayedPoints} editable={(editMode === 'waypoint' ? draftEditable : editable) && editMode !== 'observe'} onSelect={selectPoint} mode={editMode}
+              draftConflicts={draftConflicts} selectionPreview={active ? null : selectionPreview}
               zones={editor.zones} savedZones={editor.saved?.zones} anchor={editor.anchor} goalIssue={goalIssue} issueCurrent={issueCurrent} homeEmphasized={homeEmphasized} onCancelSelection={() => dispatch({ type: 'anchor', point: null })} />
               : <div className="simulation-map-empty"><MapPin size={34} /><strong>等待仿真地图</strong><p>地图发布后，就能在这里选点。</p></div>}
           </div>
@@ -241,6 +316,7 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
               <span><i className="simulation-legend-obstacle" />移动障碍</span>
               <span><i className="simulation-legend-wall" />软件虚拟墙</span>
               <span><i className="simulation-legend-zone" />禁区 · 虚线为草稿</span>
+              <span><i className="simulation-legend-conflict" />红线：草稿直线冲突</span>
             </div>
             {map && <span>{(map.width * map.resolution).toFixed(1)} × {(map.height * map.resolution).toFixed(1)} 米</span>}
           </div>
@@ -292,7 +368,7 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
                 return <li key={`${index}-${point.x}-${point.y}`} className={[current ? 'simulation-waypoint-current' : '', rejected ? 'simulation-waypoint-issue' : ''].filter(Boolean).join(' ')}>
                   <span className="simulation-waypoint-number">{done ? <Check size={14} /> : index + 1}</span>
                   <div><strong>{isHome ? '返回本次出发点' : `巡逻点 ${index + 1}`}</strong><span>({point.x.toFixed(2)}, {point.y.toFixed(2)}) 米</span>{rejected && <small className="simulation-rejected-point-label">此点被拒绝</small>}</div>
-                  {current ? <span className="simulation-waypoint-tag">前往中</span> : editable && <div className="simulation-waypoint-edit">
+                  {current ? <span className="simulation-waypoint-tag">前往中</span> : draftEditable && <div className="simulation-waypoint-edit">
                     <button type="button" aria-label={`上移巡逻点 ${index + 1}`} disabled={index === 0} onClick={() => reorderPoint(index, -1)}><ArrowUp size={14} /></button>
                     <button type="button" aria-label={`下移巡逻点 ${index + 1}`} disabled={index === displayedPoints.length - 1} onClick={() => reorderPoint(index, 1)}><ArrowDown size={14} /></button>
                     <button type="button" aria-label={`移除巡逻点 ${index + 1}`} onClick={() => setWaypoints((values) => values.filter((_, i) => i !== index))}><X size={16} /></button>
@@ -302,7 +378,7 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
             </ol> : <div className="simulation-queue-empty"><MapPin size={22} /><p>在地图上选择巡逻点，或载入已保存的路线。</p></div>}
 
             <p className="simulation-selection-message" aria-live="polite">{!active && startBlock}</p>
-            <label className={`simulation-return-home ${issueCurrent && goalIssue?.target === 'return_home' ? 'simulation-return-home-issue' : ''}`}><input type="checkbox" checked={showReturnHome} disabled={!editable} onChange={(event) => setReturnHome(event.target.checked)} /><Home size={16} /><span>巡逻结束后返回本次出发点</span>{issueCurrent && goalIssue?.target === 'return_home' && <small>返航起点被拒绝</small>}</label>
+            <label className={`simulation-return-home ${issueCurrent && goalIssue?.target === 'return_home' ? 'simulation-return-home-issue' : ''}`}><input type="checkbox" checked={showReturnHome} disabled={!draftEditable} onChange={(event) => changeDraft({ ...draftCache.draft, returnHome: event.target.checked })} /><Home size={16} /><span>巡逻结束后返回本次出发点</span>{issueCurrent && goalIssue?.target === 'return_home' && <small>返航起点被拒绝</small>}</label>
             {showReturnHome && <div className="simulation-home-details">
               <strong>{active ? '本次出发点／返航点' : '本次出发点（按当前定位）'}</strong>
               <span>{state?.home ? `(${state.home.x.toFixed(2)}, ${state.home.y.toFixed(2)}) 米` : '等待定位'}</span>
@@ -310,23 +386,27 @@ export function SimulationPage({ onBack, onCooperation }: { onBack: () => void; 
               <button type="button" className="simulation-button simulation-quiet" disabled={!map || !state?.home} onClick={locateReturnHome}><MapPin size={15} />定位本次出发点</button>
             </div>}
             <div className="simulation-mission-actions">
-              <button type="button" className="simulation-button simulation-primary" disabled={!ready || !editable || waypoints.length === 0 || !!startBlock}
+              <button type="button" className="simulation-button simulation-primary" disabled={!ready || !editable || !draftEditable || draftCache.conflict || draftCache.validation === 'stale' || waypoints.length === 0 || !!startBlock}
                 onClick={startMission}><Play size={17} />{pending === 'mission' ? '正在派发…' : '开始巡逻'}</button>
               <button type="button" className="simulation-button simulation-cancel" disabled={!active || !!pending || (mission?.status === 'canceling' && !canRetryCancel)} onClick={() => void act('cancel')}><Square size={15} />{unknownAcceptance ? '取消无法确认' : canRetryCancel ? '重试取消' : mission?.status === 'canceling' ? '正在取消…' : '取消任务'}</button>
             </div>
-            <button type="button" className="simulation-clear-queue" disabled={!editable || waypoints.length === 0} onClick={() => { setWaypoints([]); setSelectionMessage('待派发巡逻点已清空。') }}><Trash2 size={14} />清空待派发点</button>
+            <div className="simulation-draft-history">
+              <button type="button" className="simulation-button simulation-quiet" disabled={!draftEditable || !draftHistory.length} onClick={() => undoDraft()}><Undo2 size={14} />撤销航点</button>
+              <button type="button" className="simulation-button simulation-quiet" disabled={!draftEditable || !draftFuture.length} onClick={() => undoDraft(true)}>重做航点</button>
+            </div>
+            <button type="button" className="simulation-clear-queue" disabled={!draftEditable || waypoints.length === 0} onClick={() => { setWaypoints([]); setSelectionMessage('待派发巡逻点已清空。') }}><Trash2 size={14} />清空待派发点</button>
           </section>
 
           <section className="simulation-task" aria-labelledby="simulation-routes-title">
             <div className="simulation-task-heading"><h2 id="simulation-routes-title">路线模板</h2><span>{routes.length} 条</span></div>
             <p className="simulation-panel-note">保存与载入只改变草稿；点击“开始巡逻”才执行。</p>
             {routesError && <p className="simulation-inline-error" role="alert">{routesError}</p>}
-            <label className="simulation-route-name">路线名称<input type="text" value={routeName} maxLength={64} placeholder="例如：窄口巡查" disabled={!editable || routeWrite === 'unknown'} onChange={(event) => setRouteName(event.target.value)} /></label>
+            <label className="simulation-route-name">路线名称<input type="text" value={routeName} maxLength={64} placeholder="例如：窄口巡查" disabled={!draftEditable || routeWrite === 'unknown'} onChange={(event) => draftCache.setDraft((draft) => ({ ...draft, routeName: event.target.value }))} /></label>
             <button type="button" className="simulation-button simulation-quiet simulation-save-route" disabled={!editable || !rulesReady || !!routesError || !waypoints.length || !routeName.trim() || routeWrite === 'unknown'}
               onClick={() => void saveRoute(routeName, waypoints, returnHome)}><Save size={14} />{routeWrite === 'saving' ? '正在保存…' : '保存当前路线'}</button>
             {routeMessage && <p className="simulation-panel-note" role="status">{routeMessage}</p>}
             {routes.length > 0 && <ul className="simulation-template-list">{routes.map((route) => <li key={route.id}><div><strong>{route.name}</strong><span>{route.waypoints.length} 点{route.return_home ? ' · 返航' : ''}</span></div>
-              <button type="button" className="simulation-button simulation-quiet" disabled={!editable || routeWrite === 'unknown'} onClick={() => loadRoute(route)}>载入草稿</button></li>)}</ul>}
+              <button type="button" className="simulation-button simulation-quiet" disabled={!draftEditable || routeWrite === 'unknown'} onClick={() => loadRoute(route)}>载入草稿</button></li>)}</ul>}
           </section>
           <details className="simulation-task simulation-runs"><summary>任务记录 <span>{runs.length} 条</span></summary>
             {runsError && <p className="simulation-inline-error" role="alert">{runsError}</p>}

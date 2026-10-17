@@ -7,8 +7,9 @@ import {
 } from '@/lib/simulation'
 import { goalIssueTarget } from '@/lib/simulation-errors'
 import { mapGeneration, rectanglePoints, zonesEqual, type MapEditMode, type MapZone } from '@/lib/simulation-workspace'
+import type { SegmentConflict, WaypointSelection } from '@/lib/route-safety'
 
-export function SimulationMapView({ map, state, points, editable, onSelect, mode = 'waypoint', zones = [], savedZones = [], anchor = null, onCancelSelection, goalIssue = null, issueCurrent = false, homeEmphasized = false }: {
+export function SimulationMapView({ map, state, points, editable, onSelect, mode = 'waypoint', zones = [], savedZones = [], anchor = null, onCancelSelection, goalIssue = null, issueCurrent = false, homeEmphasized = false, draftConflicts = [], selectionPreview = null }: {
   map: SimulationMap
   state: SimulationState | null
   points: Pose[]
@@ -22,6 +23,8 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
   goalIssue?: SimulationGoalIssue | null
   issueCurrent?: boolean
   homeEmphasized?: boolean
+  draftConflicts?: SegmentConflict[]
+  selectionPreview?: { start: Point; selection: WaypointSelection } | null
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const svg = useRef<SVGSVGElement>(null)
@@ -151,6 +154,29 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
         {trace.length > 1 && <polyline points={polyline(trace)} fill="none" stroke="#297fb1" strokeOpacity=".42" strokeWidth=".7" strokeDasharray="1.5 1.5" />}
         {state && state.path.length > 1 && <polyline points={polyline(state.path)} fill="none" stroke="#577636" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />}
         {points.length > 1 && <polyline points={polyline(points)} fill="none" stroke="#a77637" strokeOpacity=".6" strokeDasharray="2 2" strokeWidth=".5" />}
+        <g className="simulation-draft-conflicts" pointerEvents="none" aria-label="草稿直线冲突">
+          {draftConflicts.map((conflict) => <polyline key={`${conflict.index}-${conflict.entityId}`} data-draft-conflict={conflict.entityId}
+            points={polyline([conflict.start, conflict.end])} fill="none" stroke="#d42d46" strokeWidth="1.3" strokeDasharray="2 1">
+            <title>{`第 ${conflict.index + 1} 段草稿直线接触${conflict.collisionType === 'wall' ? '虚拟墙' : '禁区'} ${conflict.entityId}；实际绕行由 Nav2 规划`}</title>
+          </polyline>)}
+        </g>
+        {selectionPreview && selectionPreview.selection.kind !== 'accepted' && (() => {
+          const { start, selection } = selectionPreview
+          const requested = worldToMap(selection.requested, map)
+          const snapped = selection.point ? worldToMap(selection.point, map) : null
+          return <g data-selection-preview={selection.kind} pointerEvents="none">
+            <polyline points={polyline([start, selection.requested])} fill="none" stroke="#d42d46" strokeWidth="1.2" strokeDasharray="2 1" />
+            <circle cx={requested.x} cy={requested.y} r="3.2" fill="#fff" fillOpacity=".8" stroke="#d42d46" strokeWidth=".8" />
+            <path d={`M ${requested.x - 1.5} ${requested.y - 1.5} l 3 3 m -3 0 l 3 -3`} stroke="#d42d46" strokeWidth=".8" />
+            <text x={requested.x + 4} y={requested.y - 4} fontSize={Math.max(3.6, map.width / 85)} fill="#b61d36" stroke="white" strokeWidth=".7" paintOrder="stroke">原目标</text>
+            {snapped && <>
+              <line x1={requested.x} y1={requested.y} x2={snapped.x} y2={snapped.y} stroke="#16867d" strokeWidth=".65" strokeDasharray="1 1" />
+              <circle cx={snapped.x} cy={snapped.y} r={.14 * unit} fill="#19aa99" fillOpacity=".12" stroke="#16867d" strokeWidth=".7" />
+              <text x={snapped.x + 4} y={snapped.y + 6} fontSize={Math.max(3.6, map.width / 85)} fill="#076a60" stroke="white" strokeWidth=".7" paintOrder="stroke">安全吸附点</text>
+            </>}
+            <title>{selection.reason}</title>
+          </g>
+        })()}
         {obstacle && obstaclePosition && <g transform={`translate(${obstaclePosition.x} ${obstaclePosition.y})`}>
           <rect x={-obstacle.size * unit / 2} y={-obstacle.size * unit / 2} width={obstacle.size * unit} height={obstacle.size * unit}
             rx=".5" fill={obstacle.state === 'parked' ? '#a6aaa2' : '#ce731d'} stroke="#794518" strokeWidth=".5" />
@@ -194,7 +220,7 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
           <circle r="2.4" fill="none" />
         </g>}
       </svg>
-      {home && state?.home && <div className={`simulation-home-marker ${home.y < map.height / 4 ? 'simulation-home-marker-below' : ''} ${home.x < map.width / 4 ? 'simulation-home-marker-left' : home.x > map.width * 3 / 4 ? 'simulation-home-marker-right' : ''}`}
+      {home && state?.home && <div className={`simulation-home-marker ${home.y < map.height / 4 || selectionPreview ? 'simulation-home-marker-below' : ''} ${home.x < map.width / 4 ? 'simulation-home-marker-left' : home.x > map.width * 3 / 4 ? 'simulation-home-marker-right' : ''}`}
         style={{ left: `${home.x / map.width * 100}%`, top: `${home.y / map.height * 100}%` }} data-home-emphasized={homeEmphasized}
         aria-label={`${homeLabel}（${state.home.x.toFixed(2)}, ${state.home.y.toFixed(2)}）米`}>
         <i className="simulation-home-anchor" aria-hidden="true" />

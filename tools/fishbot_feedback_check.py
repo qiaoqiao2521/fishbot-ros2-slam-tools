@@ -111,6 +111,8 @@ def frontend_group():
         command = [npm, 'test', '--', 'src/lib/simulation.test.ts',
                    'src/lib/voice.test.ts', 'src/components/voice/voice-panel.test.tsx',
                    'src/lib/patrol-mission.test.ts', 'src/lib/map-zones.test.ts',
+                   'src/lib/route-safety.test.ts', 'src/lib/patrol-draft-cache.test.ts',
+                   'src/hooks/use-patrol-draft-cache.test.ts',
                    'src/lib/workbench.test.ts',
                    'src/components/workbench/workbench-page.test.tsx',
                    'src/lib/cooperation.test.ts', 'src/lib/cooperation-reset.test.ts',
