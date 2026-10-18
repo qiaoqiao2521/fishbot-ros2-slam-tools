@@ -1,35 +1,40 @@
 # FishBot Control Station
 
-FishBot Control Station is a web-first robot control console for FishBot. It replaces keyboard-first teleoperation with a safer, stateful operator surface that can evolve into a desktop shell later without changing the core frontend or backend architecture.
+FishBot Control Station provides observation, editing, and explicit robot task controls.
+Runtime identity, native execution, and independent physical results remain separate.
 
 ## Why This Stack
 
-- `backend/`: Spring Boot 3 on Java 17, used as the control gateway between the browser and ROS bridge in WSL.
+- `backend/`: Spring Boot 3 on Java 17, providing compatibility observation and SSE.
 - `frontend/`: React + TypeScript + Vite, used for a fast operator console with clear component boundaries.
-- Real-time flow: Browser -> Spring Boot -> rosbridge websocket.
+- Task commands use the existing mission, cooperation, and voice owners through fixed same-origin proxies.
 - UI direction: restrained modern robotics console, not an admin dashboard and not a cheap industrial skin.
 
 ## Phase 1 Scope
 
 - Connection status panel
-- Motion control panel with hold-to-run and a latched station software stop
+- Leased manual controls require the explicit `passage_manual` ROS profile
 - Odom and IMU observation panels
 - Logs and diagnostics
 - Expandable layout for map, navigation goals, patrol tasks, and parameter configuration
 
 ## Map Navigation
 
-`/workbench` groups recent capabilities, frozen acceptance results, and links to the original workspaces.
-It initializes no motion controller or telemetry bootstrap. Tool checks require an explicit GET request.
-The FishBot logo returns here; existing control, radar, simulation, and cooperation paths remain available.
-See the [workbench guide](../../docs/WORKBENCH.md) for source identity and acceptance limits.
+`/workbench` and `/simulation` open the same map and patrol workspace.
+`/results` contains frozen results, report links, and the voice panel.
+The sidebar keeps control, radar, cooperation, and evidence views accessible.
 
-`/radar` supports map and scan overlays, position and heading selection, navigation goals, and initial pose submission.
-Observation mode sends no commands. Operators explicitly submit each draft.
-The path overlay uses the latest observed ROS `/plan`.
-Patrol opens the existing `/simulation` task page, with its separately configured MuJoCo environment.
-Web and mobile browsers share this interface.
-See [map-navigation.md](docs/map-navigation.md) for message contracts, simulation time, acceptance evidence, and limits.
+Desktop panels use Dockview. Mobile uses a canvas and bottom panels.
+Panel visibility does not create, cancel, or restart a task owner.
+Map edits remain drafts until explicitly saved or dispatched.
+
+`/radar` provides 2D observation and a lazy 3D view.
+The 3D view accepts bounded local URDF, GLTF/GLB, and PCD files.
+Sensor-local scans stay separate from map paths when source TF is unavailable.
+Legacy Java goal, initial-pose, and velocity writes are disabled by default.
+Manual leases bind runtime, map, session, sequence, and command expiry.
+Release, native cancellation, guard acknowledgement, and continuous quiet are reported separately.
+See [runtime contracts](../../docs/RUNTIME_CONTEXT.md) and the [workbench guide](../../docs/WORKBENCH.md).
 
 ## Workspace Layout
 
@@ -68,10 +73,10 @@ fishbot-control-station/
 
 ## Core Runtime Contract
 
-- ROS bridge runs in WSL and is treated as an upstream dependency.
+- ROS bridge runs in the configured ROS host environment as an upstream dependency.
 - Spring Boot owns rosbridge connection lifecycle, timeout detection, reconnects, and publish safety.
 - Frontend never talks to rosbridge directly in phase 1.
-- Software stop latches this station, rejects further velocity commands and repeats zero at 10 Hz until restart. It cannot exclude external Nav2 publishers; use a downstream command arbiter and physical stop before hardware operation.
+- Legacy Java writes default to rejected. Explicit compatibility mode retains topic publication semantics, without native cancellation or verified stopping.
 - Default startup is loopback-only, including the Vite proxy. There is no remote-user authentication: do not expose these services to a LAN/public network.
 - Native FishBot startup defaults to Jazzy. Laser-only startup maps both backend rosbridge endpoint variables to the requested laser port.
 - `/station/odom` and `/station/imu` from the HTTP diagnostic bridge must never be remapped into authoritative SLAM/EKF sensor topics.
@@ -119,7 +124,7 @@ cd /home/muqiao/dev/ros2/projects/fishbot/apps/fishbot-control-station/frontend
 npm run dev -- --host 127.0.0.1
 ```
 
-Offline mode is driven by `STATION_TELEMETRY_MODE=offline`. In that mode the backend publishes synthetic `/odom` and `/imu`-like state, and control commands move the simulated robot state without requiring rosbridge or a powered robot.
+Offline mode is driven by `STATION_TELEMETRY_MODE=offline`. It provides synthetic observation state. Legacy control writes remain disabled unless explicitly enabled for compatibility.
 
 ## Verification
 

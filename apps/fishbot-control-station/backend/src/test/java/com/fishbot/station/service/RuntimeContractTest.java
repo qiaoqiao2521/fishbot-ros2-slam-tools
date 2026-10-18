@@ -41,7 +41,8 @@ class RuntimeContractTest {
                 .jsonPath("$.mode").isEqualTo("unknown")
                 .jsonPath("$.domain").isEmpty().jsonPath("$.scene_id").isEmpty()
                 .jsonPath("$.episode_id").isEmpty()
-                .jsonPath("$.capabilities[1].submission").isEqualTo("topic_publish")
+                .jsonPath("$.capabilities[1].submission").isEqualTo("read_only")
+                .jsonPath("$.capabilities[1].available").isEqualTo(false)
                 .jsonPath("$.capabilities[1].task_lookup").isEqualTo(false)
                 .jsonPath("$.capabilities[1].cancel").isEqualTo(false);
         verifyNoInteractions(owner);

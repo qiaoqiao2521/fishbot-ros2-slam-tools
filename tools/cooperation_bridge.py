@@ -24,7 +24,8 @@ from cooperation_perception import (map_covariance, messages_to_observation,
                                     normalize_config, validate_observation)
 from cooperation_readiness import NativeReadiness
 from cooperation_sim import LoopTiming
-from fishbot_runtime import INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability
+from fishbot_runtime import (INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability,
+                            DomainExecutionLock, ExecutionOwnerBusy)
 
 
 class BridgeTiming(LoopTiming):
@@ -156,7 +157,7 @@ def run(args):
     from rosgraph_msgs.msg import Clock
     from std_msgs.msg import Bool, String
     from tf2_ros import Buffer, TransformListener
-    from cooperation_arm import ArmPlanner
+    from cooperation_arm import ArmPlanner, query_approach
 
     manifest = json.loads(args.manifest.read_text())
     scene_sha = hashlib.sha256(Path(manifest['world_xml']).read_bytes()).hexdigest()
@@ -1015,8 +1016,22 @@ def run(args):
                         self.persist()
                     return
                 planner = ArmPlanner(manifest, car_pose=raw['qpos22'][13:20])
-                plan = planner.prepare_approach(raw['q6'])
+                plan = query_approach(manifest, raw['q6'], raw['qpos22'][13:20],
+                    check=self.check, timeout_s=min(30., max(.001, self.wall_deadline-time.monotonic())))
                 self.check()
+                # Retain small planning evidence once per task. Full trajectories
+                # remain local planning data, not repeated telemetry payloads.
+                with self.lock:
+                    self.owner(token)
+                    self.task['arm_planning'] = {
+                        'phase': 'approach', 'source_stamp': raw['stamp'],
+                        'planner': plan['planning'].get('planner'),
+                        'requested_seed': plan['planning'].get('requested_seed'),
+                        'rng_seed_scope': plan['planning'].get('rng_seed_scope'),
+                        'path_sha256': hashlib.sha256(json.dumps(plan['planning']['path'],
+                            separators=(',', ':'), allow_nan=False).encode()).hexdigest(),
+                        'execution': plan['planning']['execution'],
+                    }
                 baseline = raw['cargo']['position'][2]
                 for segment in plan['segments']:
                     self.event('arm',segment['stage'], {'approach':'正在靠近取货位置。','descend':'正在下降到夹取位置。',
@@ -1436,7 +1451,10 @@ def run(args):
                     ready=False;nav_ready=False;reason=str(error)
                 frame=self.frame_state(raw)
                 result = {'mode':'mujoco','domain':args.domain,'ready':ready,'reason':reason,'task':copy.deepcopy(self.task),
-                    'events':copy.deepcopy(self.events),'physics':physics,'frame':frame,'source':{'scene_sha':raw['source']['scene_sha256']} if raw else None,
+                    'events':copy.deepcopy(self.events),'physics':physics,'frame':frame,
+                    # Instance identity survives a reset/freshness gap. This is
+                    # the XML hashed at startup, not a new physical observation.
+                    'source':{'scene_sha':scene_sha,'origin':'manifest_world_xml','observed':raw is not None},
                     'nav':{'ready':nav_ready,'pose':pose},'stations':self.stations(),
                     'native_lifecycle':self.native_readiness.snapshot(),
                     'freshness_failure':copy.deepcopy(getattr(self,'last_freshness_failure',None)),
@@ -1541,7 +1559,11 @@ def main():
     os.environ['ROS_DOMAIN_ID']=str(args.domain)
     os.environ['ROS_AUTOMATIC_DISCOVERY_RANGE']='LOCALHOST'
     os.environ['ROS_LOCALHOST_ONLY']='1'
-    run(args)
+    try:
+        with DomainExecutionLock(args.domain, 'cooperation'):
+            run(args)
+    except ExecutionOwnerBusy as error:
+        raise SystemExit(str(error)) from None
 
 
 if __name__=='__main__':main()

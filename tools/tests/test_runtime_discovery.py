@@ -1,18 +1,22 @@
 """Real ephemeral HTTP fixtures; discovery and fences never dispatch ROS."""
 import json
+import os
 from pathlib import Path
+import select
+import subprocess
 import sys
 import tempfile
 import threading
 import unittest
 from email.message import Message
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from fishbot_runtime import INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability
+from fishbot_runtime import (INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability,
+                            DomainExecutionLock, ExecutionOwnerBusy)
 from fishbot_voice_bridge import make_server as voice_server
 from cooperation_bridge import make_server as cooperation_server
 
@@ -69,6 +73,65 @@ class RuntimeIdentityTests(unittest.TestCase):
         for domain in (True, -1, 233, '121'):
             with self.subTest(domain=domain), self.assertRaises(ValueError):
                 RuntimeIdentity('voice', 'simulation', domain, [])
+
+
+class ExecutionOwnershipTests(unittest.TestCase):
+    def test_same_domain_conflicts_without_changing_original_owner_or_lock_inode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with DomainExecutionLock(122, 'mission', directory=directory):
+                filename = Path(directory) / 'domain-122.lock'
+                before, inode = filename.read_bytes(), filename.stat().st_ino
+                with self.assertRaisesRegex(ExecutionOwnerBusy, 'existing owner unchanged'):
+                    with DomainExecutionLock(122, 'cooperation', directory=directory):
+                        self.fail('A second execution owner acquired the same domain')
+                self.assertEqual(filename.read_bytes(), before)
+                with DomainExecutionLock(123, 'cooperation', directory=directory):
+                    self.assertTrue((Path(directory) / 'domain-123.lock').is_file())
+            with DomainExecutionLock(122, 'cooperation', directory=directory):
+                self.assertEqual(filename.stat().st_ino, inode)
+                self.assertEqual(json.loads(filename.read_bytes())['owner'], 'cooperation')
+
+    def test_separate_process_conflicts_and_kernel_releases_lock_after_exit(self):
+        code = ('import sys;sys.path.insert(0,sys.argv[1]);'
+                'from fishbot_runtime import DomainExecutionLock;'
+                'lock=DomainExecutionLock(122,"mission",directory=sys.argv[2]);'
+                'lock.__enter__();print("READY",flush=True);sys.stdin.buffer.read(1)')
+        with tempfile.TemporaryDirectory() as directory:
+            child = subprocess.Popen([sys.executable, '-B', '-c', code, str(Path(__file__).resolve().parents[1]), directory],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                self.assertTrue(select.select([child.stdout], [], [], 3)[0], 'Child did not acquire its lock')
+                self.assertEqual(child.stdout.readline().strip(), 'READY')
+                with self.assertRaises(ExecutionOwnerBusy):
+                    with DomainExecutionLock(122, 'cooperation', directory=directory):
+                        self.fail('A second process acquired a held domain')
+                child.terminate()
+                child.wait(timeout=3)
+                with DomainExecutionLock(122, 'cooperation', directory=directory):
+                    pass
+            finally:
+                if child.poll() is None:
+                    child.kill()
+                child.communicate(timeout=3)
+
+    def test_default_namespace_is_independent_of_output_cwd_and_environment(self):
+        one = DomainExecutionLock(122, 'mission')
+        with patch.dict(os.environ, {'XDG_CACHE_HOME': '/not-used', 'XDG_RUNTIME_DIR': '/also-not-used'}):
+            two = DomainExecutionLock(122, 'cooperation')
+        self.assertEqual(one.directory, two.directory)
+        self.assertEqual(one.directory, Path('/tmp') / f'fishbot-execution-{os.getuid()}')
+        with self.assertRaises(ValueError):
+            DomainExecutionLock(122, 'voice')
+
+    def test_cooperation_conflict_refuses_before_native_run_or_ros_import(self):
+        import cooperation_bridge
+        with patch.object(sys, 'argv', ['cooperation_bridge.py', '--domain', '122',
+                '--manifest', '/not-read', '--output', '/not-written', '--frame-dir', '/not-read']), \
+                patch.dict(os.environ), patch.object(cooperation_bridge, 'DomainExecutionLock',
+                side_effect=ExecutionOwnerBusy('domain occupied')), patch.object(cooperation_bridge, 'run') as run:
+            with self.assertRaisesRegex(SystemExit, 'domain occupied'):
+                cooperation_bridge.main()
+        run.assert_not_called()
 
 
 class VoiceDiscoveryTests(unittest.TestCase):

@@ -8,7 +8,6 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
-const { chromium, request: playwrightRequest } = require('playwright');
 
 function argumentsFrom(argv) {
   const options = { base: 'http://127.0.0.1:5179', domain: 107,
@@ -75,7 +74,29 @@ function sameMissionPayload(actual, expected) {
   assert.equal(actual.rules_revision, expected.rules_revision);
 }
 
+function assertMissionBody(body, expected, now = Date.now() / 1000) {
+  exactKeys(body, ['mission_id', 'waypoints', 'return_home', 'map_id', 'rules_revision', 'issued_at', 'timeout_s']);
+  assert.match(body.mission_id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, 'The UI must assign one canonical client UUID');
+  sameMissionPayload(body, expected);
+  assert.equal(body.timeout_s, expected.timeout_s, 'Preserve the existing owner deadline');
+  assert.ok(Number.isFinite(body.issued_at) && Math.abs(now - body.issued_at) < 2, 'Require a fresh UI dispatch');
+}
+
+async function showPanel(page, slot) {
+  const root = page.locator('[data-workspace="simulation"]');
+  const labels = { objects: '对象', properties: '属性', task: '任务与反馈' };
+  assert.ok(slot === 'canvas' || labels[slot], `Unsupported workspace slot: ${slot}`);
+  if (await root.locator('.workspace-mobile').isVisible()) {
+    if (slot !== 'canvas') await root.getByRole('tab', { name: labels[slot], exact: true }).tap();
+  } else {
+    await root.getByRole('navigation', { name: '显示面板' }).getByRole('button', {
+      name: slot === 'canvas' ? '场景' : labels[slot], exact: true,
+    }).click();
+  }
+}
+
 async function terminalVisible(phone, identity, revision) {
+  await showPanel(phone, 'task');
   const panel = phone.locator('.simulation-runs');
   if (await panel.getAttribute('open') !== '') await panel.locator('summary').tap();
   const row = panel.locator('li').filter({ hasText: identity });
@@ -85,13 +106,15 @@ async function terminalVisible(phone, identity, revision) {
 }
 
 async function main(options) {
+  const { chromium, request: playwrightRequest } = require('playwright');
   const report = { passed: false, domain: options.domain, base: options.base,
     started_epoch: Date.now() / 1000, checks: [], events: [], errors: [], posts: [], screenshots: [],
     source_sha256: crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),
     scope: 'Touch UI and native task lifecycle; physical scoring belongs to the independent observer' };
   let browser, api, phone;
   let marker = { phase: 'initializing', domain: options.domain, base: options.base,
-    dispatch_epoch: null, before_id: null, requested_body: null, owned_mission_id: null };
+    dispatch_epoch: null, before_id: null, requested_body: null, requested_mission_id: null,
+    owned_mission_id: null, submission_state: 'not_submitted', accepted_epoch: null };
   function atomicJson(filename, value) {
     const temporary = path.join(options.output, `.${filename}.${process.pid}.${crypto.randomUUID()}`);
     fs.writeFileSync(temporary, JSON.stringify(value, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
@@ -119,6 +142,11 @@ async function main(options) {
     const original = await until(() => get('map-rules'), (rules) => rules.apply_state === 'applied');
     const map = await get('map');
     const originalRoutes = await get('routes');
+    const runtime = await get('runtime');
+    assert.equal(runtime.service, 'mission');
+    assert.equal(runtime.domain, options.domain);
+    assert.ok(typeof runtime.instance_id === 'string' && runtime.instance_id, 'Require the actual runtime identity');
+    report.runtime = runtime;
     assert.equal(map.map_id, original.map_id);
     assert.equal(originalRoutes.map_id, original.map_id);
     assert.ok(original.zones.length < 64, 'No space for an additional owned test rule');
@@ -126,8 +154,8 @@ async function main(options) {
       requested_points: [{ x: 0.60, y: 0.0, yaw: 0 }, { x: 0.15, y: 0.40, yaw: 0 }] });
     browser = await chromium.launch({ headless: true,
       ...(options.chromium ? { executablePath: options.chromium } : {}) });
-    const context = await browser.newContext({ viewport: { width: 390, height: 950 },
-      isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 },
+      hasTouch: true, deviceScaleFactor: 1 });
     phone = await context.newPage();
     phone.setDefaultTimeout(30000);
     phone.on('pageerror', (error) => report.errors.push(`Page error: ${error}`));
@@ -137,6 +165,13 @@ async function main(options) {
     });
     await phone.goto(options.base + '/simulation');
     await phone.getByRole('status').filter({ hasText: `导航已应用 · 版本 ${original.revision}` }).waitFor();
+    for (const slot of ['objects', 'properties', 'task', 'canvas']) await showPanel(phone, slot);
+    assert.equal(report.posts.length, 0, 'Desktop panel changes must not write');
+    await screenshot('00-desktop-readonly-workspace');
+    await phone.setViewportSize({ width: 390, height: 950 });
+    await phone.locator('[data-workspace="simulation"] .workspace-mobile').waitFor();
+    await showPanel(phone, 'objects');
+    report.checks.push('desktop_and_phone_panel_changes_without_write');
     assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false);
     async function beforeEdit() {
       const state = await get('state');
@@ -145,6 +180,7 @@ async function main(options) {
       return state;
     }
     async function tapPoint(x, y) {
+      await showPanel(phone, 'canvas');
       const svg = phone.getByRole('application');
       await svg.scrollIntoViewIfNeeded();
       const box = await svg.boundingBox();
@@ -157,6 +193,8 @@ async function main(options) {
       const point = { x: box.x + px / map.width * box.width, y: box.y + py / map.height * box.height };
       assert.ok(point.x >= 0 && point.x < 390 && point.y >= 0 && point.y < 950,
         'The touch target is outside the phone viewport');
+      assert.equal(await svg.evaluate((element, target) => element.contains(document.elementFromPoint(target.x, target.y)), point), true,
+        'The exact map target is obscured by a panel or canvas tool; do not tap an unrelated control');
       await phone.touchscreen.tap(point.x, point.y);
     }
     const missionPosts = () => report.posts.filter((post) => post.url.endsWith('/sim-api/mission'));
@@ -200,6 +238,7 @@ async function main(options) {
 
     // Only remove the new owned row; all preexisting rules remain byte-equivalent.
     const row = savedRules.zones.findIndex((zone) => zone.id === added[0].id);
+    await showPanel(phone, 'objects');
     await beforeEdit();
     const currentRules = await get('map-rules');
     assert.equal(currentRules.revision, savedRules.revision);
@@ -221,10 +260,12 @@ async function main(options) {
     await tapPoint(0.60, 0.0);
     await tapPoint(0.15, 0.40);
     assert.equal(await phone.locator('.simulation-waypoints li').count(), 2);
-    const returnHome = phone.getByRole('checkbox', { name: '巡逻结束后返回起点', exact: true });
+    await showPanel(phone, 'task');
+    const returnHome = phone.getByRole('checkbox', { name: '巡逻结束后返回本次出发点', exact: true });
     if (await returnHome.isChecked()) await returnHome.tap();
     assert.equal(await returnHome.isChecked(), false);
     const name = `触屏闭环-${crypto.randomUUID()}`;
+    await showPanel(phone, 'objects');
     await phone.getByLabel('路线名称', { exact: true }).fill(name);
     let holdReads = true, forwarded = 0, forwardedTemplate;
     let interceptionError;
@@ -255,7 +296,7 @@ async function main(options) {
           mark({ template_id: body.id, saved_route: forwardedTemplate });
           await route.abort('failed');
         } else if (holdReads) await route.fulfill({ status: 200, contentType: 'application/json',
-          body: JSON.stringify(originalRoutes) });
+          body: JSON.stringify(originalRoutes), headers: { 'X-Fishbot-Instance': runtime.instance_id } });
         else await route.continue();
       } catch (error) {
         interceptionError = error;
@@ -288,8 +329,10 @@ async function main(options) {
     await phone.getByRole('button', { name: '清空待派发点', exact: true }).tap();
     assert.equal(await phone.locator('.simulation-waypoints li').count(), 0);
     // Invert the draft option first, then prove loading restores the saved option.
+    await showPanel(phone, 'task');
     await returnHome.tap();
     assert.equal(await returnHome.isChecked(), true);
+    await showPanel(phone, 'objects');
     const templateRow = phone.locator('.simulation-template-list li').filter({
       has: phone.getByText(name, { exact: true }) });
     assert.equal(await templateRow.count(), 1);
@@ -301,7 +344,9 @@ async function main(options) {
       assert.ok((await waypointRows.nth(index).innerText()).includes(
         `(${point.x.toFixed(2)}, ${point.y.toFixed(2)}) 米`));
     }
+    await showPanel(phone, 'task');
     assert.equal(await returnHome.isChecked(), savedRoute.return_home);
+    await showPanel(phone, 'objects');
     assert.equal(await phone.getByLabel('路线名称', { exact: true }).inputValue(), savedRoute.name);
     assert.equal(missionPosts().length, 0);
     const editedState = await beforeEdit();
@@ -315,8 +360,14 @@ async function main(options) {
     assert.equal(dispatchRules.apply_state, 'applied');
     assert.equal(dispatchRules.revision, restored.revision);
     assert.deepEqual(dispatchRules.zones, original.zones);
+    await showPanel(phone, 'task');
+    const reviewDraft = phone.getByRole('button', { name: '按当前规则复核', exact: true });
+    assert.equal(await reviewDraft.isEnabled(), true);
+    await reviewDraft.tap();
+    assert.equal(missionPosts().length, 0, 'Reviewing the restored draft must not dispatch');
+    report.checks.push('explicit_current_revision_draft_review_without_dispatch');
     const expected = { waypoints: savedRoute.waypoints, return_home: savedRoute.return_home,
-      map_id: savedRoute.map_id, rules_revision: dispatchRules.revision };
+      map_id: savedRoute.map_id, rules_revision: dispatchRules.revision, timeout_s: 360 };
     mark({ phase: 'prepared', prepared_epoch: Date.now() / 1000,
       dispatch_epoch: Date.now() / 1000, expected_body: expected });
     let dispatched = 0, dispatchError;
@@ -326,15 +377,17 @@ async function main(options) {
         dispatched += 1;
         assert.equal(dispatched, 1, 'Only one UI mission POST is permitted');
         const body = route.request().postDataJSON();
-        exactKeys(body, ['waypoints', 'return_home', 'map_id', 'rules_revision', 'issued_at']);
-        sameMissionPayload(body, expected);
-        assert.ok(Number.isFinite(body.issued_at) && Math.abs(Date.now() / 1000 - body.issued_at) < 2);
+        assertMissionBody(body, expected);
+        assert.notEqual(body.mission_id, initial.mission.id, 'A new dispatch cannot reuse the previous task UUID');
         await beforeEdit();
         const rules = await get('map-rules');
         assert.equal(rules.apply_state, 'applied');
         assert.equal(rules.revision, dispatchRules.revision);
         assert.deepEqual(rules.zones, original.zones);
-        mark({ phase: 'submitted', dispatch_epoch: Date.now() / 1000, requested_body: body });
+        // The client owns this UUID before the response. Pending is not native acceptance.
+        // The independent observer may clean up only if the current backend task has this exact UUID.
+        mark({ phase: 'submitted', dispatch_epoch: Date.now() / 1000, requested_body: body,
+          requested_mission_id: body.mission_id, owned_mission_id: body.mission_id, submission_state: 'pending' });
         await route.continue();
       } catch (error) {
         dispatchError = error;
@@ -352,12 +405,14 @@ async function main(options) {
     assert.equal(accepted.status(), 202, `UI mission rejected: ${await accepted.text()}`);
     const receipt = await accepted.json();
     assert.ok(receipt.mission.id && receipt.mission.id !== initial.mission.id);
+    assert.equal(receipt.mission.id, marker.requested_mission_id, 'The backend task owner must retain the exact client UUID');
     sameMissionPayload(receipt.mission, expected);
-    mark({ owned_mission_id: receipt.mission.id, accepted_epoch: Date.now() / 1000 });
+    mark({ owned_mission_id: receipt.mission.id, accepted_epoch: Date.now() / 1000, submission_state: 'receipt_received' });
     event('ui_mission_receipt', receipt.mission);
     assert.equal(dispatched, 1);
     assert.equal(missionPosts().length, 1);
     report.checks.push('single_ui_mission_dispatch_matches_saved_template_and_rules');
+    await showPanel(phone, 'task');
     await screenshot('04-phone-native-mission');
     const terminal = await until(() => get('state'), (state) => {
       assert.equal(state.domain, options.domain);
@@ -413,4 +468,4 @@ if (require.main === module) {
     .catch((error) => { process.stderr.write(String(error.stack || error) + '\n'); process.exitCode = 1; });
 }
 
-module.exports = { terminalVisible };
+module.exports = { argumentsFrom, assertMissionBody, inactive, sameMissionPayload, showPanel, terminalVisible };

@@ -7,6 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fishbot.station.config.SafetyProperties;
+import com.fishbot.station.config.StationRuntimeProperties;
 import com.fishbot.station.domain.ControlCommandRequest;
 import com.fishbot.station.domain.NavigationGoalRequest;
 
@@ -22,19 +23,23 @@ public class ControlService {
     private final RosTopicService rosTopicService;
     private final DiagnosticsService diagnosticsService;
     private final OfflineTelemetryService offlineTelemetryService;
+    private final StationRuntimeProperties runtimeProperties;
 
     public ControlService(SafetyProperties safetyProperties,
             RosTopicService rosTopicService,
             DiagnosticsService diagnosticsService,
-            OfflineTelemetryService offlineTelemetryService) {
+            OfflineTelemetryService offlineTelemetryService,
+            StationRuntimeProperties runtimeProperties) {
         this.safetyProperties = safetyProperties;
         this.rosTopicService = rosTopicService;
         this.diagnosticsService = diagnosticsService;
         this.offlineTelemetryService = offlineTelemetryService;
+        this.runtimeProperties = runtimeProperties;
     }
 
     public Mono<Void> sendVelocity(ControlCommandRequest request) {
         return Mono.defer(() -> {
+        if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
         synchronized (stopLatched) {
         if (stopLatched.get()) return Mono.error(new StationStopLatchedException());
         if (!Double.isFinite(request.getLinearX()) || !Double.isFinite(request.getAngularZ())) {
@@ -54,6 +59,7 @@ public class ControlService {
 
     public Mono<Void> sendNavigationGoal(NavigationGoalRequest request) {
         return Mono.defer(() -> {
+        if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
         synchronized (stopLatched) {
         if (stopLatched.get()) return Mono.error(new StationStopLatchedException());
         return rosTopicService.publishGoalPose(request.getX(), request.getY(), request.getYaw(), request.getSource())
@@ -67,6 +73,7 @@ public class ControlService {
 
     public Mono<Void> sendInitialPose(NavigationGoalRequest request) {
         return Mono.defer(() -> {
+            if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
             synchronized (stopLatched) {
                 if (stopLatched.get()) return Mono.error(new StationStopLatchedException());
                 return rosTopicService.publishInitialPose(request.getX(), request.getY(), request.getYaw(), request.getSource())
@@ -76,12 +83,14 @@ public class ControlService {
     }
 
     public Mono<Void> stop() {
+        if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
         offlineTelemetryService.stop();
         return rosTopicService.publishStop("operator")
                 .doOnError(err -> diagnosticsService.recordError("control", "stop failure: " + err.getMessage()));
     }
 
     public Mono<Void> emergencyStop() {
+        if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
         synchronized (stopLatched) {
         stopLatched.set(true);
         offlineTelemetryService.stop();
@@ -99,7 +108,7 @@ public class ControlService {
     // to exclude velocity publishers outside this process.
     @Scheduled(fixedDelay = 100)
     public void maintainStop() {
-        if (stopLatched.get()) rosTopicService.publishStop("station-latched")
+        if (runtimeProperties.isLegacyMotionWritesEnabled() && stopLatched.get()) rosTopicService.publishStop("station-latched")
             .subscribe(null, error -> log.warn("Latched stop publish failed", error));
     }
 }

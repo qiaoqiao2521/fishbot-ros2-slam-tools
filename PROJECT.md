@@ -11,7 +11,7 @@
 ## Constraints
 Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。历史无线延迟与专项验收边界继续保留，不再作为已售实车的当前阻塞项。
 ## Current State
-2026-10-18 工作台重构P1完成：四服务运行身份、代次隔离、五资源来源与分层任务回执已接入，通过隔离ROS节点/Java实际服务与浏览器验收。P2共享工作面实施中；P3–P6待实施。范围、商业采纳依据和未覆盖边界见[大范围重构](plans/workbench-rebuild-20261018/task_plan.md)及[运行合同](docs/RUNTIME_CONTEXT.md)。
+2026-10-18 工作台重构P1–P5阶段验收通过：四服务身份、分层回执、共享工作面、地图编辑、真实导航/返航/运动取消及原任务恢复已接通。同一MuJoCo实例完成两轮抓放运输，独立物理评分通过。硬件生产浏览器的100ms交互与30分钟长测通过。最终1552项反馈与641项完整前端检查通过；人工控制八项、文字语音预览/确认/原UUID取消四项通过。实验ROS实例已清理；本轮只证明仿真闭环。Lichtblick完整源码在独立工作树推进，历史回放不代替当前实时控制验收。范围和证据见[大范围重构](plans/workbench-rebuild-20261018/task_plan.md)、[当前进度](plans/workbench-rebuild-20261018/progress.md)及[运行合同](docs/RUNTIME_CONTEXT.md)。
 2026-10-17 协同日志增长已修复：演示默认不写physics，显式诊断2Hz/默认最多32MiB；独立observer实际manifest去重、900秒/1GiB预算，缺失/超限/IO失败生成正式false评分。96定向、22状态/QoS、1223反馈通过；隔离124/125/126实际验证关闭/轮转/超限，6份源起止一致，零动作。旧90GB日志已由用户清理，不计为本轮释放；见[容量修复](plans/cooperation-log-budget-20261017/progress.md)。
 2026-10-17 航点草稿保护已实施：原目标红线、完整圆足迹吸附、航点撤销/重做；按域/地图缓存与Web Locks revision_id比较写入，重连核对、规则变化复核、坏存储内存降级。414前端与1186反馈通过；真实122页面断流/重载/多标签页及手机验收零运动写请求，15秒对比左示意右实际录屏。原ROS owner与物理门槛保持；见[本轮进度](plans/draft-safety-demo-20261016/progress.md)。
 2026-10-16 巡逻/禁区TypeScript库修复并接回`/simulation`：草稿任务转换、路径几何提示、重做、原任务耗时和实际Nav2规则消息导出。原生Goal与Filter消息构造通过；隔离122网页完成两点加返航，同UUID原生4，独立末误差9.25cm并连续停稳，导出与真实ROS发布逐项一致。349前端与1121反馈回归通过。演练状态不代表ROS成功，不支持的逐点等待/HTTP循环/限速规则明确拒绝。见[修复计划](plans/navigation-modules-repair-20261016/task_plan.md)及[验收记录](plans/navigation-modules-repair-20261016/progress.md)。

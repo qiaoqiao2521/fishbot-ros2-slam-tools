@@ -326,6 +326,22 @@ class WorkflowTest(unittest.TestCase):
             workflow.reset(recover=True)
             self.assertEqual(workflow.data['operation']['purpose'], 'retry')
 
+    def test_pending_reset_keeps_scene_identity_while_physics_is_unavailable(self):
+        with self.open() as workflow:
+            self.start(workflow)
+            self.bridge.terminal()
+            workflow.reset()
+            request_id = workflow.data['operation']['request_id']
+            self.bridge.value.update(ready=False, physics=None)
+            self.bridge.value['source'] = {'scene_sha':'a'*64,
+                'origin':'manifest_world_xml','observed':False}
+            self.assertEqual(workflow.tick()['status'], 'reset_pending')
+            self.assertEqual(workflow.data['operation']['request_id'], request_id)
+            self.assertEqual([call[0] for call in self.bridge.calls], ['start', 'reset'])
+            self.bridge.value['source']['scene_sha'] = 'b'*64
+            self.assertEqual(workflow.tick()['status'], 'unknown')
+            self.assertEqual([call[0] for call in self.bridge.calls], ['start', 'reset'])
+
     def test_lost_reset_receipt_and_restart_use_same_ack_id(self):
         self.bridge.lose.add('reset')
         with self.open() as workflow:

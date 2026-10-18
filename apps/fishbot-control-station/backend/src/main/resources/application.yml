@@ -15,6 +15,7 @@ station:
     telemetry-mode: ${STATION_TELEMETRY_MODE:rosbridge}
     offline-tick-ms: ${STATION_OFFLINE_TICK_MS:100}
     use-sim-time: ${STATION_USE_SIM_TIME:false}
+    legacy-motion-writes-enabled: ${STATION_LEGACY_MOTION_WRITES_ENABLED:false}
   rosbridge:
     control:
       host: ${CONTROL_ROSBRIDGE_HOST:127.0.0.1}

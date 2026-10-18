@@ -1,0 +1,19 @@
+# Official ros-teleop/twist_mux 4.5.0, configured without source modifications.
+# https://github.com/ros-teleop/twist_mux/tree/4.5.0
+twist_mux:
+  ros__parameters:
+    use_stamped: true
+    topics:
+      navigation:
+        topic: /cmd_vel_nav
+        timeout: 0.25
+        priority: 10
+      manual:
+        topic: /cmd_vel_manual
+        timeout: 0.25
+        priority: 100
+    locks:
+      navigation_owner:
+        topic: /manual/nav_lock
+        timeout: 0.25
+        priority: 50

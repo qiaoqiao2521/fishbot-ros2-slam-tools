@@ -11,12 +11,19 @@ import static org.mockito.Mockito.when;
 import org.junit.jupiter.api.Test;
 
 import com.fishbot.station.config.SafetyProperties;
+import com.fishbot.station.config.StationRuntimeProperties;
 import com.fishbot.station.domain.ControlCommandRequest;
 
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 class ControlServiceTest {
+    private StationRuntimeProperties legacyProperties() {
+        StationRuntimeProperties properties = new StationRuntimeProperties();
+        properties.setLegacyMotionWritesEnabled(true);
+        return properties;
+    }
+
 
     @Test
     void clampsVelocitiesAndInvokesRosTopic() {
@@ -29,7 +36,7 @@ class ControlServiceTest {
         OfflineTelemetryService offlineTelemetryService = mock(OfflineTelemetryService.class);
         when(rosTopicService.publishCmdVel(anyDouble(), anyDouble(), anyString(), anyLong())).thenReturn(Mono.empty());
 
-        ControlService controlService = new ControlService(safety, rosTopicService, diagnosticsService, offlineTelemetryService);
+        ControlService controlService = new ControlService(safety, rosTopicService, diagnosticsService, offlineTelemetryService, legacyProperties());
         ControlCommandRequest request = new ControlCommandRequest();
         request.setLinearX(2.0);
         request.setAngularZ(-1.0);

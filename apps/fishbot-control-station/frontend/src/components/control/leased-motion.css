@@ -1,0 +1,8 @@
+.leased-motion { outline-offset: 4px; }
+.leased-motion button { touch-action: none; }
+.leased-keyboard { display: flex; align-items: center; gap: .45rem; margin-top: .7rem; font-size: .8rem; }
+.leased-motion .station-control-settings label { display: grid; gap: .5rem; font-size: .85rem; }
+.leased-motion .station-control-settings output { font-variant-numeric: tabular-nums; color: #1d4ed8; }
+.leased-evidence { display: flex; flex-wrap: wrap; gap: .5rem 1rem; border-top: 1px solid #dbe5f0; padding: .7rem 0; font-size: .8rem; }
+.leased-error { color: #b42318; overflow-wrap: anywhere; }
+.leased-motion details p { overflow-wrap: anywhere; }

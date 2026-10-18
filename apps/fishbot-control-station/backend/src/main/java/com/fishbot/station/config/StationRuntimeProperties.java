@@ -8,6 +8,11 @@ public class StationRuntimeProperties {
     private String telemetryMode = "rosbridge";
     private long offlineTickMs = 100;
     private boolean useSimTime;
+    private boolean legacyMotionWritesEnabled;
+
+    public boolean isLegacyMotionWritesEnabled() { return legacyMotionWritesEnabled; }
+
+    public void setLegacyMotionWritesEnabled(boolean enabled) { legacyMotionWritesEnabled = enabled; }
 
     public boolean isUseSimTime() { return useSimTime; }
 

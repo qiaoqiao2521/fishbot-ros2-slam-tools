@@ -2,18 +2,26 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SimulationPage } from '@/components/simulation/simulation-page'
+import type { SimulationObjectPoseEdit, SimulationObjectSelection } from '@/components/simulation/simulation-properties'
 import { goalDraftIdentity } from '@/lib/simulation-errors'
 import type { SimulationGoalIssue, SimulationState } from '@/lib/simulation'
 import type { MapZone, MissionRun } from '@/lib/simulation-workspace'
 import { emptyRulesEditor, rulesReducer } from '@/lib/simulation-workspace'
 
 const fixture = vi.hoisted(() => ({ routeWrite: 'idle', seedDraft: false, draftConsumed: false,
+  ownerReads: 0, act: vi.fn(),
+  selectedObject: null as SimulationObjectSelection | null,
+  applyObject: null as ((edit: SimulationObjectPoseEdit) => string | null) | null,
+  draftUpdates: vi.fn(), ruleDispatch: vi.fn(),
   cacheValidation: 'validated', cacheConflict: false, cacheMode: 'persistent_atomic', connectionError: null as string | null,
   attemptedDraft: null as string | null, goalIssue: null as SimulationGoalIssue | null, zones: [] as MapZone[], revision: 2,
   home: { x: 0, y: 0, yaw: 0 }, mission: null as SimulationState['mission'] | null, runs: null as MissionRun[] | null }))
 vi.mock('react', async (original) => {
   const actual = await original<typeof import('react')>()
   return { ...actual, useState: (initial: unknown) => {
+    if (initial && typeof initial === 'object' && 'kind' in initial && initial.kind === 'scene' && fixture.selectedObject) {
+      return actual.useState(fixture.selectedObject)
+    }
     if (initial === null && fixture.attemptedDraft && !fixture.draftConsumed) {
       fixture.draftConsumed = true
       return actual.useState(fixture.attemptedDraft)
@@ -21,21 +29,28 @@ vi.mock('react', async (original) => {
     return actual.useState(initial)
   } }
 })
+vi.mock('@/components/simulation/simulation-properties', async (original) => {
+  const actual = await original<typeof import('@/components/simulation/simulation-properties')>()
+  return { ...actual, SimulationProperties: (props: Parameters<typeof actual.SimulationProperties>[0]) => {
+    fixture.applyObject = props.onApply ?? null
+    return <actual.SimulationProperties {...props} />
+  } }
+})
 
 vi.mock('@/hooks/use-simulation', () => ({
-  useSimulation: () => ({
+  useSimulation: () => { fixture.ownerReads++; return ({
     state: { mode: 'mujoco', domain: 93, ready: true, reason: '就绪', pose: null, truth: null,
       path: [], mission: fixture.mission ?? { id: null, status: 'idle', current_index: 0, waypoints: [], return_home: false, message: '等待巡逻任务' },
       obstacle: { state: 'parked', x: null, y: null, size: 0.36 }, home: fixture.home },
     map: { map_id: 'map-a', width: 4, height: 4, resolution: 1, origin: [0, 0, 0], data: new Array(16).fill(0) },
-    connectionError: fixture.connectionError, mapError: null, actionError: fixture.goalIssue ? 'rejected' : null, goalIssue: fixture.goalIssue, pending: null, missionRequestUnknown: false, act: vi.fn(),
-  }),
+    connectionError: fixture.connectionError, mapError: null, actionError: fixture.goalIssue ? 'rejected' : null, goalIssue: fixture.goalIssue, pending: null, missionRequestUnknown: false, act: fixture.act,
+  }) },
 }))
 vi.mock('@/hooks/use-patrol-draft-cache', () => ({
   usePatrolDraftCache: () => ({ draft: { waypoints: fixture.seedDraft ? [{ x: 1, y: 1, yaw: 0 }] : [], returnHome: true, routeName: '' },
     loaded: true, loading: false, saving: false, revisionId: '00000000-0000-4000-8000-000000000001', mode: fixture.cacheMode,
     validation: fixture.cacheValidation, validationToken: 'token', conflict: fixture.cacheConflict, message: '草稿已保留',
-    setDraft: vi.fn(), confirmValidated: vi.fn(() => true), reloadCache: vi.fn() }),
+    setDraft: fixture.draftUpdates, confirmValidated: vi.fn(() => true), reloadCache: vi.fn() }),
 }))
 vi.mock('@/hooks/use-rviz', () => ({
   useRviz: () => ({ status: { available: true, running: false, domain: 107, message: '可打开' },
@@ -45,7 +60,7 @@ vi.mock('@/hooks/use-simulation-workspace', () => ({
   useSimulationWorkspace: () => ({
     editor: rulesReducer(emptyRulesEditor(), { type: 'received', value: { map_id: 'map-a', revision: fixture.revision,
       zones: fixture.zones, apply_state: 'applied', message: '已确认' } }),
-    dispatch: vi.fn(), rulesError: null, routes: [], routesError: null,
+    dispatch: fixture.ruleDispatch, rulesError: null, routes: [], routesError: null,
     runs: fixture.runs ?? [{ id: 'interrupted-run', status: 'unknown', map_id: 'map-a', rules_revision: 1,
       message: '桥接重启，旧任务实际终态未知；不会恢复或重发', stop_reason: '扫描断流' }],
     runsError: null, routeWrite: fixture.routeWrite, routeMessage: '', refreshing: false,
@@ -56,7 +71,9 @@ vi.mock('@/hooks/use-simulation-workspace', () => ({
 afterEach(() => { fixture.routeWrite = 'idle'; fixture.seedDraft = false; fixture.draftConsumed = false;
   fixture.cacheValidation = 'validated'; fixture.cacheConflict = false; fixture.cacheMode = 'persistent_atomic'; fixture.connectionError = null;
   fixture.attemptedDraft = null; fixture.goalIssue = null; fixture.zones = []; fixture.revision = 2;
-  fixture.home = { x: 0, y: 0, yaw: 0 }; fixture.mission = null; fixture.runs = null; vi.restoreAllMocks() })
+  fixture.home = { x: 0, y: 0, yaw: 0 }; fixture.mission = null; fixture.runs = null;
+  fixture.ownerReads = 0; fixture.act.mockClear(); fixture.selectedObject = null; fixture.applyObject = null;
+  fixture.draftUpdates.mockClear(); fixture.ruleDispatch.mockClear(); vi.restoreAllMocks() })
 
 const issue: SimulationGoalIssue = { kind: 'map_rule', target: 'waypoint', waypoint_index: 1,
   point: { x: 1, y: 1, yaw: 0 }, rule_id: 'wall-a', rule_kind: 'wall', rule_index: 1,
@@ -64,7 +81,86 @@ const issue: SimulationGoalIssue = { kind: 'map_rule', target: 'waypoint', waypo
   map_id: 'map-a', rules_revision: 2 }
 const wall: MapZone = { id: 'wall-a', kind: 'wall', points: [{ x: 0, y: 0 }, { x: 1, y: 0 }], width: 0.02 }
 
+describe('selected object draft commands', () => {
+  const scope = JSON.stringify({ generation: 'map-a', revision: 2 })
+  const source = { x: 1, y: 1, yaw: 0 }
+  const identity = goalDraftIdentity([source], true)
+  const edit: SimulationObjectPoseEdit = { kind: 'waypoint', index: 0, draftIdentity: identity, source,
+    pose: { x: 2, y: 1, yaw: .4 }, scope }
+
+  it('commits the selected waypoint to the existing draft owner without dispatching movement', () => {
+    fixture.seedDraft = true; fixture.selectedObject = { kind: 'waypoint', index: 0, draftIdentity: identity }
+    renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(fixture.applyObject!(edit)).toBeNull()
+    expect(fixture.draftUpdates).toHaveBeenCalledExactlyOnceWith({ waypoints: [{ x: 2, y: 1, yaw: .4 }], returnHome: true, routeName: '' })
+    expect(fixture.act).not.toHaveBeenCalled()
+    expect(fixture.ruleDispatch).not.toHaveBeenCalled()
+  })
+
+  it('refuses a different object, stale scope, stale draft and invalid coordinates without updating anything', () => {
+    fixture.seedDraft = true; fixture.selectedObject = { kind: 'waypoint', index: 0, draftIdentity: identity }
+    renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    for (const invalid of [{ ...edit, scope: 'old-map' }, { ...edit, index: 1 }, { ...edit, draftIdentity: 'old-draft' },
+      { ...edit, pose: { x: NaN, y: 1, yaw: 0 } }, { ...edit, pose: { x: 4, y: 1, yaw: 0 } }]) {
+      expect(fixture.applyObject!(invalid)).toBeTruthy()
+    }
+    expect(fixture.applyObject!({ kind: 'zone', id: wall.id, source: wall, pose: { x: 2, y: 2, yaw: 0 }, scope })).toContain('选中规则')
+    expect(fixture.draftUpdates).not.toHaveBeenCalled(); expect(fixture.ruleDispatch).not.toHaveBeenCalled()
+    expect(fixture.act).not.toHaveBeenCalled()
+  })
+
+  it('uses the original rule reducer transaction and does not auto-save the moved wall', () => {
+    fixture.zones = [wall]; fixture.selectedObject = { kind: 'zone', id: wall.id }
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('data-selected-zone="wall-a"')
+    expect(fixture.applyObject!({ kind: 'zone', id: wall.id, source: wall, pose: { x: 2, y: 2, yaw: Math.PI / 2 }, scope })).toBeNull()
+    expect(fixture.ruleDispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'replace', id: wall.id, expected: wall }))
+    expect(fixture.draftUpdates).not.toHaveBeenCalled(); expect(fixture.act).not.toHaveBeenCalled()
+  })
+
+  it('keeps active or disconnected rule editing locked even if a retained form invokes its callback', () => {
+    fixture.zones = [wall]; fixture.selectedObject = { kind: 'zone', id: wall.id }; fixture.connectionError = '断开'
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(html).toContain('type="submit" disabled=""')
+    expect(fixture.applyObject!({ kind: 'zone', id: wall.id, source: wall, pose: { x: 2, y: 2, yaw: 0 }, scope })).toContain('不允许修改')
+    expect(fixture.ruleDispatch).not.toHaveBeenCalled(); expect(fixture.act).not.toHaveBeenCalled()
+    fixture.connectionError = null
+    fixture.seedDraft = true; fixture.selectedObject = { kind: 'waypoint', index: 0, draftIdentity: identity }
+    fixture.mission = { id: 'active', status: 'running', current_index: 0, waypoints: [source], return_home: true, message: '' }
+    renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    expect(fixture.applyObject!(edit)).toContain('不允许修改航点')
+    expect(fixture.draftUpdates).not.toHaveBeenCalled(); expect(fixture.act).not.toHaveBeenCalled()
+  })
+})
+
 describe('simulation historical task record presentation', () => {
+  it('places exactly one start and cancel group in the toolbar alongside four separate slots', () => {
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)
+    const heading = html.slice(html.indexOf('workspace-heading'), html.indexOf('</header>'))
+    expect(heading).toContain('开始巡逻')
+    expect(heading).toContain('取消任务')
+    expect(html.match(/开始巡逻<\/button>/g)).toHaveLength(1)
+    expect(html.match(/取消任务<\/button>/g)).toHaveLength(1)
+    expect(html).toContain('aria-label="场景画布"')
+    expect(html).toContain('id="simulation-panel-objects"')
+    expect(html).toContain('id="simulation-panel-properties"')
+    expect(html).toContain('id="simulation-panel-task"')
+    expect(fixture.act).not.toHaveBeenCalled()
+  })
+
+  it('keeps the business owner and original task receipt when the workspace is inactive', () => {
+    fixture.mission = { id: 'same-native-task', status: 'canceling', dispatch_state: 'unavailable', current_index: 0,
+      waypoints: [], return_home: false, message: '等待原UUID终态' }
+    const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} active={false} />)
+    expect(fixture.ownerReads).toBe(1)
+    expect(html).toContain('data-workspace="simulation" hidden=""')
+    expect(fixture.mission.id).toBe('same-native-task')
+    expect(html).toContain('原任务保留')
+    expect(html).toContain('等待原UUID终态')
+    expect(html).not.toContain('simulation-map-frame')
+    expect(fixture.act).not.toHaveBeenCalled()
+  })
+
   it('keeps stale-rule drafts visible but requires an explicit review before start', () => {
     fixture.seedDraft = true; fixture.cacheValidation = 'stale'
     const html = renderToStaticMarkup(<SimulationPage onBack={() => {}} />)

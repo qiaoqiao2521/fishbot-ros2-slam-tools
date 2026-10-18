@@ -1,0 +1,44 @@
+[
+  {
+    "package": "libacl1-dev",
+    "version": "2.3.2-1build1.1",
+    "sha256": "c9711e29621acc8abb01a337d147e38288f950c75e3f761dbdbbfc634d4a7bdf",
+    "file": "libacl1-dev_2.3.2-1build1.1_amd64.deb"
+  },
+  {
+    "package": "libattr1-dev",
+    "version": "1:2.5.2-1ubuntu0.1",
+    "sha256": "8b8617c8cfb142dbee1fc32f3a1df555341a7115b9560edfec4476b4bd8c178f",
+    "file": "libattr1-dev_1%3a2.5.2-1ubuntu0.1_amd64.deb"
+  },
+  {
+    "package": "ros-jazzy-cyclonedds",
+    "version": "0.10.5-1noble.20260225.142613",
+    "sha256": "d6a34a96a1cf2900f6b8c884d583df92bad88ffaa359e2788697f4d614112f47",
+    "file": "ros-jazzy-cyclonedds_0.10.5-1noble.20260225.142613_amd64.deb"
+  },
+  {
+    "package": "ros-jazzy-iceoryx-binding-c",
+    "version": "2.0.6-1noble.20260225.140829",
+    "sha256": "2c9559c485470c2decd27f7f89fa91f007de90e0b81bba12c1c552e5b32c2ccb",
+    "file": "ros-jazzy-iceoryx-binding-c_2.0.6-1noble.20260225.140829_amd64.deb"
+  },
+  {
+    "package": "ros-jazzy-iceoryx-hoofs",
+    "version": "2.0.6-1noble.20260225.055330",
+    "sha256": "b38948b370b5263477e839181cda41fac6e2887b618b5a785f196701289e60e2",
+    "file": "ros-jazzy-iceoryx-hoofs_2.0.6-1noble.20260225.055330_amd64.deb"
+  },
+  {
+    "package": "ros-jazzy-iceoryx-posh",
+    "version": "2.0.6-1noble.20260225.135341",
+    "sha256": "2a89f4969959f43af4db7ad5eed22381f14ff6f2fa237f1909651d60fd5814b5",
+    "file": "ros-jazzy-iceoryx-posh_2.0.6-1noble.20260225.135341_amd64.deb"
+  },
+  {
+    "package": "ros-jazzy-rmw-cyclonedds-cpp",
+    "version": "2.2.4-1noble.20260911.095700",
+    "sha256": "2692ed901c4cf21d1e422e3f6ebcc95707265883252e173daf4f4ac443a7f51f",
+    "file": "ros-jazzy-rmw-cyclonedds-cpp_2.2.4-1noble.20260911.095700_amd64.deb"
+  }
+]

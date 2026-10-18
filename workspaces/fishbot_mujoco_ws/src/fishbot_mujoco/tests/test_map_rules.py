@@ -166,13 +166,25 @@ class GeometryTests(unittest.TestCase):
             costmap['data'][marked] = value
             self.assertFalse(costmap_matches_mask(costmap, mask)[0])
 
+    def test_empty_current_and_previous_masks_have_no_cells_to_confirm_or_clear(self):
+        source = grid()
+        source['origin'][2] = .37
+        mask = build_mask(source, [])
+        costmap = copy.deepcopy(source)
+        for value in (0, 254, 255):
+            costmap['data'] = [value]*len(costmap['data'])
+            for previous in (None, copy.deepcopy(mask)):
+                self.assertEqual(costmap_matches_mask(costmap, mask, previous, source),
+                                 (True, 0, 0))
+
     def test_deleted_rule_must_clear_on_free_source_cells(self):
         source = grid()
         previous = build_mask(source, [rectangle()])
         cleared = build_mask(source, [])
         stale = copy.deepcopy(previous)
-        stale['data'] = [254 if v else 0 for v in previous['data']]
-        self.assertFalse(costmap_matches_mask(stale, cleared, previous, source)[0])
+        for value in (254, 255):
+            stale['data'] = [value if v else 0 for v in previous['data']]
+            self.assertFalse(costmap_matches_mask(stale, cleared, previous, source)[0])
         stale['data'] = [0]*len(stale['data'])
         ok, _marked, removed = costmap_matches_mask(stale, cleared, previous, source)
         self.assertTrue(ok)

@@ -7,11 +7,78 @@ paths through position actuators while the target remains a free body.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import math
 from pathlib import Path
+import time
 import xml.etree.ElementTree as ET
 
 from cooperation_scene import frozen_car_geoms, source_modules
+
+
+def query_approach(manifest, q6, car_pose, *, check, timeout_s=30.):
+    """One pure planning process; the caller retains action ownership and hold.
+
+    Each query uses the original planner's first seed, without global RNG resets.
+    Poll the existing owner's check while waiting. Cancel/timeout closes the owned
+    query before returning; the child never creates ROS nodes or moves live data.
+    """
+    import os
+    import subprocess
+    import sys
+    import tempfile
+    import uuid
+    if not math.isfinite(timeout_s) or not 0 < timeout_s <= 30.:
+        raise ValueError('Approach query requires a wall budget up to 30 seconds')
+    identity = str(uuid.uuid4()); started = time.monotonic(); process = None
+    payload = {'query_id': identity, 'manifest': manifest,
+               'q6': [float(v) for v in q6], 'car_pose': [float(v) for v in car_pose]}
+    encoded = json.dumps(payload, allow_nan=False)
+    if len(encoded.encode()) > 1024*1024:
+        raise ValueError('Approach query exceeds one MiB')
+    with tempfile.TemporaryDirectory(prefix='fishbot-approach-') as folder:
+        request, response = Path(folder)/'request.json', Path(folder)/'response.json'
+        request.write_text(encoded)
+        try:
+            check()
+            process = subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()),
+                '--query-approach', str(request), str(response)], stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            while process.poll() is None:
+                check()
+                if time.monotonic()-started >= timeout_s:
+                    raise TimeoutError('Approach planning exceeded its wall budget')
+                time.sleep(.02)
+            check()
+            if time.monotonic()-started >= timeout_s:
+                raise TimeoutError('Approach planning exceeded its wall budget')
+            if not response.is_file() or response.stat().st_size > 1024*1024:
+                raise RuntimeError('Approach query returned no bounded result')
+            result = json.loads(response.read_text())
+            if result.get('query_id') != identity:
+                raise RuntimeError('Approach query identity mismatch')
+            if process.returncode or result.get('error'):
+                raise RuntimeError('Approach query failed: '+str(result.get('error', process.returncode)))
+            plan = result['plan']
+            if (not isinstance(plan, dict) or plan.get('planning', {}).get('status') != 'solved'
+                    or not isinstance(plan.get('segments'), list) or len(plan['segments']) != 5):
+                raise RuntimeError('Malformed approach query result')
+            plan['planning']['execution'] = {'mode': 'one_owned_query_process',
+                'query_id': identity,
+                'input_sha256': hashlib.sha256(json.dumps(
+                    {key: value for key, value in payload.items() if key != 'query_id'},
+                    sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest(),
+                'child_pid': process.pid, 'caller_pid': os.getpid(), 'child_exited': True,
+                'elapsed_wall_s': time.monotonic()-started, 'wall_budget_s': timeout_s,
+                'seed_scope': 'first_plan_of_each_query_process', 'shortcut_applied': False}
+            return plan
+        finally:
+            if process is not None and process.poll() is None:
+                process.terminate()
+                try: process.wait(timeout=2.)
+                except subprocess.TimeoutExpired:
+                    process.kill(); process.wait(timeout=2.)
 
 
 class ArmPlanner:
@@ -142,3 +209,23 @@ class ArmPlanner:
 
     def evaluate(self, q6):
         return self.open_checker.evaluate(self._q6(q6), require_fixed_gripper=False)
+
+
+def _query_main():
+    import sys
+    if len(sys.argv) != 4 or sys.argv[1] != '--query-approach':
+        raise SystemExit('Use the bounded query adapter from the existing owner')
+    request, response = map(Path, sys.argv[2:])
+    payload = json.loads(request.read_text())
+    result = {'query_id': payload['query_id']}
+    try:
+        planner = ArmPlanner(payload['manifest'], car_pose=payload['car_pose'])
+        result['plan'] = planner.prepare_approach(payload['q6'], seed=0)
+    except Exception as error:
+        result['error'] = str(error)[:2000]
+    response.write_text(json.dumps(result, allow_nan=False))
+    raise SystemExit(1 if 'error' in result else 0)
+
+
+if __name__ == '__main__':
+    _query_main()

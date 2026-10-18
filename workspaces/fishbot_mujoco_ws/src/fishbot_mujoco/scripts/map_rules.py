@@ -203,6 +203,10 @@ def costmap_matches_mask(costmap, mask, previous=None, source_grid=None):
     only where the static source map is known free; live obstacles can keep the
     result ambiguous, in which case the caller must retain 'published'.
     """
+    if 100 not in mask['data'] and (previous is None or 100 not in previous['data']):
+        # Caller validation still owns metadata/frame/source freshness. With no
+        # current or removed keepout cells, no coordinate lookup can add evidence.
+        return True, 0, 0
     marked = cleared = 0
     for row in range(costmap['height']):
         for col in range(costmap['width']):

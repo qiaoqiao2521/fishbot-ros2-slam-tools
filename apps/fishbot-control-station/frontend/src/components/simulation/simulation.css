@@ -207,3 +207,96 @@
   .simulation-map-stage { min-height: 220px; }
   .simulation-waypoint-edit button { min-width: 32px; min-height: 42px; }
 }
+
+/* The shared surface owns layout. These rules describe patrol content inside its slots. */
+.simulation-page.simulation-workspace { max-width: none; margin: 0; padding: 0; }
+.simulation-workspace-toolbar, .simulation-toolbar-context { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.simulation-workspace .simulation-mission-actions { display: flex; gap: 6px; }
+.simulation-workspace-toolbar .simulation-button { min-height: 36px; padding: 7px 11px; font-size: 12px; border-radius: 6px; }
+.simulation-workspace .simulation-readiness { margin: 0; padding: 7px 10px; border: 0; border-radius: 5px; font-size: 12px; }
+.simulation-workspace-notices { display: grid; gap: 5px; max-height: 112px; overflow-y: auto; }
+.simulation-workspace .simulation-error { margin: 0; padding: 7px 10px; font-size: 12px; }
+.simulation-workspace .simulation-error summary { cursor: pointer; overflow-wrap: anywhere; }
+.simulation-compact-error { margin: 0; padding: 5px 10px; color: #9f352f; font-size: 12px; }
+.simulation-workspace .simulation-scene { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; }
+.simulation-workspace .simulation-scene-header { padding: 10px 12px 3px; gap: 8px; }
+.simulation-workspace .simulation-scene-header h2 { font-size: 13px; }
+.simulation-workspace .simulation-scene-header p { font-size: 11px; }
+.simulation-workspace .simulation-map-tools { display: flex; flex-wrap: wrap; padding: 7px 12px; gap: 5px; }
+.simulation-workspace .simulation-map-tools .simulation-button { min-height: 32px; padding: 5px 9px; border-radius: 5px; font-size: 11px; }
+.simulation-workspace .simulation-map-tools .simulation-tool-selected { background: #e6efff; border-color: #a5bff1; color: #234d91; }
+.simulation-workspace .simulation-rule-strip { padding: 0 12px 5px; }
+.simulation-workspace .simulation-rule-strip button { min-height: 30px; padding: 4px 8px; border-radius: 5px; font-size: 11px; }
+.simulation-workspace .simulation-map-guidance { flex-shrink: 0; margin: 0; padding: 0 12px 6px; min-height: 0; font-size: 11px; }
+.simulation-workspace .simulation-map-stage { flex: 1; min-height: 160px; padding: 10px; container-type: size; overflow: hidden; background: #eef2f7; }
+.simulation-workspace .simulation-map-frame { width: min(100%, calc(100cqh * var(--simulation-map-ratio))); max-width: none; }
+.simulation-workspace .simulation-map-footer { flex-shrink: 0; padding: 7px 12px 3px; gap: 8px; flex-wrap: wrap; font-size: 10px; }
+.simulation-workspace .simulation-legend { gap: 6px 12px; }
+.simulation-workspace .simulation-position { flex-shrink: 0; padding: 3px 12px; font-size: 11px; gap: 5px 14px; }
+.simulation-workspace .simulation-keyboard-note { padding: 3px 12px 7px; font-size: 10px; }
+.simulation-object-sections, .simulation-task-sections { display: grid; align-content: start; gap: 0; min-width: 0; }
+.simulation-workspace .simulation-task { border: 0; border-radius: 0; padding: 12px; border-bottom: 1px solid hsl(var(--border)); }
+.simulation-workspace h2 { font-size: 13px; }
+.simulation-workspace .simulation-panel-note { margin: 7px 0; font-size: 11px; }
+.simulation-workspace .simulation-rule-list, .simulation-workspace .simulation-template-list, .simulation-workspace .simulation-waypoints { max-height: none; }
+.simulation-workspace .simulation-rule-list .simulation-object-select,
+.simulation-workspace .simulation-waypoints .simulation-object-select,
+.simulation-workspace .simulation-template-list .simulation-object-select { display: grid; flex: 1; min-width: 0; align-content: center; justify-items: start; gap: 3px; min-height: 36px; padding: 6px 7px; border: 0; border-radius: 4px; background: transparent; color: inherit; text-align: left; }
+.simulation-workspace .simulation-object-select:hover { background: #edf3fc; }
+.simulation-workspace .simulation-object-select[aria-pressed="true"] { background: #e6efff; box-shadow: inset 2px 0 #3865ae; }
+.simulation-workspace .simulation-object-select:focus-visible { outline: 2px solid #3865ae; outline-offset: 1px; }
+.simulation-workspace .simulation-object-select > span { font-size: 11px; font-variant-numeric: tabular-nums; }
+.simulation-workspace .simulation-waypoints li { gap: 5px; padding: 5px 0; }
+.simulation-workspace .simulation-draft-history { margin-top: 8px; gap: 5px; }
+.simulation-workspace .simulation-draft-history button, .simulation-workspace .simulation-resource-actions button { min-height: 32px; padding: 5px 7px; border-radius: 5px; font-size: 11px; }
+.simulation-workspace .simulation-resource-actions { gap: 5px; }
+.simulation-workspace .simulation-draft-cache { flex-direction: column; align-items: stretch; margin: 0; border: 0; border-radius: 0; padding: 12px; }
+.simulation-workspace .simulation-draft-cache-actions button { width: 100%; min-height: 34px; font-size: 11px; }
+.simulation-workspace .simulation-collision-report, .simulation-workspace .simulation-obstacle { margin: 0; padding: 12px; border-radius: 0; }
+.simulation-workspace .simulation-rviz-status, .simulation-workspace .simulation-boundary { margin: 0; padding: 8px 12px; font-size: 11px; }
+.simulation-properties { padding: 12px; }
+.simulation-properties-list { display: grid; gap: 0; margin: 10px 0; font-size: 12px; }
+.simulation-properties-list > div { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px; padding: 8px 0; border-bottom: 1px solid #e8edf3; }
+.simulation-properties-list dt { color: hsl(var(--muted-foreground)); }
+.simulation-properties-list dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.simulation-property-vertices h3 { margin: 14px 0 7px; font-size: 12px; font-weight: 600; }
+.simulation-property-vertices ol { list-style: none; margin: 0; padding: 0; }
+.simulation-property-vertices li { display: flex; gap: 12px; padding: 6px 0; font-size: 11px; font-variant-numeric: tabular-nums; }
+.simulation-property-vertices li > span:first-child { color: hsl(var(--muted-foreground)); }
+.simulation-property-rejection { padding: 10px; background: #fff2ed; border-left: 2px solid #ba5842; font-size: 12px; }
+.simulation-property-rejection p { margin: 6px 0; line-height: 1.6; }
+.simulation-property-rejection small { font-size: 11px; }
+@media (max-width: 1049px) {
+  .simulation-workspace .simulation-scene { min-height: 0; overflow-y: auto; }
+  .simulation-workspace .simulation-map-stage { flex-shrink: 0; min-height: 180px; }
+  .simulation-workspace .simulation-readiness { flex-wrap: wrap; }
+  .simulation-workspace .simulation-readiness > span:last-child { flex-basis: auto; padding-left: 0; }
+}
+
+/* Keep the map continuous; its tools occupy small overlay strips, not full-height rows. */
+.simulation-workspace .simulation-scene { position: relative; overflow: hidden; }
+.simulation-workspace .simulation-scene-header { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; }
+.simulation-workspace .simulation-map-stage { position: absolute; inset: 0; min-height: 0; }
+.simulation-workspace .simulation-map-tools { position: absolute; z-index: 2; left: 8px; top: 8px; padding: 0; }
+.simulation-workspace .simulation-rule-strip { position: absolute; z-index: 2; left: 8px; right: 8px; top: 46px; padding: 0; display: flex; flex-direction: row; align-items: center; gap: 6px; }
+.simulation-workspace .simulation-rule-strip > span { background: #ffffffed; border-radius: 4px; padding: 4px 6px; font-size: 10px; }
+.simulation-workspace .simulation-rule-strip > div { display: flex; width: auto; margin-left: auto; gap: 4px; }
+.simulation-workspace .simulation-map-guidance { position: absolute; z-index: 2; top: 82px; left: 8px; right: 8px; padding: 4px 6px; width: fit-content; max-width: calc(100% - 16px); background: #fffffff0; border-radius: 4px; pointer-events: none; font-size: 10px; }
+.simulation-workspace .simulation-map-footer { position: absolute; z-index: 2; bottom: 8px; left: 8px; right: 8px; padding: 4px 6px; background: #fffffff0; border-radius: 4px; pointer-events: none; }
+.simulation-workspace .simulation-position { position: absolute; z-index: 2; bottom: 47px; left: 8px; padding: 3px 6px; background: #fffffff0; border-radius: 4px; pointer-events: none; }
+.simulation-workspace .simulation-keyboard-note { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; }
+@media(max-width:1049px) {
+ .simulation-workspace .simulation-scene { overflow: hidden; }
+ .simulation-workspace .simulation-map-stage { min-height: 0; }
+ .simulation-workspace .simulation-map-tools .simulation-button { min-height: 32px; }
+ .simulation-workspace .simulation-rule-strip button { min-height: 30px; }
+ .simulation-workspace .simulation-map-footer .simulation-legend { display: none; }
+ .simulation-workspace .simulation-position { bottom: 33px; font-size: 10px; }
+}
+
+.simulation-object-form { margin-top:14px; padding-top:12px; border-top:1px solid #e1e7ef; }
+.simulation-object-edit-fields { display:grid; gap:10px; }
+.simulation-object-edit-fields label { display:grid; gap:5px; color:#64748b; font-size:12px; }
+.simulation-object-edit-fields input { width:100%; min-width:0; padding:7px 9px; border:1px solid #cad6e5; border-radius:5px; background:white; color:#1d2736; }
+.simulation-object-edit-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.simulation-object-edit-error { padding:8px; margin-top:8px; background:#fff0eb; color:#973e30; font-size:12px; overflow-wrap:anywhere; }

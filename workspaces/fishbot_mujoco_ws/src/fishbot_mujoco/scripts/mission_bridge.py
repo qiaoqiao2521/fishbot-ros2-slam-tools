@@ -3,10 +3,12 @@
 
 HTTP workers never spin or mutate the ROS node. Their short-lived requests enter
 one executor-owned queue; navigation uses FollowWaypoints or a bounded native
-BackUp action, with no velocity publisher and no ground-truth TF.
+BackUp action. The explicit manual profile publishes only upstream of the
+existing final guard; navigation has no velocity publisher or ground-truth TF.
 """
 import argparse
 import copy
+import gc
 import json
 import math
 import os
@@ -16,15 +18,18 @@ import sys
 import threading
 import time
 import uuid
+from collections import deque
 from concurrent.futures import Future, TimeoutError as FutureTimeout
+from contextlib import contextmanager
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path as FilePath
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped, TwistStamped
+from diagnostic_msgs.msg import DiagnosticArray
 from lifecycle_msgs.srv import GetState
 from mujoco_ros2_control_msgs.msg import FreeJointStateArray
 from nav2_msgs.action import BackUp, FollowWaypoints
@@ -34,11 +39,13 @@ from nav2_msgs.srv import GetCostmap
 from nav_msgs.msg import OccupancyGrid, Odometry, Path
 from rclpy.action import ActionClient
 from rclpy.clock import Clock, ClockType
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import (DurabilityPolicy, QoSProfile, ReliabilityPolicy,
                       qos_profile_sensor_data)
 from rclpy.signals import SignalHandlerOptions
+from rclpy.time_source import TimeSource
 from rcl_interfaces.srv import GetParameters
 from rcl_interfaces.msg import ParameterType
 from rosgraph_msgs.msg import Clock as ClockMessage
@@ -52,13 +59,20 @@ from map_rules import (MapRulesError, MapRulesStore, build_mask, costmap_matches
 from rviz_desktop import RvizDesktop, RvizDesktopError
 
 try:
-    from fishbot_runtime import INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability
+    from fishbot_runtime import (INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability,
+                                 DomainExecutionLock, ExecutionOwnerBusy)
+
 except ModuleNotFoundError as error:
     if error.name != 'fishbot_runtime':
         raise
     # Source checkout fallback. Colcon installs this helper beside the script.
     sys.path.insert(0, str(FilePath(__file__).resolve().parents[5] / 'tools'))
-    from fishbot_runtime import INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability
+    from fishbot_runtime import (INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability,
+                                 DomainExecutionLock, ExecutionOwnerBusy)
+
+from fishbot_manual_lease import ManualError, ManualHTTPAdapter, idle_timing_evidence
+from fishbot_manual_profile import claim_manual_boot, manual_capability
+from fishbot_manual_ros import attach_manual
 
 
 ROBOT_RADIUS = 0.13
@@ -327,15 +341,103 @@ class Operation:
     body: dict
     deadline: float
     future: Future
+    enqueued_steady: float | None = None
+
+
+class ManualGCTiming:
+    """Fixed-size GC observations; the collector never takes the owner lock."""
+    def __init__(self):
+        # Starts, stops, pending GC2, last GC2, replaced completed/pending, errors.
+        self.state = ((0, 0, 0), (0, 0, 0), None, None, 0, 0, 0)
+        self.callback = self.observe
+        self.registered = False
+
+    def start(self):
+        if not self.registered:
+            try:
+                gc.callbacks.append(self.callback)
+                self.registered = True
+            except Exception:
+                self.state = (*self.state[:6], self.state[6]+1)
+
+    def close(self):
+        if self.registered:
+            self.registered = False
+            try:
+                gc.callbacks.remove(self.callback)
+            except ValueError:
+                pass  # Another owner already removed this exact callback.
+            except Exception:
+                self.state = (*self.state[:6], self.state[6]+1)
+
+    def observe(self, phase, info):
+        if not self.registered:
+            return
+        state = self.state
+        try:
+            generation = info['generation']
+            if (type(generation) is not int or generation not in (0, 1, 2)
+                    or phase not in ('start', 'stop')):
+                raise ValueError('Malformed GC observation')
+            starts, stops, pending, last, replaced, incomplete, errors = state
+            if phase == 'start':
+                starts = tuple(count+(index == generation) for index, count in enumerate(starts))
+                if generation == 2:
+                    incomplete += pending is not None
+                    pending = (starts[2], time.monotonic(), time.thread_time(),
+                               threading.get_native_id())
+            else:
+                stops = tuple(count+(index == generation) for index, count in enumerate(stops))
+                if generation == 2:
+                    collected, uncollectable = info['collected'], info['uncollectable']
+                    if (pending is None or type(collected) is not int or collected < 0
+                            or type(uncollectable) is not int or uncollectable < 0):
+                        raise ValueError('Unpaired or malformed GC completion')
+                    end = (time.monotonic(), time.thread_time(), threading.get_native_id())
+                    last = (*pending, *end, collected, uncollectable)
+                    replaced += state[3] is not None
+                    pending = None
+            self.state = (starts, stops, pending, last, replaced, incomplete, errors)
+        except Exception:
+            # Do not raise from a collector callback or perform diagnostic I/O.
+            self.state = (*state[:6], state[6]+1)
+
+    @staticmethod
+    def snapshot(state):
+        starts, stops, pending, last, replaced, incomplete, errors = state
+        return {'scope': 'runtime_process', 'generation_starts': starts,
+            'generation_stops': stops, 'pending_gc2': pending, 'last_gc2': last,
+            'gc2_tuple_fields': ['sequence', 'start_steady', 'start_thread_cpu_s',
+                'start_thread_id', 'end_steady', 'end_thread_cpu_s', 'end_thread_id',
+                'collected', 'uncollectable'],
+            'completed_gc2_overwritten': replaced, 'pending_gc2_overwritten': incomplete,
+            'rejected_observations': errors, 'last_only': True,
+            'generation_0_1_duration_observed': False}
 
 
 class MissionBridge(Node):
-    def __init__(self, domain=93):
+    def __init__(self, domain=93, control_profile='baseline'):
+        # Reuse cooperation's precise native TimeSource routing. Business
+        # callbacks and the manual timer remain in the default owner group.
+        self.clock_callbacks = (MutuallyExclusiveCallbackGroup()
+                                if control_profile == 'passage_manual' else None)
         super().__init__('fishbot_mission_bridge', parameter_overrides=[
             rclpy.parameter.Parameter('use_sim_time', value=True)])
         self.lock = threading.RLock()
         self.domain = domain
+        self.control_profile = control_profile
+        self.manual_adapter = None
+        self.manual_guard = None
+        self.manual_guard_directory = None
+        self.manual_guard_trigger_cache = None
+        self.stopping = False
+        self.dispatch_wakeup = None
         self.operations = queue.Queue(maxsize=32)
+        self.manual_slow_timing_count = 0
+        self.manual_timing_epoch = None
+        self.manual_timing_events = deque()
+        self.manual_timing_bytes = 0
+        self.manual_timing_evicted = self.manual_timing_rejected = 0
         self.mission = MissionRecord()
         self.grid = None
         self.samples = {}
@@ -420,16 +522,155 @@ class MissionBridge(Node):
         # Jazzy CM publishes a volatile change event, not a timestamped heartbeat.
         self.create_subscription(CollisionMonitorState, '/collision_monitor_state',
                                  self.on_collision_monitor, 10)
+        if control_profile == 'passage_manual':
+            self.create_subscription(DiagnosticArray, '/fishbot_command_guard/diagnostics',
+                                     self.on_manual_guard, 1)
         self.create_subscription(OccupancyGrid, '/map', self.on_map,
                                  QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                                             durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.ready = False
         self.reason = '等待仿真时钟、传感器与 Nav2 启动'
+        if control_profile == 'passage_manual':
+            self.dispatch_wakeup = self.create_guard_condition(self.drain_operations)
         # A steady timer keeps HTTP/readiness alive even when simulation time pauses.
         self.create_timer(0.1, self.tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
+        MissionBridge.start_manual_timing(self)
+
+    def start_manual_timing(self):
+        self.manual_gc_timing = None
+        if self.control_profile == 'passage_manual':
+            self.manual_gc_timing = ManualGCTiming()
+            self.manual_gc_timing.start()
+
+    def close_manual_timing(self):
+        observer = getattr(self, 'manual_gc_timing', None)
+        if observer is not None:
+            observer.close()
+
+    def destroy_node(self):
+        MissionBridge.close_manual_timing(self)
+        return super().destroy_node()
+
+    def create_subscription(self, msg_type, topic, callback, qos_profile, *,
+                            callback_group=None, event_callbacks=None,
+                            qos_overriding_options=None, raw=False,
+                            content_filter_options=None):
+        if (msg_type is ClockMessage and topic == '/clock' and callback_group is None
+                and getattr(self, 'clock_callbacks', None) is not None
+                and isinstance(getattr(callback, '__self__', None), TimeSource)
+                and getattr(callback, '__func__', None) is TimeSource.clock_callback):
+            callback_group = self.clock_callbacks
+        return super().create_subscription(msg_type, topic, callback, qos_profile,
+            callback_group=callback_group, event_callbacks=event_callbacks,
+            qos_overriding_options=qos_overriding_options, raw=raw,
+            content_filter_options=content_filter_options)
 
     def sample(self, name, stamp):
         self.samples[name] = (stamp_seconds(stamp), time.monotonic())
+
+    def on_manual_guard(self, msg):
+        with self.lock:
+            self.manual_guard = (time.monotonic(), msg)
+
+    def manual_guard_available(self):
+        if not self.manual_guard:
+            return False
+        received, msg = self.manual_guard
+        source_age = self.get_clock().now().nanoseconds/1e9-stamp_seconds(msg.header.stamp)
+        if not 0 <= time.monotonic()-received <= 1. or not -.05 <= source_age <= 1.:
+            return False
+        status = next((item for item in msg.status if item.name == 'fishbot_command_guard'), None)
+        values = {item.key: item.value for item in status.values} if status else {}
+        # A new press may re-arm an ordinary release/expiry stop. Hard ownership,
+        # sensor and recorder latches retain the original explicit reset boundary.
+        if status and status.message.startswith('latched:') and status.message != 'latched: operator/task stop':
+            manual = self.manual_adapter
+            lease = manual.controller.current_lease if manual else None
+            ordinary_expiry = (status.message in {
+                'latched: command: receive timeout', 'latched: command: source stamp too old',
+                'latched: command: malformed: command source timestamp outside freshness limit'}
+                and lease and lease['state'] in {'released', 'expired'}
+                and lease['guard_stop_acknowledged'] is True)
+            if not ordinary_expiry:
+                return False
+        return values.get('execute', '').lower() == 'true' and values.get('profile') == 'fishbot_passage'
+
+    def manual_native_owner(self):
+        mission = self.mission.value
+        return {'task_id': mission.get('id'),
+                'status': 'succeeded' if mission['status'] == 'completed' else mission['status'],
+                'native_goal_id': mission.get('native_goal_id'),
+                'native_status': mission.get('native_status'),
+                'cleanup_state': mission.get('cleanup_state'),
+                'cancel_acknowledged': self.cancel_sent}
+
+    def manual_idle_guard_fault(self):
+        """Read the current guard's own bounded incident; never infer idle motion."""
+        if not self.manual_guard:
+            return None
+        received, msg = self.manual_guard
+        source_age = self.get_clock().now().nanoseconds/1e9-stamp_seconds(msg.header.stamp)
+        if not 0 <= time.monotonic()-received <= 1. or not -.05 <= source_age <= 1.:
+            return {'eligible': False, 'reason': 'guard_diagnostics_stale'}
+        status = next((item for item in msg.status if item.name == 'fishbot_command_guard'), None)
+        if status is None:
+            return {'eligible': False, 'reason': 'guard_diagnostics_missing'}
+        if not status.message.startswith('latched: '):
+            return None
+        reason = status.message[len('latched: '):]
+        values = {item.key: item.value for item in status.values}
+        result = {'trigger_id': values.get('last_trigger', ''), 'reason': reason, 'eligible': False}
+        if (values.get('execute', '').lower() != 'true' or values.get('profile') != 'fishbot_passage'
+                or values.get('timing_profile') != 'strict'):
+            return result
+        try:
+            path = FilePath(result['trigger_id']).resolve(strict=True)
+            directory = getattr(self, 'manual_guard_directory', None)
+            if (directory is None or path.parent != FilePath(directory).resolve()
+                    or not path.name.startswith('trigger-') or path.suffix != '.json'
+                    or not path.is_file() or path.stat().st_size > 2_000_000):
+                return result
+            cached = getattr(self, 'manual_guard_trigger_cache', None)
+            if cached is None or cached[0] != str(path):
+                cached = self.manual_guard_trigger_cache = (str(path), json.loads(path.read_text()))
+            document = cached[1]
+            if not isinstance(document, dict):
+                return result
+            wall, ros_now = time.monotonic(), self.get_clock().now().nanoseconds/1e9
+            samples = getattr(self, 'samples', {})
+            fresh = all(name in samples and 0 <= wall-samples[name][1] <= limit
+                        and -.05 <= ros_now-samples[name][0] <= limit
+                        for name, limit in (('odom', .25), ('scan', .5), ('truth', .25), ('clock', .25)))
+            result.update(trigger_id=str(path), steady_time=document.get('steady_time'),
+                          eligible=bool(fresh and idle_timing_evidence(document, reason)))
+        except (OSError, ValueError, TypeError):
+            pass  # Missing/malformed evidence keeps this fault ineligible.
+        return result
+
+    def manual_cancel_native(self, task_id):
+        if self.mission.value.get('id') != task_id:
+            raise ManualError('stop_target_changed')
+        self.request_cancel('人工停止请求，取消原目标',
+                            retry=self.mission.value.get('cleanup_state') == 'unresolved')
+
+    def initialize_manual(self):
+        self.manual_adapter = attach_manual(self, self.runtime_instance_id,
+            self.rules_store.map_id or None, native_owner=self.manual_native_owner,
+            cancel_native=self.manual_cancel_native, guard_available=self.manual_guard_available,
+            idle_guard_fault=self.manual_idle_guard_fault,
+            enabled=self.control_profile == 'passage_manual')
+
+    def manual_request(self, method, path, body=None):
+        if not self.manual_adapter:
+            return 503, {'accepted': False, 'outcome': 'rejected', 'error': 'manual_profile_not_enabled'}
+        adapter = self.manual_adapter
+        routes = ManualHTTPAdapter(adapter.controller)
+        if method == 'GET':
+            status, result = routes.get(path, adapter.now())
+            if path == '/sim-api/manual/status':
+                result = {**result, 'timing_diagnostics': MissionBridge.manual_timing_snapshot(self)}
+            return status, result
+        return routes.post(path, body, adapter.now())
 
     def on_collision_monitor(self, msg):
         with self.lock:
@@ -516,6 +757,10 @@ class MissionBridge(Node):
                                   'linear_speed': math.hypot(t.linear.x, t.linear.y),
                                   'angular_speed': abs(t.angular.z)}
                     self.sample('truth', msg.header.stamp)
+                    manual = getattr(self, 'manual_adapter', None)
+                    if manual:
+                        manual.controller.observe_truth(stamp_seconds(msg.header.stamp),
+                            self.truth['linear_speed'], self.truth['angular_speed'], manual.now())
                     wall = time.monotonic()
                     if wall-self.last_trace >= 0.2:
                         self.trajectory.append({'x': p.x, 'y': p.y})
@@ -566,6 +811,9 @@ class MissionBridge(Node):
                 # terminal result; never write it into the new map document.
                 self.rules_store = MapRulesStore(self.rules_store.directory)
             if self.rules_store.bind(self.grid):
+                manual = getattr(self, 'manual_adapter', None)
+                if manual:
+                    manual.controller.bind_map(self.rules_store.map_id, manual.now())
                 if self.mission.value['status'] in ACTIVE_STATUSES:
                     self.request_cancel('地图版本变更，取消旧地图任务')
                 self.publish_rules()
@@ -582,7 +830,8 @@ class MissionBridge(Node):
                             current_index=unknown['current_index'], dispatch_state='unavailable',
                             cleanup_state='unresolved', stop_reason=unknown.get('stop_reason'),
                             message=unknown['message'])
-                        for key in ('operation', 'native_action', 'distance_m', 'native_goal_id'):
+                        for key in ('operation', 'native_action', 'distance_m', 'native_goal_id',
+                                    'runtime_instance_id'):
                             if key in unknown:
                                 self.mission.value[key] = copy.deepcopy(unknown[key])
 
@@ -772,7 +1021,7 @@ class MissionBridge(Node):
         check['mismatch_last'] = wall
 
     def rules_result(self, name, kind, epoch, future):
-        with self.lock:
+        with self.lock, MissionBridge.manual_timing(self, 'rules_result.'+name+'.'+kind):
             check = self.rules_checks[name]
             if check[f'{kind}_future'] is not future:
                 return
@@ -863,7 +1112,7 @@ class MissionBridge(Node):
         self.rules_run.update({key: copy.deepcopy(mission.get(key)) for key in
                                ('status', 'current_index', 'dispatch_state', 'cleanup_state',
                                 'stop_reason', 'message', 'missed_waypoints')})
-        for key in ('operation', 'native_action', 'distance_m', 'native_goal_id',
+        for key in ('operation', 'native_action', 'distance_m', 'native_goal_id', 'runtime_instance_id',
                     'native_status', 'native_error_code', 'distance_traveled_m'):
             if key in mission:
                 self.rules_run[key] = copy.deepcopy(mission[key])
@@ -943,6 +1192,8 @@ class MissionBridge(Node):
             self.lifecycle[name]['future'] = None
 
     def evaluate_ready(self, wall):
+        if getattr(self, 'manual_adapter', None) and not self.manual_guard_available():
+            return False, '最终命令守卫尚未就绪或仍有故障'
         ros_now = self.get_clock().now().nanoseconds*1e-9
         if not self.clock_fresh(ros_now, wall):
             return False, '仿真时钟未就绪或已暂停'
@@ -1032,22 +1283,173 @@ class MissionBridge(Node):
                 'collision_monitor': self.collision_monitor_state(wall)})
 
     def enqueue(self, kind, body):
-        op = Operation(kind, body, time.monotonic()+2.0, Future())
+        if getattr(self, 'stopping', False):
+            raise APIError('Bridge is shutting down; request was not admitted', 503, outcome='rejected')
+        enqueued = time.monotonic()
+        op = Operation(kind, body, enqueued+2.0, Future(), enqueued)
+        op.future.dispatch_timing = {'enqueued_steady': enqueued}
         try:
             self.operations.put_nowait(op)
         except queue.Full:
             raise APIError('Bridge request queue is full', 503, outcome='rejected')
+        op.future.dispatch_timing['put_done_steady'] = time.monotonic()
+        MissionBridge.wake_operations(self, op.future.dispatch_timing)
         return op.future
 
-    def tick(self):
+    def record_manual_slow_timing(self, stage, started, ended, **context):
+        """Bounded observations only; never change a stamp or admission decision."""
+        if (getattr(self, 'control_profile', None) != 'passage_manual'
+                or ended-started < .05):
+            return
         with self.lock:
+            lease = MissionBridge.sync_manual_timing_scope(self)
+            if lease is None:
+                return
+            self.manual_slow_timing_count += 1
+            event = {'stage': stage, 'start_steady': started, 'end_steady': ended,
+                     'duration_s': ended-started,
+                     'runtime_instance_id': getattr(self, 'runtime_instance_id', None),
+                     'event': self.manual_slow_timing_count, 'event_limit': 32,
+                     'event_scope': self.manual_timing_epoch, **context}
+            event.update(lease_id=lease['lease_id'], accepted_sequence=lease['last_sequence'])
+            try:
+                encoded = json.dumps(event, allow_nan=False, separators=(',', ':'))
+                size = len(encoded.encode('utf-8'))
+                if size > 8192:
+                    raise ValueError('Timing record exceeds its memory budget')
+                detached = json.loads(encoded)
+                while self.manual_timing_events and (len(self.manual_timing_events) >= 32
+                        or self.manual_timing_bytes+size > 8192):
+                    _, removed = self.manual_timing_events.popleft()
+                    self.manual_timing_bytes -= removed
+                    self.manual_timing_evicted += 1
+                self.manual_timing_events.append((detached, size))
+                self.manual_timing_bytes += size
+            except Exception:
+                # Diagnostic context cannot replace the original control result.
+                self.manual_timing_rejected += 1
+
+    def sync_manual_timing_scope(self):
+        manual = getattr(self, 'manual_adapter', None)
+        lease = manual.controller.current_lease if manual else None
+        scope = lease['lease_id'] if lease else None
+        if (not hasattr(self, 'manual_timing_events')
+                or getattr(self, 'manual_timing_epoch', None) != scope):
+            self.manual_timing_epoch, self.manual_slow_timing_count = scope, 0
+            self.manual_timing_events = deque()
+            self.manual_timing_bytes = self.manual_timing_evicted = self.manual_timing_rejected = 0
+        return lease
+
+    def manual_timing_snapshot(self):
+        with self.lock:
+            MissionBridge.sync_manual_timing_scope(self)
+            return {'scope_lease_id': self.manual_timing_epoch, 'event_limit': 32,
+                'byte_limit': 8192, 'retained_bytes': self.manual_timing_bytes,
+                'slow_threshold_s': .05, 'observed_events': self.manual_slow_timing_count,
+                'evicted_events': self.manual_timing_evicted,
+                'rejected_events': self.manual_timing_rejected, 'logging_enabled': False,
+                'events': [copy.deepcopy(event) for event, _ in self.manual_timing_events]}
+
+    @contextmanager
+    def manual_timing(self, stage):
+        if getattr(self, 'control_profile', None) != 'passage_manual':
+            yield
+            return
+        try:
+            started = time.monotonic()
+            cpu_started = time.thread_time()
+            thread_id = threading.get_native_id()
+            observer = getattr(self, 'manual_gc_timing', None)
+            gc_before = observer.state if observer is not None else None
+        except Exception:
+            started = None
+            self.manual_timing_rejected = getattr(self, 'manual_timing_rejected', 0)+1
+        try:
+            yield
+        finally:
+            if started is not None:
+                try:
+                    ended, cpu_ended = time.monotonic(), time.thread_time()
+                    gc_after = observer.state if observer is not None else None
+                    if ended-started >= .05:
+                        context = {'thread_id': thread_id,
+                            'end_thread_id': threading.get_native_id(),
+                            'thread_cpu_start_s': cpu_started, 'thread_cpu_end_s': cpu_ended,
+                            'thread_cpu_duration_s': cpu_ended-cpu_started}
+                        if observer is not None:
+                            context.update(gc_before=ManualGCTiming.snapshot(gc_before),
+                                           gc_after=ManualGCTiming.snapshot(gc_after))
+                        MissionBridge.record_manual_slow_timing(self, stage, started, ended, **context)
+                except Exception:
+                    # Instrumentation must preserve the original callback result.
+                    self.manual_timing_rejected = getattr(self, 'manual_timing_rejected', 0)+1
+
+    def finish_operation(self, op, result):
+        timing = getattr(op.future, 'dispatch_timing', {})
+        timing['completed_steady'] = time.monotonic()
+        op.future.dispatch_timing = timing
+        op.future.set_result(result)
+
+    def wake_operations(self, timing=None):
+        wakeup = getattr(self, 'dispatch_wakeup', None)
+        if wakeup is not None and not getattr(self, 'stopping', False):
+            if timing is not None:
+                timing['trigger_before_steady'] = time.monotonic()
+            try:
+                wakeup.trigger()
+            except RuntimeError as error:
+                # The original bounded 10 Hz drain remains a fallback. A wake
+                # failure cannot truthfully reject work already in its queue.
+                self.get_logger().warning('HTTP queue wake unavailable; periodic drain remains: '+str(error))
+            finally:
+                if timing is not None:
+                    timing['trigger_after_steady'] = time.monotonic()
+
+    def task_record(self, task_id, expected_map_id=None):
+        """Read one original task; persisted activity cannot prove current execution."""
+        validate_mission_id(task_id)
+        with self.lock:
+            current_instance = getattr(self, 'runtime_instance_id', None)
+            current = self.mission.value
+            record, source = None, None
+            if (current.get('id') == task_id and current_instance is not None
+                    and current.get('runtime_instance_id') == current_instance):
+                record, source = copy.deepcopy(current), 'current'
+            elif hasattr(self, 'rules_store'):
+                record = next((item for item in self.rules_store.runs()['runs']
+                               if item['id'] == task_id), None)
+                if record is not None:
+                    record, source = copy.deepcopy(record), 'persisted'
+            if record is None and current.get('id') == task_id:
+                record, source = copy.deepcopy(current), 'current'
+            if record is None:
+                raise APIError('task_not_found', 404)
+            if expected_map_id is not None and record.get('map_id') != expected_map_id:
+                raise APIError('task_map_mismatch', 409)
+            recorded_instance = record.get('runtime_instance_id')
+            if (record.get('status') not in {'succeeded', 'failed', 'canceled'}
+                    and (source == 'persisted' or recorded_instance != current_instance
+                         or current_instance is None)):
+                record.update(recorded_status=record.get('status'), status='unknown',
+                              reason='previous_runtime_execution_unconfirmed')
+            return {'task_id': task_id, 'source': source,
+                    'runtime_instance_id': recorded_instance,
+                    'current_runtime_instance_id': current_instance, 'mission': record}
+
+    def tick(self):
+        with self.lock, MissionBridge.manual_timing(self, 'tick'):
             wall = time.monotonic()
-            self.poll_lifecycle(wall)
-            self.poll_collision_monitor(wall)
+            with MissionBridge.manual_timing(self, 'tick.poll_lifecycle'):
+                self.poll_lifecycle(wall)
+            with MissionBridge.manual_timing(self, 'tick.poll_collision_monitor'):
+                self.poll_collision_monitor(wall)
             if hasattr(self, 'rules_store'):
-                self.synchronize_rules(wall)
-                self.poll_rules(wall)
-            self.ready, self.reason = self.evaluate_ready(wall)
+                with MissionBridge.manual_timing(self, 'tick.synchronize_rules'):
+                    self.synchronize_rules(wall)
+                with MissionBridge.manual_timing(self, 'tick.poll_rules'):
+                    self.poll_rules(wall)
+            with MissionBridge.manual_timing(self, 'tick.evaluate_ready'):
+                self.ready, self.reason = self.evaluate_ready(wall)
             if (self.mission.value['status'] == 'running' and not self.ready
                     and self.goal_sent_wall is not None and wall-self.goal_sent_wall > 1):
                 self.request_cancel(f'仿真未就绪：{self.reason}')
@@ -1065,6 +1467,24 @@ class MissionBridge(Node):
                     if not op.future.done():
                         op.future.set_result((504, {'error': 'Obstacle service response timed out; poll actual state'}))
                     self.pending_services.remove(pending)
+            MissionBridge.drain_operations(self, wall)
+            if hasattr(self, 'rules_store'):
+                with MissionBridge.manual_timing(self, 'tick.record_run'):
+                    self.record_run()
+
+    def drain_operations(self, wall=None):
+        """Drain the one existing FIFO on its mutually exclusive owner.
+
+        Native GuardCondition wakeups remove the 100 ms poll wait. The
+        original timer remains a fallback and preserves the four-op cap.
+        Shutdown leaves undispatched futures unknown rather than replaying.
+        """
+        entered = time.monotonic()
+        with self.lock:
+            if getattr(self, 'stopping', False):
+                return
+            wake_dispatch = wall is None
+            wall = time.monotonic() if wall is None else wall
             for _ in range(4):
                 try:
                     op = self.operations.get_nowait()
@@ -1072,28 +1492,36 @@ class MissionBridge(Node):
                     break
                 if not op.future.set_running_or_notify_cancel():
                     continue
+                timing = getattr(op.future, 'dispatch_timing', {})
+                timing.update(drain_entered_steady=entered, dequeued_steady=time.monotonic())
+                op.future.dispatch_timing = timing
                 if wall > op.deadline:
-                    op.future.set_result((408, {'error': 'Request expired before ROS dispatch',
-                                               'outcome': 'rejected'}))
+                    MissionBridge.finish_operation(self, op, (408, {'error': 'Request expired before ROS dispatch',
+                                               'outcome': 'rejected',
+                                               **({'accepted': False} if op.kind == 'manual' else {})}))
                     continue
                 try:
+                    if wake_dispatch and op.kind in ('mission', 'obstacle'):
+                        # The old timer evaluated readiness immediately before
+                        # dispatch; a wakeup must retain that admission gate.
+                        self.ready, self.reason = self.evaluate_ready(wall)
                     if op.kind == 'mission':
                         self.start_mission(op.body)
-                        op.future.set_result((202, self.state()))
+                        MissionBridge.finish_operation(self, op, (202, self.state()))
                     elif op.kind == 'cancel':
                         validate_cancel(op.body, self.mission.value['id'])
                         if self.mission.value['status'] not in ACTIVE_STATUSES:
                             raise APIError('There is no active mission to cancel', 409)
                         self.request_cancel('用户请求取消',
                             retry=self.mission.value.get('cleanup_state') == 'unresolved')
-                        op.future.set_result((202, self.state()))
+                        MissionBridge.finish_operation(self, op, (202, self.state()))
                     elif op.kind == 'obstacle':
                         self.request_obstacle(op)
                     elif op.kind == 'map-rules':
                         self.rules_store.update_rules(op.body,
                             active=self.mission.value['status'] in ACTIVE_STATUSES)
                         self.publish_rules()
-                        op.future.set_result((200, self.rules_state()))
+                        MissionBridge.finish_operation(self, op, (200, self.rules_state()))
                     elif op.kind == 'routes':
                         body = op.body
                         if not isinstance(body, dict):
@@ -1104,7 +1532,10 @@ class MissionBridge(Node):
                         points, _ = validate_mission({'waypoints': body.get('waypoints'),
                             'return_home': False, 'issued_at': time.time()}, self.grid)
                         body = {**body, 'waypoints': points, 'return_home': returning}
-                        op.future.set_result((200, self.rules_store.save_route(body)))
+                        MissionBridge.finish_operation(self, op, (200, self.rules_store.save_route(body)))
+                    elif op.kind == 'manual':
+                        result = self.manual_request('POST', op.body['path'], op.body['body'])
+                        MissionBridge.finish_operation(self, op, result)
                     else:
                         raise APIError('Unknown operation', 404)
                 except (APIError, MapRulesError) as error:
@@ -1113,12 +1544,12 @@ class MissionBridge(Node):
                         payload['outcome'] = error.outcome
                     if error.issue is not None:
                         payload['issue'] = error.issue
-                    op.future.set_result((error.status, payload))
+                    MissionBridge.finish_operation(self, op, (error.status, payload))
                 except Exception as error:
                     self.get_logger().error(f'HTTP operation failed: {error}')
-                    op.future.set_result((500, {'error': 'ROS operation failed'}))
-            if hasattr(self, 'rules_store'):
-                self.record_run()
+                    MissionBridge.finish_operation(self, op, (500, {'error': 'ROS operation failed'}))
+            if not self.operations.empty():
+                MissionBridge.wake_operations(self)
 
     def prepare_mission(self, body):
         """All errors here precede dispatch and are authoritative rejections."""
@@ -1162,13 +1593,19 @@ class MissionBridge(Node):
             raise
 
     def start_mission(self, body):
+        manual = getattr(self, 'manual_adapter', None)
+        if manual:
+            try:
+                manual.controller.require_native_admission(manual.now())
+            except ManualError as error:
+                raise APIError(error.code, error.status, outcome='rejected') from error
         prepared = MissionBridge.prepare_mission(self, body)
         points, return_home = prepared
         backup = body.get('operation') == 'backup'
         if backup:
             goal = BackUp.Goal()
             goal.target.x = -float(body['distance_m'])
-            goal.speed = .08
+            goal.speed = .03 if manual else .08
             timeout = float(body.get('timeout_s', 30.))
             goal.time_allowance.sec, goal.time_allowance.nanosec = divmod(round(timeout*1e9), 1_000_000_000)
             client = self.backup_client
@@ -1188,6 +1625,7 @@ class MissionBridge(Node):
         previous_mission = copy.deepcopy(self.mission.value)
         mission_id = self.mission.begin(points, return_home, prepared.start_pose,
                                         mission_id=body.get('mission_id'))
+        self.mission.value['runtime_instance_id'] = getattr(self, 'runtime_instance_id', None)
         if 'timeout_s' in body:
             self.mission.value['timeout_s'] = float(body['timeout_s'])
         if backup:
@@ -1197,6 +1635,7 @@ class MissionBridge(Node):
         if hasattr(self, 'rules_store'):
             self.rules_run_store = self.rules_store
             self.rules_run = {'id': mission_id, 'map_id': self.rules_store.map_id,
+                'runtime_instance_id': self.mission.value['runtime_instance_id'],
                 'rules_revision': self.rules_store.document['revision'], 'started_at': time.time(),
                 'finished_at': None, 'status': 'running', 'current_index': 0,
                 'waypoints': copy.deepcopy(points), 'return_home': return_home,
@@ -1228,6 +1667,8 @@ class MissionBridge(Node):
                                 or {key: prepared.start_pose[key] for key in ('x', 'y')})]
         self.path = []
         try:
+            if manual:
+                manual.controller.native_started(mission_id)
             self.goal_send_future = client.send_goal_async(
                 goal, feedback_callback=lambda msg: self.feedback(mission_id, msg))
         except Exception as error:
@@ -1442,9 +1883,14 @@ class LocalHTTPServer(ThreadingHTTPServer):
     def __init__(self, port, bridge, ui_port=5173):
         self.bridge = bridge
         self.runtime = RuntimeIdentity('mission', 'simulation', bridge.domain, [
-            capability('navigation', 'native_action', cancel=True, event_history='snapshot'),
+            {**capability('navigation', 'native_action', cancel=True, event_history='snapshot'),
+             'task_lookup': True},
             capability('map_edit', 'topic_publish', event_history='snapshot'),
+            manual_capability(),
         ])
+        bridge.runtime_instance_id = self.runtime.instance_id
+        if hasattr(bridge, 'initialize_manual'):
+            bridge.initialize_manual()
         self.rviz = RvizDesktop(bridge.domain)
         self.ui_ports = {5173, 5174, 5175, 5176, 5177, ui_port}
         super().__init__(('127.0.0.1', port), Handler)
@@ -1511,9 +1957,35 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path == '/sim-api/runtime':
-            self.reply(200, self.server.runtime.snapshot())
+            runtime = self.server.runtime.snapshot()
+            manual = getattr(self.server.bridge, 'manual_adapter', None)
+            if manual:
+                with self.server.bridge.lock:
+                    ready = manual.controller.map_id is not None and self.server.bridge.manual_guard_available()
+                    runtime['capabilities'] = [cap for cap in runtime['capabilities'] if cap['id'] != 'teleop']
+                    runtime['capabilities'].append(manual_capability(available=ready,
+                        reason=None if ready else 'manual_guard_or_map_unavailable'))
+            self.reply(200, runtime)
         elif path == '/sim-api/state':
             self.reply(200, self.server.bridge.state())
+        elif path.startswith('/sim-api/manual/'):
+            if urlsplit(self.path).query:
+                self.reply(400, {'accepted': False, 'outcome': 'rejected', 'error': 'manual_query_invalid'})
+            else:
+                with self.server.bridge.lock:
+                    status, result = self.server.bridge.manual_request('GET', path)
+                self.reply(status, result)
+        elif path.startswith('/sim-api/tasks/'):
+            try:
+                task_id = path[len('/sim-api/tasks/'):]
+                query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
+                if (set(query) - {'map_id'} or any(len(values) != 1 or not values[0]
+                                                 for values in query.values())):
+                    raise APIError('task_lookup_query_invalid')
+                result = self.server.bridge.task_record(task_id, query.get('map_id', [None])[0])
+                self.reply(200, result)
+            except (APIError, MapRulesError) as error:
+                self.reply(error.status, {'error': str(error)})
         elif path == '/sim-api/rviz':
             self.reply(200, self.server.rviz.status())
         elif path == '/sim-api/map':
@@ -1540,20 +2012,26 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(404, {'error': 'Unknown endpoint'})
 
     def do_POST(self):
+        received_steady, received_epoch_ms = time.monotonic(), time.time_ns()//1_000_000
         if not self.allowed():
             self.reply(403, {'error': 'Local browser origin required'})
             return
+        path = urlsplit(self.path).path
+        manual_path = path.startswith('/sim-api/manual/')
         if self.headers.get(INSTANCE_HEADER) is not None and not self.server.runtime.accepts(self.headers):
-            self.reply(409, RUNTIME_CHANGED)
+            self.reply(409, {**RUNTIME_CHANGED, **({'accepted': False} if manual_path else {})})
             return
         paths = {'/sim-api/mission': 'mission', '/sim-api/cancel': 'cancel',
                  '/sim-api/obstacle': 'obstacle', '/sim-api/map-rules': 'map-rules',
                  '/sim-api/routes': 'routes', '/sim-api/rviz': 'rviz'}
         kind = paths.get(urlsplit(self.path).path)
+        if path in {'/sim-api/manual/acquire', '/sim-api/manual/command', '/sim-api/manual/release',
+                    '/sim-api/manual/stop', '/sim-api/manual/reset'}:
+            kind = 'manual'
         if kind is None:
             self.reply(404, {'error': 'Unknown endpoint'})
             return
-        future = None
+        future, body, body_ready_steady = None, None, None
         try:
             if self.headers.get('Content-Type', '').split(';')[0].strip().lower() != 'application/json':
                 raise APIError('Content-Type must be application/json', 415)
@@ -1562,6 +2040,7 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < length <= maximum:
                 raise APIError(f'JSON body must be between 1 and {maximum} bytes', 413)
             body = json.loads(self.rfile.read(length))
+            body_ready_steady = time.monotonic()
             if not isinstance(body, dict):
                 raise APIError('JSON body must be an object')
             if kind == 'rviz':
@@ -1573,42 +2052,78 @@ class Handler(BaseHTTPRequestHandler):
                     raise APIError(str(error), error.status) from error
                 self.reply(status, result)
                 return
-            future = self.server.bridge.enqueue(kind, body)
+            future = self.server.bridge.enqueue(kind, {'path': path, 'body': body} if kind == 'manual' else body)
             status, result = future.result(timeout=3.0)
             self.reply(status, result)
         except FutureTimeout:
             if future is not None:
                 future.cancel()  # Prevent a queued request executing after the HTTP timeout.
-            self.reply(504, {'error': 'ROS bridge response timed out; poll actual state'})
+            self.reply(504, {'error': 'ROS bridge response timed out; poll actual state',
+                            **({'accepted': None, 'outcome': 'unknown'} if kind == 'manual' else {})})
         except APIError as error:
-            payload = {'error': str(error)}
+            payload = {'error': str(error), **({'accepted': False, 'outcome': 'rejected'} if kind == 'manual' else {})}
             if error.outcome is not None:
                 payload['outcome'] = error.outcome
             if error.issue is not None:
                 payload['issue'] = error.issue
             self.reply(error.status, payload)
         except (ValueError, UnicodeError, TimeoutError):
-            self.reply(400, {'error': 'Invalid or incomplete JSON body'})
+            self.reply(400, {'error': 'Invalid or incomplete JSON body',
+                            **({'accepted': False, 'outcome': 'rejected'} if kind == 'manual' else {})})
+        finally:
+            if kind == 'manual' and isinstance(body, dict):
+                replied = time.monotonic()
+                dispatch = getattr(future, 'dispatch_timing', None)
+                MissionBridge.record_manual_slow_timing(self.server.bridge, 'http.manual',
+                    received_steady, replied, path=path, session_id=body.get('session_id'),
+                    sequence=body.get('sequence'), issued_at_ms=body.get('issued_at_ms'),
+                    http_received_epoch_ms=received_epoch_ms,
+                    body_ready_steady=body_ready_steady, reply_returned_steady=replied,
+                    dispatch=dict(dispatch) if isinstance(dispatch, dict) else {})
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=9070)
     parser.add_argument('--ui-port', type=int, default=5173)
+    parser.add_argument('--control-profile', choices=('baseline', 'passage_manual'), default='baseline')
+    parser.add_argument('--manual-profile-receipt', default='')
     args, ros_args = parser.parse_known_args()
     if args.port < 1024 or args.port > 65535:
         raise SystemExit('HTTP port must be between 1024 and 65535')
     if args.ui_port < 1024 or args.ui_port > 65535:
         raise SystemExit('UI port must be between 1024 and 65535')
     domain = simulation_domain()
+    if args.control_profile == 'passage_manual':
+        try:
+            claim_manual_boot(args.manual_profile_receipt, domain)
+        except (OSError, ValueError, KeyError) as error:
+            raise SystemExit(str(error)) from None
+    try:
+        with DomainExecutionLock(domain, 'mission'):
+            run_server(args, ros_args, domain)
+    except ExecutionOwnerBusy as error:
+        raise SystemExit(str(error)) from None
+
+
+def run_server(args, ros_args, domain):
     # Keep ROS alive briefly on SIGINT/SIGTERM so an active action can be canceled.
     rclpy.init(args=ros_args, signal_handler_options=SignalHandlerOptions.NO)
     def stop(_signal, _frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, stop)
-    bridge = MissionBridge(domain=domain)
-    executor = SingleThreadedExecutor()
-    executor.add_node(bridge)
+    bridge = MissionBridge(domain=domain, control_profile=args.control_profile)
+    if args.control_profile == 'passage_manual':
+        bridge.manual_guard_directory = FilePath(args.manual_profile_receipt).resolve().parent/'command_guard'
+    try:
+        # All business callbacks already share one mutually exclusive owner.
+        # Reuse the baseline executor instead of a competing Python threadpool.
+        executor = SingleThreadedExecutor()
+        executor.add_node(bridge)
+    except BaseException:
+        # Constructor/add-node failures precede the normal server finally.
+        MissionBridge.close_manual_timing(bridge)
+        raise
     server = None
     try:
         server = LocalHTTPServer(args.port, bridge, ui_port=args.ui_port)
@@ -1618,14 +2133,24 @@ def main():
     except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
         pass
     finally:
+        MissionBridge.close_manual_timing(bridge)
+        manual = getattr(bridge, 'manual_adapter', None)
+        if rclpy.ok():
+            with bridge.lock:
+                bridge.stopping = True
+                if manual:
+                    manual.controller.shutdown(manual.now())
+                bridge.request_cancel('桥接正在关闭，取消任务')
         if server is not None:
             server.shutdown()
             server.server_close()
         if rclpy.ok():
-            with bridge.lock:
-                bridge.request_cancel('桥接正在关闭，取消任务')
             deadline = time.monotonic()+3
-            while bridge.mission.value['status'] in ACTIVE_STATUSES and time.monotonic() < deadline:
+            def unresolved():
+                return (bridge.mission.value['status'] in ACTIVE_STATUSES or manual and (
+                    not manual.controller.cleanup_ack
+                    or not manual.controller.quiet.snapshot(manual.now())['confirmed']))
+            while unresolved() and time.monotonic() < deadline:
                 executor.spin_once(timeout_sec=0.1)
         executor.shutdown()
         bridge.destroy_node()

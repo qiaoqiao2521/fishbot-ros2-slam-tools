@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { runtimeRegistry } from '@/lib/runtime-context'
+import { missionReceiptKey, recoveredTerminal, readMissionReceipt, receiptMatches, saveMissionReceipt, type MissionReceipt } from '@/lib/mission-receipt'
 
 import {
-  missionReceiptResolved, requestSimulation, simulationRequestRejected, SimulationRejectedRequest, validateSimulationMap, validateSimulationState,
-  type Pose, type SimulationGoalIssue, type SimulationMap, type SimulationState, type UnknownMissionReceipt,
+  SIMULATION_DOMAIN, requestSimulation, simulationRequestRejected, SimulationRejectedRequest, validateSimulationMap, validateSimulationState,
+  type SimulationGoalIssue, type SimulationMap, type SimulationState,
 } from '@/lib/simulation'
 
 export function useSimulation() {
@@ -12,8 +14,9 @@ export function useSimulation() {
   const [mapError, setMapError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [goalIssue, setGoalIssue] = useState<SimulationGoalIssue | null>(null)
+  const [recoveryMessage, setRecoveryMessage] = useState('')
   const [missionRequestUnknown, setMissionRequestUnknown] = useState(false)
-  const unknownMission = useRef<UnknownMissionReceipt | null>(null)
+  const unknownMission = useRef<MissionReceipt | null>(null)
   const stateRef = useRef<SimulationState | null>(null)
   const mapId = useRef<string | undefined>(undefined)
   stateRef.current = state
@@ -28,11 +31,16 @@ export function useSimulation() {
     if (!mounted.current || sequence < acceptedSequence.current) return
     acceptedSequence.current = sequence
     const validated = validateSimulationState(value)
-    if (unknownMission.current && missionReceiptResolved(unknownMission.current, validated)) {
+    if (unknownMission.current && receiptMatches(unknownMission.current, validated.domain, runtimeRegistry.getSnapshot().mission.descriptor?.instance_id ?? null, validated.mission.id)) {
       unknownMission.current = null
       setMissionRequestUnknown(false)
+      setRecoveryMessage('已按原任务 ID 核对当前导航状态。')
       setActionError(null)
       setGoalIssue(null)
+      // Keep the original receipt through an active task, including later refreshes.
+      if (['succeeded', 'failed', 'canceled'].includes(validated.mission.status)) {
+        try { sessionStorage.removeItem(missionReceiptKey(SIMULATION_DOMAIN)) } catch { /* Read-only evidence is safe to recheck. */ }
+      }
     }
     setState(validated)
     setConnectionError(null)
@@ -40,9 +48,14 @@ export function useSimulation() {
 
   useEffect(() => {
     mounted.current = true
+    try {
+      unknownMission.current = readMissionReceipt(sessionStorage, SIMULATION_DOMAIN)
+      if (unknownMission.current) { setMissionRequestUnknown(true); setActionError('正在核对刷新前的原任务；不会重发。') }
+    } catch (error) { setActionError(error instanceof Error ? error.message : '原任务缓存读取失败，请核对任务记录。') }
     let stopped = false
     let stateTimer: ReturnType<typeof setTimeout>
     let mapTimer: ReturnType<typeof setTimeout>
+    let lastLookup = 0
 
     async function pollState() {
       if (busy.current) {
@@ -56,6 +69,24 @@ export function useSimulation() {
       try {
         const value = await requestSimulation<SimulationState>('state', undefined, controller.signal)
         acceptState(value, sequence)
+        const receipt = unknownMission.current
+        if (receipt && Date.now() - lastLookup >= 2000 && !stopped) {
+          lastLookup = Date.now()
+          try {
+            const mapQuery = receipt.mapId === null ? '' : `?map_id=${encodeURIComponent(receipt.mapId)}`
+            const lookup = await requestSimulation<unknown>(`tasks/${receipt.missionId}${mapQuery}`, undefined, controller.signal)
+            const terminal = recoveredTerminal(receipt, lookup)
+            if (!stopped) setRecoveryMessage(terminal ?? '原任务记录尚无可确认终态，继续读取；未重发。')
+            if (!stopped && unknownMission.current === receipt && terminal) {
+              unknownMission.current = null
+              setMissionRequestUnknown(false)
+              setActionError(terminal)
+              try { sessionStorage.removeItem(missionReceiptKey(SIMULATION_DOMAIN)) } catch { /* Read-only evidence remains safe to recheck. */ }
+            }
+          } catch (error) {
+            if (!stopped) setRecoveryMessage(`原任务核对未完成：${error instanceof Error ? error.message : '查询失败'}；保留未知状态。`)
+          }
+        }
       } catch (error) {
         if (!stopped && sequence >= acceptedSequence.current) {
           setConnectionError(error instanceof Error && error.name !== 'AbortError'
@@ -112,22 +143,35 @@ export function useSimulation() {
     setActionError(null)
     setGoalIssue(null)
     const sequence = ++requestSequence.current
-    const previousMissionId = stateRef.current?.mission.id ?? null
+    const requestedId = action === 'mission' ? crypto.randomUUID() : null
+    const payload = action === 'mission' ? { ...body, mission_id: requestedId }
+      : action === 'cancel' && stateRef.current?.mission.id ? { mission_id: stateRef.current.mission.id, issued_at: Date.now() / 1000 } : body
     acceptedSequence.current = sequence
     const controller = new AbortController()
     controllers.current.add(controller)
     const timeout = setTimeout(() => controller.abort(), 5000)
+    let sent = false
     try {
-      const value = await requestSimulation<SimulationState>(action, body, controller.signal)
+      if (requestedId) {
+        const receipt: MissionReceipt = { version: 1, domain: SIMULATION_DOMAIN, missionId: requestedId, instanceId: runtimeRegistry.getSnapshot().mission.descriptor?.instance_id ?? null, mapId: mapId.current ?? null }
+        saveMissionReceipt(sessionStorage, receipt)
+        unknownMission.current = receipt
+      }
+      sent = true
+      const value = await requestSimulation<SimulationState>(action, payload, controller.signal)
       acceptState(value, sequence)
+      if (requestedId && unknownMission.current) { setMissionRequestUnknown(true); setActionError('派发回执未包含原任务 ID，正在核对；不会重发。') }
     } catch (error) {
       if (mounted.current) {
-        if (action === 'mission' && !simulationRequestRejected(error)) {
-          const requested = body as { waypoints?: Pose[]; return_home?: boolean }
-          unknownMission.current = { previousId: previousMissionId, waypoints: requested.waypoints?.map((point) => ({ ...point })) ?? [], returnHome: !!requested.return_home }
+        if (action === 'mission' && sent && !simulationRequestRejected(error)) {
           setMissionRequestUnknown(true)
           setActionError('派发回执未知，正在读取原任务状态；不能重复派发。')
         } else {
+          if (action === 'mission') {
+            unknownMission.current = null
+            setMissionRequestUnknown(false)
+            try { sessionStorage.removeItem(missionReceiptKey(SIMULATION_DOMAIN)) } catch { /* No action was sent or it was explicitly rejected. */ }
+          }
           if (action === 'mission' && error instanceof SimulationRejectedRequest) setGoalIssue(error.issue)
           setActionError(error instanceof Error && error.name !== 'AbortError'
             ? error.message : '请求超时，请查看当前任务状态。')
@@ -141,5 +185,5 @@ export function useSimulation() {
     }
   }
 
-  return { state, map, connectionError, mapError, actionError, goalIssue, pending, missionRequestUnknown, act }
+  return { state, map, recoveryMessage, connectionError, mapError, actionError, goalIssue, pending, missionRequestUnknown, act }
 }

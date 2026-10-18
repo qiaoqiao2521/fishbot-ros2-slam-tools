@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import { SimulationMapView } from '@/components/simulation/simulation-map'
+import { WorkspaceVisibilityContext } from '@/components/workspace/workspace-visibility'
 import type { SimulationGoalIssue, SimulationMap, SimulationState } from '@/lib/simulation'
 import type { MapZone } from '@/lib/simulation-workspace'
 
@@ -13,6 +14,20 @@ const issue: SimulationGoalIssue = { kind: 'map_rule', target: 'waypoint', waypo
   required_clearance_m: 0.13, blocking_point: { x: -1, y: 0 }, map_id: 'map-a', rules_revision: 2 }
 
 describe('simulation software constraint overlay', () => {
+  it('highlights the exact selected rule or waypoint without changing the source geometry', () => {
+    const selectedZone = renderToStaticMarkup(<SimulationMapView map={map} state={null} points={[]} editable onSelect={() => {}} zones={[wall]}
+      selectedObject={{ kind: 'zone', id: wall.id }} />)
+    expect(selectedZone).toContain('data-selected-zone="wall-a"')
+    expect(selectedZone).toContain('points="10,20 30,20"')
+    expect(selectedZone).toContain('属性修改只更新草稿')
+    expect(selectedZone).toContain('pointer-events="none"')
+    const selectedPoint = renderToStaticMarkup(<SimulationMapView map={map} state={null} points={[]} editable onSelect={() => {}}
+      selectedObject={{ kind: 'waypoint', index: 2, point: { x: 1, y: -1, yaw: .4 } }} />)
+    expect(selectedPoint).toContain('data-selected-waypoint="3"')
+    expect(selectedPoint).toContain('cx="30" cy="30"')
+    expect(selectedPoint).toContain('已选巡逻点 3（1.000, -1.000）米')
+    expect(wall.points).toEqual([{ x: -1, y: 0 }, { x: 1, y: 0 }])
+  })
   it('shows the attempted red segment and the exact snapped point without replacing native navigation data', () => {
     const html = renderToStaticMarkup(<SimulationMapView map={map} state={null} points={[{ x: -.2, y: 0, yaw: 0 }]} editable onSelect={() => {}}
       selectionPreview={{ start: { x: -1, y: 0 }, selection: { kind: 'snapped', requested: { x: 1, y: 0 }, point: { x: -.2, y: 0 }, reason: '保留安全间隔' } }}
@@ -54,6 +69,16 @@ describe('simulation software constraint overlay', () => {
     expect(html).toContain('当前观察模式')
     expect(html).toContain('tabindex="-1"')
     expect(html).not.toContain('simulation-map-editable')
+  })
+
+  it('makes a hidden canvas noninteractive while keeping original world coordinates', () => {
+    const html = renderToStaticMarkup(<WorkspaceVisibilityContext.Provider value={false}>
+      <SimulationMapView map={map} state={null} points={[]} editable onSelect={() => {}} zones={[wall]} savedZones={[wall]} />
+    </WorkspaceVisibilityContext.Provider>)
+    expect(html).toContain('data-workspace-visible="false"')
+    expect(html).toContain('tabindex="-1"')
+    expect(html).not.toContain('simulation-map-editable')
+    expect(html).toContain('points="10,20 30,20"')
   })
 
   it('marks the authoritative rejected coordinate and footprint even if another draft is on the map', () => {

@@ -292,6 +292,47 @@ describe('explicit voice operations and original command receipts', () => {
     expect(commandId).toHaveBeenCalledTimes(2)
     expect(controller.getSnapshot().receipt?.unknown).toBe(true)
   })
+  it('recovers the original unknown STOP as canceled native 5 on explicit connect without rewriting its receipt or replaying', async () => {
+    const native = '17c93304fd0c4816b7137304519a2aa2'
+    const running = { id: 'motion-a', task_id: 'motion-a', owner: 'voice:session-a',
+      status: 'running', native_goal_id: native, native_status: 2 }
+    let current: VoiceState = state
+    const posted: Array<{ command_id: string; session_id: string; sequence: number; issued_at_ms: number; text: string }> = []
+    const fetcher = vi.fn<typeof fetch>(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url).endsWith('/state')) return response(current)
+      const body = JSON.parse(init!.body as string)
+      if (String(url).endsWith('/preview')) return response(body.text === '停止' ? { ...parse, intent: 'STOP', parameters: {} } : parse)
+      posted.push(body)
+      return response({ command_id: body.command_id, session_id: 'session-a', task_id: 'motion-a', task: running,
+        accepted: body.text === '停止' ? null : true, status: body.text === '停止' ? 'task_unknown' : 'running' })
+    })
+    const commandId = vi.fn().mockReturnValueOnce('motion-a').mockReturnValueOnce('stop-a')
+    const controller = new VoiceController({ fetcher, now: () => 10000, commandId })
+    await controller.connect(); controller.setText('前进40厘米'); await controller.preview(); await controller.execute()
+    current = { ...state, ready: false, task: running,
+      latest_command: { command_id: 'motion-a', session_id: 'session-a', accepted: true, status: 'running', task_id: 'motion-a' } }
+    await controller.connect(); controller.setText('停止'); await controller.preview(); await controller.execute()
+    const original = controller.getSnapshot().receipt!
+    expect(original).toMatchObject({ unknown: true, command: { command_id: 'stop-a', accepted: null, status: 'task_unknown' } })
+    const canceled = { ...running, status: 'canceled', native_status: 5 }
+    current = { ...state, task: canceled, latest_command: { command_id: 'stop-a', session_id: 'session-a',
+      accepted: null, status: 'canceled', task_id: 'motion-a', task: canceled,
+      ...{ receipt_status: 'task_unknown' } } }
+    const beforeRefresh = fetcher.mock.calls.length
+    await controller.connect()
+    expect(fetcher.mock.calls.slice(beforeRefresh).map(([url]) => url)).toEqual(['/voice-api/state'])
+    expect(controller.getSnapshot().receipt).toMatchObject({ unknown: false, envelope: original.envelope,
+      command: { command_id: 'stop-a', session_id: 'session-a', task_id: 'motion-a', accepted: null,
+        receipt_status: 'task_unknown', status: 'canceled', task: { ...canceled } } })
+    expect(original.command?.status).toBe('task_unknown')
+    controller.setText('停止'); await controller.preview(); await controller.execute()
+    expect(commandId).toHaveBeenCalledTimes(2)
+    expect(posted.map(({ command_id, session_id, sequence, issued_at_ms, text }) =>
+      ({ command_id, session_id, sequence, issued_at_ms, text }))).toEqual([
+      { command_id: 'motion-a', session_id: 'session-a', sequence: 1, issued_at_ms: 10000, text: '前进40厘米' },
+      { command_id: 'stop-a', session_id: 'session-a', sequence: 2, issued_at_ms: 10000, text: '停止' },
+    ])
+  })
   it('starts from last_sequence on first connect and on a fresh page controller', async () => {
     const posted: Array<{ command_id: string; sequence: number }> = []
     const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {

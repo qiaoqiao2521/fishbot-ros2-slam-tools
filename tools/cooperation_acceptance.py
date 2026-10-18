@@ -6,7 +6,7 @@ outside Git. The adapter never retries a task or takes over an unknown UUID.
 """
 from __future__ import annotations
 import argparse
-from collections import deque
+from collections import OrderedDict, deque
 import hashlib
 import importlib.util
 import json
@@ -257,22 +257,35 @@ def ensure_port_available(port):
 
 
 class EvidenceTail:
+    # Action status is sparse; a long arm stage can outlive the physics tail.
+    # Bound goal identities separately, retaining their last observed status.
+    NATIVE_STATUS_LIMIT = 256
+
     def __init__(self,path):
         self.path=path;self.offset=0;self.partial=b'';self.records=deque(maxlen=20000);self.oracle=None;self.audit=None
+        self.native_statuses=OrderedDict()
+
+    def remember_native(self,record):
+        if record.get('topic') not in ('dock_status','nav_status'):return
+        for item in record['payload']['status_list']:
+            identity=(record['topic'],bytes(item['goal_info']['goal_id']['uuid']).hex())
+            self.native_statuses.pop(identity,None)
+            self.native_statuses[identity]=item['status']
+            while len(self.native_statuses)>self.NATIVE_STATUS_LIMIT:
+                self.native_statuses.popitem(last=False)
+
     def refresh(self):
         if not self.path.exists():return
         with self.path.open('rb') as stream:
             stream.seek(self.offset);data=stream.read();self.offset=stream.tell()
         lines=(self.partial+data).split(b'\n');self.partial=lines.pop()
         for line in lines:
-            if line:self.records.append(json.loads(line))
+            if line:
+                record=json.loads(line);self.records.append(record);self.remember_native(record)
     def native(self):
-        states={}
         for record in self.records:
-            if record['topic'] in ('dock_status','nav_status'):
-                for item in record['payload']['status_list']:
-                    states[(record['topic'],bytes(item['goal_info']['goal_id']['uuid']).hex())]=item['status']
-        return states
+            self.remember_native(record)
+        return dict(self.native_statuses)
     def moving_dock(self):
         truth=[r for r in self.records if r['topic']=='truth']
         active=[key[1] for key,status in self.native().items() if key[0]=='dock_status' and status==2]
@@ -337,8 +350,14 @@ def native_cleanup_known(state,native,task_id,episode_id):
     if state.get('episode_id')!=episode_id or state.get('task',{}).get('id')!=task_id:
         return False
     if state.get('task',{}).get('status')=='unknown':return False
-    if native:return all(status in (4,5,6) for status in native.values())
     handles=state.get('native_actions',[])
+    if native:
+        if not all(status in (4,5,6) for status in native.values()):return False
+        if not isinstance(handles,list) or not handles:return False
+        # A terminal from another goal cannot stand in for an evicted or
+        # unobserved accepted UUID, even when the bridge task has failed.
+        return all(isinstance(item,dict) and item.get('accepted') is True
+            and any(key[1]==item.get('uuid') for key in native) for item in handles)
     return (state.get('task',{}).get('status')=='failed' and isinstance(handles,list) and bool(handles)
         and all(item.get('accepted') is False and item.get('terminal') is True
                 and item.get('result_known') is False and item.get('status') is None

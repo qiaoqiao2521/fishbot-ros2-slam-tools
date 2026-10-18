@@ -209,7 +209,8 @@ class BridgeRaceTests(unittest.TestCase):
         class TimeSource:
             def clock_callback(self,message):return message
         import cooperation_perception as perception
-        self.namespace={**vars(core),**vars(perception),'copy':copy,'json':json,'math':math,
+        import hashlib
+        self.namespace={**vars(core),**vars(perception),'copy':copy,'json':json,'math':math,'hashlib':hashlib,
             'SubscriptionProbeBase':SubscriptionProbeBase,'Clock':Clock,'TimeSource':TimeSource,
             'np':np,
             'time':NS(monotonic=lambda:self.clock,time=lambda:self.epoch+self.clock-100.,sleep=self.sleep),
@@ -441,6 +442,15 @@ class BridgeRaceTests(unittest.TestCase):
         self.assertEqual(state['physics']['stamp'],p.raw['stamp'])
         self.assertFalse(timing['native_consumption_ack'])
 
+    def test_scene_identity_survives_missing_physics_without_faking_readiness(self):
+        p=self.bridge;p.raw=None;p.observation_error='等待新回合共享物理反馈'
+        value=p.state()
+        self.assertEqual(value['source'], {'scene_sha':'a'*64,
+            'origin':'manifest_world_xml','observed':False})
+        self.assertFalse(value['ready']);self.assertFalse(value['nav']['ready'])
+        self.assertIsNone(value['physics'])
+        self.assertIn('等待新回合共享物理反馈',value['reason'])
+
     def test_timing_slow_tail_is_bounded_and_eviction_keeps_aggregate_truth(self):
         timing=BridgeTiming()
         for sequence in range(40):
@@ -670,9 +680,13 @@ class BridgeRaceTests(unittest.TestCase):
         p.dock_at_station=lambda:p.check()
         class Planner:
             def __init__(self,*args,**kwargs):pass
-            def prepare_approach(self,q):return {'segments':[{'stage':'lift'}]}
             def prepare_transport(self,raw):return {'segments':[{'stage':name} for name in ('release','retreat','settle')]}
         self.namespace['ArmPlanner']=Planner
+        def controlled_query(manifest,q6,car_pose,*,check,timeout_s):
+            check()
+            return {'segments':[{'stage':'lift'}], 'planning':{
+                'path':[q6[:5]], 'execution':{'mode':'controlled_test_fixture'}}}
+        self.namespace['query_approach']=controlled_query
         def segment(item,planner):
             if item['stage']=='lift':
                 p.raw['cargo']['position'][2]=p.raw['qpos22'][8]=.07

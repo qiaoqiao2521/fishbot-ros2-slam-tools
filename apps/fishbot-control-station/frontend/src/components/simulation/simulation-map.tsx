@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
+import type { CSSProperties, KeyboardEvent, MouseEvent, PointerEvent } from 'react'
+import { useWorkspaceVisible } from '@/components/workspace/workspace-visibility'
 
 import {
   mapToWorld, worldToMap,
@@ -9,7 +10,7 @@ import { goalIssueTarget } from '@/lib/simulation-errors'
 import { mapGeneration, rectanglePoints, zonesEqual, type MapEditMode, type MapZone } from '@/lib/simulation-workspace'
 import type { SegmentConflict, WaypointSelection } from '@/lib/route-safety'
 
-export function SimulationMapView({ map, state, points, editable, onSelect, mode = 'waypoint', zones = [], savedZones = [], anchor = null, onCancelSelection, goalIssue = null, issueCurrent = false, homeEmphasized = false, draftConflicts = [], selectionPreview = null }: {
+export function SimulationMapView({ map, state, points, editable, onSelect, mode = 'waypoint', zones = [], savedZones = [], anchor = null, onCancelSelection, goalIssue = null, issueCurrent = false, homeEmphasized = false, draftConflicts = [], selectionPreview = null, selectedObject = null }: {
   map: SimulationMap
   state: SimulationState | null
   points: Pose[]
@@ -25,8 +26,10 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
   homeEmphasized?: boolean
   draftConflicts?: SegmentConflict[]
   selectionPreview?: { start: Point; selection: WaypointSelection } | null
+  selectedObject?: { kind: 'zone'; id: string } | { kind: 'waypoint'; index: number; point: Pose } | null
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
+  const visible = useWorkspaceVisible()
   const svg = useRef<SVGSVGElement>(null)
   const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
   const [focused, setFocused] = useState(false)
@@ -42,6 +45,7 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
   }, [generation])
 
   useEffect(() => {
+    if (!visible) return
     const context = canvas.current?.getContext('2d')
     if (!context) return
     const image = context.createImageData(map.width, map.height)
@@ -54,7 +58,7 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
       }
     }
     context.putImageData(image, 0, 0)
-  }, [map])
+  }, [map, visible])
 
   useEffect(() => {
     if (!state?.truth) return
@@ -75,14 +79,14 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
   }
 
   function select(event: MouseEvent<SVGSVGElement>) {
-    if (!editable || mode === 'observe') return
+    if (!visible || !editable || mode === 'observe') return
     const position = eventPosition(event)
     setCursor(position)
     onSelect(position)
   }
 
   function keySelect(event: KeyboardEvent<SVGSVGElement>) {
-    if (!editable || mode === 'observe') return
+    if (!visible || !editable || mode === 'observe') return
     if (event.key === 'Escape') { event.preventDefault(); onCancelSelection?.(); return }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
@@ -117,17 +121,18 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
   const issueLabel = issue ? `${issueCurrent ? '拒绝点' : '上次拒绝点'}：${goalIssueTarget(issue)}` : ''
 
   return (
-    <div className="simulation-map-frame" style={{ aspectRatio: `${map.width} / ${map.height}` }}>
+    <div className="simulation-map-frame" data-workspace-visible={visible}
+      style={{ aspectRatio: `${map.width} / ${map.height}`, '--simulation-map-ratio': map.width / map.height } as CSSProperties}>
       <canvas ref={canvas} width={map.width} height={map.height} aria-hidden="true" />
       <svg
         ref={svg}
         viewBox={`0 0 ${map.width} ${map.height}`}
         aria-label={`巡逻地图，当前${{ waypoint: '巡逻点', wall: '虚拟墙', no_go: '禁区', observe: '观察' }[mode]}模式，方向键移动十字，回车选点，Escape取消选择`}
         role="application"
-        tabIndex={editable ? 0 : -1}
-        className={editable ? 'simulation-map-editable' : ''}
+        tabIndex={visible && editable ? 0 : -1}
+        className={visible && editable ? 'simulation-map-editable' : ''}
         onClick={select}
-        onPointerMove={(event) => { if (editable && anchor) setCursor(eventPosition(event)) }}
+        onPointerMove={(event) => { if (visible && editable && anchor) setCursor(eventPosition(event)) }}
         onKeyDown={keySelect}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -148,6 +153,18 @@ export function SimulationMapView({ map, state, points, editable, onSelect, mode
           </polyline> : <polygon key={zone.id} points={zonePoints} fill={blocked ? '#b32d2b' : '#b14255'} fillOpacity={blocked ? '.30' : '.20'} stroke={blocked ? '#b32d2b' : '#b14255'}
             data-rule-issue={blocked || undefined} strokeWidth={blocked ? '1.5' : '.8'} strokeDasharray={persisted ? undefined : '2 1'}><title>{`${persisted ? '已保存禁区' : '禁区草稿'}：${zone.id}`}</title></polygon>
         })}
+        {selectedObject?.kind === 'zone' && zones.filter((zone) => zone.id === selectedObject.id).map((zone) =>
+          <g key={zone.id} data-selected-zone={zone.id} pointerEvents="none">
+            {zone.kind === 'wall' ? <polyline points={polyline(zone.points)} fill="none" stroke="#2359d1"
+              strokeWidth={Math.max((zone.width ?? .02) * unit + 1, 1.8)} strokeDasharray="1 .8" />
+              : <polygon points={polyline(zone.points)} fill="none" stroke="#2359d1" strokeWidth="1.3" strokeDasharray="1 .8" />}
+            <title>{`已选${zone.kind === 'wall' ? '虚拟墙' : '禁区'}：${zone.id}，属性修改只更新草稿`}</title>
+          </g>)}
+        {selectedObject?.kind === 'waypoint' && <g data-selected-waypoint={selectedObject.index + 1} pointerEvents="none">
+          <circle cx={worldToMap(selectedObject.point, map).x} cy={worldToMap(selectedObject.point, map).y}
+            r={Math.max(.13 * unit, 2.8)} fill="none" stroke="#2359d1" strokeWidth=".9" strokeDasharray="1 .8" />
+          <title>{`已选巡逻点 ${selectedObject.index + 1}（${selectedObject.point.x.toFixed(3)}, ${selectedObject.point.y.toFixed(3)}）米`}</title>
+        </g>}
         {anchor && mode === 'wall' && <polyline points={polyline([anchor, cursor])} fill="none" stroke="#b26120" strokeWidth="1" strokeDasharray="2 1" />}
         {anchor && mode === 'no_go' && <polygon points={polyline(rectanglePoints(anchor, cursor))} fill="#b14255" fillOpacity=".12" stroke="#b14255" strokeWidth=".8" strokeDasharray="2 1" />}
         {anchor && <g transform={`translate(${worldToMap(anchor, map).x} ${worldToMap(anchor, map).y})`}><circle r="1.4" fill="#713f9f" /><title>已选第一个点，继续选择第二个点</title></g>}

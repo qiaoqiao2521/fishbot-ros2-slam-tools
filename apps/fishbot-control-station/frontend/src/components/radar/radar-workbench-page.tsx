@@ -1,12 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Box, Map, Radar, Route, Send } from 'lucide-react'
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { ArrowLeft, Map, Radar, Route, Send } from 'lucide-react'
 
 import { RadarQualityPanel } from '@/components/radar/radar-quality-panel'
-import { RadarStatusStrip } from '@/components/radar/radar-status-strip'
 import { RadarViewport } from '@/components/radar/radar-viewport'
 import { RadarWorkbenchControls } from '@/components/radar/radar-workbench-controls'
 import { Button } from '@/components/ui/button'
-import { Card, CardDescription, CardTitle } from '@/components/ui/card'
+import { WorkspaceSurface } from '@/components/workspace/workspace-surface'
+import { useWorkspaceVisible } from '@/components/workspace/workspace-visibility'
+import { runtimeRegistry } from '@/lib/runtime-context'
+import { useRuntimeWriteCapability } from '@/hooks/use-runtime-capability'
+import { CommandEvidencePanel } from '@/components/status/command-evidence-panel'
+import { projectLegacyPublicationEvidence } from '@/lib/command-evidence'
+import './radar-workspace.css'
 import { MapPublicationUnconfirmedError, postInitialPose, postNavigationGoal } from '@/lib/api'
 import {
   createDefaultRadarWorkbenchConfig,
@@ -21,6 +26,8 @@ import {
 import { useStationStore } from '@/store/station-store'
 import type { LaserScanSnapshot } from '@/types/station'
 
+const SceneViewport = lazy(() => import('@/components/scene/scene-viewport').then((module) => ({ default: module.SceneViewport })))
+
 type MapRequestFeedback = {
   mode: Exclude<RadarMapMode, 'observe'>
   status: Exclude<MapPublicationStatus, 'idle'>
@@ -31,11 +38,17 @@ type MapRequestFeedback = {
 export function RadarWorkbenchPage({
   onBack,
   onPatrol,
+  active = true,
 }: {
+  active?: boolean
   onBack: () => void
   onPatrol: () => void
 }) {
-  const { connection, navigation, perception, robotState, usingFallbackData } = useStationStore()
+  const { connection, navigation, perception, robotState, usingFallbackData, resourceProvenance } = useStationStore()
+  const runtime = useSyncExternalStore(runtimeRegistry.subscribe, runtimeRegistry.getSnapshot, runtimeRegistry.getSnapshot).station
+  const [view, setView] = useState<'2d' | '3d'>('2d')
+  const descriptor = runtime.descriptor
+  const source = { key: descriptor ? JSON.stringify([descriptor.instance_id, runtime.generation, descriptor.domain, descriptor.scene_id, descriptor.episode_id]) : null, live: runtime.status === 'verified' && !usingFallbackData && connection.mode === 'live' && resourceProvenance.navigation.status === 'received' && resourceProvenance.perception.status === 'received', label: usingFallbackData ? '示例摘要' : connection.mode === 'offline' ? '离线模拟摘要' : 'ROS 接收摘要' }
   const [config, setConfig] = useState<RadarWorkbenchConfig>(createDefaultRadarWorkbenchConfig)
   const [history, setHistory] = useState<LaserScanSnapshot[]>([])
   const [selectedPoint, setSelectedPoint] = useState<RadarSelectedPoint | null>(null)
@@ -45,11 +58,13 @@ export function RadarWorkbenchPage({
   const [draftPose, setDraftPose] = useState<RadarMapPose | null>(null)
   const [requestFeedback, setRequestFeedback] = useState<MapRequestFeedback | null>(null)
   const requestLock = useRef(false)
+  const goalEnabled = useRuntimeWriteCapability('station', 'navigation')
+  const initialPoseEnabled = useRuntimeWriteCapability('station', 'initial_pose')
   const sending = requestFeedback?.status === 'sending'
   const draftBlocked = mapPublicationBlocksDraft(requestFeedback?.status ?? 'idle')
   const mapInteractive = config.layerMode === 'scan+map' && navigation.map.ready && !config.freeze
   const controlReady = !usingFallbackData && connection.mode === 'live' && connection.controlBridge.connected
-  const canSend = mapMode !== 'observe' && !!draftPose && mapInteractive && controlReady
+  const canSend = view === '2d' && (mapMode === 'initial-pose' ? initialPoseEnabled : goalEnabled) && mapMode !== 'observe' && !!draftPose && mapInteractive && controlReady
     && !draftBlocked && isPointInsideMap(draftPose, navigation.map)
   const localizationUpdated = requestFeedback?.mode === 'initial-pose' && requestFeedback.status === 'published'
     && navigation.localization.ready && navigation.localization.lastUpdate !== requestFeedback.localizationBefore
@@ -81,7 +96,7 @@ export function RadarWorkbenchPage({
   }
 
   useEffect(() => {
-    if (!perception.scan.ready || config.freeze || perception.scan.lastUpdate === lastUpdate) {
+    if (!active || !perception.scan.ready || config.freeze || perception.scan.lastUpdate === lastUpdate) {
       return
     }
 
@@ -94,212 +109,55 @@ export function RadarWorkbenchPage({
 
     setLastUpdate(perception.scan.lastUpdate)
     setHistory((current) => [...current.slice(-5), { ...perception.scan, samplePoints: [...perception.scan.samplePoints] }])
-  }, [config.freeze, lastUpdate, perception.scan])
+  }, [active, config.freeze, lastUpdate, perception.scan])
 
-  return (
-    <div className="relative min-h-screen overflow-hidden text-foreground">
-
-      <div className="mx-auto flex min-h-screen max-w-[1680px] flex-col gap-5 px-4 py-5 md:px-6 lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Button variant="outline" onClick={onBack}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            控制总览
-          </Button>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={onPatrol}><Route className="mr-2 h-4 w-4" />仿真巡逻</Button>
-            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-            <Radar className="h-4 w-4" />
-            /radar
-            </div>
-          </div>
-        </div>
-
-        <RadarStatusStrip connection={connection} scan={perception.scan} hz={hz} />
-
-        <div className="grid flex-1 gap-5 xl:grid-cols-[340px_minmax(0,1fr)_340px]">
-          <div className="order-2 grid gap-5 xl:order-1">
-            <RadarQualityPanel perception={perception} />
-            <Card>
-              <div className="panel-header">
-                <div>
-
-                  <CardTitle>地图与定位状态</CardTitle>
-                  <CardDescription>查看地图、坐标变换、定位与导航报告。</CardDescription>
-                </div>
-              </div>
-
-              <div className="grid gap-3">
-                <PrepRow title="SLAM source" value={navigation.map.ready ? `${navigation.map.width} x ${navigation.map.height}` : 'waiting /map'} />
-                <PrepRow title="TF graph" value={navigation.tf.ready ? navigation.tf.statusMessage : 'waiting /tf'} />
-                <PrepRow title="Localization" value={navigation.localization.ready ? navigation.localization.statusMessage : 'waiting /amcl_pose'} />
-                <PrepRow title="Nav status" value={navigation.navStatus.ready ? navigation.navStatus.statusSummary : 'waiting nav2 actions'} />
-                <PrepRow
-                  title="最近路径报告"
-                  value={!navigation.path ? '路径状态未知：当前服务未提供路径数据'
-                    : `${navigation.path.statusMessage} · ${navigation.path.lastUpdate ?? '未报告时间'} · ${navigation.path.frameId && navigation.path.frameId !== 'map'
-                      ? `${navigation.path.frameId} 坐标系，未绘制`
-                      : `${navigation.path.poseCount} 个位姿 / ${navigation.path.points.length} 个显示点`}`}
-                />
-              </div>
-            </Card>
-          </div>
-
-          <div className="order-1 grid min-w-0 gap-5 xl:order-2">
-            <Card>
-              <div className="panel-header"><div><CardTitle>地图操作</CardTitle><CardDescription>先选模式，再选位置和方向，最后点击发送。</CardDescription></div></div>
-              <div className="grid grid-cols-3 gap-2" role="group" aria-label="地图操作模式">
-                {([['observe', '观察'], ['goal', '导航目标'], ['initial-pose', '重定位']] as const).map(([mode, label]) => (
-                  <Button key={mode} className="px-2 tracking-normal" variant={mapMode === mode ? 'default' : 'outline'}
-                    aria-pressed={mapMode === mode} disabled={sending} onClick={() => changeMapMode(mode)}>{label}</Button>
-                ))}
-              </div>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                {mapMode === 'observe' ? '观察模式只看地图。选择导航目标或重定位后，地图点击才会选择草稿。'
-                  : '点地图选位置；拖动或再点一次确定方向。也可以在下方调整角度，选点不会立即发布。'}
-              </p>
-              {mapMode !== 'observe' && <div className="mt-3 grid gap-3">
-                <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                  <span>{draftPose ? `待发送位置 (${draftPose.x.toFixed(2)}, ${draftPose.y.toFixed(2)}) 米` : '等待在地图上选择位置'}</span>
-                  <Button variant="ghost" size="sm" disabled={!draftPose || sending} onClick={() => { setDraftPose(null); setRequestFeedback(null) }}>重新选点</Button>
-                </div>
-                <label className="flex items-center gap-3 text-sm">
-                  <span>方向（度）</span>
-                  <input aria-label="方向（度）" className="station-well min-h-11 w-24 rounded-xl px-3" type="number" min={-180} max={180} step="1"
-                    disabled={!draftPose || draftBlocked} value={draftPose ? Number((draftPose.yaw * 180 / Math.PI).toFixed(1)) : 0}
-                    onChange={(event) => { const value = event.currentTarget.valueAsNumber; if (draftPose && Number.isFinite(value)) setDraftPose({ ...draftPose, yaw: Math.max(-180, Math.min(180, value)) * Math.PI / 180 }) }} />
-                  <span className="text-xs text-muted-foreground">0° 向右，90° 向上</span>
-                </label>
-                <Button disabled={!canSend} onClick={() => void sendMapPose()}><Send className="mr-2 h-4 w-4" />
-                  {sending ? '正在发布…' : mapMode === 'initial-pose' ? '发布重定位位姿' : '发送导航目标'}</Button>
-                {!mapInteractive && <p className="text-sm text-muted-foreground">切换到实时 scan+map 图层并等待地图后才能发送。</p>}
-                {!controlReady && <p className="text-sm text-muted-foreground">控制桥未连接或当前为示例数据，发送暂不可用。</p>}
-              </div>}
-              {requestFeedback && <p className="mt-3 text-sm leading-6" role="status" aria-live="polite">
-                {requestFeedback.status === 'sending' ? '正在等待发布回执…'
-                  : requestFeedback.status === 'error' ? `请求未获确认：${requestFeedback.error}。请先核对当前反馈。`
-                    : requestFeedback.status === 'unconfirmed' ? '未收到发布回执，结果未知。同一草稿禁止再次发送；请先核对导航或定位反馈，再重新选点。'
-                    : requestFeedback.mode === 'initial-pose'
-                      ? localizationUpdated ? '重定位位姿已发布；收到新的定位消息，请核对车身位置与方向。' : '重定位位姿已发布，等待定位反馈。'
-                      : '导航目标已发布，等待 Nav2 反馈。发布回执不代表已到达。'}
-              </p>}
-              <p className="mt-3 text-xs leading-5 text-muted-foreground">多航点巡逻、返航和取消请进入“仿真巡逻”。该页使用隔离 MuJoCo 环境，不向本页控制桥派发任务。</p>
-            </Card>
-            <RadarViewport
-              config={config}
-              mapMode={mapMode}
-              draftPose={draftPose}
-              selectionDisabled={draftBlocked || config.freeze}
-              pathTelemetryLive={!usingFallbackData && connection.mode === 'live'}
-              history={history}
-              navigation={navigation}
-              onPoseSelect={setDraftPose}
-              onPointSelect={setSelectedPoint}
-              robotState={robotState}
-              scan={perception.scan}
-              selectedPoint={selectedPoint}
-            />
-            <RadarWorkbenchControls config={config} onClearHistory={() => setHistory([])} onConfigChange={setConfig} />
-          </div>
-
-          <div className="order-3 grid gap-5">
-            <Card>
-              <div className="panel-header">
-                <div>
-                  <div className="station-kicker mb-2">point inspector / field pick</div>
-                  <CardTitle>Point Inspector</CardTitle>
-                  <CardDescription>鼠标停在雷达点上时，这里显示当前射线的极坐标和直角坐标。</CardDescription>
-                </div>
-                <BadgeLike active={!!selectedPoint}>{selectedPoint ? 'locked' : 'idle'}</BadgeLike>
-              </div>
-
-              {selectedPoint ? (
-                <div className="grid gap-3">
-                  <InspectorRow label="Range" value={`${selectedPoint.rangeMeters.toFixed(3)} m`} />
-                  <InspectorRow label="Angle" value={`${(selectedPoint.angleRad * 180 / Math.PI).toFixed(2)}°`} />
-                  <InspectorRow label="X" value={selectedPoint.x.toFixed(3)} />
-                  <InspectorRow label="Y" value={selectedPoint.y.toFixed(3)} />
-                </div>
-              ) : (
-                <div className="station-well flex min-h-[240px] flex-col items-center justify-center rounded-[24px] text-center">
-                  <Box className="mb-3 h-8 w-8 text-muted-foreground/45" />
-                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">hover a point to inspect</div>
-                </div>
-              )}
-            </Card>
-
-            <Card>
-              <div className="panel-header">
-                <div>
-                  <div className="station-kicker mb-2">operator note / source of truth</div>
-                  <CardTitle>Sensor Note</CardTitle>
-                  <CardDescription>当前页面显示的是 LaserScan 采样点，不是完整点云地图。</CardDescription>
-                </div>
-                <Map className="h-5 w-5 text-[hsl(var(--accent))]" />
-              </div>
-
-              <div className="grid gap-3 text-sm leading-6 text-muted-foreground">
-                <div className="station-well rounded-[22px] px-4 py-4">
-                  scan+map 图层叠加 /map、扫描、定位和后端路径报告；示例数据不绘制为实时路径。导航目标发布到 /goal_pose，重定位发布到 /initialpose；两者都需要显式发送。
-                </div>
-                <div className="station-well rounded-[22px] px-4 py-4">
-                  当前边界：地图是后端采样的栅格（≤6000 格）；TF 只报存在性，扫描先按基座原点对齐，真实 laser→base 偏移待 TF 数值接入后修正。
-                </div>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+  const feedback = requestFeedback?.status === 'sending' ? '正在等待发布回执…'
+    : requestFeedback?.status === 'error' ? `请求未获确认：${requestFeedback.error}。请先核对当前反馈。`
+      : requestFeedback?.status === 'unconfirmed' ? '未收到发布回执，结果未知。同一草稿禁止再次发送；请先核对反馈。'
+        : requestFeedback?.status === 'published' ? requestFeedback.mode === 'initial-pose'
+          ? localizationUpdated ? '重定位位姿已发布；收到新定位，请核对车身方向。' : '重定位位姿已发布，等待定位反馈。'
+          : '导航目标已发布，等待 Nav2 反馈。发布回执不代表已到达。' : null
+  const modes = [['observe', '观察'], ['goal', '导航目标'], ['initial-pose', '重定位']] as const
+  return <WorkspaceSurface id="radar" title="雷达与地图" subtitle="观测、目标与重定位" active={active}
+    toolbar={<><div className="radar-view-switch" role="group" aria-label="画布视图"><Button variant="outline" aria-pressed={view === '2d'} onClick={() => setView('2d')}>二维地图</Button><Button variant="outline" aria-pressed={view === '3d'} onClick={() => setView('3d')}>三维观测</Button></div>
+      {mapMode !== 'observe' && <Button disabled={!canSend} onClick={() => void sendMapPose()}><Send size={15} />{sending ? '正在发布…' : mapMode === 'initial-pose' ? '发布重定位位姿' : '发送导航目标'}</Button>}
+      <Button variant="outline" onClick={onPatrol}><Route size={15} />地图巡逻</Button>
+      <Button variant="outline" onClick={onBack}><ArrowLeft size={15} />控制总览</Button>
+    </>}
+    notice={<><p className="radar-write-capability">{!goalEnabled && !initialPoseEnabled ? '当前为只读观测；导航任务请从“地图巡逻”进入。' : '旧话题发布已显式启用；发布回执不等于动作接纳。'}</p><div className="radar-source-notice" role="status"><Radar size={14} />{usingFallbackData ? '示例数据 · 不可派发' : connection.mode === 'offline' ? '离线模拟数据' : 'ROS 链路'}<span>{perception.scan.ready ? `${perception.scan.samplePoints.length} 个显示点 · ${hz.toFixed(1)} Hz` : '等待扫描'}</span>{feedback && <strong>{feedback}</strong>}</div></>}
+    canvas={<VisibleRadarCanvas>{view === '3d' ? <Suspense fallback={<p className="workspace-loading">正在载入三维观测…</p>}><SceneViewport scan={perception.scan} navigation={navigation} robotState={robotState} source={source} active={!config.freeze} /></Suspense> : <RadarViewport config={config} mapMode={mapMode} draftPose={draftPose}
+      selectionDisabled={draftBlocked || config.freeze} pathTelemetryLive={!usingFallbackData && connection.mode === 'live'}
+      history={history} navigation={navigation} onPoseSelect={setDraftPose} onPointSelect={setSelectedPoint}
+      robotState={robotState} scan={perception.scan} selectedPoint={selectedPoint} />}</VisibleRadarCanvas>}
+    objects={<div className="radar-workspace-objects"><h2>地图操作</h2><div className="workspace-object-list" role="group" aria-label="地图操作模式">
+      {modes.map(([mode, label]) => <button key={mode} aria-pressed={mapMode === mode} disabled={sending || view === '3d'} onClick={() => changeMapMode(mode)}><Map size={15} />{label}</button>)}
+      </div><p className="radar-workspace-hint">{view === '3d' ? '三维视图只读。切回二维地图进行位姿草稿操作。' : '先选模式，再点地图选位置和朝向。选点只更新草稿。'}</p>
+      <h2>显示图层</h2><RadarWorkbenchControls config={config} onClearHistory={() => setHistory([])} onConfigChange={setConfig} />
+      <details><summary>扫描质量</summary><RadarQualityPanel perception={perception} /></details>
+    </div>}
+    properties={<div className="workspace-properties"><h2>{draftPose ? '位姿草稿' : selectedPoint ? '扫描点属性' : '对象属性'}</h2>
+      {mapMode !== 'observe' && <><p>{draftPose ? `位置 (${draftPose.x.toFixed(2)}, ${draftPose.y.toFixed(2)}) 米` : '在地图上选择位置，再拖动确定方向。'}</p>
+        <label className="radar-angle-input">方向（度）<input aria-label="方向（度）" type="number" min={-180} max={180} step="1" disabled={!draftPose || draftBlocked}
+          value={draftPose ? Number((draftPose.yaw * 180 / Math.PI).toFixed(1)) : 0}
+          onChange={(event) => { const value = event.currentTarget.valueAsNumber; if (draftPose && Number.isFinite(value)) setDraftPose({ ...draftPose, yaw: Math.max(-180, Math.min(180, value)) * Math.PI / 180 }) }} /></label>
+        <p className="radar-workspace-hint">0° 向右，90° 向上</p>
+        <Button variant="outline" size="sm" disabled={!draftPose || sending} onClick={() => { setDraftPose(null); setRequestFeedback(null) }}>重新选点</Button>
+        {!mapInteractive && <p>切换到实时 scan+map 图层并等待地图后才能发送。</p>}
+        {!controlReady && <p>控制桥未连接或当前为示例数据，发送暂不可用。</p>}
+      </>}
+      {selectedPoint ? <dl><div><dt>距离</dt><dd>{selectedPoint.rangeMeters.toFixed(3)} m</dd></div><div><dt>角度</dt><dd>{(selectedPoint.angleRad * 180 / Math.PI).toFixed(2)}°</dd></div><div><dt>局部 X / Y</dt><dd>{selectedPoint.x.toFixed(3)} / {selectedPoint.y.toFixed(3)} m</dd></div></dl> : <p className="radar-workspace-hint">悬停扫描点可查看距离与坐标。</p>}
+      <details><summary>坐标与数据边界</summary><p>当前显示LaserScan采样点。地图为后端采样栅格，最多6000格。TF只报告存在性；扫描按基座原点对齐，laser→base偏移尚待TF数值接入。</p></details>
+    </div>}
+    task={<div className="radar-workspace-task"><div><h2>发布与定位反馈</h2><p role="status">{feedback || '尚未提交位姿；选点不会自动发送。'}</p>
+      <CommandEvidencePanel evidence={projectLegacyPublicationEvidence({ state: requestFeedback?.status === 'published' ? 'published' : requestFeedback?.status === 'sending' ? 'pending' : requestFeedback ? 'unknown' : 'idle', reason: feedback ?? undefined })} />
+      <p className="radar-workspace-hint">巡逻、返航和原任务取消使用地图巡逻工作面。各服务运行环境分别核对。</p></div>
+      <dl><div><dt>地图</dt><dd>{navigation.map.ready ? `${navigation.map.width} × ${navigation.map.height}` : '等待 /map'}</dd></div>
+        <div><dt>定位</dt><dd>{navigation.localization.statusMessage}</dd></div><div><dt>TF</dt><dd>{navigation.tf.statusMessage}</dd></div>
+        <div><dt>导航报告</dt><dd>{navigation.navStatus.statusSummary}</dd></div><div><dt>路径报告</dt><dd>{navigation.path?.statusMessage || '服务未提供路径'}</dd></div></dl>
+    </div>} />
 }
 
-function PrepRow({
-  title,
-  value,
-}: {
-  title: string
-  value: string
-}) {
-  return (
-    <div className="station-well rounded-[22px] px-4 py-4">
-      <div className="mb-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">{title}</div>
-      <div className="text-sm font-semibold text-foreground/92">{value}</div>
-    </div>
-  )
-}
-
-function InspectorRow({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <div className="station-well flex items-center justify-between gap-3 rounded-[20px] px-4 py-4">
-      <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
-      <div className="station-readout text-base font-semibold text-foreground/96">{value}</div>
-    </div>
-  )
-}
-
-function BadgeLike({
-  active,
-  children,
-}: {
-  active: boolean
-  children: string
-}) {
-  return (
-    <div
-      className={
-        active
-          ? 'rounded-full border border-[hsl(var(--accent))] bg-[hsl(var(--accent))] px-3 py-1 text-xs uppercase tracking-[0.18em] text-[hsl(var(--accent-foreground))]'
-          : 'rounded-full border border-border bg-secondary px-3 py-1 text-xs uppercase tracking-[0.18em] text-secondary-foreground'
-      }
-    >
-      {children}
-    </div>
-  )
+function VisibleRadarCanvas({ children }: { children: ReactNode }) {
+  const visible = useWorkspaceVisible()
+  return visible ? <div className="radar-canvas-host">{children}</div> : null
 }

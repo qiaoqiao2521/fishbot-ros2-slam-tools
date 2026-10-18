@@ -3,6 +3,7 @@ import { ArrowUpRight, Box, Camera, Check, FileDown, FlaskConical, Map, RefreshC
 
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
+import type { VoiceController } from '@/lib/voice'
 import { VoicePanel } from '@/components/voice/voice-panel'
 import { useWorkbenchServices } from '@/hooks/use-workbench-services'
 import type { AppRoute } from '@/lib/app-route'
@@ -11,6 +12,7 @@ import {
   type Capability, type CaseFilter, type ServiceId,
 } from '@/lib/workbench-catalog'
 import type { ServiceState } from '@/lib/workbench-services'
+import { toolEntry } from '@/lib/workbench-tool-entry'
 import './workbench.css'
 
 const flow = [
@@ -28,9 +30,10 @@ function CapabilityAction({ capability, onNavigate, services, local }: {
   if ('route' in action) return <Button type="button" size="sm" variant="outline" onClick={() => onNavigate(action.route)}>{action.label}</Button>
   if ('href' in action) return <Button asChild size="sm" variant="outline"><a href={action.href} target="_blank" rel="noopener noreferrer">{action.label}<ArrowUpRight size={13} aria-hidden="true" /></a></Button>
   const service = services[action.service]
-  const available = local && service.status === 'available'
+  const entry = toolEntry(action.service)
+  const available = local && service.status === 'available' && entry !== null
   return <div className="workbench-tool-action" data-service={action.service} data-service-status={local ? service.status : 'remote-host'}>
-    {available ? <Button asChild size="sm" variant="outline"><a href={workbenchSnapshot.services[action.service].url} target="_blank" rel="noopener noreferrer">{action.label}<ArrowUpRight size={13} aria-hidden="true" /></a></Button>
+    {available ? <Button asChild size="sm" variant="outline"><a href={entry} target="_blank" rel="noopener noreferrer">{action.label}<ArrowUpRight size={13} aria-hidden="true" /></a></Button>
       : <Button type="button" size="sm" variant="outline" disabled>{action.label}</Button>}
     <p className="workbench-service-message" role="status">{local ? service.message : '需在工作台电脑打开；手机的本机地址指向手机自身。'}</p>
     {local && service.checkedAt !== null && <small className="workbench-service-message">检查于 {new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(service.checkedAt)}，可重新检查</small>}
@@ -84,7 +87,7 @@ export function WorkbenchVisualCases({ filter, onFilterChange }: { filter: CaseF
   </div>
 }
 
-export function WorkbenchPage({ onNavigate }: { onNavigate: (route: AppRoute) => void }) {
+export function WorkbenchPage({ onNavigate, voiceController }: { onNavigate: (route: AppRoute) => void; voiceController?: VoiceController }) {
   const [filter, setFilter] = useState<CaseFilter>('all')
   const { services, checking, refresh } = useWorkbenchServices()
   const local = typeof window !== 'undefined' && isWorkbenchLocalHost(window.location.hostname)
@@ -121,7 +124,7 @@ export function WorkbenchPage({ onNavigate }: { onNavigate: (route: AppRoute) =>
       {!local && <p className="workbench-local-note">本机编辑器和视频复核台需在运行工作台的电脑打开。这里的快照、报告与工作区导航仍可查看。</p>}
     </section>
 
-    <VoicePanel />
+    <VoicePanel controller={voiceController} />
 
     <section className="workbench-supporting" aria-labelledby="workbench-supporting-heading">
       <div className="workbench-section-heading"><div><h2 id="workbench-supporting-heading">验证与反馈</h2><p>停靠感知补相对位姿；组合评测用固定条件检验策略。两者保留各自验收边界。</p></div></div>

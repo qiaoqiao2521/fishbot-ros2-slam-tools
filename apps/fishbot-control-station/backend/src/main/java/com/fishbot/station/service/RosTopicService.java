@@ -37,6 +37,7 @@ public class RosTopicService {
     }
 
     public Mono<Void> publishCmdVel(double linearX, double angularZ, String source, long sequence) {
+        if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
         String payload = buildTwistPayload(linearX, angularZ);
         diagnosticsService.recordCommand(source, "cmd_vel:" + payload + " seq:" + sequence);
         if (runtimeProperties.isOfflineTelemetry()) {
@@ -44,6 +45,7 @@ public class RosTopicService {
         }
         return advertise().then(Mono.defer(() -> {
             synchronized (commandGate) {
+                if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
                 if (stopLatched) return Mono.error(new StationStopLatchedException());
                 return client.send(payload);
             }
@@ -51,9 +53,11 @@ public class RosTopicService {
     }
 
     public Mono<Void> publishGoalPose(double x, double y, double yaw, String source) {
+        if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
         validatePose(x, y, yaw);
         return Mono.defer(() -> {
             synchronized (commandGate) {
+                if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
                 if (stopLatched) return Mono.error(new StationStopLatchedException());
                 navigationStateService.invalidatePath("new goal submitted; waiting for a new /plan", Instant.now());
                 if (runtimeProperties.isOfflineTelemetry()) {
@@ -64,6 +68,7 @@ public class RosTopicService {
             return client.send("{\"op\":\"advertise\",\"topic\":\"/goal_pose\",\"type\":\"geometry_msgs/PoseStamped\"}")
                 .then(Mono.defer(() -> {
                     synchronized (commandGate) {
+                        if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
                         if (stopLatched) return Mono.error(new StationStopLatchedException());
                         String payload = buildPoseStampedPayload(x, y, yaw);
                         diagnosticsService.recordCommand(source, "goal_pose:" + payload);
@@ -74,9 +79,11 @@ public class RosTopicService {
     }
 
     public Mono<Void> publishInitialPose(double x, double y, double yaw, String source) {
+        if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
         validatePose(x, y, yaw);
         return Mono.defer(() -> {
             synchronized (commandGate) {
+                if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
                 if (stopLatched) return Mono.error(new StationStopLatchedException());
                 navigationStateService.invalidatePath("initial pose submitted; waiting for a new /plan", Instant.now());
                 if (runtimeProperties.isOfflineTelemetry()) {
@@ -88,6 +95,7 @@ public class RosTopicService {
             return client.send("{\"op\":\"advertise\",\"topic\":\"/initialpose\",\"type\":\"geometry_msgs/msg/PoseWithCovarianceStamped\"}")
                     .then(Mono.defer(() -> {
                         synchronized (commandGate) {
+                            if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
                             if (stopLatched) return Mono.error(new StationStopLatchedException());
                             String payload = buildInitialPosePayload(x, y, yaw);
                             diagnosticsService.recordCommand(source, "initialpose:" + payload);
@@ -98,14 +106,17 @@ public class RosTopicService {
     }
 
     public Mono<Void> publishStop(String reason) {
+        if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
         diagnosticsService.recordCommand("control", "stop -" + reason + " @ " + Instant.now());
         if (runtimeProperties.isOfflineTelemetry()) {
             return Mono.empty();
         }
-        return advertise().then(Mono.defer(() -> client.send(buildTwistPayload(0, 0))));
+        return advertise().then(Mono.defer(() -> runtimeProperties.isLegacyMotionWritesEnabled()
+                ? client.send(buildTwistPayload(0, 0)) : Mono.error(new LegacyMotionWritesDisabledException())));
     }
 
     public Mono<Void> publishEmergencyStop(String reason) {
+        if (!runtimeProperties.isLegacyMotionWritesEnabled()) return Mono.error(new LegacyMotionWritesDisabledException());
         synchronized (commandGate) {
             stopLatched = true;
         }

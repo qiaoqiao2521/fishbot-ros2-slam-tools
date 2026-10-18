@@ -48,4 +48,14 @@ describe('radar viewport map rendering', () => {
     expect(html).toContain('观察模式 · 仅查看地图')
     expect(html).not.toContain('data-testid="map-pose-draft"')
   })
+  it('keeps distinct history geometry and the existing per-index fading after group reuse', () => {
+    const frames = [structuredClone(mockPerception.scan), structuredClone(mockPerception.scan)]
+    frames[0].lastUpdate = 'older'; frames[1].lastUpdate = 'newer'; frames[1].samplePoints[0].x += 1
+    const html = renderToStaticMarkup(<RadarViewport config={createDefaultRadarWorkbenchConfig()} mapMode="observe" draftPose={null}
+      selectionDisabled={false} pathTelemetryLive={false} history={frames} scan={mockPerception.scan} robotState={mockRobotState}
+      selectedPoint={null} onPointSelect={() => {}} onPoseSelect={() => {}} navigation={mockNavigation} />)
+    expect(html).toContain('data-radar-history="0" fill-opacity="0.42"')
+    expect(html).toContain('data-radar-history="1" fill-opacity="0.33999999999999997"')
+    expect(html.match(/r="0.38"/g)).toHaveLength(frames.reduce((sum, frame) => sum + frame.samplePoints.length, 0))
+  })
 })

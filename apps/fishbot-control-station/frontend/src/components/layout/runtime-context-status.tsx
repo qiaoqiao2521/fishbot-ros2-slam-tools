@@ -8,7 +8,7 @@ const labels: Record<RuntimeService, string> = {
   station: '控制与雷达', mission: '地图巡逻', cooperation: '车臂协同', voice: '语音入口',
 }
 const routeService: Record<AppRoute, RuntimeService | null> = {
-  dashboard: 'station', radar: 'station', simulation: 'mission', cooperation: 'cooperation', workbench: null,
+  dashboard: 'station', radar: 'station', simulation: 'mission', cooperation: 'cooperation', workbench: 'mission', results: null,
 }
 
 export function RuntimeContextStatus({ route }: { route: AppRoute }) {

@@ -10,6 +10,10 @@ export type RuntimeCapability = {
   task_lookup: boolean
   cancel: boolean
   event_history: 'none' | 'snapshot' | 'bounded'
+  available?: boolean
+  protocol?: string
+  profile_id?: string
+  reason?: string | null
 }
 export type RuntimeDescriptor = {
   schema_version: 1

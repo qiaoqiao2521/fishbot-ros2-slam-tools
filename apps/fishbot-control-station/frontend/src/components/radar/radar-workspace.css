@@ -1,0 +1,28 @@
+.radar-source-notice { display:flex; gap:9px; align-items:center; padding:8px 16px; flex-wrap:wrap; }
+.radar-source-notice strong { font-weight:500; color:#9b4b35; }
+.radar-canvas-host { height:100%; min-height:0; }
+.radar-canvas-host .radar-viewport { height:100%; min-height:0; border:0; border-radius:0; }
+.radar-canvas-host .radar-viewport > div:first-child { padding:10px 16px; }
+.radar-canvas-host .radar-viewport .station-kicker { display:none; }
+.radar-canvas-host .radar-viewport .station-readout { font-size:13px; letter-spacing:0; }
+.radar-workspace-hint { color:#758398; line-height:1.7; font-size:12px; margin:10px 0; }
+.radar-workspace-objects > h2 { margin-top:18px; }
+.radar-workspace-objects > h2:first-child { margin-top:0; }
+.radar-workspace-objects > .glass-panel { padding:0; }
+.radar-workspace-objects .glass-panel > div { display:flex; flex-direction:column; align-items:stretch; }
+.radar-workspace-objects .glass-panel button { padding:6px 8px; border-radius:5px; height:30px; font-size:11px; letter-spacing:0; }
+.radar-workspace-objects .glass-panel > div > div { gap:5px; }
+.radar-workspace-objects details { margin-top:14px; }
+.radar-angle-input { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.radar-angle-input input { border:1px solid #d7e0ed; border-radius:5px; padding:7px; max-width:100px; }
+.radar-workspace-task { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.radar-workspace-task dl { display:flex; flex-wrap:wrap; gap:12px 20px; font-size:11px; }
+.radar-workspace-task dt { color:#758398; }
+.radar-workspace-task dd { margin:4px 0; }
+@media(max-width:1049px) { .radar-workspace-task { grid-template-columns:1fr; } }
+.radar-canvas-host .station-chip { border-radius:5px; font-size:11px; letter-spacing:0; padding:6px 9px; background:#ffffffed; }
+.radar-canvas-caption { position:absolute; left:12px; bottom:10px; font-size:11px; color:#69778b; pointer-events:none; background:#ffffffdd; border-radius:4px; padding:3px 7px; }
+.radar-robot-marker { position:absolute; display:grid; place-items:center; left:50%; top:50%; transform:translate(-50%,-50%); width:34px; height:34px; border-radius:50%; background:#2359d1; border:3px solid white; box-shadow:0 1px 5px #2359d144; pointer-events:none; }
+
+.radar-view-switch { display:flex; gap:3px; }
+.radar-view-switch button[aria-pressed=true] { background:#e8f0ff; border-color:#a9c1ed; color:#2359d1; }

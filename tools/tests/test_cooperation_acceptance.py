@@ -220,5 +220,51 @@ class EvidenceTests(unittest.TestCase):
             with path.open('a') as stream:stream.write(data[-4:])
             with patch.object(acceptance.time,'time',return_value=100.1):tail.refresh();self.assertEqual(tail.moving_dock(),'01'*16)
 
+    def test_native_terminal_survives_long_physics_tail_without_rewriting_failure(self):
+        def native(status):
+            return {'topic':'dock_status','payload':{'status_list':[
+                {'goal_info':{'goal_id':{'uuid':[1]*16}},'status':status}]}}
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp)/'observer.jsonl';tail=acceptance.EvidenceTail(path)
+            with path.open('w')as stream:
+                stream.write(json.dumps(native(4))+'\n')
+                for i in range(20001):stream.write(json.dumps({'topic':'clock','source_stamp':i})+'\n')
+            tail.refresh()
+            self.assertEqual(len(tail.records),20000)
+            self.assertFalse(any(r['topic']=='dock_status'for r in tail.records))
+            self.assertEqual(tail.native(),{('dock_status','01'*16):4})
+            failed={'episode_id':'e','task':{'id':'t','status':'failed'},'native_actions':[
+                {'uuid':'01'*16,'accepted':True,'terminal':True,'result_known':True,'status':4}]}
+            self.assertTrue(acceptance.native_cleanup_known(failed,tail.native(),'t','e'))
+            self.assertEqual(failed['task']['status'],'failed')
+            unknown=copy.deepcopy(failed);unknown['task']['status']='unknown'
+            self.assertFalse(acceptance.native_cleanup_known(unknown,tail.native(),'t','e'))
+            self.assertFalse(acceptance.native_cleanup_known(failed,tail.native(),'other','e'))
+            self.assertFalse(acceptance.native_cleanup_known(failed,tail.native(),'t','other'))
+            missing=copy.deepcopy(failed);missing['native_actions'][0]['uuid']='02'*16
+            self.assertFalse(acceptance.native_cleanup_known(missing,tail.native(),'t','e'))
+            rejected=copy.deepcopy(failed);rejected['native_actions'][0]['accepted']=False
+            self.assertFalse(acceptance.native_cleanup_known(rejected,tail.native(),'t','e'))
+            with path.open('a')as stream:stream.write(json.dumps(native(2))+'\n')
+            tail.refresh()
+            self.assertEqual(tail.native(),{('dock_status','01'*16):2})
+            self.assertFalse(acceptance.native_cleanup_known(failed,tail.native(),'t','e'))
+
+    def test_native_status_index_is_bounded_and_empty_status_list_is_not_terminal(self):
+        with tempfile.TemporaryDirectory()as temp:
+            path=Path(temp)/'observer.jsonl';tail=acceptance.EvidenceTail(path)
+            with path.open('w')as stream:
+                for n in range(tail.NATIVE_STATUS_LIMIT+1):
+                    stream.write(json.dumps({'topic':'nav_status','payload':{'status_list':[
+                        {'goal_info':{'goal_id':{'uuid':list(n.to_bytes(16,'big'))}},'status':4}]}})+'\n')
+            tail.refresh()
+            self.assertEqual(len(tail.native_statuses),tail.NATIVE_STATUS_LIMIT)
+            self.assertEqual(len(tail.native()),tail.NATIVE_STATUS_LIMIT)
+            self.assertNotIn(('nav_status','00'*16),tail.native_statuses)
+            # Empty DDS arrays do not fabricate terminal evidence for a new UUID.
+            with path.open('a')as stream:stream.write(json.dumps({'topic':'dock_status','payload':{'status_list':[]}})+'\n')
+            tail.refresh()
+            self.assertEqual(len(tail.native_statuses),tail.NATIVE_STATUS_LIMIT)
+
 
 if __name__=='__main__':unittest.main()

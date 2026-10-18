@@ -17,5 +17,19 @@ install(PROGRAMS scripts/verify_stack.py scripts/mission_bridge.py
   scripts/obstacle_controller.py scripts/wait_ready.py scripts/map_rules.py
   scripts/rviz_desktop.py DESTINATION lib/${PROJECT_NAME})
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/fishbot_runtime.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/fishbot_manual_lease.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/fishbot_manual_profile.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/fishbot_manual_ros.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/cooperation_core.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/fishbot_passage.launch.py
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/fishbot_command_guard.py
   DESTINATION lib/${PROJECT_NAME})
+install(FILES
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/config/fishbot_manual_mux.yaml
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/config/fishbot_model_geometry.yaml
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/config/fishbot_passage_nav.yaml
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/config/fishbot_passage_tree.xml
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/config/fishbot_passage_tolerant_tree.xml
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/config/fishbot_passage_through_tree.xml
+  DESTINATION lib/${PROJECT_NAME}/config)
 ament_package()

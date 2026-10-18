@@ -40,7 +40,10 @@ public class RuntimeService {
     }
 
     private Map<String, Object> capability(String id) {
-        return Map.of("id", id, "submission", "topic_publish", "task_lookup", false,
-                "cancel", false, "event_history", "none");
+        boolean enabled = properties.isLegacyMotionWritesEnabled();
+        return Map.of("id", id, "submission", enabled && !properties.isOfflineTelemetry() ? "topic_publish" : "read_only",
+                "available", enabled, "reason", !enabled ? "legacy_motion_writes_disabled"
+                    : properties.isOfflineTelemetry() ? "offline_preview_only" : "legacy_topic_publish_only",
+                "task_lookup", false, "cancel", false, "event_history", "none");
     }
 }

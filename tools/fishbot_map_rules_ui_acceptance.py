@@ -319,7 +319,8 @@ def main():
             identity = marker().get('owned_mission_id')
             current = get('state')['mission']
             if identity and current['id'] == identity and current['status'] in {'running', 'canceling'}:
-                report['failure_cancel'] = request(args.api, 'cancel', {})
+                report['failure_cancel'] = request(args.api, 'cancel', {
+                    'mission_id': identity, 'issued_at': time.time()})
                 wait_for(lambda: get('state'), lambda s: s['mission']['id'] == identity
                     and s['mission']['status'] not in {'running', 'canceling'}, 15)
                 quiet_tail(time.monotonic())

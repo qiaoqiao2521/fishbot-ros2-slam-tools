@@ -9,11 +9,17 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 class RosTopicSafetyTest {
+    private StationRuntimeProperties legacyProperties() {
+        StationRuntimeProperties properties = new StationRuntimeProperties();
+        properties.setLegacyMotionWritesEnabled(true);
+        return properties;
+    }
+
     @Test
     void queuedVelocityIsRejectedAfterLatch() {
         RosbridgeClient client = mock(RosbridgeClient.class);
         when(client.send(anyString())).thenReturn(Mono.empty());
-        RosTopicService service = new RosTopicService(client, mock(DiagnosticsService.class), new StationRuntimeProperties(), mock(NavigationStateService.class), new RosTimeService(new StationRuntimeProperties(), client));
+        RosTopicService service = new RosTopicService(client, mock(DiagnosticsService.class), legacyProperties(), mock(NavigationStateService.class), new RosTimeService(legacyProperties(), client));
         Mono<Void> queued = service.publishCmdVel(0.2, 0, "test", 1);
         service.publishEmergencyStop("test").block();
         StepVerifier.create(queued).expectError(IllegalStateException.class).verify();
@@ -25,7 +31,7 @@ class RosTopicSafetyTest {
     void goalPoseIsRejectedAfterLatch() {
         RosbridgeClient client = mock(RosbridgeClient.class);
         when(client.send(anyString())).thenReturn(Mono.empty());
-        RosTopicService service = new RosTopicService(client, mock(DiagnosticsService.class), new StationRuntimeProperties(), mock(NavigationStateService.class), new RosTimeService(new StationRuntimeProperties(), client));
+        RosTopicService service = new RosTopicService(client, mock(DiagnosticsService.class), legacyProperties(), mock(NavigationStateService.class), new RosTimeService(legacyProperties(), client));
         Mono<Void> queued = service.publishGoalPose(1.5, -0.5, 0.0, "test");
         service.publishEmergencyStop("test").block();
         StepVerifier.create(queued).expectError(IllegalStateException.class).verify();
@@ -36,7 +42,7 @@ class RosTopicSafetyTest {
     void goalPosePublishesPoseStampedInMapFrame() {
         RosbridgeClient client = mock(RosbridgeClient.class);
         when(client.send(anyString())).thenReturn(Mono.empty());
-        RosTopicService service = new RosTopicService(client, mock(DiagnosticsService.class), new StationRuntimeProperties(), mock(NavigationStateService.class), new RosTimeService(new StationRuntimeProperties(), client));
+        RosTopicService service = new RosTopicService(client, mock(DiagnosticsService.class), legacyProperties(), mock(NavigationStateService.class), new RosTimeService(legacyProperties(), client));
         StepVerifier.create(service.publishGoalPose(1.25, 2.5, Math.PI, "operator")).verifyComplete();
         verify(client).send(contains("\"op\":\"advertise\",\"topic\":\"/goal_pose\""));
         verify(client).send(contains("\"op\":\"publish\",\"topic\":\"/goal_pose\""));
@@ -49,7 +55,7 @@ class RosTopicSafetyTest {
 
     @Test
     void goalPoseRejectsNonFiniteCoordinates() {
-        RosTopicService service = new RosTopicService(mock(RosbridgeClient.class), mock(DiagnosticsService.class), new StationRuntimeProperties(), mock(NavigationStateService.class), mock(RosTimeService.class));
+        RosTopicService service = new RosTopicService(mock(RosbridgeClient.class), mock(DiagnosticsService.class), legacyProperties(), mock(NavigationStateService.class), mock(RosTimeService.class));
         assertThrows(IllegalArgumentException.class, () -> service.publishGoalPose(Double.NaN, 0, 0, "test"));
     }
 }

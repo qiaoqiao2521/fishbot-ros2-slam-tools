@@ -220,3 +220,16 @@
   .station-control-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .station-control-current { grid-column: 1 / -1; }
 }
+
+/* Keep the global route rail compact; panels own the working space. */
+@media (min-width: 601px) {
+  .station-sidebar { width: 64px; padding: 18px 8px; }
+  .station-brand { padding:0 5px 24px; }
+  .station-brand > div, .station-navigation button > span, .station-nav-arrow, .station-sidebar-note { display:none; }
+  .station-navigation button { justify-content:center; padding:0; }
+  .station-topbar { padding:0 20px; }
+}
+.station-workspace > [hidden] { display:none; }
+
+.station-control-unavailable { padding:10px 14px; background:#f0f4fa; color:#5d6e83; font-size:12px; line-height:1.7; }
+.radar-write-capability { margin:0; padding:5px 14px; font-size:11px; color:#61758c; }

@@ -1,6 +1,7 @@
 import { runtimeFetch, runtimeJson } from '@/lib/runtime-context'
 
-export const VOICE_DOMAIN = 121
+export const VOICE_DOMAIN = Number(import.meta.env.VITE_FISHBOT_VOICE_DOMAIN ?? '121')
+if (!Number.isInteger(VOICE_DOMAIN) || VOICE_DOMAIN < 1 || VOICE_DOMAIN > 232) throw new Error('语音服务必须配置明确的隔离 ROS 域。')
 export const VOICE_AUDIO_MAX_BYTES = 4 * 1024 * 1024
 export const VOICE_AUDIO_MAX_MS = 15000
 export const VOICE_AUDIO_TTL_MS = 5000

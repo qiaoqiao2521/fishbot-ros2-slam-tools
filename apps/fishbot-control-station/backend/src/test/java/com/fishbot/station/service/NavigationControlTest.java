@@ -23,6 +23,12 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 class NavigationControlTest {
+    private StationRuntimeProperties legacyProperties() {
+        StationRuntimeProperties properties = new StationRuntimeProperties();
+        properties.setLegacyMotionWritesEnabled(true);
+        return properties;
+    }
+
     private final ObjectMapper mapper = new ObjectMapper();
     private final Instant timestamp = Instant.parse("2026-10-13T01:00:00Z");
 
@@ -47,7 +53,7 @@ class NavigationControlTest {
 
     @Test
     void initialPosePayloadUsesCovarianceQuaternionAndObservedSimulationClock() throws Exception {
-        StationRuntimeProperties properties = new StationRuntimeProperties();
+        StationRuntimeProperties properties = legacyProperties();
         properties.setUseSimTime(true);
         RosbridgeClient client = connectedClient();
         RosTimeService time = new RosTimeService(properties, client);
@@ -81,7 +87,7 @@ class NavigationControlTest {
 
     @Test
     void offlineInitialPoseUpdatesOnlyPreviewAndClearsOldPreviewPath() {
-        StationRuntimeProperties properties = new StationRuntimeProperties();
+        StationRuntimeProperties properties = legacyProperties();
         properties.setTelemetryMode("offline");
         RosbridgeClient client = mock(RosbridgeClient.class);
         NavigationStateService navigation = new NavigationStateService(properties, client);
@@ -102,7 +108,7 @@ class NavigationControlTest {
 
     @Test
     void queuedInitialPoseCannotPublishAfterStopLatch() {
-        StationRuntimeProperties properties = new StationRuntimeProperties();
+        StationRuntimeProperties properties = legacyProperties();
         RosbridgeClient client = connectedClient();
         RosTopicService service = new RosTopicService(client, mock(DiagnosticsService.class), properties,
                 mock(NavigationStateService.class), new RosTimeService(properties, client));
@@ -115,7 +121,7 @@ class NavigationControlTest {
     @Test
     void nonFiniteInitialPoseNeverPublishes() {
         RosbridgeClient client = mock(RosbridgeClient.class);
-        RosTopicService service = new RosTopicService(client, mock(DiagnosticsService.class), new StationRuntimeProperties(),
+        RosTopicService service = new RosTopicService(client, mock(DiagnosticsService.class), legacyProperties(),
                 mock(NavigationStateService.class), mock(RosTimeService.class));
         for (double value : new double[]{Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
             assertThrows(IllegalArgumentException.class, () -> service.publishInitialPose(value, 0, 0, "test"));
@@ -127,7 +133,7 @@ class NavigationControlTest {
 
     @Test
     void pathSamplingRetainsFirstLastAndOriginalPoseCount() {
-        NavigationStateService navigation = new NavigationStateService(new StationRuntimeProperties(), connectedClient());
+        NavigationStateService navigation = new NavigationStateService(legacyProperties(), connectedClient());
         navigation.updateFromPath(path(4001), timestamp);
         var snapshot = navigation.snapshot().path();
         assertTrue(snapshot.ready());
@@ -141,7 +147,7 @@ class NavigationControlTest {
 
     @Test
     void emptyWrongFrameAndMalformedPathsAllClearPreviousPath() throws Exception {
-        NavigationStateService navigation = new NavigationStateService(new StationRuntimeProperties(), connectedClient());
+        NavigationStateService navigation = new NavigationStateService(legacyProperties(), connectedClient());
         for (JsonNode invalid : List.of(path(0), mapper.readTree("{\"header\":{\"frame_id\":\"odom\"},\"poses\":[]}"),
                 mapper.readTree("{\"header\":{\"frame_id\":\"map\"},\"poses\":[{\"pose\":{\"position\":{\"x\":1}}}]}"))) {
             navigation.updateFromPath(path(3), timestamp);
@@ -156,7 +162,7 @@ class NavigationControlTest {
     void invalidUnsampledPointRejectsWholePath() {
         JsonNode data = path(4001);
         ((com.fasterxml.jackson.databind.node.ObjectNode) data.path("poses").get(1).path("pose").path("position")).put("x", Double.NaN);
-        NavigationStateService navigation = new NavigationStateService(new StationRuntimeProperties(), connectedClient());
+        NavigationStateService navigation = new NavigationStateService(legacyProperties(), connectedClient());
         navigation.updateFromPath(path(3), timestamp);
         navigation.updateFromPath(data, timestamp);
         assertFalse(navigation.snapshot().path().ready());
@@ -166,7 +172,7 @@ class NavigationControlTest {
     @Test
     void disconnectClearsPathAndReconnectDoesNotResurrectIt() {
         RosbridgeClient client = connectedClient();
-        NavigationStateService navigation = new NavigationStateService(new StationRuntimeProperties(), client);
+        NavigationStateService navigation = new NavigationStateService(legacyProperties(), client);
         navigation.updateFromPath(path(3), timestamp);
         assertTrue(navigation.snapshot().path().ready());
         when(client.isConnected()).thenReturn(false);
@@ -182,7 +188,7 @@ class NavigationControlTest {
     void reconnectBetweenSnapshotsInvalidatesPreviousConnectionPath() {
         RosbridgeClient client = connectedClient();
         when(client.getConnectionGeneration()).thenReturn(1L);
-        NavigationStateService navigation = new NavigationStateService(new StationRuntimeProperties(), client);
+        NavigationStateService navigation = new NavigationStateService(legacyProperties(), client);
         navigation.updateFromPath(path(3), timestamp);
         assertTrue(navigation.snapshot().path().ready());
         when(client.getConnectionGeneration()).thenReturn(2L);
@@ -195,7 +201,7 @@ class NavigationControlTest {
     void newGoalAndInitialPoseClearPreviousPathEvenWhenSubmissionFails() {
         RosbridgeClient client = connectedClient();
         when(client.send(anyString())).thenReturn(Mono.error(new IllegalStateException("Disconnected")));
-        StationRuntimeProperties properties = new StationRuntimeProperties();
+        StationRuntimeProperties properties = legacyProperties();
         NavigationStateService navigation = new NavigationStateService(properties, client);
         RosTopicService service = new RosTopicService(client, mock(DiagnosticsService.class), properties,
                 navigation, new RosTimeService(properties, client));
@@ -246,7 +252,7 @@ class NavigationControlTest {
         RosTopicService topics = mock(RosTopicService.class);
         when(topics.publishEmergencyStop(any())).thenReturn(Mono.empty());
         ControlService service = new ControlService(new SafetyProperties(), topics,
-                mock(DiagnosticsService.class), mock(OfflineTelemetryService.class));
+                mock(DiagnosticsService.class), mock(OfflineTelemetryService.class), legacyProperties());
         service.emergencyStop().block();
         NavigationGoalRequest request = new NavigationGoalRequest();
         request.setX(0.); request.setY(0.); request.setYaw(0.); request.setSource("test");

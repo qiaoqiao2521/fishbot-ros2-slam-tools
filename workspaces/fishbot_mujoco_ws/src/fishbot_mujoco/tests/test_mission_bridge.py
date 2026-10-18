@@ -80,6 +80,124 @@ class IdentifiedVoiceTaskTests(unittest.TestCase):
             self.assertEqual(caught.exception.status, status)
 
 
+class TaskLookupTests(unittest.TestCase):
+    current_id = 'd44b9ba6-ac8e-49dc-83c4-86caf4a14390'
+    historical_id = 'db7de024-1f05-4b78-8d6f-088e94f4eae9'
+    current_instance = '2b91f713-021b-496c-99ea-e1445815ae35'
+    previous_instance = '548f369a-fc92-496a-9ad8-607fb004fcb8'
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.store = MapRulesStore(self.directory.name)
+        self.store.bind(fixture_grid())
+        self.bridge = SimpleNamespace(lock=threading.RLock(), mission=MissionRecord(),
+            runtime_instance_id=self.current_instance, rules_store=self.store)
+        self.bridge.mission.begin([{'x': 1., 'y': 1., 'yaw': 0.}], False,
+                                  mission_id=self.current_id)
+        self.bridge.mission.value.update(runtime_instance_id=self.current_instance,
+                                        map_id=self.store.map_id)
+
+    def record(self, status='succeeded', instance=previous_instance):
+        value = {'id': self.historical_id, 'map_id': self.store.map_id,
+                 'rules_revision': 0, 'started_at': 100., 'finished_at': 102.,
+                 'status': status, 'current_index': 0, 'return_home': False,
+                 'waypoints': [{'x': .5, 'y': .5, 'yaw': 0.}], 'message': '原始记录',
+                 'native_goal_id': 'a' * 32, 'native_status': 4,
+                 'native_error_code': 0, 'events': [], 'observations': []}
+        if instance is not None:
+            value['runtime_instance_id'] = instance
+        return value
+
+    def lookup(self, task_id, map_id=None):
+        return MissionBridge.task_record(self.bridge, task_id, map_id)
+
+    def test_current_original_id_returns_live_evidence_without_poll_or_ledger_read(self):
+        with patch.object(self.store, 'runs', side_effect=AssertionError('current task needs no persistence read')):
+            result = self.lookup(self.current_id, self.store.map_id)
+        self.assertEqual(result['source'], 'current')
+        self.assertEqual(result['runtime_instance_id'], self.current_instance)
+        self.assertEqual(result['current_runtime_instance_id'], self.current_instance)
+        self.assertEqual(result['mission'], self.bridge.mission.value)
+        result['mission']['waypoints'][0]['x'] = 99.
+        self.assertEqual(self.bridge.mission.value['waypoints'][0]['x'], 1.)
+
+    def test_historical_native_terminals_preserve_origin_times_and_evidence(self):
+        for status, native in (('succeeded', 4), ('canceled', 5), ('failed', 6)):
+            with self.subTest(status=status):
+                original = self.record(status)
+                original['native_status'] = native
+                self.store.save_run(original)
+                result = self.lookup(self.historical_id, self.store.map_id)
+                self.assertEqual(result['source'], 'persisted')
+                self.assertEqual(result['runtime_instance_id'], self.previous_instance)
+                self.assertEqual(result['current_runtime_instance_id'], self.current_instance)
+                self.assertEqual(result['mission'], original)
+                self.assertNotIn('physical_score', result['mission'])
+                self.assertEqual(self.bridge.mission.value['id'], self.current_id)
+
+    def test_old_active_or_missing_origin_stays_unknown_without_rewriting_ledger(self):
+        for status in ('running', 'canceling', 'unknown'):
+            for instance in (self.previous_instance, self.current_instance, None):
+                with self.subTest(status=status, instance=instance):
+                    original = self.record(status, instance)
+                    original['finished_at'] = None
+                    original.pop('native_status')
+                    self.store.save_run(original)
+                    before = self.store.filename.read_bytes()
+                    result = self.lookup(self.historical_id)
+                    self.assertEqual(result['mission']['status'], 'unknown')
+                    self.assertEqual(result['mission']['recorded_status'], status)
+                    self.assertEqual(result['mission']['reason'], 'previous_runtime_execution_unconfirmed')
+                    self.assertEqual(result['runtime_instance_id'], instance)
+                    self.assertIsNone(result['mission']['finished_at'])
+                    self.assertNotIn('native_status', result['mission'])
+                    self.assertEqual(self.store.runs()['runs'][0], original)
+                    self.assertEqual(self.store.filename.read_bytes(), before)
+
+    def test_restored_current_slot_uses_persisted_origin_instead_of_new_server_identity(self):
+        original = self.record('unknown')
+        original['finished_at'] = None
+        self.store.save_run(original)
+        self.bridge.mission.value.update(id=self.historical_id, status='canceling',
+                                        runtime_instance_id=self.previous_instance)
+        result = self.lookup(self.historical_id)
+        self.assertEqual(result['source'], 'persisted')
+        self.assertEqual(result['runtime_instance_id'], self.previous_instance)
+        self.assertEqual(result['mission']['recorded_status'], 'unknown')
+        self.assertEqual(self.bridge.mission.value['status'], 'canceling')
+
+    def test_unidentified_legacy_current_activity_is_not_execution_proof(self):
+        self.bridge.mission.value.pop('runtime_instance_id')
+        result = self.lookup(self.current_id)
+        self.assertEqual(result['mission']['status'], 'unknown')
+        self.assertEqual(result['mission']['recorded_status'], 'running')
+        self.assertIsNone(result['runtime_instance_id'])
+
+    def test_exact_id_never_returns_another_current_task_or_accepts_uuid_aliases(self):
+        for invalid in ('not-a-uuid', self.current_id.upper(), '{' + self.current_id + '}',
+                        'urn:uuid:' + self.current_id, '../' + self.current_id, None):
+            with self.subTest(invalid=invalid), self.assertRaises(APIError) as caught:
+                self.lookup(invalid)
+            self.assertEqual(caught.exception.status, 400)
+        with self.assertRaises(APIError) as missing:
+            self.lookup(self.historical_id)
+        self.assertEqual((missing.exception.status, str(missing.exception)), (404, 'task_not_found'))
+        with self.assertRaises(APIError) as compact_alias:
+            self.lookup(self.current_id.replace('-', ''))
+        self.assertEqual(compact_alias.exception.status, 404)
+        self.assertEqual(self.bridge.mission.value['id'], self.current_id)
+
+    def test_map_guard_compares_original_record_not_latest_runtime_map(self):
+        self.store.save_run(self.record())
+        self.bridge.grid = {**fixture_grid(), 'origin': [8., 8., 0.]}
+        self.assertEqual(self.lookup(self.historical_id, self.store.map_id)['mission']['map_id'], self.store.map_id)
+        for task_id in (self.current_id, self.historical_id):
+            with self.subTest(task_id=task_id), self.assertRaises(APIError) as mismatch:
+                self.lookup(task_id, 'different-map')
+            self.assertEqual((mismatch.exception.status, str(mismatch.exception)), (409, 'task_map_mismatch'))
+
+
 class GoalBoundaryTests(unittest.TestCase):
     def setUp(self):
         self.grid = fixture_grid()
@@ -744,6 +862,7 @@ class MapRulesIntegrationBoundaryTests(unittest.TestCase):
         bridge, _canceled = self.healthy_bridge()
         bridge.mission = MissionRecord()
         bridge.ready, bridge.rules_apply_state = True, 'applied'
+        bridge.runtime_instance_id = '2b91f713-021b-496c-99ea-e1445815ae35'
         source = dict(start or {'x': -.8, 'y': .6, 'yaw': .7})
         reads, goals = [], []
         def transform(*_args):
@@ -779,6 +898,8 @@ class MapRulesIntegrationBoundaryTests(unittest.TestCase):
         self.assertAlmostEqual(last.orientation.z, math.sin(expected['yaw']/2))
         self.assertAlmostEqual(last.orientation.w, math.cos(expected['yaw']/2))
         self.assertEqual(bridge.mission.value['start_pose'], expected)
+        self.assertEqual(bridge.mission.value['runtime_instance_id'], bridge.runtime_instance_id)
+        self.assertEqual(self.store.runs()['runs'][0]['runtime_instance_id'], bridge.runtime_instance_id)
         self.assertEqual(bridge.mission.value['waypoints'][-1], expected)
         self.assertEqual(bridge.rules_run['start_pose'], expected)
         self.assertEqual(self.store.runs()['runs'][0]['start_pose'], expected)

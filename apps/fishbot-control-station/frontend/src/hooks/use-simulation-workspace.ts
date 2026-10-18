@@ -1,7 +1,8 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { MapZonesManager } from '@/lib/map-zones'
+import { readRuleDraft, writeRuleDraft, ruleDraftKey } from '@/lib/rule-draft-cache'
 
-import { posesEquivalent, requestSimulation, simulationRequestRejected, SimulationRejectedRequest, type Pose, type SimulationMap } from '@/lib/simulation'
+import { SIMULATION_DOMAIN, posesEquivalent, requestSimulation, simulationRequestRejected, SimulationRejectedRequest, type Pose, type SimulationMap } from '@/lib/simulation'
 import {
   emptyRulesEditor, mapGeneration, rulesDirty, rulesReducer, validateMapRules, validateRoutes, validateRuns, zonesEqual,
   type MapRules, type RouteCollection, type RunCollection, type SavedRoute,
@@ -9,6 +10,9 @@ import {
 
 export function useSimulationWorkspace(map: SimulationMap | null, blocked: boolean) {
   const [editor, dispatch] = useReducer(rulesReducer, undefined, emptyRulesEditor)
+  const ruleCacheLoaded = useRef<string | null>(null)
+  const ruleCacheFailed = useRef(false)
+  const [ruleDraftMessage, setRuleDraftMessage] = useState('')
   const [rulesError, setRulesError] = useState<string | null>(null)
   const [routesError, setRoutesError] = useState<string | null>(null)
   const [runsError, setRunsError] = useState<string | null>(null)
@@ -54,6 +58,16 @@ export function useSimulationWorkspace(map: SimulationMap | null, blocked: boole
     if (ruleResult.status === 'fulfilled') {
       dispatch({ type: 'received', value: ruleResult.value })
       setRulesError(null)
+      if (ruleCacheLoaded.current !== expectedMap) {
+        ruleCacheLoaded.current = expectedMap ?? null
+        try {
+          const cached = expectedMap ? readRuleDraft(sessionStorage, SIMULATION_DOMAIN, expectedMap) : null
+          if (cached) {
+            dispatch({ type: 'restoreDraft', mapId: cached.mapId, baseRevision: cached.baseRevision, zones: cached.zones })
+            setRuleDraftMessage(cached.baseRevision === ruleResult.value.revision ? '已恢复本标签页未发布规则草稿；未自动保存或派发。' : '已恢复旧版本规则草稿；服务端版本已变化，请核对后恢复已保存规则。')
+          }
+        } catch { ruleCacheFailed.current = true; setRuleDraftMessage('规则草稿缓存未能恢复；服务器规则可读，当前编辑仅留本页。') }
+      }
     } else setRulesError(message(ruleResult.reason, '地图规则'))
     if (routeResult.status === 'fulfilled') {
       setRoutes(routeResult.value.routes)
@@ -74,6 +88,9 @@ export function useSimulationWorkspace(map: SimulationMap | null, blocked: boole
   useEffect(() => {
     mounted.current = true
     dispatch({ type: 'reset' })
+    ruleCacheLoaded.current = null
+    ruleCacheFailed.current = false
+    setRuleDraftMessage('')
     setRoutes([])
     setRuns([])
     setRouteWrite('idle')
@@ -102,6 +119,15 @@ export function useSimulationWorkspace(map: SimulationMap | null, blocked: boole
     // Only map generation changes reset drafts. Polling an identical map does not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generation])
+
+  useEffect(() => {
+    if (!editor.saved || !editor.mapId || editor.mapId !== generation || ruleCacheLoaded.current !== generation || ruleCacheFailed.current) return
+    try {
+      if (rulesDirty(editor) && editor.baseRevision !== null) {
+        writeRuleDraft(sessionStorage, { version: 1, domain: SIMULATION_DOMAIN, mapId: editor.mapId, baseRevision: editor.baseRevision, zones: editor.zones })
+      } else if (editor.writeState === 'idle') sessionStorage.removeItem(ruleDraftKey(SIMULATION_DOMAIN, editor.mapId))
+    } catch { ruleCacheFailed.current = true; setRuleDraftMessage('规则草稿未能写入本标签页缓存；本页仍保留，请在关闭前保存。') }
+  }, [editor, generation])
 
   async function refresh() {
     if (refreshing) return
@@ -230,6 +256,6 @@ export function useSimulationWorkspace(map: SimulationMap | null, blocked: boole
     }
   }
 
-  return { editor, dispatch, rulesError, routes, routesError, runs, runsError, routeWrite, routeMessage,
+  return { editor, dispatch, rulesError, ruleDraftMessage, routes, routesError, runs, runsError, routeWrite, routeMessage,
     refreshing, refresh, saveRules, saveRoute, exporting, exportMessage, exportRules }
 }

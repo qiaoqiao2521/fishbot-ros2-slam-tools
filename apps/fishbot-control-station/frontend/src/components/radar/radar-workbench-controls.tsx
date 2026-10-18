@@ -24,7 +24,7 @@ export function RadarWorkbenchControls({
             onClick={() => onConfigChange({ ...config, freeze: !config.freeze })}
           >
             {config.freeze ? <Play className="mr-2 h-4 w-4" /> : <Pause className="mr-2 h-4 w-4" />}
-            {config.freeze ? 'Resume' : 'Freeze'}
+            {config.freeze ? '恢复显示' : '冻结显示'}
           </Button>
 
           <Button
@@ -33,7 +33,7 @@ export function RadarWorkbenchControls({
             onClick={() => onConfigChange({ ...config, showGhost: !config.showGhost })}
           >
             <Ghost className="mr-2 h-4 w-4" />
-            Ghost
+            轨迹残影
           </Button>
 
           <Button
@@ -42,7 +42,7 @@ export function RadarWorkbenchControls({
             onClick={() => onConfigChange({ ...config, showSweep: !config.showSweep })}
           >
             <ScanLine className="mr-2 h-4 w-4" />
-            Sweep
+            扫描动画
           </Button>
 
           <Button
@@ -51,12 +51,12 @@ export function RadarWorkbenchControls({
             onClick={() => onConfigChange({ ...config, showGrid: !config.showGrid })}
           >
             <Grid3X3 className="mr-2 h-4 w-4" />
-            Grid
+            网格
           </Button>
 
           <Button variant="outline" size="sm" onClick={onClearHistory}>
             <Trash2 className="mr-2 h-4 w-4" />
-            Clear
+            清空残影
           </Button>
         </div>
 

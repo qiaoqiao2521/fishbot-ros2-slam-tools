@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "label": "本机仿真工作台",
+  "services": {
+    "station": { "port": 8080, "domain": null },
+    "mission": { "port": 9070, "domain": 93 },
+    "cooperation": { "port": 9086, "domain": 114 },
+    "voice": { "port": 9094, "domain": 93 }
+  },
+  "tools": { "spatiallm": null, "video": null }
+}

@@ -1,4 +1,5 @@
-import { MAX_WAYPOINTS, type MissionDispatchState, type Point, type Pose, type SimulationMap } from '@/lib/simulation'
+import { isFreeWaypoint, MAX_WAYPOINTS, worldToMap, type MissionDispatchState, type Point, type Pose, type SimulationMap } from '@/lib/simulation'
+import { MapZonesManager } from '@/lib/map-zones'
 
 export const MAX_MAP_ZONES = 64
 
@@ -123,11 +124,64 @@ export function zoneFromSelection(kind: 'wall' | 'no_go', first: Point, second: 
     ...(kind === 'wall' ? { width: 0.02 } : {}) }
 }
 
+/** Editing changes a local document. Native planning and dispatch remain authoritative. */
+export function parseObjectPoseFields(fields: { x: string; y: string; yaw: string }, translateOnly = false): Pose {
+  function number(value: string): number {
+    const parsed = Number(value)
+    if (!value.trim() || !Number.isFinite(parsed)) throw new Error('请输入有限数值，不能留空。')
+    return parsed
+  }
+  const pose = { x: number(fields.x), y: number(fields.y), yaw: translateOnly ? 0 : number(fields.yaw) * Math.PI / 180 }
+  if (!Number.isFinite(pose.yaw)) throw new Error('朝向数值过大，请重新输入。')
+  return pose
+}
+
+export function mapZonePose(zone: MapZone): Pose {
+  const normalized = MapZonesManager.fromMapRulesZones([zone]).toMapRulesZones()[0]
+  return {
+    x: normalized.points.reduce((sum, point) => sum + point.x, 0) / normalized.points.length,
+    y: normalized.points.reduce((sum, point) => sum + point.y, 0) / normalized.points.length,
+    yaw: normalized.kind === 'wall' ? Math.atan2(normalized.points[1].y - normalized.points[0].y,
+      normalized.points[1].x - normalized.points[0].x) : 0,
+  }
+}
+
+export function transformMapZone(zone: MapZone, pose: Pose, map: SimulationMap): MapZone {
+  if (!poseValid(pose)) throw new Error('位置与朝向必须为有限数值。')
+  const original = mapZonePose(zone)
+  if (zone.kind === 'no_go' && pose.yaw !== 0) throw new Error('禁区只支持世界轴对齐平移，不能旋转。')
+  const angle = pose.yaw - original.yaw, cos = Math.cos(angle), sin = Math.sin(angle)
+  const transformed: MapZone = { ...zone, points: zone.points.map((point) => {
+    const x = point.x - original.x, y = point.y - original.y
+    return { x: pose.x + x * cos - y * sin, y: pose.y + x * sin + y * cos }
+  }) }
+  for (const point of transformed.points) {
+    const pixel = worldToMap(point, map)
+    if (!pointValid(pixel) || pixel.x < -1e-9 || pixel.x > map.width + 1e-9
+      || pixel.y < -1e-9 || pixel.y > map.height + 1e-9) throw new Error('修改后的规则越过地图边缘，请调整中心位置。')
+  }
+  return MapZonesManager.fromMapRulesZones([transformed]).toMapRulesZones()[0]
+}
+
+export function editWaypointPose(points: Pose[], index: number, expected: Pose, pose: Pose, map: SimulationMap, zones: MapZone[]): Pose[] {
+  const current = points[index]
+  if (!Number.isInteger(index) || !current || !poseValid(expected) || current.x !== expected.x || current.y !== expected.y || current.yaw !== expected.yaw) {
+    throw new Error('选中航点已变化，请重新选择后修改。')
+  }
+  if (!poseValid(pose)) throw new Error('位置与朝向必须为有限数值。')
+  if (!isFreeWaypoint(pose, map, .13)) throw new Error('该位置的车体范围碰到地图边缘、障碍或未知格，请调整坐标。')
+  const collision = MapZonesManager.fromMapRulesZones(zones).checkPathCollision([pose], .13)
+  if (collision.hasCollision) throw new Error(`该位置的车体范围与${collision.collisionType === 'wall' ? '虚拟墙' : '禁区'} ${collision.collidedEntityId} 冲突。`)
+  return points.map((point, i) => i === index ? { x: pose.x, y: pose.y, yaw: Math.atan2(Math.sin(pose.yaw), Math.cos(pose.yaw)) } : { ...point })
+}
+
 export type RulesEdit =
   | { type: 'received'; value: MapRules }
   | { type: 'saved'; value: MapRules }
+  | { type: 'restoreDraft'; mapId: string; baseRevision: number; zones: MapZone[] }
   | { type: 'anchor'; point: Point | null }
   | { type: 'add'; zone: MapZone }
+  | { type: 'replace'; id: string; expected: MapZone; zone: MapZone }
   | { type: 'remove'; id: string }
   | { type: 'undo' }
   | { type: 'redo' }
@@ -158,6 +212,14 @@ export function rulesReducer(editor: RulesEditor, edit: RulesEdit): RulesEditor 
     history: [], future: [], anchor: null, writeState: 'idle', attempted: null, error: null }
   if (edit.type === 'rejected') return { ...editor, writeState: 'rejected', error: edit.message, attempted: null }
   if (edit.type === 'unknown') return { ...editor, writeState: 'unknown', error: edit.message }
+  if (edit.type === 'restoreDraft') {
+    if (!editor.saved || edit.mapId !== editor.mapId || edit.mapId !== editor.saved.map_id || editor.writeState !== 'idle'
+      || rulesDirty(editor) || editor.history.length || editor.future.length || !Number.isSafeInteger(edit.baseRevision) || edit.baseRevision < 0) return editor
+    try { MapZonesManager.fromMapRulesZones(edit.zones) }
+    catch { return editor }
+    return { ...editor, zones: cloneZones(edit.zones), baseRevision: edit.baseRevision,
+      history: [cloneZones(editor.saved.zones)], future: [], anchor: null, error: null }
+  }
   if (editor.writeState === 'saving' || editor.writeState === 'unknown') return editor
   if (edit.type === 'anchor') return { ...editor, anchor: edit.point, error: null }
   if (edit.type === 'saving') return editor.saved && !editor.anchor
@@ -174,6 +236,17 @@ export function rulesReducer(editor: RulesEditor, edit: RulesEdit): RulesEditor 
     const next = editor.future.at(-1)
     return next ? { ...editor, zones: cloneZones(next), future: editor.future.slice(0, -1),
       history: [...editor.history.slice(-49), cloneZones(editor.zones)], error: null, writeState: 'idle' } : editor
+  }
+  if (edit.type === 'replace') {
+    const current = editor.zones.find((zone) => zone.id === edit.id)
+    if (!current || edit.zone.id !== edit.id || edit.zone.kind !== current.kind || !zonesEqual([current], [edit.expected])) {
+      return { ...editor, error: '选中规则已变化，请重新选择后修改。' }
+    }
+    try { MapZonesManager.fromMapRulesZones([edit.zone]) }
+    catch (error) { return { ...editor, error: error instanceof Error ? error.message : '规则修改无效。' } }
+    if (zonesEqual([current], [edit.zone])) return editor
+    return { ...editor, zones: cloneZones(editor.zones.map((zone) => zone.id === edit.id ? edit.zone : zone)),
+      history: [...editor.history.slice(-49), cloneZones(editor.zones)], future: [], anchor: null, error: null, writeState: 'idle' }
   }
   const zones = edit.type === 'add' ? [...editor.zones, edit.zone] : editor.zones.filter((zone) => zone.id !== edit.id)
   return { ...editor, zones: cloneZones(zones), history: [...editor.history.slice(-49), cloneZones(editor.zones)], future: [], anchor: null,

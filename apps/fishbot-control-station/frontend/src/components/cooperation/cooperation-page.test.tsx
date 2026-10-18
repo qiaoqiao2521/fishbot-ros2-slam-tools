@@ -1,19 +1,12 @@
 import { renderToStaticMarkup } from 'react-dom/server'
+import { isValidElement, type ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { CooperationPage, CooperationView } from '@/components/cooperation/cooperation-page'
 import { COOPERATION_STALE_MS, EMPTY_COOPERATION_SNAPSHOT, cooperationFrameSourceKey, type CooperationController, type CooperationSnapshot, type CooperationState, type CooperationFrameObservation } from '@/lib/cooperation'
 
 const hooks = vi.hoisted(() => ({ active: false, cursor: 0, values: [] as unknown[], effects: [] as Array<() => (() => void) | undefined>,
-  frames: null as null | { display: (url: string | null) => void; observe: (frame: CooperationFrameObservation | null) => void },
 }))
-vi.mock('@/lib/cooperation-frame', async (original) => {
-  const actual = await original<typeof import('@/lib/cooperation-frame')>()
-  return { CooperationFrameBuffer: class extends actual.CooperationFrameBuffer {
-    constructor(options: ConstructorParameters<typeof actual.CooperationFrameBuffer>[0]) { super(options); if (hooks.active && options.endpoint !== 'vision-frame.jpg') hooks.frames = options }
-    request(scene: string | null, stamp: number | null) { if (!hooks.active) super.request(scene, stamp) }
-  } }
-})
 vi.mock('react', async (original) => {
   const actual = await original<typeof import('react')>()
   return { ...actual,
@@ -47,6 +40,12 @@ function render(patch: Partial<CooperationSnapshot> = {}, loaded = true) {
   return renderToStaticMarkup(<CooperationView snapshot={{ ...EMPTY_COOPERATION_SNAPSHOT, state, receivedAt: 10000, ownedTaskId: 'task-a', ...patch }}
     now={10000} frame={{ scene: 'actual-scene-sha-123', stamp: 12.5, changedAt: 10000, loadedStamp: loaded ? 12.5 : null, error: !loaded }}
     onBack={() => {}} onStart={() => {}} onCancel={() => {}} onReset={() => {}} onRefresh={() => {}} />)
+}
+
+function visibleText(node: ReactNode): string {
+  if (Array.isArray(node)) return node.map(visibleText).join(' ')
+  if (isValidElement<{ hidden?: boolean; children?: ReactNode }>(node)) return node.props.hidden ? '' : visibleText(node.props.children)
+  return typeof node === 'string' || typeof node === 'number' ? String(node) : ''
 }
 
 describe('cooperation page evidence rendering', () => {
@@ -239,15 +238,20 @@ describe('cooperation page evidence rendering', () => {
     try {
       let page = CooperationPage({ onBack: () => {}, controller })
       cleanups.push(...hooks.effects.map((effect) => effect()))
-      hooks.frames!.display('blob:decoded-frame')
-      hooks.frames!.observe({ scene: 'actual-scene-sha-123', stamp: 12.5, changedAt: 10000, loadedStamp: 12.5, error: false })
+      const decoded: CooperationFrameObservation = { scene: 'actual-scene-sha-123', stamp: 12.5, changedAt: 10000, loadedStamp: 12.5, error: false }
+      // The page owns readiness/time; the canvas now owns decoding separately.
+      const markup = () => {
+        hooks.active = false
+        try { return renderToStaticMarkup(<CooperationView {...page.props} canvas={undefined} frame={decoded} displayedFrameSrc="blob:decoded-frame" />) }
+        finally { hooks.active = true }
+      }
       hooks.cursor = 0
       page = CooperationPage({ onBack: () => {}, controller })
-      expect(renderToStaticMarkup(page)).toContain('data-frame-live="true"')
+      expect(markup()).toContain('data-frame-live="true"')
       await vi.advanceTimersByTimeAsync(COOPERATION_STALE_MS)
       hooks.cursor = 0
       page = CooperationPage({ onBack: () => {}, controller })
-      const expired = renderToStaticMarkup(page)
+      const expired = markup()
       expect(expired).toContain('data-frame-live="false"')
       expect(expired).toContain('画面已过期')
       expect(expired).toContain('状态已过期')
@@ -261,6 +265,73 @@ describe('cooperation page evidence rendering', () => {
       cleanups.forEach((cleanup) => cleanup?.())
       hooks.active = false
       vi.useRealTimers()
+    }
+  })
+
+  it('renders one shared workspace, four read-only objects and exactly one set of primary actions', () => {
+    const html = render({ state: { ...state, episode_id: 'episode-a',
+      reset: { available: true, reason: '可重置', pending: false, last: null } } })
+    expect(html).toContain('data-workspace="cooperation"')
+    for (const object of ['car', 'arm', 'cargo', 'station']) expect(html).toContain(`data-coop-object="${object}"`)
+    const buttons = [...html.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)].map((match) => match[1])
+    for (const action of ['开始装货运输', '取消当前任务', '重置场景']) {
+      expect(buttons.filter((text) => text.includes(action))).toHaveLength(1)
+    }
+    expect(html).toContain('物理真值与导航定位分别显示')
+    expect(html).toContain('data-object-properties="car"')
+    expect(html).toContain('后向相机、停靠感知与验收报告')
+    expect(html).toContain('回执与验收明细')
+  })
+
+  it.each([
+    ['car', ['小车定位与运动', '物理朝向', '线速度'], ['SO101 机械臂', '自由货物', '工位与交付点']],
+    ['arm', ['SO101 机械臂', '关节数量', '实际关节角度'], ['小车定位与运动', '自由货物', '工位与交付点']],
+    ['cargo', ['自由货物', '夹指接触力', '高度'], ['小车定位与运动', 'SO101 机械臂', '工位与交付点']],
+    ['station', ['工位与交付点', '固定工位', '交付点'], ['小车定位与运动', 'SO101 机械臂', '自由货物']],
+  ] as const)('selects %s properties without hiding its own measurements', (object, expected, absent) => {
+    hooks.active = true; hooks.cursor = 0; hooks.values = []; hooks.effects = []
+    try {
+      const props = { snapshot: { ...EMPTY_COOPERATION_SNAPSHOT, state, receivedAt: 10000 }, now: 10000,
+        frame: null, onBack: vi.fn(), onStart: vi.fn(), onCancel: vi.fn(), onRefresh: vi.fn() }
+      const initial = CooperationView(props)
+      const buttons = initial.props.objects.props.children[0]
+      buttons.find((button: { props: { 'data-coop-object': string } }) => button.props['data-coop-object'] === object).props.onClick()
+      hooks.cursor = 0
+      const selected = CooperationView(props)
+      const text = visibleText(selected.props.properties)
+      for (const label of expected) expect(text).toContain(label)
+      for (const label of absent) expect(text).not.toContain(label)
+      expect(props.onStart).not.toHaveBeenCalled(); expect(props.onCancel).not.toHaveBeenCalled()
+    } finally { hooks.active = false; hooks.values = []; hooks.effects = [] }
+  })
+
+  it('keeps the same business owner reading while the workspace is inactive and never posts on hide', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(10000)
+    hooks.active = true; hooks.cursor = 0; hooks.values = []; hooks.effects = []
+    const unsubscribe = vi.fn()
+    const controller = { getSnapshot: () => ({ ...EMPTY_COOPERATION_SNAPSHOT, state, receivedAt: 10000 }),
+      subscribe: vi.fn(() => unsubscribe), refresh: vi.fn(async () => {}), act: vi.fn(), reset: vi.fn() } as unknown as CooperationController
+    const cleanups: Array<(() => void) | undefined> = []
+    try {
+      const page = CooperationPage({ onBack: () => {}, controller, active: false })
+      cleanups.push(...hooks.effects.map((effect) => effect()))
+      expect(page.props.active).toBe(false)
+      await vi.advanceTimersByTimeAsync(1100)
+      expect(controller.refresh).toHaveBeenCalledTimes(2)
+      expect(controller.subscribe).toHaveBeenCalledTimes(1)
+      hooks.cursor = 0
+      const restored = CooperationPage({ onBack: () => {}, controller, active: true })
+      expect(restored.props.active).toBe(true)
+      expect(controller.subscribe).toHaveBeenCalledTimes(1)
+      expect(controller.act).not.toHaveBeenCalled()
+      expect(controller.reset).not.toHaveBeenCalled()
+      cleanups.forEach((cleanup) => cleanup?.()); cleanups.length = 0
+      expect(unsubscribe).toHaveBeenCalledTimes(1)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      cleanups.forEach((cleanup) => cleanup?.())
+      hooks.active = false; vi.useRealTimers()
     }
   })
 })
