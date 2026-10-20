@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Durable, explicit two-job sequencing over the existing local cooperation API."""
+"""Durable, explicit batch sequencing over the existing local cooperation API."""
 import argparse
 import copy
 import fcntl
@@ -13,6 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+from cooperation_core import Rejected, task_delivery_pose
 from fishbot_simulation_suite import write_json
 
 
@@ -48,6 +49,14 @@ def read_json(path):
     def invalid(value):
         raise ContractError('nonfinite JSON is forbidden: '+value)
     return json.loads(Path(path).read_text(encoding='utf-8'), parse_constant=invalid)
+
+
+def delivery_pose(value):
+    """Canonical request values; preserve yaw so task identity stays explicit."""
+    try:
+        return task_delivery_pose({'delivery_pose': value})
+    except Rejected as error:
+        raise ContractError(str(error)) from error
 
 
 class LocalBridge:
@@ -130,9 +139,9 @@ class Workflow:
             raise ContractError('invalid ledger or different bridge endpoint')
         identity(value['workflow_id'])
         identity(value['episode_id'])
-        if (not isinstance(value.get('jobs'), list) or len(value['jobs']) != 2
-                or type(value.get('index')) is not int or not 0 <= value['index'] < 2):
-            raise ContractError('ledger must contain exactly two sequential jobs')
+        if (not isinstance(value.get('jobs'), list) or not value['jobs']
+                or type(value.get('index')) is not int or not 0 <= value['index'] < len(value['jobs'])):
+            raise ContractError('ledger must contain a nonempty sequential job list')
         if not isinstance(value.get('events'), dict) or not isinstance(value.get('resets'), list):
             raise ContractError('ledger event/reset inventory is invalid')
         ids, tasks, jobs = set(), set(), set()
@@ -144,12 +153,17 @@ class Workflow:
                 raise ContractError('duplicate batch or unknown machine')
             ids.add(job['batch_id'])
             jobs.add(job['job_id'])
+            target = delivery_pose(job['delivery_pose']) if 'delivery_pose' in job else None
             for attempt in job['attempts']:
                 identity(attempt['task_id'])
                 identity(attempt['episode_id'])
                 if (attempt['task_id'] in tasks or attempt['dispatch']['body']['task_id'] != attempt['task_id']
                         or attempt['dispatch']['body']['episode_id'] != attempt['episode_id']
-                        or set(attempt['dispatch']['body']) != {'task_id', 'episode_id', 'issued_at'}
+                        or set(attempt['dispatch']['body']) != ({'task_id', 'episode_id', 'issued_at'}
+                            | ({'delivery_pose'} if target is not None else set()))
+                        or ('delivery_pose' in attempt) != (target is not None)
+                        or (target is not None and (delivery_pose(attempt['delivery_pose']) != target
+                            or delivery_pose(attempt['dispatch']['body']['delivery_pose']) != target))
                         or attempt['status'] not in TERMINAL | {'unknown', 'running', 'canceling', 'rejected'}):
                     raise ContractError('conflicting task identity in ledger')
                 tasks.add(attempt['task_id'])
@@ -185,13 +199,20 @@ class Workflow:
         finally:
             os.close(descriptor)
 
-    def create(self, batches, machine='laundry-machine-1'):
+    def create(self, batches, machine='laundry-machine-1', delivery_poses=None):
         if self.data is not None:
             raise ContractError('ledger already exists; it cannot be reinitialized')
-        if len(batches) != 2 or len(set(batches)) != 2 or not machine or not isinstance(machine, str):
-            raise ContractError('two distinct batches and a machine are required')
+        if (not isinstance(batches, (list, tuple)) or not batches
+                or not machine or not isinstance(machine, str)):
+            raise ContractError('a nonempty batch list and a machine are required')
         for batch in batches:
             identity(batch)
+        if len(set(batches)) != len(batches):
+            raise ContractError('batch identities must be distinct')
+        targets = {} if delivery_poses is None else delivery_poses
+        if not isinstance(targets, dict) or set(targets) - set(batches):
+            raise ContractError('delivery-poses must map selected batch UUIDs to delivery_pose values')
+        targets = {batch: delivery_pose(target) for batch, target in targets.items()}
         state = self.bridge.state()
         episode = identity(state.get('episode_id'))
         source, task = state.get('source'), state.get('task')
@@ -208,7 +229,9 @@ class Workflow:
                      'index': 0, 'operation': None, 'events': {}, 'resets': [],
                      'machines': {machine: {'capacity': 1, 'occupant': None, 'version': 0, 'event': None}},
                      'jobs': [{'job_id': str(uuid.uuid4()), 'batch_id': batch, 'machine_id': machine,
-                               'status': 'waiting', 'attempts': []} for batch in batches]}
+                               'status': 'waiting', 'attempts': [],
+                               **({'delivery_pose': copy.deepcopy(targets[batch])} if batch in targets else {})}
+                              for batch in batches]}
         self._save()
         return self.snapshot()
 
@@ -245,6 +268,9 @@ class Workflow:
                 or len({canonical(item['task']) for item in candidates}) != 1):
             raise ContractError('conflicting task history or episode')
         task = candidates[0]['task']
+        if ('delivery_pose' in attempt
+                and delivery_pose(task.get('delivery_pose')) != attempt['delivery_pose']):
+            raise ContractError('original task ID has a different delivery_pose')
         if task.get('status') not in TERMINAL | {'running', 'canceling', 'unknown'}:
             raise ContractError('original task has no usable state')
         return copy.deepcopy(task)
@@ -314,6 +340,10 @@ class Workflow:
                   'outcome': 'attempted', 'receipt': None}
         attempt = {'task_id': task_id, 'episode_id': self.data['episode_id'], 'status': 'unknown',
                    'ready_event_id': event['event_id'], 'dispatch': record, 'cancel': None, 'task': None}
+        if 'delivery_pose' in job:
+            target = delivery_pose(job['delivery_pose'])
+            record['body']['delivery_pose'] = copy.deepcopy(target)
+            attempt['delivery_pose'] = copy.deepcopy(target)
         job['attempts'].append(attempt)
         job['status'] = 'active'
         machine['occupant'] = job['job_id']
@@ -349,7 +379,7 @@ class Workflow:
                             self.data.update(status='waiting_quiet', reason='terminal task still lacks quiet/reset admission')
                         elif task['status'] == 'succeeded':
                             self._job()['status'] = 'succeeded'
-                            last = self.data['index'] == 1
+                            last = self.data['index'] == len(self.data['jobs'])-1
                             self.data.update(status='succeeded' if last else 'waiting_reset', reason=None)
                             if last:
                                 self.data['machines'][self._job()['machine_id']]['occupant'] = None
@@ -509,7 +539,10 @@ def main(argv=None):
     parser.add_argument('--bridge', default='http://127.0.0.1:9086')
     sub = parser.add_subparsers(dest='command', required=True)
     init = sub.add_parser('init')
-    init.add_argument('--batch', action='append', required=True)
+    batches = init.add_mutually_exclusive_group(required=True)
+    batches.add_argument('--batch', action='append', help='Legacy repeatable batch UUID')
+    batches.add_argument('--batches', nargs='+', help='Nonempty ordered batch UUID list')
+    init.add_argument('--delivery-poses', type=Path, help='JSON object mapping batch UUIDs to {x,y,yaw}')
     init.add_argument('--machine', default='laundry-machine-1')
     event = sub.add_parser('event')
     event.add_argument('--file', type=Path, required=True)
@@ -526,7 +559,8 @@ def main(argv=None):
             return 0 if result['exit_reason'] == 'succeeded' else 3 if result['exit_reason'] == 'timeout' else 2
         with Workflow(args.ledger, LocalBridge(args.bridge)) as workflow:
             if args.command == 'init':
-                result = workflow.create(args.batch, args.machine)
+                result = workflow.create(args.batches if args.batches is not None else args.batch,
+                                         args.machine, read_json(args.delivery_poses) if args.delivery_poses else None)
             elif args.command == 'event':
                 result = workflow.event(read_json(args.file))
             elif args.command in ('reset', 'recover'):

@@ -16,7 +16,7 @@ from urllib.parse import parse_qs
 from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, arm_home_quiet, car_pose,
                               cargo_retained, dispatch_terminal, finite_vector,
                               physical_quiet, quaternion, request_identity,
-                              task_scope,
+                              task_scope, task_delivery_pose,
                               reset_request_identity,
                               settled_cargo, stopped, tip_forces, transport_handoff_ready, validate_physics)
 from cooperation_core import station_robot_pose, within_station_capture
@@ -24,6 +24,7 @@ from cooperation_perception import (map_covariance, messages_to_observation,
                                     normalize_config, validate_observation)
 from cooperation_readiness import NativeReadiness
 from cooperation_sim import LoopTiming
+from cooperation_geometry_check import SceneGeometry
 from fishbot_runtime import (INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability,
                             DomainExecutionLock, ExecutionOwnerBusy)
 
@@ -170,6 +171,9 @@ def run(args):
             self.clock_callbacks = MutuallyExclusiveCallbackGroup()
             super().__init__('fishbot_so101_cooperation', parameter_overrides=[rclpy.parameter.Parameter('use_sim_time', value=True)])
             self.lock = threading.RLock()
+            self.delivery_geometry_lock = threading.RLock()
+            self.delivery_geometry = None
+            self.delivery_geometry_error = None
             self.bridge_timing = BridgeTiming()
             self.raw = None
             self.received = 0.
@@ -261,6 +265,10 @@ def run(args):
                 if record['task'].get('id'): self.known_ids.add(record['task']['id'])
             self.hold(True)
             self.dock_guard_pub.publish(Bool(data=False))
+            # Compile the independent query model before the HTTP server and
+            # telemetry executor start. Optional geometry failure must not
+            # remove the legacy no-destination start capability.
+            self.prepare_delivery_geometry()
 
         def create_subscription(self, msg_type, topic, callback, qos_profile, *,
                                 callback_group=None, event_callbacks=None,
@@ -870,7 +878,8 @@ def run(args):
             request.pose.pose.position.x, request.pose.pose.position.y = goal['x'], goal['y']
             request.pose.pose.orientation.z, request.pose.pose.orientation.w = math.sin(goal['yaw']/2), math.cos(goal['yaw']/2)
             return self.dispatch_goal(self.nav,request,carrying=carrying,label='Nav2',timeout=120,
-                station_localization=station_localization,allow_outside_station=station_localization)
+                station_localization=station_localization,allow_outside_station=station_localization,
+                goal_pose=copy.deepcopy(goal))
 
         def dock_at_station(self):
             request = DockRobot.Goal()
@@ -884,7 +893,7 @@ def run(args):
                 station_localization=True,docking_guard=True)
 
         def dispatch_goal(self,client,request,*,carrying=False,label,timeout,station_localization=False,
-                          allow_outside_station=False,docking_guard=False):
+                          allow_outside_station=False,docking_guard=False,goal_pose=None):
             token = self.owner()
             self.hold(True, token)
             try:
@@ -892,7 +901,8 @@ def run(args):
                     self.owner(token)
                     self.dispatch_epoch += 1
                     dispatch = {'token': token, 'epoch': self.dispatch_epoch, 'label': label, 'request': None, 'handle': None,
-                                'result': None, 'cancel': None, 'received': False, 'aborted': False, 'error': None}
+                                'result': None, 'cancel': None, 'received': False, 'aborted': False, 'error': None,
+                                'carrying': bool(carrying), 'goal_pose': copy.deepcopy(goal_pose)}
                     self.dispatches.append(dispatch)
                     sent = client.send_goal_async(request)
                     dispatch['request'] = sent
@@ -1062,7 +1072,7 @@ def run(args):
                 raw = self.check(carrying=True)
                 start = raw['cargo']['position'][:2]
                 self.event('car','delivery','收到交接确认，驶往交付点。')
-                self.navigate(self.stations()['delivery'],carrying=True)
+                self.navigate(copy.deepcopy(self.task.get('delivery_pose', self.stations()['delivery'])),carrying=True)
                 raw = self.wait_condition(lambda v: transport_handoff_ready(v, manifest['arm_home_qpos6']),
                                           duration=1., timeout=8., carrying=True)
                 if math.hypot(raw['cargo']['position'][0]-start[0],raw['cargo']['position'][1]-start[1])<.5:
@@ -1096,7 +1106,8 @@ def run(args):
             if any(item['task'].get('id') == self.task['id'] for item in self.history):
                 return
             record = {'episode_id': self.episode_id, 'task': copy.deepcopy(self.task),
-                      'events': copy.deepcopy(self.events), 'completed_at': time.time()}
+                      'events': copy.deepcopy(self.events), 'native_actions': self.native_action_state(),
+                      'completed_at': time.time()}
             path = self.history_dir/(self.task['id']+'.json')
             with path.open('x') as stream:
                 json.dump(record, stream, ensure_ascii=False, allow_nan=False, indent=2)
@@ -1316,9 +1327,40 @@ def run(args):
 
         def stations(self):
             dock=manifest['dock_pose']
+            delivery = self.task.get('delivery_pose') if self.task.get('id') else None
+            delivery = delivery or task_delivery_pose({}, manifest.get('delivery_pose'))
             return {'dock':dict(zip(('x','y','yaw'),dock)),
                     'staging':dict(zip(('x','y','yaw'),manifest['staging_pose'])),
-                    'delivery':{'x':0.,'y':-2.,'yaw':0.}}
+                    'delivery':copy.deepcopy(delivery)}
+
+        def prepare_delivery_geometry(self):
+            with self.delivery_geometry_lock:
+                if self.delivery_geometry is not None:
+                    return True
+                if self.delivery_geometry_error is not None:
+                    return False
+                try:
+                    self.delivery_geometry = SceneGeometry(manifest)
+                except (ImportError, OSError, ValueError, KeyError, RuntimeError) as error:
+                    self.delivery_geometry_error = str(error)
+                    self.get_logger().warning(f'可选交付点几何预检不可用；原默认任务保留：{error}')
+                    return False
+                return True
+
+        def validate_delivery_goal(self, goal):
+            if not self.prepare_delivery_geometry():
+                raise Rejected(f'无法核对交付点原始碰撞几何：{self.delivery_geometry_error}', 409)
+            try:
+                with self.delivery_geometry_lock:
+                    result = self.delivery_geometry.check_pose(goal)
+            except (ImportError, OSError, ValueError, KeyError, RuntimeError) as error:
+                raise Rejected(f'无法核对交付点原始碰撞几何：{error}', 409) from error
+            if not result['passed']:
+                witness = result.get('witness') or {}
+                detail = (f'，车体 {witness.get("car_geom")} 与 {witness.get("external_geom")}'
+                          if witness else '')
+                raise Rejected(f'交付点 ({goal["x"]:.3f}, {goal["y"]:.3f}) 足迹或场景边界预检未通过：{result["reason"]}{detail}', 409)
+            return result
 
         def native_action_state(self):
             result = []
@@ -1336,6 +1378,7 @@ def run(args):
                         known = False
                 result.append({'uuid': bytes(goal_id).hex() if goal_id is not None else None,
                     'label': item.get('label'), 'accepted': bool(handle and handle.accepted),
+                    'carrying': bool(item.get('carrying', False)), 'goal_pose': copy.deepcopy(item.get('goal_pose')),
                     'status': status, 'result_known': known, 'terminal': dispatch_terminal(item),
                     'cancel_requested_wall_time': item.get('cancel_requested_wall_time')})
             return result
@@ -1497,15 +1540,42 @@ def run(args):
                 raise ValueError('相机文件与当前回合不匹配')
             return args.frame_dir/info['image_file']
 
+        def existing_start(self, task_id, scope, delivery):
+            """Called under the telemetry lock at both admission boundaries."""
+            if task_id not in self.known_ids:
+                return None
+            if task_id!=self.task['id']: raise Rejected('该任务编号已使用；请读取原任务记录',409)
+            if self.task.get('scope', 'transport') != scope:
+                raise Rejected('任务编号已绑定另一范围；请读取原任务',409)
+            if self.task.get('delivery_pose', task_delivery_pose({}, manifest.get('delivery_pose'))) != delivery:
+                raise Rejected('任务编号已绑定另一交付点；请读取原任务',409)
+            return {'task_id':task_id,'task':copy.deepcopy(self.task)}
+
         def start(self, body):
+            body = copy.deepcopy(body)
             with self.lock:
                 task_id=request_identity(body, episode_id=self.episode_id)
                 scope = task_scope(body)
-                if task_id in self.known_ids:
-                    if task_id!=self.task['id']: raise Rejected('该任务编号已使用；请读取原任务记录',409)
-                    if self.task.get('scope', 'transport') != scope:
-                        raise Rejected('任务编号已绑定另一范围；请读取原任务',409)
-                    return {'task_id':task_id,'task':copy.deepcopy(self.task)}
+                delivery = task_delivery_pose(body, manifest.get('delivery_pose'))
+                existing = self.existing_start(task_id, scope, delivery)
+                if existing is not None:
+                    return existing
+                episode = self.episode_id
+                current=self.state()
+                if not current['ready']: raise Rejected(current['reason'],409)
+            # Compilation and native geometry queries never hold the telemetry
+            # lock. Physics/observation callbacks continue updating their cache.
+            preflight = (self.validate_delivery_goal(delivery)
+                         if scope == 'transport' and 'delivery_pose' in body else None)
+            if preflight is not None:
+                preflight.update(cargo_minimum_net_displacement_m=.5, cargo_transport_validated=False)
+            with self.lock:
+                if self.episode_id != episode:
+                    raise Rejected('场景回合已变化，请读取最新状态后重新开始',409)
+                request_identity(body, episode_id=self.episode_id)
+                existing = self.existing_start(task_id, scope, delivery)
+                if existing is not None:
+                    return existing
                 current=self.state()
                 if not current['ready']: raise Rejected(current['reason'],409)
                 self.archive_current()
@@ -1517,7 +1587,8 @@ def run(args):
                 self.last_freshness_failure = None
                 self.cleanup_summary = {'state': 'not_started', 'native_terminal': False,
                                         'quiet': False, 'hold': False, 'guard_disabled': False}
-                self.task={'id':task_id,'scope':scope,'status':'running','stage':'submitted','message':'任务已提交，等待原生执行','stop_reason':None}
+                self.task={'id':task_id,'scope':scope,'status':'running','stage':'submitted','message':'任务已提交，等待原生执行','stop_reason':None,
+                           'delivery_pose':copy.deepcopy(delivery), 'delivery_goal_preflight':copy.deepcopy(preflight)}
                 self.events=[];self.persist()
                 self.task_worker = threading.Thread(target=self.execute,args=(self.execution_token,),daemon=True,name='cooperation-task')
                 self.task_worker.start()

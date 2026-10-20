@@ -267,4 +267,30 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(len(tail.native_statuses),tail.NATIVE_STATUS_LIMIT)
 
 
+class TaskDestinationCompatibilityTests(unittest.TestCase):
+    def test_default_and_explicit_targets_are_declared_before_submission(self):
+        self.assertEqual(acceptance.delivery_start_marker({}, {}), {
+            'expected_delivery_pose': {'x': 0., 'y': -2., 'yaw': 0.},
+            'requested_delivery_pose': None})
+        body={'delivery_pose': {'x': .7, 'y': -2, 'yaw': 0}}
+        marker=acceptance.delivery_start_marker(body, {})
+        body['delivery_pose']['x']=9
+        self.assertEqual(marker['expected_delivery_pose']['x'], .7)
+        self.assertEqual(marker['requested_delivery_pose']['x'], .7)
+
+    def test_failure_before_dispatch_needs_explicit_cleanup_and_no_native_actions(self):
+        state={'episode_id':'e','task':{'id':'t','status':'failed'},'native_actions':[],
+               'cleanup':{'state':'verified','native_terminal':True,'quiet':True,'hold':True,'guard_disabled':True}}
+        self.assertTrue(acceptance.native_cleanup_known(state,{},'t','e'))
+        missing=copy.deepcopy(state);missing.pop('native_actions')
+        self.assertFalse(acceptance.native_cleanup_known(missing,{},'t','e'))
+        for key in state['cleanup']:
+            changed=copy.deepcopy(state);changed['cleanup'].pop(key)
+            self.assertFalse(acceptance.native_cleanup_known(changed,{},'t','e'))
+        for status in ('running','unknown','succeeded'):
+            changed=copy.deepcopy(state);changed['task']['status']=status
+            self.assertFalse(acceptance.native_cleanup_known(changed,{},'t','e'))
+        self.assertFalse(acceptance.native_cleanup_known(state,{('nav','01'*16):2},'t','e'))
+
+
 if __name__=='__main__':unittest.main()

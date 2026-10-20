@@ -86,3 +86,35 @@ job1新attempt 0c1bf47d在准备导航失败：原Nav31701beb到5，没有Dock/�
 执行候选ec879ed8bcc95225f4845b5a6c295bdaa1fbc40f和最终结果文档4189fce981abc8be452f7fa6e8c4c6275a89267b已串行推送既有qiaoqiao2521/fishbot-ros2-slam-tools main，GitHub REST与本地读回一致。有效账号238822818、仓库1381244533、公有可见性及fetch/push目标保持；运行后只改文档，45执行源当前仍匹配冻结。此元数据收尾另作文档提交，最新tip回源远端。
 
 私有index.html和acceptance-report.json单列3case通过，链接原视觉56报告；83原result哈希再次核对不变。原release.sh保持未执行、未暂存，具体依赖/分区静态阻碍及owner仍见cooperation计划Retained work。没有运行日志、地图、模型或凭据入Git。
+
+## P7 完成（2026-10-20）
+
+- complete：用户授权的三批＋第二目的地复用验证已通过。原main在768ea35收尾干净后开始；根串行整合。worker边界和原阈值见task_plan P7。
+- start可选delivery_pose；workflow init保留--batch，新增--batches与可选--delivery-poses JSON映射。N来自输入，不新增人造批次上限。未提供目标时保持旧行为。
+- domain136/API9106在新目录执行，未重启旧实例。复用既有验收器、真实ROS独立observer和oracle，未新建调度/运动owner。实际C源起止10文件逐文本一致。
+- knowledge：采用的双时钟、原ID恢复、桥回显与原生/物理评分分离为`already_covered`，来源为Wiki/ROS2 与 FishBot第19/20节及“原生 ROS 时钟与回调组”。新增慢几何预检锁边界经验为`pending`：该知识页及入口另有未交付改动，本轮不整体覆盖或发布；owner=根Codex，最短入口为审定本项目findings的“P7实际暴露的锁边界”后，局部补入原知识页。项目实现与验收不依赖此知识发布。
+
+### P7 前两次尝试与修复
+
+- A在用户DBus查询前退出，未prepare/launch/start；根为新命令补XDG/DBUS路径，未重启服务或改网络。
+- B首任务原ID `12d721d7-8b02-4241-8f3a-f5b8aff1c538` 接纳后源龄失败，0原生派发、0reset，原失败保留。根独立原episode的1.28源秒静止、guard关闭和明确cleanup后核PID清理，9106关闭、原launch/observer PID消失，见私有root-closeout。
+- worker移出耗时预检临界区；85core、46workflow、49oracle、1真实几何与25acceptance定向检查分别通过。canonical transport marker现在兼容默认目标声明，新oracle不误拒原无参数入口。
+- C使用新目录和新UUID，控制/评分源码冻结；同一136/9106 world跑A/A/B。5189复用原前端，仅用workbench JSON映射该cooperation服务，0前端源码修改。三次完整运输已通过独立评分，见下表。
+
+### P7 最终实际结果与交付边界
+
+原件位于`~/.cache/fishbot/workflow-reuse-20261020/c/`；result.json、workflow.json、逐case observer/score、cleanup-quiet与root-closeout-readback.json共同取证。A/B失败原件与root清理回执保留，未回填成功。C耗时643.777墙秒，在1400秒总预算内；各任务保留原360秒上限。
+
+| 批次 | 目标(x,y,yaw) | task UUID | 载货Nav UUID | 位置/偏航误差 | 终点连续停稳 | 同货物净位移 |
+|---|---|---|---|---|---|---|
+| 1 | (0,-2,0) | 695f0f51-7a0a-4c2b-af7b-cdc8cd91ea62 | 03ddbb2edb56401cb6e77f09c4f7625a | .033854m/.015640rad | 2.46源秒 | 1.79146m |
+| 2 | (0,-2,0) | 88edb274-6338-4b30-9f7e-656db5c7acdc | ece828226c91494ea42c5b7c7785a389 | .031832m/.032529rad | 2.54源秒 | 1.79003m |
+| 3 | (.7,-2,0) | dc99a6fc-f44e-43b0-abc7-9c5a93dcae21 | 9dec77e0933143989f44a2778c7357a8 | .022101m/.002298rad | 2.42源秒 | 2.48919m |
+
+三task/episode目标绑定一致，载货Nav独立ROS终态均4；原K抓取、抬升、释放、完整货物留盘、臂回位、持续携货与终态评分均通过。目标桥回显仍标`goal_request_independently_observed=false`，不冒充控制器消费回执。workflow最终succeeded，3start/2reset/0cancel，无额外重发。两reset绑定独立ROS源时间，桥/world未重启。
+
+定向检查共206项：core85、workflow46、oracle49、实际MuJoCo几何1、acceptance25，均通过。C清理后只收紧acceptance缺失native_actions的负例，25项重跑通过；实际C字段明确为空/有值，控制器与评分源码保持，未重跑运动冒称新改善。既有旧无参数合同与默认目标测试保持。
+
+原前端桌面/390px分别读回A与B，任务目标与界面属性一致，零写请求、零页面错误、手机无横向溢出。证据位于同级ui/goal-a.json、goal-b.json及截图。实验owned进程全部退出、9106/5189关闭；原5188仍监听，保护实例状态一致。只读核对与清理记录已回读。
+
+可直接复用：输入作业数量、每批交付点、同ID查询/取消/恢复、既有停靠/抓放/载货导航、原前端与独立评分。仍需适配：不同工位/物体/底盘、同回合多货物库存、任意地图、视觉留出与真实硬件。本轮ideal观测三批成功不计为新RGB或sim-to-real验收。原固件脚本保留，未刷写。

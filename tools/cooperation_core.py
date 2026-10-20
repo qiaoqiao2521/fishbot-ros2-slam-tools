@@ -167,6 +167,9 @@ def request_identity(body, *, cancel=False, now=None, episode_id=None):
     if not cancel and isinstance(body, dict) and 'scope' in body:
         expected.add('scope')
         task_scope(body)
+    if not cancel and isinstance(body, dict) and 'delivery_pose' in body:
+        expected.add('delivery_pose')
+        task_delivery_pose(body)
     if not isinstance(body, dict) or set(body) != expected:
         raise Rejected('请求须包含 task_id 和 issued_at')
     if episode_id is not None and body['episode_id'] != episode_id:
@@ -190,6 +193,22 @@ def task_scope(body):
     if value not in ('dock', 'transport'):
         raise Rejected('任务范围须为 dock 或 transport')
     return value
+
+
+def task_delivery_pose(body, default=None):
+    """Freeze a finite per-task destination without rewriting its yaw identity."""
+    if isinstance(body, dict) and 'delivery_pose' in body:
+        value = body['delivery_pose']
+    else:
+        value = default if default is not None else {'x': 0., 'y': -2., 'yaw': 0.}
+        if isinstance(value, (list, tuple)) and len(value) == 3:
+            value = dict(zip(('x', 'y', 'yaw'), value))
+    if not isinstance(value, dict) or set(value) != {'x', 'y', 'yaw'}:
+        raise Rejected('交付点须包含 x、y、yaw 三个有限数值')
+    try:
+        return {key: float(finite_number(value[key], f'交付点{key}')) for key in ('x', 'y', 'yaw')}
+    except ValueError as error:
+        raise Rejected(str(error)) from error
 
 
 def reset_request_identity(body, now=None):

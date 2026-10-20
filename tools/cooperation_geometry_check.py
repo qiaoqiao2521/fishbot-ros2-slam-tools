@@ -12,31 +12,81 @@ import math
 from pathlib import Path
 
 
+class SceneGeometry:
+    """Independent query data; never changes the running physics instance."""
+    def __init__(self, manifest):
+        import mujoco
+        self.manifest = manifest
+        self.model = model = mujoco.MjModel.from_xml_path(manifest['world_xml'])
+        self.data = data = mujoco.MjData(model)
+        data.qpos[:6] = manifest['arm_home_qpos6']
+        base = model.body('base_footprint').id
+        bodies = {base}
+        for body in range(base+1, model.nbody):
+            if int(model.body_parentid[body]) in bodies:
+                bodies.add(body)
+        car = [g for g in range(model.ngeom) if int(model.geom_bodyid[g]) in bodies
+               and (model.geom_contype[g] or model.geom_conaffinity[g])]
+        external = [g for g in range(model.ngeom) if int(model.geom_bodyid[g]) not in bodies
+                    and (model.geom_contype[g] or model.geom_conaffinity[g])
+                    and model.geom_type[g] != mujoco.mjtGeom.mjGEOM_PLANE
+                    and model.geom(g).name != 'target_collision']
+        self.pairs = [(a, b) for a in car for b in external
+                      if (int(model.geom_contype[a]) & int(model.geom_conaffinity[b]))
+                      or (int(model.geom_contype[b]) & int(model.geom_conaffinity[a]))]
+        if not self.pairs:
+            raise ValueError('No original collision pairs were checked')
+        self.free = int(model.joint('base_free_joint').qposadr[0])
+        self.base_height = float(data.qpos[self.free+2])
+        mujoco.mj_forward(model, data)
+
+    def check_pose(self, pose):
+        """Static full-body/footprint preflight, not a path or arrival proof."""
+        import mujoco
+        import numpy as np
+        from cooperation_core import task_delivery_pose
+        goal = task_delivery_pose({'delivery_pose': pose})
+        model, data, free = self.model, self.data, self.free
+        x, y, yaw = (goal[key] for key in ('x', 'y', 'yaw'))
+        data.qpos[free:free+7] = [x, y, self.base_height, math.cos(yaw/2), 0., 0., math.sin(yaw/2)]
+        mujoco.mj_forward(model, data)
+        minimum, witness = .20, None
+        for a, b in self.pairs:
+            distance = float(mujoco.mj_geomDistance(model, data, a, b, .20, None))
+            if distance < minimum:
+                minimum, witness = distance, {'car_geom': model.geom(a).name,
+                    'external_geom': model.geom(b).name, 'distance_m': distance}
+        rotation = np.array([[math.cos(yaw), -math.sin(yaw)], [math.sin(yaw), math.cos(yaw)]])
+        footprint = np.asarray(self.manifest['car_footprint_xy'], dtype=float) @ rotation.T + [x, y]
+        points = np.column_stack((footprint, np.full(len(footprint), self.base_height)))
+        bounds, bounds_reason = [], None
+        for name, axis, sign in (('wall_west', 0, 1), ('wall_east', 0, -1),
+                                 ('wall_south', 1, 1), ('wall_north', 1, -1)):
+            geom = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
+            if geom < 0 or model.geom_type[geom] != mujoco.mjtGeom.mjGEOM_BOX:
+                bounds_reason = 'scene_enclosure_geometry_unavailable'
+                break
+            normal = sign*data.geom_xmat[geom].reshape(3, 3)[:, axis]
+            clearance = float(np.min((points-data.geom_xpos[geom]) @ normal)-model.geom_size[geom, axis])
+            bounds.append({'wall': name, 'footprint_clearance_m': clearance})
+        inside = bounds_reason is None and all(item['footprint_clearance_m'] > 0 for item in bounds)
+        reason = (bounds_reason if bounds_reason else 'footprint_outside_scene_bounds' if not inside
+                  else 'original_geometry_collision' if minimum <= 0 else None)
+        return {'passed': reason is None, 'scope': 'static_delivery_goal_original_geometry_and_scene_bounds',
+                'delivery_pose': goal, 'minimum_sampled_clearance_m': minimum,
+                'collision_pair_count': len(self.pairs), 'witness': witness,
+                'scene_bounds': bounds, 'reason': reason, 'robot_geometry_shrunk': False,
+                'path_validated': False, 'arrival_validated': False}
+
+
 def check(manifest_path):
     import mujoco
     import numpy as np
     from cooperation_core import within_station_capture
     path = Path(manifest_path).resolve()
     manifest = json.loads(path.read_text())
-    model = mujoco.MjModel.from_xml_path(manifest['world_xml'])
-    data = mujoco.MjData(model)
-    data.qpos[:6] = manifest['arm_home_qpos6']
-    base = model.body('base_footprint').id
-    bodies = {base}
-    for body in range(base+1, model.nbody):
-        if int(model.body_parentid[body]) in bodies:
-            bodies.add(body)
-    car = [g for g in range(model.ngeom) if int(model.geom_bodyid[g]) in bodies
-           and (model.geom_contype[g] or model.geom_conaffinity[g])]
-    external = [g for g in range(model.ngeom) if int(model.geom_bodyid[g]) not in bodies
-                and (model.geom_contype[g] or model.geom_conaffinity[g])
-                and model.geom_type[g] != mujoco.mjtGeom.mjGEOM_PLANE
-                and model.geom(g).name != 'target_collision']
-    pairs = [(a, b) for a in car for b in external
-             if (int(model.geom_contype[a]) & int(model.geom_conaffinity[b]))
-             or (int(model.geom_contype[b]) & int(model.geom_conaffinity[a]))]
-    if not pairs:
-        raise ValueError('No original collision pairs were checked')
+    query = SceneGeometry(manifest)
+    model, data, pairs, free = query.model, query.data, query.pairs, query.free
     spawn = [*manifest['spawn'], manifest.get('spawn_yaw', 0.)]
     dock = manifest['dock_pose']
     via_staging = [spawn, manifest['staging_pose'], dock]
@@ -47,7 +97,6 @@ def check(manifest_path):
         paths.insert(0, [spawn, dock])
     footprint = np.asarray(manifest['car_footprint_xy'], dtype=float)
     radius = float(np.linalg.norm(footprint, axis=1).max())
-    free = int(model.joint('base_free_joint').qposadr[0])
     minimum = .20
     witness = None
     count = 0

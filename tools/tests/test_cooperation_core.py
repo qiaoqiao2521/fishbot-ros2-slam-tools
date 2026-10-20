@@ -52,6 +52,23 @@ class CooperationEvidenceTests(unittest.TestCase):
         with self.assertRaises(core.Rejected):
             core.request_identity(dict(body,scope='dock'),cancel=True,now=10)
 
+    def test_optional_delivery_pose_is_finite_float_and_keeps_yaw_identity(self):
+        task = str(uuid.uuid4())
+        body = {'task_id': task, 'issued_at': 10,
+                'delivery_pose': {'x': 1, 'y': -2, 'yaw': 2*math.pi}}
+        self.assertEqual(core.request_identity(body, now=10), task)
+        self.assertEqual(core.task_delivery_pose(body), {'x': 1., 'y': -2., 'yaw': 2*math.pi})
+        self.assertEqual(core.task_delivery_pose({}), {'x': 0., 'y': -2., 'yaw': 0.})
+        self.assertEqual(core.task_delivery_pose({}, [.7, -2, 0]), {'x': .7, 'y': -2., 'yaw': 0.})
+        for value in (None, [], [1, -2, 0], {'x': 1, 'y': -2},
+                      {'x': True, 'y': -2, 'yaw': 0},
+                      {'x': 1, 'y': float('inf'), 'yaw': 0},
+                      {'x': 1, 'y': -2, 'yaw': 0, 'extra': 1}):
+            with self.subTest(value=value), self.assertRaises(core.Rejected):
+                core.request_identity(dict(body, delivery_pose=value), now=10)
+        with self.assertRaises(core.Rejected):
+            core.request_identity(body, cancel=True, now=10)
+
     def test_settled_cargo_requires_support_released_tips_and_full_extent(self):
         raw={'cargo':{'position_relative_tray':[0,0,.01],'quaternion_wxyz':[1,0,0,0],'velocity_relative_tray':[0,0,0]},
              'tray':{'rotation_world':[[1,0,0],[0,1,0],[0,0,1]]},'cargo_tray_floor_contact':True,
@@ -231,6 +248,7 @@ class BridgeRaceTests(unittest.TestCase):
         self.bridge=self.namespace['BridgeProbe']();p=self.bridge
         p.episode_id=None;p.history=[];p.task_worker=None;p.reset_worker=None;p.reset_clearers=[];p.reset_records={};p.reset_acks={};p.reset_runtime={};p.last_reset_id=None
         p.lock=threading.RLock();p.worker=threading.local();p.execution_token=('task-a',1);p.worker.token=p.execution_token
+        p.delivery_geometry_lock=threading.RLock();p.delivery_geometry=None;p.delivery_geometry_error=None
         p.task_epoch=1;p.dispatch_epoch=0;p.dispatches=[];p.cancel_event=threading.Event();p.abort_event=threading.Event()
         p.abort_reason=None;p.observation_error=None;p.last_ref=[0.]*6;p.raw=measurement();p.received=self.clock;p.wall_deadline=1000.
         p.task={'id':'task-a','status':'running','stage':'submitted'};p.events=[];p.known_ids=set();p.holds=[];p.refs=[]
@@ -255,6 +273,10 @@ class BridgeRaceTests(unittest.TestCase):
         p.pose_pub=NS(publish=lambda message:p.poses.append(message))
         p.get_name=lambda:'fishbot_so101_cooperation'
         p.get_publishers_info_by_topic=lambda name:[NS(node_name=p.get_name() if name=='/detected_dock_pose' else 'cooperation_physics')]
+        # These tests isolate orchestration races. The real compiled-geometry
+        # admission is exercised separately in test_cooperation_geometry.py.
+        p.validate_delivery_goal=lambda goal:{'passed':True,'delivery_pose':copy.deepcopy(goal),
+            'scope':'controlled_static_geometry_fixture','path_validated':False,'arrival_validated':False}
 
     def sleep(self,seconds):
         self.clock+=seconds
@@ -636,6 +658,128 @@ class BridgeRaceTests(unittest.TestCase):
         with self.assertRaises(core.Rejected):p.start({'task_id':str(uuid.uuid4()),'issued_at':time.time()})
         self.assertEqual(len(self.threads),1)
 
+    def test_delivery_goal_is_frozen_and_uuid_cannot_be_rebound(self):
+        p=self.bridge;p.task.update(id=None,status='idle');p.execution_token=None
+        task=str(uuid.uuid4());goal={'x':.7,'y':-2,'yaw':0}
+        body={'task_id':task,'issued_at':time.time(),'delivery_pose':goal}
+        first=p.start(body)
+        goal['x']=9
+        self.assertEqual(first['task']['delivery_pose'],{'x':.7,'y':-2.,'yaw':0.})
+        self.assertEqual(p.stations()['delivery'],first['task']['delivery_pose'])
+        same=dict(body,delivery_pose={'x':.7,'y':-2.,'yaw':0.})
+        self.assertEqual(p.start(same)['task']['delivery_pose'],first['task']['delivery_pose'])
+        with self.assertRaisesRegex(core.Rejected,'另一交付点'):
+            p.start(dict(same,delivery_pose={'x':.8,'y':-2.,'yaw':0.}))
+        self.assertEqual(len(self.threads),1)
+        snapshot=p.state()
+        self.assertEqual(snapshot['task']['delivery_pose'],snapshot['stations']['delivery'])
+
+    def test_occupied_delivery_admission_does_not_spend_uuid_or_launch_worker(self):
+        p=self.bridge;p.task.update(id=None,status='idle');p.execution_token=None
+        task=str(uuid.uuid4())
+        def blocked(goal):raise core.Rejected('原始车体与墙相交',409)
+        p.validate_delivery_goal=blocked
+        with self.assertRaisesRegex(core.Rejected,'墙相交'):
+            p.start({'task_id':task,'issued_at':time.time(),'delivery_pose':{'x':4,'y':0,'yaw':0}})
+        self.assertNotIn(task,p.known_ids)
+        self.assertEqual(len(self.threads),0)
+        self.assertIsNone(p.execution_token)
+
+    def test_legacy_default_request_does_not_add_a_new_geometry_admission_gate(self):
+        p=self.bridge;p.task.update(id=None,status='idle');p.execution_token=None
+        def unexpected(goal):raise AssertionError('legacy default route must keep its original admission')
+        p.validate_delivery_goal=unexpected
+        result=p.start({'task_id':str(uuid.uuid4()),'issued_at':time.time()})
+        self.assertEqual(result['task']['delivery_pose'],{'x':0.,'y':-2.,'yaw':0.})
+        self.assertIsNone(result['task']['delivery_goal_preflight'])
+        self.assertEqual(len(self.threads),1)
+
+    def test_missing_geometry_runtime_reports_specific_admission_rejection(self):
+        def unavailable(manifest):raise ImportError('mujoco unavailable in selected Python')
+        self.namespace['SceneGeometry']=unavailable
+        method=self.namespace['BridgeProbe'].validate_delivery_goal
+        with self.assertRaisesRegex(core.Rejected,'无法核对交付点原始碰撞几何.*mujoco unavailable'):
+            method(self.bridge,{'x':.7,'y':-2.,'yaw':0.})
+
+    def test_slow_geometry_query_does_not_block_actual_physics_cache_commit(self):
+        p=self.bridge;p.task.update(id=None,status='idle');p.execution_token=None
+        entered,release,committed=threading.Event(),threading.Event(),threading.Event()
+        results,errors=[],[]
+        class SlowGeometry:
+            def check_pose(self,goal):
+                entered.set()
+                if not release.wait(2.):raise RuntimeError('test did not release slow geometry')
+                return {'passed':True,'delivery_pose':copy.deepcopy(goal)}
+        p.delivery_geometry=SlowGeometry()
+        p.validate_delivery_goal=self.namespace['BridgeProbe'].validate_delivery_goal.__get__(p)
+        expected_sequence=p.raw['sequence']+1
+        body={'task_id':str(uuid.uuid4()),'issued_at':time.time(),'delivery_pose':{'x':.7,'y':-2.,'yaw':0.}}
+        def submit():
+            try:results.append(p.start(body))
+            except Exception as error:errors.append(error)
+        def receive():
+            value=copy.deepcopy(p.raw);value['sequence']+=1;value['stamp']+=.02;value['time_s']=value['stamp']
+            p.observe(NS(data=json.dumps(value)))
+            committed.set()
+        admission=threading.Thread(target=submit);admission.start()
+        self.assertTrue(entered.wait(1.))
+        callback=threading.Thread(target=receive);callback.start()
+        received_during_query=committed.wait(.5)
+        release.set();admission.join(2.);callback.join(2.)
+        self.assertTrue(received_during_query,'physics callback waited behind geometry admission')
+        self.assertEqual(errors,[])
+        self.assertEqual(p.raw['sequence'],expected_sequence)
+        self.assertEqual(len(results),1)
+        self.assertEqual(len(self.threads),1)
+
+    def test_changed_episode_during_geometry_is_rejected_before_owner_creation(self):
+        p=self.bridge;p.task.update(id=None,status='idle');p.execution_token=None
+        def changed(goal):
+            with p.lock:p.episode_id=str(uuid.uuid4())
+            return {'passed':True}
+        p.validate_delivery_goal=changed
+        task=str(uuid.uuid4())
+        with self.assertRaisesRegex(core.Rejected,'场景回合已变化'):
+            p.start({'task_id':task,'issued_at':time.time(),'delivery_pose':{'x':.7,'y':-2.,'yaw':0.}})
+        self.assertNotIn(task,p.known_ids)
+        self.assertEqual(len(self.threads),0)
+        self.assertIsNone(p.execution_token)
+
+    def test_unknown_owner_created_during_geometry_is_not_overwritten(self):
+        p=self.bridge;p.task.update(id=None,status='idle');p.execution_token=None
+        def changed(goal):
+            with p.lock:p.task.update(id='original-owner',status='unknown')
+            return {'passed':True}
+        p.validate_delivery_goal=changed
+        task=str(uuid.uuid4())
+        with self.assertRaises(core.Rejected):
+            p.start({'task_id':task,'issued_at':time.time(),'delivery_pose':{'x':.7,'y':-2.,'yaw':0.}})
+        self.assertEqual(p.task['id'],'original-owner')
+        self.assertEqual(p.task['status'],'unknown')
+        self.assertNotIn(task,p.known_ids)
+        self.assertEqual(len(self.threads),0)
+
+    def test_optional_geometry_warmup_failure_does_not_break_legacy_start(self):
+        p=self.bridge;p.task.update(id=None,status='idle');p.execution_token=None
+        def unavailable(manifest):raise ImportError('geometry dependency missing')
+        self.namespace['SceneGeometry']=unavailable
+        self.assertFalse(p.prepare_delivery_geometry())
+        result=p.start({'task_id':str(uuid.uuid4()),'issued_at':time.time()})
+        self.assertEqual(result['task']['status'],'running')
+        self.assertIsNone(result['task']['delivery_goal_preflight'])
+
+    def test_native_delivery_metadata_captures_the_same_pose_before_send(self):
+        p=self.bridge;record=[]
+        p.dispatch_goal=lambda client,request,**options:record.append((request,options))
+        goal={'x':.7,'y':-2.,'yaw':.3}
+        p.navigate(goal,carrying=True)
+        goal['x']=9
+        request,options=record[0]
+        self.assertEqual(request.pose.pose.position.x,.7)
+        self.assertEqual(request.pose.pose.position.y,-2.)
+        self.assertEqual(options['goal_pose'],{'x':.7,'y':-2.,'yaw':.3})
+        self.assertTrue(options['carrying'])
+
     def test_native_terminal_and_continuous_car_arm_quiet_are_both_required(self):
         p=self.bridge;handle=ControlledHandle();dispatch={'token':p.execution_token,'received':True,'handle':handle,
             'result':handle.result_future,'cancel':None,'error':None,'aborted':True}
@@ -674,9 +818,10 @@ class BridgeRaceTests(unittest.TestCase):
         p.raw['qvel6'][1]=p.raw['qvel20'][1]=.05
         with self.assertRaisesRegex(RuntimeError,'机械臂未保持回位停稳'):p.check(carrying=True)
 
-    def execution_handoff_probe(self, *, before_transfer=None, after_delivery=None, delivery_distance=1.):
+    def execution_handoff_probe(self, *, before_transfer=None, after_delivery=None, delivery_distance=1., delivery_pose=None):
         """Exercise current execute ordering; controlled samples are not physical acceptance."""
         p=self.bridge;p.station_capture_ready=lambda:True;p.align_station_map=lambda:None
+        if delivery_pose is not None:p.task['delivery_pose']=copy.deepcopy(delivery_pose)
         p.dock_at_station=lambda:p.check()
         class Planner:
             def __init__(self,*args,**kwargs):pass
@@ -708,6 +853,29 @@ class BridgeRaceTests(unittest.TestCase):
         p.hold_pub=NS(publish=hold)
         p.execute(p.execution_token)
         return p,deliveries
+
+    def test_execute_transport_uses_frozen_alternate_delivery_in_original_owner(self):
+        selected={'x':.7,'y':-2.,'yaw':0.}
+        p,deliveries=self.execution_handoff_probe(delivery_pose=selected)
+        self.assertEqual(deliveries,[selected])
+        self.assertEqual(p.task['status'],'succeeded')
+        self.assertEqual(p.execution_token,('task-a',1))
+
+    def test_history_keeps_frozen_delivery_and_original_native_goal_metadata(self):
+        p=self.bridge;p.task.update(status='succeeded',delivery_pose={'x':.7,'y':-2.,'yaw':0.})
+        handle=ControlledHandle();handle.goal_id=NS(uuid=bytes(range(16)))
+        handle.result_future.resolve(NS(status=4))
+        p.dispatches=[{'token':p.execution_token,'received':True,'handle':handle,
+            'result':handle.result_future,'error':None,'label':'Nav2','carrying':True,
+            'goal_pose':{'x':.7,'y':-2.,'yaw':0.}}]
+        with tempfile.TemporaryDirectory() as temp:
+            p.history_dir=Path(temp)
+            p.archive_current()
+            record=json.loads((Path(temp)/'task-a.json').read_text())
+        self.assertEqual(record['task']['delivery_pose'],{'x':.7,'y':-2.,'yaw':0.})
+        self.assertEqual(record['native_actions'][0]['uuid'],bytes(range(16)).hex())
+        self.assertTrue(record['native_actions'][0]['carrying'])
+        self.assertEqual(record['native_actions'][0]['goal_pose'],record['task']['delivery_pose'])
 
     def test_execute_never_dispatches_transport_without_held_stationary_handoff(self):
         for fault in ('unheld','moving'):

@@ -358,6 +358,13 @@ def native_cleanup_known(state,native,task_id,episode_id):
         # unobserved accepted UUID, even when the bridge task has failed.
         return all(isinstance(item,dict) and item.get('accepted') is True
             and any(key[1]==item.get('uuid') for key in native) for item in handles)
+    cleanup = state.get('cleanup', {})
+    if (state.get('task',{}).get('status') == 'failed' and state.get('native_actions') == []
+            and cleanup.get('state') == 'verified'
+            and all(cleanup.get(key) is True for key in ('native_terminal','quiet','hold','guard_disabled'))):
+        # Failure before the first dispatch has no native UUID to wait for.
+        # The caller still requires independently observed continuous quiet.
+        return True
     return (state.get('task',{}).get('status')=='failed' and isinstance(handles,list) and bool(handles)
         and all(item.get('accepted') is False and item.get('terminal') is True
                 and item.get('result_known') is False and item.get('status') is None
@@ -438,6 +445,13 @@ def stop_owned_launch(process,result):
     result['owned_process_survivors']=remaining
     if remaining:result['errors'].append('Owned descendants still active; root owns reconciliation')
     return not remaining
+
+
+def delivery_start_marker(body, manifest):
+    """Record the requested/default goal before POST, never infer it at arrival."""
+    from cooperation_core import task_delivery_pose
+    return {'expected_delivery_pose': task_delivery_pose(body, manifest.get('delivery_pose')),
+            'requested_delivery_pose': dict(body['delivery_pose']) if 'delivery_pose' in body else None}
 
 
 def execute_case(declaration,directory,args,panel,thresholds,vision_config):
@@ -531,11 +545,14 @@ def execute_case(declaration,directory,args,panel,thresholds,vision_config):
             'task_completion_passed':False,'expected_safety_passed':False,
             'evidence_mode':'live_observation','independent_score_available':False})
         prefix='dock' if declaration['scope']=='dock' else 'full'
-        marker(prefix+'_started',scope=declaration['scope'])
+        body={'task_id':task_id,'issued_at':time.time(),'episode_id':episode,'scope':declaration['scope']}
+        declaration_fields=(delivery_start_marker(body,json.loads(manifest.read_text()))
+                            if declaration['scope']=='transport' else {})
+        marker(prefix+'_started',scope=declaration['scope'],**declaration_fields)
         result['start_posts']=1  # Set before POST; an uncertain send never authorizes retry.
         rejected=False
         try:
-            receipt=api_request(api,'/start',{'task_id':task_id,'issued_at':time.time(),'episode_id':episode,'scope':declaration['scope']})
+            receipt=api_request(api,'/start',body)
             result['start_receipt']=receipt
         except ApiRejected as error:
             rejected=True

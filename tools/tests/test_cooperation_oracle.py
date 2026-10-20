@@ -7,6 +7,7 @@ import json
 import math
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -126,6 +127,139 @@ class PhysicalOracleTests(unittest.TestCase):
         self.assertEqual(result['reported_twist_speed_not_scoring_authority'], 999.)
         self.assertTrue(result['independent_crosscheck'])
         self.assertGreater(abs(result['relative'][0])+result['extents'][0], .058)
+
+
+def delivery_fixture():
+    samples = physical_samples()
+    for item in samples:
+        item['raw'].update(episode_id='episode', source={'episode_id': 'episode'})
+    target = {'x': .6, 'y': 0., 'yaw': 0.}
+    started = {'kind': 'full_started', 'task_id': 'task', 'episode_id': 'episode',
+               'wall_time': 100., 'expected_delivery_pose': target,
+               'requested_delivery_pose': copy.deepcopy(target)}
+    events = [started, {'kind': 'full_finished', 'task_id': 'task', 'wall_time': 113.}]
+    action = {'uuid': '03'*16, 'label': 'Nav2', 'accepted': True, 'carrying': True,
+              'goal_pose': copy.deepcopy(target), 'status': 4, 'result_known': True}
+    records = [
+        {'topic': 'http_state', 'received_wall_time': 100.1, 'payload': {
+            'episode_id': 'episode', 'task': {'id': 'task', 'delivery_pose': copy.deepcopy(target)},
+            'native_actions': []}},
+        {'topic': 'nav_status', 'received_wall_time': 105., 'payload': {'status_list': [
+            {'goal_info': {'goal_id': {'uuid': [3]*16}}, 'status': 2}]}},
+        {'topic': 'nav_status', 'received_wall_time': 111., 'payload': {'status_list': [
+            {'goal_info': {'goal_id': {'uuid': [3]*16}}, 'status': 4}]}},
+        {'topic': 'http_state', 'received_wall_time': 112.8, 'payload': {
+            'episode_id': 'episode', 'task': {'id': 'task', 'delivery_pose': copy.deepcopy(target)},
+            'native_actions': [action]}}]
+    attempt = {'task_id': 'task', 'started_wall_time': 100., **base.full_score(samples, audit())}
+    return records, samples, attempt, events
+
+
+class TaskDeliveryTests(unittest.TestCase):
+    def score(self, fixture):
+        records, samples, attempt, events = fixture
+        return oracle.delivery_checks(records, samples, audit(), [attempt], events)
+
+    def test_same_task_goal_uuid_and_independent_final_pose_are_all_required(self):
+        result = self.score(delivery_fixture())
+        self.assertTrue(result['required'])
+        self.assertTrue(result['passed'])
+        window = result['attempts'][0]
+        self.assertEqual(window['carrying_nav_uuid'], '03'*16)
+        self.assertEqual(window['position_tolerance_m'], .04)
+        self.assertEqual(window['yaw_tolerance_rad'], .05)
+        self.assertEqual(window['continuous_final_dwell_s'], 1.)
+        self.assertFalse(window['goal_request_independently_observed'])
+        self.assertFalse(window['native_goal_consumption_ack_claimed'])
+
+    def test_request_acceptance_and_frozen_goal_mismatch_cannot_pass(self):
+        for changed in ('request', 'accepted', 'goal', 'episode', 'late_mutation', 'missing_http'):
+            fixture = delivery_fixture()
+            records, samples, attempt, events = fixture
+            if changed == 'request': events[0]['requested_delivery_pose']['x'] = 1.
+            if changed == 'accepted': records[-1]['payload']['task']['delivery_pose']['x'] = 1.
+            if changed == 'goal': records[-1]['payload']['native_actions'][0]['goal_pose']['x'] = 1.
+            if changed == 'episode': records[-1]['payload']['episode_id'] = 'other'
+            if changed == 'late_mutation':
+                mutated = copy.deepcopy(records[-1]); mutated['received_wall_time'] = 112.9
+                mutated['payload']['native_actions'][0]['goal_pose']['yaw'] = .1
+                records.append(mutated)
+            if changed == 'missing_http': records[:] = [r for r in records if r['topic'] != 'http_state']
+            with self.subTest(changed=changed): self.assertFalse(self.score(fixture)['passed'])
+
+    def test_http_success_cannot_replace_correct_native_uuid_and_carrying_goal(self):
+        for changed in ('wrong_uuid', 'aborted', 'only_terminal', 'not_carrying', 'later_nav', 'missing_goal'):
+            fixture = delivery_fixture(); records = fixture[0]
+            if changed == 'wrong_uuid': records[2]['payload']['status_list'][0]['goal_info']['goal_id']['uuid'] = [4]*16
+            if changed == 'aborted': records[2]['payload']['status_list'][0]['status'] = 6
+            if changed == 'only_terminal': records.pop(1)
+            action = records[-1]['payload']['native_actions'][0]
+            if changed == 'not_carrying': action['carrying'] = False
+            if changed == 'later_nav':
+                records[-1]['payload']['native_actions'].append({**copy.deepcopy(action), 'carrying': False, 'uuid': '04'*16})
+            if changed == 'missing_goal': action.pop('goal_pose')
+            with self.subTest(changed=changed): self.assertFalse(self.score(fixture)['passed'])
+
+    def test_old_success_at_wrong_place_yaw_or_bad_final_cargo_does_not_prove_delivery(self):
+        for changed in ('position', 'yaw', 'cargo', 'arm', 'hold', 'crosscheck'):
+            fixture = delivery_fixture()
+            for item in fixture[1]:
+                if item['stamp'] < 11.: continue
+                if changed == 'position': item['car'][0] = .64001
+                if changed == 'yaw': item['car_yaw'] = .05001
+                if changed == 'cargo': item['relative'][0] = .06
+                if changed == 'arm': item['raw']['q6'][0] = .02
+                if changed == 'hold': item['raw']['car_hold'] = False
+                if changed == 'crosscheck': item['independent_crosscheck'] = False
+            with self.subTest(changed=changed): self.assertFalse(self.score(fixture)['passed'])
+
+    def test_earlier_arrival_dwell_does_not_allow_a_moving_or_wrong_final_sample(self):
+        fixture = delivery_fixture()
+        fixture[1][-1]['car'][0] = .7
+        result = self.score(fixture)
+        self.assertTrue(result['attempts'][0]['final_true_pose_and_cargo_stop']['passed'])
+        self.assertFalse(result['passed'])
+
+    def test_sampling_gap_and_short_dwell_cannot_be_interpolated(self):
+        for changed in ('gap', 'short'):
+            fixture = delivery_fixture()
+            if changed == 'gap': fixture[1][:] = [item for item in fixture[1] if item['stamp'] <= 11.6 or item['stamp'] >= 11.9]
+            if changed == 'short': fixture[1][:] = [item for item in fixture[1] if item['stamp'] < 11.9]
+            with self.subTest(changed=changed): self.assertFalse(self.score(fixture)['passed'])
+
+    def test_http_target_without_marker_cannot_disable_new_acceptance(self):
+        fixture = delivery_fixture()
+        fixture[3][0].pop('expected_delivery_pose'); fixture[3][0].pop('requested_delivery_pose')
+        result = self.score(fixture)
+        self.assertTrue(result['required']); self.assertFalse(result['passed'])
+
+    def test_legacy_capture_with_no_target_keeps_original_score_boundary(self):
+        records = episode_records()
+        attempt, unused = score_transport(physical_samples())
+        events = records[-1]['payload']['events']
+        result = oracle.delivery_checks(records, physical_samples(), audit(), [attempt], events)
+        self.assertFalse(result['required']); self.assertTrue(result['passed'])
+
+    def test_destination_failure_overrides_old_success_in_final_score(self):
+        records, samples, attempt, events = delivery_fixture()
+        for item in samples:
+            if item['stamp'] >= 11.: item['car'][0] = .7
+        settings = SimpleNamespace(scope='transport', expected_outcome='success',
+            markers=Path('/nonexistent/markers.json'), expected_episode='episode',
+            reset_receipt=None, allow_initial_episode=True, score_only=None, output=Path('/unused'))
+        value = {'passed': True, 'full_attempts': [attempt],
+                 'source_integrity': {'passed': True, 'current_driver_matches_collection_end': True}}
+        with patch.object(oracle, 'options', settings), \
+                patch.object(oracle, 'extra_checks', return_value={'passed': True, 'windows': []}), \
+                patch.object(oracle, 'transport_checks', return_value={'passed': True}), \
+                patch.object(oracle, 'observation_metrics', return_value={}), \
+                patch.object(oracle, 'fault_checks', return_value={'passed': True}), \
+                patch.object(oracle, 'plant_guard_telemetry', return_value={}):
+            result = oracle.augment_score(value, records, samples, audit(), events)
+        self.assertTrue(result['original_k_oracle_passed'])
+        self.assertFalse(result['task_delivery_acceptance']['passed'])
+        self.assertFalse(result['passed'])
+        self.assertFalse(result['live_runtime_acceptance_claimed'])
 
 
 def episode_records():

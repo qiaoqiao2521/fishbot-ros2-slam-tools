@@ -1,7 +1,7 @@
 # 协同长流程编排薄层
 
 ## Goal
-复用现有 `/coop-api`，串行执行两个逻辑搬运，合成洗衣机 readiness 延迟到达。保留 batch、machine、事件版本、动作 UUID、episode 与取消/重置记录。
+复用现有 `/coop-api`，串行执行输入列表决定的N个逻辑搬运，每批可选独立目的地。保留 batch、machine、readiness事件版本、动作 UUID、episode 与取消/重置记录。早期两作业模板和历史验收保留；当前新增范围见P7。
 
 ## Constraints
 基线 `aab0da45a45ac3e380d0afe538adcfae59c22537`。仅独立 worktree `fishbot-workflow-20261014` 与 `codex/workflow-20261014`。不改 bridge/core、主区 dirty 实现、SpatialLM、共享 Wiki。此句限定模块worker交付阶段。FishBot root已串行合入，并按原用户“都做/跨对话协作”授权准备新隔离domain120/API9090实际面板；不接实机。
@@ -29,7 +29,7 @@
 7. 原生Clock回调组的实际ROS阻塞验证、最小分组候选与新面板：complete，owner=root。
 
 ## Next Step
-本模块同桥三episode面板已通过，串行完成文档、知识与远端交付。后续视觉资格整改回源visual-docking计划，使用新开发面板和新留出；不改写此前11失败。残余源龄拒绝仍保留，不宣称全部时序抖动消失。
+P7已完成同桥三次完整运输A/A/B与独立目的地评分。后续同模板的批次数和支持范围内目的地只改新流程输入；不同工位、物体、底盘仍需另行适配与验收。旧取消＋两次运输面板的历史通过保持。视觉资格整改仍回源visual-docking计划，不改写此前11失败，也不宣称全部时序抖动已消失。
 
 ## Root实际面板（2026-10-15）
 
@@ -38,3 +38,13 @@
 原每完整任务360s与全部物理/时间/碰撞门槛保持；首启动55s，移动取消阶段120s、每次清理15s，根整项上限1100墙秒。最多一次取消尝试＋两次完整运输，无自动重发；unknown保留封锁和执行owner。延迟合成ready、重复/旧版本/容量一拒绝、原ID重启查询和run有界超时分别取证。每个episode使用独立oracle/markers；静止与原UUID/raw/同货物评分不由网页或退出码代替。
 
 执行源/实际XML/manifest/模块/private验收脚本在派发前冻结，期间root不改源码或计划。SpatialLM官方推理释放窗口后才启动MuJoCo；没有云GPU或新模型训练。此面板不修复或重复本轮视觉留出，不改其11失败。owner=root。
+
+## P7：第三批运输＋第二目的地（2026-10-20）
+
+状态：complete。用户确认用第二个业务验证复用。保留现有cooperation owner、Nav2 DockRobot/载货导航、SO101抓放/退避、取消/quiet、事件/原ID查询与物理评分。将固定两作业改成输入决定的N作业，新增可选per-job `delivery_pose={x,y,yaw}`；无新参数时保留旧目的地及API。不是新增调度平台或运动owner。
+
+本轮同一bridge/world已完成三批A/A/B，A为原交付点(0,-2,0)，B为(.7,-2,0)，两者均通过实际几何预检。三批之间仍显式重置单货物合成episode，不称同回合三货物库存。原transport每轮360s、真实双指抓放、同一货物运输、机械臂回位、载物保持、碰撞/停稳与时钟门槛保持。新增业务验收把原task声明的目的地绑定已接纳任务/原生载货Nav2 UUID与实际终点；仅“运走≥.5m”不算新目的地通过。
+
+分工：根串行更新本计划/文档/项目入口、实际隔离验收和Git；transition_physics负责workflow与局部测试；pump_hardware负责start参数/core/bridge及复用几何helper；seal_model负责独立oracle目的地绑定与测试。工作区原有效成果保留。实验使用独占domain136/API9106、独立私有输出，已完成静止清理；原有实例、实机、CY、网络/VPN或固件未改。
+
+完成标准：旧无参数合同/旧两作业不退化；三作业不再需改源码；每作业目标冻结并随原ID恢复，回执未知不重发；实际三次原生成功及独立物理评分通过、A/B实际终点有区别、实例清理完成。失败原件与缺口保留。最后记录到底改了哪些通用接口、哪些执行能力未改，并提交推送既有qiaoqiao2521远端。

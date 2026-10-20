@@ -37,3 +37,26 @@ run 只循环本 workflow。fault/unknown 立即返回，不隐式 recover；成
 前两probe false原件保留：ac80d0c9的虚拟源推进预期不成立；b49ae70f把成功返回None的destroy_node误计0。新判据绑定实际publisher推进与独立witness，不把墙时间当源时间。通过probe只证明可构造的默认组阻塞风险，不声称复现桥原guard或识别a82占组实体。
 
 第三轮ec879ed下同三case全部通过，原360s完整任务与所有物理门槛保持。两作业之间独立reset源stamp早于采集和派发，原UUID、单货物自由体与完整交接评分通过；只重启CLI，不重启bridge。末账本仍保留一次+0.26s的物理源龄边界诊断和3次拒绝，因此不宣称全部时序异常已解决。新面板使用ideal信标，不能补齐旧RGB留出失败或重写原视觉56例。
+
+## P7 复用差距核实（2026-10-20）
+
+- 当前workflow是恰好两批的专用编排；jobs长度、index边界和末作业判断固定为2。start原负载只有身份/时刻，不包含目的地。重复同模板可复用，但第三批或新终点不是现有配置即用能力。
+- cooperation_bridge执行层已有stations.delivery→原navigate(carrying=True)，且任务/history/取消均归同owner；本轮只需把目标从固定点改为每task冻结参数，不重写抓放、DockRobot或载货导航。
+- 原full_score验证真实抓放、同货物位移≥.5m、quiet等，但没有独立目的地XY/yaw条件。必须增加目标绑定和实际末端检查，不能拿旧passed推断到了B。
+- 采用既有Wiki/ROS2与FishBot的原生时钟/回调组、真实动作与独立物理评分分离经验；本轮保持源时钟/TTL/物理门槛，不用桥转发当控制器消费。配置路径按本机knowledge-workflow解析，知识只作参考。
+
+### P7 实际暴露的锁边界
+
+B首任务接纳时，首次SceneGeometry编译在telemetry锁内耗时约3.17秒；独立Clock继续前进，但物理callback等待锁3.1717秒、station等待3.216秒。失败点源龄2.4秒、接收龄14.6ms，原native尚未派发。这是新预检接入造成的反馈阻塞，不能怪网络或放宽原0.25秒源龄门槛。
+
+修复采用独立geometry锁与启动预热，runtime查询在telemetry锁外；回来后重新核UUID/episode/TTL/ready才接纳。真实双线程回归确认慢query期间observe仍更新原缓存。可选几何依赖缺失不破坏旧默认路线，只给显式新目标具体原因。
+
+C实际physics锁等待最大68.39ms，slow计数0；全桥仍有4个慢事件，包含station锁127ms与HTTP组装128ms。因此可确认本轮编译占锁缺陷已修复，不能宣称全桥没有慢事件或所有时序抖动已解决。几何clearance的.20m是搜索截断上限，不能解释为精确净距。
+
+独立清理还需区分“已有原生UUID待终态”和“在第一次派发前已失败”。后者没有UUID，需明确failed、空dispatch/handles、verified cleanup与独立连续静止，不可等一个从未产生的UUID，也不把这类清理叫任务成功。canonical验收已补此分支与目标marker兼容，不改变真实运动标准。
+
+### P7 已验证的复用范围
+
+C同桥连续完成A/A/B，任务请求、接纳目标、最后载货Nav UUID及独立真实终点一致，三份原K与新增目标评分均通过。第三货物实际净位移2.48919m、目标误差.022101m，证明并非仍送往默认A。源码执行前后逐文本一致，原前端仅换运行配置即读回B，无前端源码适配。
+
+因此，同模板新增批次和当前场景内可达目标已是输入层变化。首次实现仍需扩展workflow数量、start目标冻结与oracle目的地评分三处通用接口；不能把本轮称为零代码修改。不同工位/货物/底盘以及真实场地仍需独立适配，三次合成episode也不是三件同时存在的库存。

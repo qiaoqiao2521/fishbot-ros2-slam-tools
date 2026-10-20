@@ -56,6 +56,8 @@ class Bridge:
             return {'error': 'fixture rejection', 'outcome': 'rejected'}
         if kind == 'start':
             self.value['task'] = {'id': body['task_id'], 'status': 'running'}
+            if 'delivery_pose' in body:
+                self.value['task']['delivery_pose'] = copy.deepcopy(body['delivery_pose'])
             self.value['ready'] = False
             self.value['reset']['available'] = False
             receipt = {'task_id': body['task_id'], 'task': self.value['task']}
@@ -114,6 +116,159 @@ class WorkflowTest(unittest.TestCase):
         self.ready(workflow)
         workflow.dispatch()
         return workflow.data['jobs'][0]['attempts'][0]['task_id']
+
+    def create_jobs(self, count, targets=None):
+        self.path = self.path.parent/('workflow-'+uid()+'.json')
+        self.batches = [uid() for _ in range(count)]
+        mapping = targets(self.batches) if targets else None
+        with self.open() as workflow:
+            workflow.create(self.batches, delivery_poses=mapping)
+        return mapping
+
+    def test_three_jobs_preserve_optional_destinations_across_resets_and_restart(self):
+        target = {'x':1.25, 'y':-1.75, 'yaw':.4}
+        self.create_jobs(3, lambda batches: {batches[1]:target})
+        task_ids = []
+        for index in range(3):
+            with self.open() as workflow:
+                self.assertEqual(workflow.data['index'],index)
+                self.ready(workflow,version=index+1)
+                workflow.dispatch()
+                attempt = workflow.data['jobs'][index]['attempts'][0]
+                task_ids.append(attempt['task_id'])
+                if index == 1:
+                    self.assertEqual(attempt['delivery_pose'],target)
+                    self.assertEqual(attempt['dispatch']['body']['delivery_pose'],target)
+                else:
+                    self.assertNotIn('delivery_pose',attempt)
+                    self.assertEqual(set(attempt['dispatch']['body']),{'task_id','episode_id','issued_at'})
+            with self.open() as workflow:
+                self.assertEqual(workflow.tick()['status'],'active')
+                self.bridge.terminal()
+                self.assertEqual(workflow.tick()['status'],'succeeded' if index==2 else 'waiting_reset')
+                if index < 2:
+                    workflow.reset()
+                    self.bridge.acknowledge_reset()
+                    self.assertEqual(workflow.tick()['status'],'waiting_ready')
+        self.assertEqual(len(set(task_ids)),3)
+        self.assertEqual([kind for kind,_ in self.bridge.calls],['start','reset','start','reset','start'])
+        self.assertEqual([job['status'] for job in read_json(self.path)['jobs']],['succeeded']*3)
+
+    def test_single_job_finishes_without_an_extra_reset(self):
+        self.create_jobs(1)
+        with self.open() as workflow:
+            self.start(workflow)
+            self.bridge.terminal()
+            self.assertEqual(workflow.tick()['status'],'succeeded')
+            self.assertEqual(workflow.data['index'],0)
+        self.assertEqual([kind for kind,_ in self.bridge.calls],['start'])
+
+    def test_delivery_pose_survives_lost_receipt_cancel_restart_and_explicit_recovery(self):
+        target = {'x':1.25, 'y':-1.75, 'yaw':7.0}
+        provided = self.create_jobs(1, lambda batches: {batches[0]:copy.deepcopy(target)})
+        provided[self.batches[0]]['x'] = 99
+        self.bridge.lose.update(('start','cancel'))
+        with self.open() as workflow:
+            original = self.start(workflow)
+            self.assertEqual(workflow.data['status'],'unknown')
+            self.assertEqual(workflow.data['jobs'][0]['attempts'][0]['delivery_pose'],target)
+        with self.open() as workflow:
+            self.assertEqual(workflow.tick()['status'],'active')
+            workflow.cancel()
+        with self.open() as workflow:
+            workflow.cancel()
+            self.assertEqual([kind for kind,_ in self.bridge.calls],['start','cancel'])
+            self.assertEqual(self.bridge.calls[-1][1]['task_id'],original)
+            self.bridge.terminal('canceled')
+            self.assertEqual(workflow.tick()['status'],'fault')
+            workflow.reset(recover=True)
+            self.bridge.acknowledge_reset()
+            self.assertEqual(workflow.tick()['status'],'waiting_ready')
+            self.ready(workflow,version=2)
+            self.bridge.lose.clear()
+            workflow.dispatch()
+            attempts = workflow.data['jobs'][0]['attempts']
+            self.assertEqual(len(attempts),2)
+            self.assertEqual(attempts[0]['status'],'canceled')
+            self.assertNotEqual(attempts[1]['task_id'],original)
+            self.assertTrue(all(a['delivery_pose']==target and a['dispatch']['body']['delivery_pose']==target for a in attempts))
+        self.assertEqual([kind for kind,_ in self.bridge.calls],['start','cancel','reset','start'])
+
+    def test_same_task_identity_with_changed_or_missing_destination_remains_unknown(self):
+        target = {'x':1.,'y':-1.,'yaw':.5}
+        self.create_jobs(1,lambda batches:{batches[0]:target})
+        with self.open() as workflow:
+            original = self.start(workflow)
+        original_task = copy.deepcopy(self.bridge.value['task'])
+        for changed in ({'x':2.,'y':-1.,'yaw':.5},None):
+            self.bridge.value['task'] = copy.deepcopy(original_task)
+            if changed is None:
+                self.bridge.value['task'].pop('delivery_pose')
+            else:
+                self.bridge.value['task']['delivery_pose'] = changed
+            with self.open() as workflow:
+                self.assertEqual(workflow.tick()['status'],'unknown')
+                self.assertEqual(workflow.data['operation']['task_id'],original)
+                with self.assertRaises(ContractError):
+                    workflow.dispatch()
+        self.assertEqual([kind for kind,_ in self.bridge.calls],['start'])
+        self.bridge.value['task'] = original_task
+        with self.open() as workflow:
+            self.assertEqual(workflow.tick()['status'],'active')
+
+    def test_destination_content_is_bound_to_job_and_attempt_on_restart(self):
+        target = {'x':1.,'y':-1.,'yaw':.5}
+        self.create_jobs(1,lambda batches:{batches[0]:target})
+        with self.open() as workflow:
+            self.start(workflow)
+        saved = read_json(self.path)
+        for change in ('job','attempt','body'):
+            value = copy.deepcopy(saved)
+            job = value['jobs'][0]
+            record = job if change=='job' else job['attempts'][0] if change=='attempt' else job['attempts'][0]['dispatch']['body']
+            record['delivery_pose']['x'] = 2.
+            self.path.write_text(json.dumps(value))
+            with self.assertRaises(ContractError):
+                with self.open():
+                    pass
+        self.assertEqual([kind for kind,_ in self.bridge.calls],['start'])
+
+    def test_cli_accepts_ordered_batch_list_and_editable_destination_mapping(self):
+        path = self.path.parent/'cli-three.json'
+        batches = [uid() for _ in range(3)]
+        target = {'x':1.,'y':-1.,'yaw':.5}
+        mapping = self.path.parent/'destinations.json'
+        mapping.write_text(json.dumps({batches[1]:target}))
+        with patch('cooperation_workflow.LocalBridge',return_value=self.bridge), patch('builtins.print') as output:
+            self.assertEqual(main(['--ledger',str(path),'init','--batches',*batches,'--delivery-poses',str(mapping)]),0)
+            result = json.loads(output.call_args.args[0])
+        self.assertEqual([job['batch_id'] for job in result['jobs']],batches)
+        self.assertEqual(result['jobs'][1]['delivery_pose'],target)
+        self.assertNotIn('delivery_pose',result['jobs'][0])
+        self.assertEqual(self.bridge.calls,[])
+
+    def test_legacy_repeatable_batch_cli_keeps_its_original_payload(self):
+        path = self.path.parent/'cli-legacy.json'
+        with patch('cooperation_workflow.LocalBridge',return_value=self.bridge), patch('builtins.print') as output:
+            self.assertEqual(main(['--ledger',str(path),'init','--batch',self.batches[0],
+                                   '--batch',self.batches[1]]),0)
+            result = json.loads(output.call_args.args[0])
+        self.assertEqual([job['batch_id'] for job in result['jobs']],self.batches)
+        self.assertTrue(all('delivery_pose' not in job for job in result['jobs']))
+
+    def test_invalid_destinations_and_empty_or_duplicate_batches_never_call_bridge(self):
+        gets = list(self.bridge.gets)
+        invalid = [([],None),([self.batches[0]]*2,None),
+                   (self.batches,{uid():{'x':0,'y':0,'yaw':0}}),
+                   (self.batches,{self.batches[0]:{'x':True,'y':0,'yaw':0}}),
+                   (self.batches,{self.batches[0]:{'x':float('inf'),'y':0,'yaw':0}}),
+                   (self.batches,{self.batches[0]:{'x':0,'y':0}})]
+        for batches,targets in invalid:
+            with Workflow(self.path.parent/(uid()+'.json'),self.bridge) as workflow:
+                with self.assertRaises(ContractError):
+                    workflow.create(batches,delivery_poses=targets)
+        self.assertEqual(self.bridge.gets,gets)
+        self.assertEqual(self.bridge.calls,[])
 
     def test_delayed_ready_and_exactly_two_jobs(self):
         with self.open() as workflow:
@@ -527,6 +682,27 @@ class WorkflowTest(unittest.TestCase):
         self.assertEqual(sleeps, [1., 2., 3., 4., 5., 6.])
         self.assertEqual([kind for kind, body in self.bridge.calls], ['start', 'reset', 'start'])
         self.assertEqual(read_json(self.path)['runner']['exit_reason'], 'succeeded')
+
+    def test_run_automates_three_jobs_and_passes_only_the_selected_new_destination(self):
+        target = {'x':1.25,'y':-1.75,'yaw':.4}
+        self.create_jobs(3,lambda batches:{batches[1]:target})
+        def external(seconds):
+            with self.open() as workflow:
+                if seconds in (1,5,9):
+                    self.ready(workflow,version=int((seconds-1)/4)+1)
+                elif seconds in (2,6,10):
+                    self.bridge.terminal()
+                elif seconds in (4,8):
+                    self.bridge.acknowledge_reset()
+        result = self.run_with_clock(external,timeout=15)
+        self.assertEqual(result['exit_reason'],'succeeded')
+        self.assertEqual([job['status'] for job in result['workflow']['jobs']],['succeeded']*3)
+        starts = [body for kind,body in self.bridge.calls if kind=='start']
+        self.assertEqual(len(starts),3)
+        self.assertNotIn('delivery_pose',starts[0])
+        self.assertEqual(starts[1]['delivery_pose'],target)
+        self.assertNotIn('delivery_pose',starts[2])
+        self.assertEqual([kind for kind,_ in self.bridge.calls],['start','reset','start','reset','start'])
 
     def test_run_timeout_preserves_original_active_task(self):
         with self.open() as workflow:

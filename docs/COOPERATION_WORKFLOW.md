@@ -1,11 +1,11 @@
-# 两作业合作编排
+# 多作业运输编排
 
 ## 入口与边界
 运行 `tools/cooperation_workflow.py`。它只调用现有本地 `/coop-api`；不启动服务，不接管 ROS，不重启合作桥。`run` 有界轮询本流程，其他命令每次只做一个显式步骤。
 
-软件语义为两个不同洗衣 batch、容量一的合成 machine-ready 工位、两次完整刚性货物运输。当前物理场景只有一个自由货物；两作业之间显式新 episode 会重新初始化该货物。此模块不提供同回合两件库存、真实衣物抓取、洗衣机控制或纺织品柔性仿真。
+作业数量由输入的非空 batch 列表决定，每批可选独立交付点。容量一的合成 machine-ready 工位与原完整刚性货物运输模板保持。物理场景只有一个自由货物；作业之间显式新 episode 会重新初始化该货物。本模块不提供同回合多货物库存、真实衣物抓取、洗衣机控制或任意技能图。
 
-代码基线为 `aab0da45`。`start` 只发送 `task_id/episode_id/issued_at`；默认完整运输，兼容基线和新桥。原 `reset.available` 已包含 worker 清理、原生动作终态、车臂货物静止、car_hold 与 guard 退出，薄层复用它。实际物理验收由 FishBot owner 在隔离实例完成，沿用独立 oracle；本模块 CPU fixtures 不证明机器人搬运成功。
+早期实现基线为 `aab0da45`。未配置目标时，`start` 仍只发送 `task_id/episode_id/issued_at`；配置后增加可选 `delivery_pose={x,y,yaw}`，单位为米/弧度、世界坐标。默认完整运输与原交付点保持。原 `reset.available` 已包含 worker 清理、原生动作终态、车臂货物静止、car_hold 与 guard 退出，薄层复用它。实际物理验收由 FishBot owner 在隔离实例完成，沿用独立 oracle；本模块 CPU fixtures 不证明机器人搬运成功。
 
 ## 有界运行
 
@@ -21,7 +21,7 @@ python3 -B tools/cooperation_workflow.py \
   --batch 2e640edc-40d9-4a51-b5fc-08a841b7a3ab
 ```
 
-启动有界流程。ready 事件从另一个 CLI 到达后，`run` 自动完成派发、原 ID 查询、第一作业成功后的重置及第二作业派发。每轮释放 ledger 锁，允许事件并发写入。自定义端口时，每条命令都带相同 `--bridge`。
+启动有界流程。ready 事件从另一个 CLI 到达后，`run` 自动完成派发、原 ID 查询、各非末作业成功后的重置及下一作业派发。每轮释放 ledger 锁，允许事件并发写入。自定义端口时，每条命令都带相同 `--bridge`。
 
 ```bash
 python3 -B tools/cooperation_workflow.py \
@@ -60,7 +60,7 @@ python3 -B tools/cooperation_workflow.py --ledger "$HOME/.cache/fishbot/workflow
 python3 -B tools/cooperation_workflow.py --ledger "$HOME/.cache/fishbot/workflow-example/workflow.json" tick
 ```
 
-第二事件使用新 `event_id`、第二 batch UUID 和 `version=2`。事件到达前不会派发。载入第二事件后，再显式 `dispatch`；`tick` 确认第二任务成功且 quiet 后，状态为 `succeeded`。成功账本保留并冻结，不因后续其他 episode 操作改写。
+后续事件使用新 `event_id`、对应 batch UUID 和连续递增 `version`。事件到达前不会派发。载入事件后，再显式 `dispatch`；`tick` 确认最后一批成功且 quiet 后，状态为 `succeeded`。成功账本保留并冻结，不因后续其他 episode 操作改写。
 
 ## 取消与恢复
 
@@ -96,6 +96,42 @@ python3 -B -m unittest discover -s tools/tests -p test_cooperation_workflow.py -
 
 fixtures 使用基线 `request_identity/reset_request_identity`，覆盖提交前后断点、lost receipts、同 UUID 取消/重启、版本乱序、缺 history、unknown、source=None 与 reset ACK 门禁。测试不启动 ROS、MuJoCo、浏览器、服务或 GPU。计划入口：[cooperation-workflow-20261014](../plans/cooperation-workflow-20261014/task_plan.md)。
 
+## 三批与第二目的地配置
+
+旧的重复 `--batch` 用法保留。新流程也可用 `--batches` 一次给出三个或更多 UUID，再用 `--delivery-poses` 读取 UUID 到目标的 JSON 映射。未列入映射的批次使用原默认交付点。每个目标在任务接纳时冻结；修改已派发任务同一 UUID 的目标会明确拒绝，恢复查询不会改写原目标或重放动作。
+
+可直接复用[三批目的地示例](../tools/config/cooperation_delivery_poses.example.json)。以下文件记为 `delivery-poses.json`。UUID 仅作示例，实际运行使用新 UUID 和新账本路径：
+
+```json
+{
+  "74a9049e-b2f0-4c4a-bf56-14539465c66a": {"x": 0, "y": -2, "yaw": 0},
+  "2e640edc-40d9-4a51-b5fc-08a841b7a3ab": {"x": 0, "y": -2, "yaw": 0},
+  "cd7eb7d0-194d-4aad-bad7-d30189d46463": {"x": 0.7, "y": -2, "yaw": 0}
+}
+```
+
+```bash
+python3 -B tools/cooperation_workflow.py \
+  --ledger "$HOME/.cache/fishbot/three-jobs/workflow.json" \
+  --bridge http://127.0.0.1:9106 init \
+  --batches 74a9049e-b2f0-4c4a-bf56-14539465c66a \
+            2e640edc-40d9-4a51-b5fc-08a841b7a3ab \
+            cd7eb7d0-194d-4aad-bad7-d30189d46463 \
+  --delivery-poses /absolute/path/delivery-poses.json
+```
+
+这是同一运输模板的参数化，不是更换工位、抓取物或机械臂的通用适配器。增加下一批或另一个已支持的目标只改新流程输入；现有DockRobot、抓放、载货Nav2、取消和静止清理继续复用。
+
+显式目标先复用原始MuJoCo完整碰撞几何与足迹做静态预检。当前边界适配四面具名BOX围墙的合作场景；不是任意地图加载器，也不证明路径、到达或货物净位移达标。旧无目标请求不新增这项几何准入。原货物净位移≥0.5m业务要求保持，不能把任意近点都视为有效运输。
+
+几何模型启动时预热，查询使用独立锁；预检后重新核对回合、UUID、期限和ready。耗时模型编译不占用物理反馈锁。原源龄与接收龄门槛保留。
+
+## 独立目的地验收
+
+每个 `full_started` 事件在POST之前记录 `expected_delivery_pose` 和原 `requested_delivery_pose`。默认目标也由原请求及manifest/default在派发前声明，不能到达后反推预期。接纳任务、载货Nav2发送目标和同任务history保留该目标。桥的目标回显是请求证据，不是控制器消费回执；原UUID活动与终态由独立ROS订阅确认。
+
+原K抓放/同货物运输评分继续要求通过。新目标还需独立真值在0.04m/0.05rad内、车货停稳、货物完整留盘、机械臂回位，并连续保持1源秒。缺少目标声明或接纳证据不能跳过这项检查。完全没有任务目标字段的旧历史记录保持原历史评分，不补造新目的地通过。
+
 ## 实际仿真验收边界
 
 2026-10-15，ec879ed冻结源在独占domain120/API9090完成一次移动取消与两次完整运输，逐episode原物理评分均通过。全过程保持同一bridge，只重启CLI；3start/1cancel/2reset，无未知重发。两次完整任务分别验证真实双指接触、抬升、释放、落稳、机械臂回位、携同一货物和最终停车。两次reset使用独立ROS回执源stamp，早于新episode采集和派发。
@@ -103,3 +139,13 @@ fixtures 使用基线 `request_identity/reset_request_identity`，覆盖提交�
 私有报告位于`~/.cache/fishbot/workflow/runtime-20261015-clock-afde67e5/`的result.json、逐episode score与root-closeout-readback.json。45项执行源/输入起止一致，17owned进程停止、9090关闭、原107/114保持。此前两轮失败原件保留。受控ROS证明默认回调组可阻塞原生Clock；专组路由保留标准TimeSource及QoS，仍不保证所有时序抖动消失。新增clock_update记录不是控制器消费回执。
 
 本面板使用ideal工位观测与显式合成回合重置，不是新RGB留出、同回合多货物库存或真机验收。原视觉50短停靠＋6运输的11失败仍由[视觉计划](../plans/visual-docking-robustness-20261014/task_plan.md)接续。
+
+### 2026-10-20：三批＋第二目的地
+
+独占domain136/API9106的同一bridge/world完成三次完整运输，独立原K与新增目的地评分均通过。三批目标依次为A `(0,-2,0)`、A `(0,-2,0)`、B `(.7,-2,0)`。最终位置误差依次3.39cm、3.18cm、2.21cm，偏航误差.015640rad、.032529rad、.002298rad，目标内连续停稳2.46、2.54、2.42源秒；原门槛0.04m/0.05rad及1源秒保持。
+
+实际3次start、2次显式episode reset、0次cancel。只重启编排CLI查询原任务，不重启桥；抓放、携同一货物、臂回位及原生载货导航继续复用。第三货物净位移2.48919m，载货Nav UUID `9dec77e0933143989f44a2778c7357a8` 由独立ROS订阅确认终态4。
+
+私有证据根目录为`~/.cache/fishbot/workflow-reuse-20261020/`：c/result.json、c/workflow.json、逐case score与c/root-closeout-readback.json。A的启动环境失败、B的预检锁阻塞失败和各自清理回执保留。慢几何查询已移出反馈锁，原时龄门槛未放宽。206项定向检查通过；原前端只改运行配置即显示A/B，桌面/390px零写请求、零页面错误。实验进程及9106/5189已关闭，原5188保持。
+
+这证明当前固定工位、刚性货物、ideal观测下的运输模板可通过输入增加批次与目标。它不证明不同物体/工位、多货物库存、新RGB留出或真实硬件。后续使用上面的新账本与目标映射入口；完整记录见[本轮进度](../plans/cooperation-workflow-20261014/progress.md)。

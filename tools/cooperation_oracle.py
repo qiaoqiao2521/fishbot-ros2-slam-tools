@@ -236,6 +236,133 @@ def transport_checks(samples, audit, attempts, events):
             'passed': bool(windows) and all(window['passed'] for window in windows)}
 
 
+def delivery_checks(records, samples, audit, attempts, events):
+    """Bind each declared task destination to its native UUID and true stop.
+
+    The bridge freezes the sent goal before send_goal_async. HTTP is evidence
+    for that request and handle binding, never authority for physical success.
+    The observer independently receives the same UUID's ROS status/feedback
+    and standard truth/cargo poses. Historical captures without any task-level
+    destination declaration retain the original K score.
+    """
+    def pose(value):
+        if not isinstance(value, dict) or not all(finite(value.get(k)) for k in ('x', 'y', 'yaw')):
+            return None
+        return {k: float(value[k]) for k in ('x', 'y', 'yaw')}
+
+    target_keys = ('expected_delivery_pose', 'delivery_pose', 'requested_delivery_pose')
+    declared = any(e.get('kind') == 'full_started' and any(k in e for k in target_keys) for e in events)
+    declared |= any(r['topic'] == 'http_state' and 'delivery_pose' in r['payload'].get('task', {}) for r in records)
+    results = []
+    for attempt in attempts:
+        task_id, start = attempt['task_id'], attempt['started_wall_time']
+        starts = [e for e in events if e.get('kind') == 'full_started'
+                  and e.get('task_id') == task_id and e['wall_time'] == start]
+        event = starts[0] if len(starts) == 1 else {}
+        ends = [e['wall_time'] for e in events if e.get('kind') == 'full_finished'
+                and e.get('task_id') == task_id and e['wall_time'] >= start]
+        end = min(ends, default=math.inf)
+        states = [r['payload'] for r in records if r['topic'] == 'http_state'
+                  and start <= r['received_wall_time'] <= end + 1.
+                  and r['payload'].get('task', {}).get('id') == task_id]
+        required = any(k in event for k in target_keys) or any('delivery_pose' in state.get('task', {}) for state in states)
+        if not required:
+            results.append({'task_id': task_id, 'required': False, 'passed': True,
+                            'reason': 'Historical capture has no task destination declaration; original K score retained.'})
+            continue
+        target = pose(event.get('expected_delivery_pose', event.get('delivery_pose')))
+        episode = event.get('episode_id')
+        binding = (len(starts) == 1 and len(ends) == 1 and target is not None
+                   and isinstance(episode, str) and bool(episode) and bool(states))
+        for key in ('expected_delivery_pose', 'delivery_pose'):
+            if key in event:
+                binding &= pose(event[key]) == target and target is not None
+        if event.get('requested_delivery_pose') is not None:
+            binding &= pose(event['requested_delivery_pose']) == target and target is not None
+        for state in states:
+            binding &= (state.get('episode_id') == episode
+                        and pose(state.get('task', {}).get('delivery_pose')) == target and target is not None)
+        carried = {}
+        last_nav_is_delivery = False
+        goal_frozen = True
+        for state in states:
+            accepted = [a for a in state.get('native_actions', [])
+                        if a.get('label') == 'Nav2' and a.get('accepted') is True]
+            if accepted:
+                last_nav_is_delivery = accepted[-1].get('carrying') is True
+            for action in accepted:
+                if action.get('carrying') is not True:
+                    continue
+                identifier = action.get('uuid')
+                identifier_ok = (isinstance(identifier, str) and len(identifier) == 32
+                                 and all(ch in '0123456789abcdef' for ch in identifier))
+                goal = pose(action.get('goal_pose'))
+                goal_frozen &= identifier_ok and goal == target and target is not None
+                if identifier_ok:
+                    if identifier in carried:
+                        goal_frozen &= carried[identifier] == goal
+                    carried[identifier] = goal
+        native_id = next(iter(carried)) if len(carried) == 1 else None
+        active = False
+        terminal = None
+        for record in sorted(records, key=lambda r: r.get('received_wall_time', 0.)):
+            if not start <= record.get('received_wall_time', 0.) <= end + 1.:
+                continue
+            if record['topic'] == 'nav_feedback' and uuid_hex(record['payload']['goal_id']['uuid']) == native_id:
+                active = True
+            if record['topic'] == 'nav_status':
+                for status in record['payload'].get('status_list', []):
+                    if uuid_hex(status['goal_info']['goal_id']['uuid']) == native_id:
+                        active |= status['status'] in (1, 2, 3)
+                        terminal = status['status']
+        native = bool(native_id and goal_frozen and last_nav_is_delivery and active and terminal == 4)
+        gate = oracle.Gate(1.)
+        placed = attempt.get('released_full_footprint_supported_and_relative_rest', {}).get('first_pass_stamp')
+        previous = last = None
+        last_valid = False
+        errors = None
+        for item in samples:
+            if not start <= item['wall_time'] <= end or placed is None or item['stamp'] < placed:
+                continue
+            raw = item['raw']
+            errors = ({'position_m': math.hypot(item['car'][0] - target['x'], item['car'][1] - target['y']),
+                       'yaw_rad': oracle.yaw_error(item['car_yaw'], target['yaw'])} if target else None)
+            retained = (all(abs(item['relative'][i]) + item['extents'][i] <= .058 for i in range(2))
+                        and abs(item['relative'][0]) <= .047 and abs(item['relative'][1]) <= .047
+                        and -.002 <= item['relative'][2] <= .04 and raw.get('cargo_tray_floor_contact') is True)
+            arm_home = (len(raw.get('q6', [])) == 6 and len(raw.get('qvel6', [])) == 6
+                        and max(abs(a-b) for a, b in zip(raw['q6'], audit['home_q6'])) < .02
+                        and oracle.norm(raw['qvel6']) < .05)
+            cargo_speed = math.inf
+            if previous and 0 < item['stamp'] - previous['stamp'] <= .1:
+                cargo_speed = oracle.norm([item['cargo'][i] - previous['cargo'][i] for i in range(3)]) / (item['stamp'] - previous['stamp'])
+            last_valid = bool(errors and errors['position_m'] <= .04 and errors['yaw_rad'] <= .05
+                and item['independent_crosscheck'] and raw.get('finite') is True
+                and episode_id(raw) == episode and raw.get('car_hold') is True
+                and item['car_speed'] < .01 and abs(item['yaw_rate']) < .01 and arm_home and retained
+                and len(item['forces']) >= 2 and max(item['forces']) < .02
+                and oracle.norm(raw.get('cargo', {}).get('velocity_relative_tray', [math.inf])) < .002
+                and cargo_speed < .005)
+            gate.update(item['stamp'], last_valid)
+            previous = last = item
+        settled = bool(last and last_valid and gate.started is not None and last['stamp'] - gate.started >= 1.)
+        results.append({'task_id': task_id, 'episode_id': episode, 'required': True,
+            'expected_delivery_pose': target, 'task_request_and_acceptance_match': bool(binding),
+            'carrying_nav_uuid': native_id, 'carrying_nav_sent_goal_matches': bool(goal_frozen and native_id),
+            'last_nav_is_delivery': last_nav_is_delivery, 'native_uuid_active_observed': active,
+            'native_uuid_terminal_status': terminal, 'native_uuid_success_independently_observed': native,
+            'goal_request_evidence': 'bridge_pre_send_frozen_goal_and_accepted_handle_HTTP_snapshot',
+            'native_status_evidence': 'independently_subscribed_ROS_action_status_and_feedback',
+            'goal_request_independently_observed': False, 'native_goal_consumption_ack_claimed': False,
+            'final_true_pose_error': errors, 'final_true_pose_and_cargo_stop': gate.result(),
+            'position_tolerance_m': .04, 'yaw_tolerance_rad': .05, 'continuous_final_dwell_s': 1.,
+            'threshold_basis': 'original_physical_dock_pose_tolerances_and_original_final_rest_dwell',
+            'passed': bool(binding and native and settled)})
+    return {'required': bool(declared), 'attempts': results,
+            'passed': (bool(results) and all(r['passed'] for r in results)) if declared else True,
+            'original_K_checks_remain_required': True, 'controller_helpers_imported': False}
+
+
 def percentile(values, fraction=.95):
     values = sorted(value for value in values if finite(value))
     return values[min(len(values)-1, math.ceil(fraction*len(values))-1)] if values else None
@@ -643,9 +770,12 @@ def augment_score(value, records, samples, audit, events):
                          reset_receipt=options.reset_receipt,
                          allow_initial_episode=options.allow_initial_episode,scope=scope,expected_outcome=outcome)
     handoff = transport_checks(samples, audit, value.get('full_attempts', []), events) if audit else {'passed': False, 'windows': []}
+    delivery = (delivery_checks(records, samples, audit, value.get('full_attempts', []), events)
+                if audit and scope == 'transport' else {'required': False, 'passed': True, 'attempts': []})
     value['original_k_oracle_passed'] = value['passed']
     value['repeated_episode_acceptance'] = extra
     value['continuous_handoff_and_transport'] = handoff
+    value['task_delivery_acceptance'] = delivery
     value['evidence_mode'] = 'offline_replay' if options.score_only else 'live_observation'
     value['collection_directory'] = str(options.score_only or options.output)
     value['oracle_reuse'] = {
@@ -668,7 +798,7 @@ def augment_score(value, records, samples, audit, events):
         value['task_completion_passed']=bool(outcome == 'success' and value['passed'])
         value['expected_safety_passed']=bool(outcome == 'safe_cancel' and value['passed'])
     else:
-        value['passed'] = bool(value['passed'] and extra['passed'] and handoff['passed'] and not callback_errors and current_ok)
+        value['passed'] = bool(value['passed'] and extra['passed'] and handoff['passed'] and delivery['passed'] and not callback_errors and current_ok)
     first_physics=next((r['payload'] for r in records if r['topic']=='physics'),{})
     mode=first_physics.get('source',{}).get('manifest',{}).get('station_perception',{}).get('mode','ideal')
     if mode=='vision':
