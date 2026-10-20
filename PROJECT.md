@@ -11,6 +11,7 @@
 ## Constraints
 Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。历史无线延迟与专项验收边界继续保留，不再作为已售实车的当前阻塞项。
 ## Current State
+2026-10-20 [场景与三维雷达验证](plans/scene-business-validation-20261020/task_plan.md)完成：官方16线PointCloud2进入Nav2；隔离130/9100的D轮畅通往返、绕障往返、堵塞取消三例通过，真实碰撞增量均0。工作台/results展示来源与独立评分。默认仍为合成参考，已有地图导入尚未运动验收；不外推货物签收或sim-to-real。原A/B/C失败保留，见[本轮进度](plans/scene-business-validation-20261020/progress.md)。
 2026-10-18 工作台重构P0–P6完成：四服务身份、分层回执、共享工作面、地图编辑、真实导航/返航/运动取消及原任务恢复已接通。同一MuJoCo实例完成两轮抓放运输，独立物理评分通过。硬件生产浏览器的100ms交互与30分钟长测通过。最终1552项反馈与641项完整前端检查通过；人工控制八项、文字语音预览/确认/原UUID取消四项通过。源码fe06cb4已推既有远端并读回一致。实验ROS实例已清理；本轮只证明仿真闭环。Lichtblick完整源码在独立工作树推进，历史回放不代替当前实时控制验收。范围和证据见[大范围重构](plans/workbench-rebuild-20261018/task_plan.md)、[当前进度](plans/workbench-rebuild-20261018/progress.md)及[运行合同](docs/RUNTIME_CONTEXT.md)。
 2026-10-17 协同日志增长已修复：演示默认不写physics，显式诊断2Hz/默认最多32MiB；独立observer实际manifest去重、900秒/1GiB预算，缺失/超限/IO失败生成正式false评分。96定向、22状态/QoS、1223反馈通过；隔离124/125/126实际验证关闭/轮转/超限，6份源起止一致，零动作。旧90GB日志已由用户清理，不计为本轮释放；见[容量修复](plans/cooperation-log-budget-20261017/progress.md)。
 2026-10-17 航点草稿保护已实施：原目标红线、完整圆足迹吸附、航点撤销/重做；按域/地图缓存与Web Locks revision_id比较写入，重连核对、规则变化复核、坏存储内存降级。414前端与1186反馈通过；真实122页面断流/重载/多标签页及手机验收零运动写请求，15秒对比左示意右实际录屏。原ROS owner与物理门槛保持；见[本轮进度](plans/draft-safety-demo-20261016/progress.md)。
@@ -45,6 +46,7 @@ Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。
 历史记录：2026-10-05 已修正两块板的服务器地址，雷达约7 Hz、odom/imu约20 Hz上线；雷达接收定时器泄漏、断线重连和扫描点数变化导致的SLAM丢帧已修复。已实测低速短段直行、转向和主动零速停车，当时地图约6.725平方米自由区域及续建数据已保存。2026-10-05检查点的实车RViz实时视图曾保持打开，此处不代表当前在线状态。用户当时要求保持当前方向前进1米，实际仅前进约4.9厘米后触发前方保护，续试无新增位移；该检查点为零速、无排队动作，但续试的连续新鲜停车反馈未通过，原始时间戳偶发超限。底盘复位后恢复续建，轮式转角与点云实测转角不一致；后续修复与验收见Current Priority及plans/fishbot-real-autonomy-20261005/。
 2026-10-05：网页三点巡逻、物理箱体移入、减速转向绕障、继续巡航和返航已通过MuJoCo实测；三个巡逻点加返航共四点，约90.94秒，最终位置误差11.64cm且已停稳。取消任务、过期请求、仿真暂停和启动就绪门禁也已验证。入口为tools/fishbot_mujoco.sh web，证据见plans/fishbot-web-patrol-20261004/。此前RPP单点导航、断流停车和旧时间戳命令拒绝基线保留。2026-09-15原样迁移和旧路径兼容保留；本机Git历史未压平。历史实车建图和保存通过；最新固定图导航结果见Current State。私有成果未新增上传。
 ## Current Priority
+2026-10-20 场景面板已接通实际PointCloud2到Nav2及三工况路线。下一步可导入选定真实场地图，核对全外廓、定位误差和扫掠后复用面板；更换整车和涵道负压另立实施范围。入口[场景验证](docs/SCENE_VALIDATION.md)。
 2026-10-18 [工作台大范围重构](plans/workbench-rebuild-20261018/task_plan.md)已完成本轮交付。当前网页为5182/workbench，实验ROS服务已清理，不自动恢复动作。后续依赖安全与独立Lichtblick接入范围见[进度](plans/workbench-rebuild-20261018/progress.md)。下列专项记录保留当时基线，旧端口和进程描述不代表当前在线。
 2026-10-17 日志容量修复完成，后续演示使用默认不落完整物理日志；验收仍走独立observer并明确预算。32MiB只约束物理滚动诊断，不是RGB/全部运行目录上限。原121/122进程保持；入口[协同日志](docs/COOPERATION.md#日志与容量)。
 2026-10-17 本轮草稿保护完成，使用122/5181页面复核。缓存恢复不自动派发；几何红线是草稿直线提示，不代替Nav2绕行或物理验收。实现、视频和接续边界见[本轮计划](plans/draft-safety-demo-20261016/task_plan.md)。
@@ -72,6 +74,7 @@ Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。
 2026-10-07 用户确认先在虚拟环境实现三点视觉巡检，现已完成：MuJoCo车载RGB→三点导航拍摄→绿灯/红灯/空位像素识别→图文报告→返航。最终整轮73.703秒，九帧带拍摄位姿证据，返航误差12.29cm且停稳；独立超时取消通过。入口tools/fishbot_inspection.sh，仅domain97；见docs/VISUAL_INSPECTION.md。识别限定合成工位，实车相机与巡检尚未验收。
 2026-10-06 用户确认直接采用FishBot开源模型，不以现场测量作为前置步骤；连续本地控制、分级限速/停车、触发记录与回放已实现。新入口 tools/fishbot_passage.launch.py 在隔离MuJoCo domain 96完成整段过门、硬停车及取消测试，74项聚焦测试通过；见docs/PASSAGE_CONTROL.md。当前小车充电，本次未操作实车。原domain 93仿真与旧实车脚本保留。接续使用新入口验收实际过门和建图；实车源时间戳、转角反馈、板端断流停车和旧命令拒绝仍需实际反馈验证。
 ## Knowledge Map
+[场景、三维雷达与路线验证](docs/SCENE_VALIDATION.md)；[实施计划](plans/scene-business-validation-20261020/task_plan.md)；[当前进度](plans/scene-business-validation-20261020/progress.md)。
 [工作台大范围重构计划](plans/workbench-rebuild-20261018/task_plan.md)；[商业/开源采纳与底层审查](plans/workbench-rebuild-20261018/findings.md)；[当前重构进度](plans/workbench-rebuild-20261018/progress.md)。
 [语音任务入口](docs/VOICE.md)；[语音框架计划](plans/edge-voice-framework-20261015/task_plan.md)；[验收与保留边界](plans/edge-voice-framework-20261015/progress.md)。
 [近期成果工作台](docs/WORKBENCH.md)；[本轮计划](plans/workbench-harvest-20261015/task_plan.md)；[交付进度](plans/workbench-harvest-20261015/progress.md)。

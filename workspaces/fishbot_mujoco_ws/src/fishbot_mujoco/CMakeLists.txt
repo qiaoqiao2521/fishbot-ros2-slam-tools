@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.8)
 project(fishbot_mujoco)
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(pluginlib REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
+find_package(mujoco_ros2_control_plugins REQUIRED)
+add_library(fishbot_contact_audit SHARED src/contact_audit.cpp)
+target_compile_features(fishbot_contact_audit PUBLIC cxx_std_17)
+ament_target_dependencies(fishbot_contact_audit rclcpp pluginlib diagnostic_msgs mujoco_ros2_control_plugins)
+pluginlib_export_plugin_description_file(mujoco_ros2_control_plugins fishbot_plugins.xml)
+install(TARGETS fishbot_contact_audit LIBRARY DESTINATION lib)
 execute_process(COMMAND /usr/bin/python3
   ${CMAKE_CURRENT_SOURCE_DIR}/scripts/make_fixture_map.py
   ${CMAKE_CURRENT_SOURCE_DIR}/mjcf/arena.xml ${CMAKE_CURRENT_BINARY_DIR}/arena.pgm

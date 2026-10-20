@@ -13,6 +13,7 @@ import {
 } from '@/lib/workbench-catalog'
 import type { ServiceState } from '@/lib/workbench-services'
 import { toolEntry } from '@/lib/workbench-tool-entry'
+import { SceneValidationPanel } from './scene-validation-panel'
 import './workbench.css'
 
 const flow = [
@@ -125,6 +126,8 @@ export function WorkbenchPage({ onNavigate, voiceController }: { onNavigate: (ro
     </section>
 
     <VoicePanel controller={voiceController} />
+
+    <SceneValidationPanel />
 
     <section className="workbench-supporting" aria-labelledby="workbench-supporting-heading">
       <div className="workbench-section-heading"><div><h2 id="workbench-supporting-heading">验证与反馈</h2><p>停靠感知补相对位姿；组合评测用固定条件检验策略。两者保留各自验收边界。</p></div></div>

@@ -1,8 +1,10 @@
 import path from 'node:path'
 import fs from 'node:fs'
+import os from 'node:os'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { validateWorkbenchProfile, workbenchProxy } from './src/lib/workbench-profile'
+import { sceneReportMiddleware } from './server/scene-report'
 
 const frontendPort = Number(process.env.FRONTEND_PORT || '5173')
 const profilePath = process.env.FISHBOT_WORKBENCH_PROFILE
@@ -15,8 +17,13 @@ const profile = validateWorkbenchProfile(profilePath ? JSON.parse(fs.readFileSyn
   }, tools: { spatiallm: Number(process.env.FISHBOT_SPATIALLM_PORT || 8867), video: Number(process.env.FISHBOT_VIDEO_PORT || 18089) },
 }, frontendPort)
 const proxy = workbenchProxy(profile)
+const sceneReport = process.env.FISHBOT_SCENE_REPORT || path.join(os.homedir(), '.cache/fishbot/scene-validation/latest/report.json')
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), {
+    name: 'fishbot-scene-report',
+    configureServer(server) { server.middlewares.use(sceneReportMiddleware(sceneReport)) },
+    configurePreviewServer(server) { server.middlewares.use(sceneReportMiddleware(sceneReport)) },
+  }],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   define: {
     'import.meta.env.VITE_FISHBOT_SIM_DOMAIN': JSON.stringify(String(profile.services.mission.domain)),

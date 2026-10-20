@@ -1,0 +1,17 @@
+# Editable generic profile. This is not a calibrated Ouster/Velodyne model.
+# Official extension and ROS wrapper: ros-controls/mujoco_ros2_control 0.1.1,
+# Apache-2.0; see mujoco_extensions/mujoco_3d_lidar/src/3dlidar.cpp.
+fishbot_lidar3d_profile:
+  ros__parameters:
+    sensor_name: generic_lidar3d
+    parent_frame: laser_link
+    frame_name: lidar3d_link
+    # Above the existing laser housing; the caller publishes the matching TF.
+    mount_xyz: [0.0, 0.0, 0.035]
+    topic: /sensors/lidar3d/points
+    horizontal_samples: 360
+    lines: 16
+    vertical_degrees: [-15.0, 15.0]
+    min_range: 0.12
+    max_range: 8.0
+    rate_hz: 10.0

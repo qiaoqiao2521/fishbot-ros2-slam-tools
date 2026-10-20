@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "source": {
+    "label": "房间-门口-走廊参考场景",
+    "basis": "synthetic_reference",
+    "assumption_cells": "all scene cells are synthetic"
+  },
+  "lidar": {"profile": "baseline-2d"},
+  "plugins_file": "../../workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/config/plugins.yaml",
+  "params_file": "../../workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/config/nav2.yaml",
+  "api": "http://127.0.0.1:9100",
+  "domain": 130,
+  "timeout_s": 90,
+  "startup_timeout_s": 45,
+  "return_home": true,
+  "waypoints": [{"x": 1.75, "y": 0, "yaw": 0}],
+  "geometry": {"half_length": 0.105, "half_width": 0.125},
+  "cases": [
+    {"id": "clear", "label": "畅通往返", "expected": "delivered", "obstacle": null},
+    {"id": "detour", "label": "绕障往返", "expected": "delivered", "timeout_s": 120, "obstacle": {"center": [1.18, 0, 0.222], "half_size": [0.18, 0.18, 0.22]}},
+    {"id": "blocked", "label": "堵死后取消", "expected": "canceled", "cancel_after_s": 8,
+      "obstacle": {"center": [0.65, 0, 0.222], "half_size": [0.18, 0.42, 0.22]}}
+  ],
+  "notes": "默认生成有明确尺寸的合成参考场景，不代表当前住宅。可填写scene_path/map，或prepare --source-map导入原图。prepare后逐例启动对应scene；run不启动ROS。"
+}

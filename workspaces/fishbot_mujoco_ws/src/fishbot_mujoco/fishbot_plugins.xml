@@ -1,0 +1,6 @@
+<library path="fishbot_contact_audit">
+  <class name="fishbot_mujoco/ContactAudit" type="fishbot_mujoco::ContactAudit"
+         base_class_type="mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase">
+    <description>Read-only cumulative robot versus scene contact evidence.</description>
+  </class>
+</library>

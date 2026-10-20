@@ -1,0 +1,51 @@
+.scene-validation-panel { min-width: 0; padding: 22px; color: #3d5573; }
+.scene-validation-heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px 20px; }
+.scene-validation-heading p { margin: 5px 0 0; color: #61748b; font-size: 11px; }
+.scene-validation-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.scene-validation-actions button { gap: 6px; }
+.scene-validation-import { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 6px 12px; border: 1px solid #dbe4ef; border-radius: 8px; background: #fff; color: #3d5573; font-size: 12px; cursor: pointer; }
+.scene-validation-import:hover { background: #f1f5fb; }
+.scene-validation-import:focus-within { outline: 2px solid #2563eb; outline-offset: 2px; }
+.scene-validation-import input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.scene-validation-import-disabled { opacity: .5; cursor: default; }
+.scene-validation-feedback, .scene-validation-error { margin: 12px 0 0; font-size: 11px; overflow-wrap: anywhere; }
+.scene-validation-feedback { color: #365e91; }
+.scene-validation-error { color: #ad493d; }
+.scene-validation-empty { margin: 18px 0 0; padding: 15px; border: 1px dashed #cbd9ec; border-radius: 8px; background: #f8fafd; color: #61748b; font-size: 12px; }
+.scene-validation-source { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px 24px; margin: 18px 0 0; padding: 15px 0; border-top: 1px solid #e2e9f2; border-bottom: 1px solid #e2e9f2; }
+.scene-validation-source > div { min-width: 0; }
+.scene-validation-source dt { font-size: 10px; color: #78889d; }
+.scene-validation-source dd { margin: 4px 0 0; font-size: 12px; overflow-wrap: anywhere; }
+.scene-validation-source dd > span { display: inline-block; margin-left: 8px; font-size: 10px; color: #365e91; }
+.scene-validation-warnings { margin: 14px 0; padding: 11px 13px; border-left: 3px solid #b88b38; background: #faf7ee; color: #805e20; font-size: 11px; }
+.scene-validation-warnings strong { font-weight: 600; }
+.scene-validation-warnings ul { margin: 5px 0 0; padding-left: 17px; }
+.scene-validation-explanation, .scene-validation-scope-note { color: #78889d; font-size: 10px; margin: 13px 0; }
+.scene-validation-table { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: left; font-size: 11px; }
+.scene-validation-table caption { padding: 0 0 10px; text-align: left; color: #61748b; font-size: 11px; }
+.scene-validation-table th { padding: 11px 10px; background: #f5f8fc; font-weight: 500; color: #61748b; }
+.scene-validation-table th:first-child { width: 25%; }
+.scene-validation-table th:nth-child(2), .scene-validation-table th:nth-child(3) { width: 15%; }
+.scene-validation-table td { min-width: 0; padding: 12px 10px; vertical-align: top; border-bottom: 1px solid #e7edf5; overflow-wrap: anywhere; }
+.scene-validation-table strong { font-weight: 600; }
+.scene-validation-expected { display: block; margin-top: 5px; color: #78889d; font-size: 10px; }
+.scene-validation-table td > p { margin: 0 0 7px; color: #61748b; }
+.scene-validation-result { font-weight: 500; }
+.scene-validation-business-route_completed, .scene-validation-business-delivered, .scene-validation-acceptance-passed { color: #087a56; }
+.scene-validation-business-route_incomplete, .scene-validation-business-undelivered { color: #365e91; }
+.scene-validation-business-unknown, .scene-validation-acceptance-incomplete { color: #9a660c; }
+.scene-validation-acceptance-failed { color: #ad493d; }
+.scene-validation-panel details summary { color: #365e91; cursor: pointer; font-size: 10px; }
+.scene-validation-panel details summary:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+.scene-validation-metrics { display: grid; gap: 7px; margin: 10px 0 0; }
+.scene-validation-metrics dt { color: #78889d; font-size: 10px; }
+.scene-validation-metrics dd { margin: 2px 0 0; color: #506682; font-size: 10px; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .scene-validation-panel { padding: 16px; }
+  .scene-validation-source { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .scene-validation-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+  .scene-validation-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; padding: 14px 0; border-top: 1px solid #e2e9f2; }
+  .scene-validation-table td { display: block; padding: 0; border: 0; }
+  .scene-validation-table td:first-child, .scene-validation-table td:last-child { grid-column: 1 / -1; }
+  .scene-validation-table td::before { content: attr(data-label); display: block; margin-bottom: 4px; color: #78889d; font-size: 10px; }
+}
