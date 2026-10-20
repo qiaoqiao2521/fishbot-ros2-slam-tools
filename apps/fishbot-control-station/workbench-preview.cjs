@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// Local read-only preview using the upstream web package's static server dependency.
+// Local workbench and thin adapter for the existing SO101 simulator CLI.
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
+const { createSo101Runtime } = require("./so101-runtime.cjs");
 
 const workbench = path.join(__dirname, "workbench");
 const serveHandler = createRequire(path.join(workbench, "web", "package.json"))("serve-handler");
@@ -17,7 +18,9 @@ if (!fs.existsSync(path.join(build, "index.html"))) {
   throw new Error("Build the workbench first: ./workbench-dev.sh web:build:prod");
 }
 
+const runtime = createSo101Runtime();
 const server = http.createServer(async (request, response) => {
+  if (await runtime.handle(request, response, serveHandler)) return;
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { Allow: "GET, HEAD" });
     response.end("Read-only preview");

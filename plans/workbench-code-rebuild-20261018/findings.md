@@ -29,3 +29,12 @@
 full-b仍有初始物体贴边，已将相机distance调到0.8m。mobile-a发现无viewport声明，CSS实际宽980px；该轮不计手机通过。已用原HtmlWebpackPlugin配置增加device-width，验收脚本明确核对实际390×844，并检查物体起点/持物/落定三处的完整可见边界。
 
 最终 full-c 和 mobile-b 分别通过 11、9 项检查，根已目视核验截图。手机底部次要同步/速度选项有裁切；已验证的是录像、报告、播放暂停和阶段定位，不包括完整手机编辑。实际跨回合换源及实时连接留后续。
+
+
+## 2026-10-20 现有执行器接入结论
+
+旧GraspGenX full_cycle以冻结motion-plan/preflight为入口，不适合直接接受编辑草稿。现有 run_visual_grasp.run_physical_episode 已有RGB定位、IK/OMPL、物理控制和原评分，仅缺场景/进度/取消等注入点。本轮新增可选hook和薄station_executor，无需另写控制器，也没有引入内容哈希门锁。
+
+FishBot coop-api的transport仍是车臂协同任务，不能替代SO101独立抓放。新 `/api/so101/` 适配只有本机CLI生命周期和产物读取，worker status.json是执行状态来源，未新增通用调度/认证平台。网页运行输入是独立快照；后续编辑不会修改已启动任务。
+
+固定八步模板当前只支持方块XY各±10mm和50×56×130mm附加障碍。设计目标高度与执行器指间高度不同，运行能力描述明确映射；不支持的节点、世界位置、步骤重排和时长会具体拒绝。第一次新CLI释放后再接触失败，复用已有floor_yaw/28mm后新CLI及浏览器实际完整回合均通过，原物理阈值保持。

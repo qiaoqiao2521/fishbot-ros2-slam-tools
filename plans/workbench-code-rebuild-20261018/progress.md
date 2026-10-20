@@ -60,3 +60,27 @@
 Knowledge closeout：already_covered。继续采用 CapMesh PIT-004 的 Web/机器人依赖隔离，不新增通用知识规则。
 
 本轮修复：上游 `isLayoutEqual` 忽略基线配置中不存在的新键。最初布局只有面板标题，导致 `station` 内容无法保存。两个入口布局现包含完整初始 station，面板默认配置也包含 station；保存通过原 `updateLayout` 与 `overwriteLayout`。移除当前地址的 layoutUrl 后刷新，不再重新导入初始模板。相关原生比较回归有 2 个测试。失败试验未误记为通过。
+
+## 2026-10-20 P3 规划执行接入（进行中）
+
+用户授权接已有规划执行器。复用 SO101 `run_visual_grasp.run_physical_episode` 的实际控制器和原评分，新增薄 CLI 适配；预览服务仅提供本机任务提交、原 ID 查询、协作取消和结果读取。UI 明确点击才提交，刷新只恢复原任务。每回合独立产物目录，可并行，不新增每日限额或内容哈希门锁。
+
+首版边界：固定完整抓放程序，方块受支持的小范围 XY 修改、已有/新增障碍；无法映射的程序/坐标必须明确反馈。通用程序执行器和真机不在本轮。根负责 HTTP/整合；内部 worker 分别负责原生执行适配和面板调用。验收至少覆盖新完整回合、协作取消、刷新不重发和输入拒绝。
+
+
+### P3 固定模板验收完成
+
+- SO101 新增 station_executor/test_station_executor，原 run_physical_episode 增加可选场景/进度/取消/视频/控制器参数，默认历史路径保持。复用已核准 floor_yaw 与28mm释放高度。canonical原现场保留，发布同步到既有SO101交付分支。
+- Node薄适配提供runtime、任务提交/原ID查询/列表/协作取消与报告/录像Range读取。每任务独立快照与产物目录，可并行；同ID只启动一次。面板重载/刷新只GET，不POST。
+- UI明确显示本次任务和历史回放；终态、原物理报告和本次录像独立显示。技术报告默认折叠。新建布局初始化executionTaskId，原布局也可从任务目录恢复最近任务。
+- 18项面板/transport、3项Node进程合同、SO101 35项定向测试与生产构建、定向ESLint通过。包体积两警告保留，未宣称页面加载性能或50Hz。
+- 真实浏览器在隔离5187通过新抓放、运行中刷新原ID/零重发、原报告、视频Range读回、再次启动和取消。成功任务 `fd3e7408-b4da-4d44-a186-ce8b90d61447`：74.76sim/50.219wall，grasp_success/place_success/controller_done均true，safety_stop=false，静稳7.52s；release审计通过、脱离后接触峰值0。新录像468帧，640×480/6.25fps；独立浏览器实际播放和seek通过，readyState=4、error=null。
+- 网页取消任务 `a4604f07-7251-489e-9f40-c8e5d745b2e6`：4.16sim，cancelled、passed=false，无safety_stop，26帧部分录像完整。总2次显式启动+1次取消POST；刷新无重复POST。pageErrors=0。
+- CLI另验修改方块X=.245和新增障碍，实际初态及XML确认消费，在25.30sim协作取消。首CLI默认旧释放高度触发再次接触，失败保留；未修改原安全判据。
+- 本机5186已换为新服务，SO101_ROOT指向已同步的独立交付工作树；原任务成功/取消与报告经5186读回。CY未部署，训练/实机/20+20未启动，任意目标或自定义程序仍不支持。
+
+证据：忽略的 `workbench-review-tests/output/station-execution/result.json`、截图与 `workbench-tools/output/station-tasks/<id>/`。浏览器测试是新物理执行，右侧共享时间轴仍属历史回放，未声明新的实时三维联动。根Codex负责后续更多任务/参数和CY部署；本轮固定模板接入完成。
+
+Knowledge closeout：already_covered。沿用既有任务ID恢复与CapMesh PIT-004依赖隔离，接口细节留项目文档。
+
+执行器已提交推送既有 SO101 分支 `codex/colab-twin-20261001`，提交 `c33a4df`。本工作台通过 `SO101_ROOT` 指向该交付工作树。新增执行UI后，原编辑器11项浏览器验收也通过；零运动写请求，旧编辑/保存/导入行为保持。

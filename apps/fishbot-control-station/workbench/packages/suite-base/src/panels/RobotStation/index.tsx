@@ -12,7 +12,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { makeStyles } from "tss-react/mui";
 
 import Panel from "@lichtblick/suite-base/components/Panel";
@@ -25,6 +25,15 @@ import {
 import { useLayoutManager } from "@lichtblick/suite-base/context/LayoutManagerContext";
 import { SaveConfig } from "@lichtblick/suite-base/types/panels";
 
+import {
+  latestSimulationTask,
+  requestSimulation,
+  simulationArtifactUrl,
+  taskIsActive,
+  TaskRequestError,
+  taskStatusLabel,
+} from "./execution";
+import type { SimulationRuntime, SimulationTask } from "./execution";
 import {
   ACTION_LABELS,
   KIND_LABELS,
@@ -39,7 +48,7 @@ import {
 } from "./station";
 import type { Instruction, Kind, Station, StationNode, Vec3 } from "./station";
 
-type Config = { station?: Station };
+type Config = { station?: Station; executionTaskId?: string };
 const selectedLayoutIdSelector = (state: LayoutState) =>
   state.selectedLayout?.id;
 const COLORS: Record<Kind, string> = {
@@ -241,11 +250,243 @@ function RobotStation({
   const [past, setPast] = useState<Station[]>([]);
   const [future, setFuture] = useState<Station[]>([]);
   const [notice, setNotice] = useState("");
+  const [runtime, setRuntime] = useState<SimulationRuntime>();
+  const [runtimeError, setRuntimeError] = useState("");
+  const [taskId, setTaskId] = useState(config.executionTaskId ?? "");
+  const [task, setTask] = useState<SimulationTask>();
+  const [checkingTask, setCheckingTask] = useState(true);
+  const [executionError, setExecutionError] = useState("");
+  const [refresh, setRefresh] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const submissionController = useRef<AbortController>();
+  const cancellationController = useRef<AbortController>();
+  const rejectedTaskId = useRef("");
   const fileInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const restoredId = config.executionTaskId ?? "";
+    setTaskId(restoredId);
+    setTask((previous) => (previous?.id === restoredId ? previous : undefined));
+  }, [config.executionTaskId]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void requestSimulation<SimulationRuntime>(
+      "/runtime",
+      controller.signal,
+    ).then(
+      (value) => {
+        if (!controller.signal.aborted) {
+          setRuntime(value);
+          setRuntimeError("");
+        }
+      },
+      (error: unknown) => {
+        if (!controller.signal.aborted) {
+          setRuntime(undefined);
+          setRuntimeError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+    );
+    return () => {
+      controller.abort();
+    };
+  }, [refresh]);
+  useEffect(() => {
+    if (submitting || (taskId !== "" && rejectedTaskId.current === taskId)) {
+      return;
+    }
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const lookup = async () => {
+      setCheckingTask(true);
+      try {
+        if (!taskId) {
+          const result = await requestSimulation<{ tasks: SimulationTask[] }>(
+            "/tasks",
+            controller.signal,
+          );
+          if (controller.signal.aborted) {
+            return;
+          }
+          const latest = latestSimulationTask(result.tasks);
+          if (latest) {
+            setTask(latest);
+            setTaskId(latest.id);
+            saveConfig({ executionTaskId: latest.id });
+          }
+          return;
+        }
+        const result = await requestSimulation<SimulationTask>(
+          `/tasks/${encodeURIComponent(taskId)}`,
+          controller.signal,
+        );
+        if (controller.signal.aborted) {
+          return;
+        }
+        if (result.id !== taskId) {
+          throw new TaskRequestError(
+            "查询返回的任务 ID 不一致，请保留原 ID 再查询。",
+          );
+        }
+        setTask(result);
+        setExecutionError("");
+        if (taskIsActive(result)) {
+          timer = setTimeout(() => {
+            void lookup();
+          }, 1500);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          setExecutionError(message);
+          if (
+            taskId &&
+            error instanceof TaskRequestError &&
+            error.status === 404
+          ) {
+            setTask({
+              id: taskId,
+              status: "failed",
+              message: "服务端未找到原任务。可以显式发起一次新运行。",
+              error: message,
+            });
+          } else if (taskId) {
+            setTask(
+              (previous) =>
+                previous ?? {
+                  id: taskId,
+                  status: "unknown",
+                  message: "状态未确认，请查询原任务。",
+                },
+            );
+          }
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setCheckingTask(false);
+        }
+      }
+    };
+    void lookup();
+    return () => {
+      controller.abort();
+      if (timer != undefined) {
+        clearTimeout(timer);
+      }
+    };
+  }, [taskId, submitting, refresh, saveConfig]);
+  useEffect(
+    () => () => {
+      submissionController.current?.abort();
+      cancellationController.current?.abort();
+    },
+    [],
+  );
+  const startSimulation = async () => {
+    if (
+      runtime?.ready !== true ||
+      checkingTask ||
+      submissionController.current ||
+      taskIsActive(task)
+    ) {
+      return;
+    }
+    const id = crypto.randomUUID();
+    const controller = new AbortController();
+    rejectedTaskId.current = "";
+    submissionController.current = controller;
+    setSubmitting(true);
+    setExecutionError("");
+    setTaskId(id);
+    setTask({
+      id,
+      status: "submitting",
+      submittedAt: new Date().toISOString(),
+      station,
+    });
+    // Save the ID before POST. A lost response must query this ID, never submit again.
+    saveConfig({ executionTaskId: id });
+    try {
+      const result = await requestSimulation<SimulationTask>(
+        "/tasks",
+        controller.signal,
+        { taskId: id, station },
+      );
+      if (!controller.signal.aborted) {
+        if (result.id !== id) {
+          throw new TaskRequestError(
+            "提交响应的任务 ID 不一致，请查询原任务。",
+          );
+        }
+        setTask(result);
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        const message = error instanceof Error ? error.message : String(error);
+        const rejected =
+          error instanceof TaskRequestError &&
+          [400, 422].includes(error.status ?? 0);
+        if (rejected) {
+          rejectedTaskId.current = id;
+        }
+        setTask({
+          id,
+          status: rejected ? "failed" : "unknown",
+          message: rejected
+            ? "执行器拒绝了当前草稿。请按错误提示修改。"
+            : "提交结果未确认，请查询原任务；不会自动重新提交。",
+          error: message,
+          station,
+        });
+        setExecutionError(message);
+      }
+    } finally {
+      submissionController.current = undefined;
+      if (!controller.signal.aborted) {
+        setSubmitting(false);
+      }
+    }
+  };
+  const cancelSimulation = async () => {
+    if (!taskId || cancellationController.current) {
+      return;
+    }
+    const controller = new AbortController();
+    cancellationController.current = controller;
+    setCancelling(true);
+    setExecutionError("");
+    try {
+      const result = await requestSimulation<SimulationTask>(
+        `/tasks/${encodeURIComponent(taskId)}/cancel`,
+        controller.signal,
+        {},
+      );
+      if (!controller.signal.aborted) {
+        setTask(result);
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setExecutionError(
+          `取消结果未确认，请查询原任务：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    } finally {
+      cancellationController.current = undefined;
+      if (!controller.signal.aborted) {
+        setCancelling(false);
+        setRefresh((value) => value + 1);
+      }
+    }
+  };
   const node = station.nodes.find((item) => item.id === selected);
   const blocked = descendants(selected, station.nodes);
   const targets = station.nodes.filter((item) => item.kind === "target");
   const warnings = programWarnings(station);
+  const videoUrl = simulationArtifactUrl(task?.artifacts?.video);
+  const reportUrl = simulationArtifactUrl(task?.artifacts?.report);
   const commit = (next: Station) => {
     setNotice("");
     setPast((history) => [...history, station]);
@@ -701,9 +942,144 @@ function RobotStation({
             commit({ ...station, notes: event.target.value });
           }}
         />
-        <Alert severity="info">
-          当前可编辑、保存和导出程序。仿真执行器尚未接入这个编辑入口；目标点和步骤尚未经过物理验证。
+        <Divider />
+        <Typography variant="subtitle1">规划与仿真</Typography>
+        <Alert severity={runtime?.ready === true ? "info" : "warning"}>
+          {runtimeError
+            ? `执行器暂不可用：${runtimeError}`
+            : (runtime?.message ?? "正在检查已有规划执行器…")}
         </Alert>
+        {runtime?.capabilities && runtime.capabilities.length > 0 && (
+          <Typography variant="caption" color="text.secondary">
+            执行器支持：{runtime.capabilities.join("；")}
+          </Typography>
+        )}
+        <Typography variant="body2" color="text.secondary">
+          运行使用提交时的草稿快照。后续编辑不会改变已提交任务；右侧共享时间轴仍是历史回放。
+        </Typography>
+        <div className={classes.row}>
+          <Button
+            variant="contained"
+            disabled={
+              runtime?.ready !== true ||
+              checkingTask ||
+              submitting ||
+              taskIsActive(task)
+            }
+            onClick={() => {
+              void startSimulation();
+            }}
+          >
+            规划并运行仿真
+          </Button>
+          <Button
+            size="small"
+            disabled={
+              submitting || cancelling || !taskId || !taskIsActive(task)
+            }
+            onClick={() => {
+              void cancelSimulation();
+            }}
+          >
+            {cancelling ? "正在取消…" : "取消任务"}
+          </Button>
+          <Button
+            size="small"
+            disabled={submitting}
+            onClick={() => {
+              rejectedTaskId.current = "";
+              setRefresh((value) => value + 1);
+            }}
+          >
+            {taskId ? "查询原任务" : "刷新执行器"}
+          </Button>
+        </div>
+        {executionError && <Alert severity="warning">{executionError}</Alert>}
+        {taskId && (
+          <Typography variant="caption" style={{ overflowWrap: "anywhere" }}>
+            原任务 ID：{taskId}
+          </Typography>
+        )}
+        {task && (
+          <div role="region" aria-live="polite" aria-label="当前仿真任务">
+            <Typography variant="subtitle2">
+              {taskStatusLabel(task.status)}
+              {task.phase ? ` · ${task.phase}` : ""}
+            </Typography>
+            {task.station && (
+              <Typography variant="body2">
+                提交的工作站：{task.station.name}
+              </Typography>
+            )}
+            {task.submittedAt && (
+              <Typography variant="caption">
+                提交时间：{task.submittedAt}
+              </Typography>
+            )}
+            {task.simulation_s != undefined && (
+              <Typography variant="body2">
+                仿真时间：{task.simulation_s.toFixed(2)} s
+              </Typography>
+            )}
+            {task.message && (
+              <Typography variant="body2">{task.message}</Typography>
+            )}
+            {task.error && (
+              <Typography variant="body2" color="error">
+                {task.error}
+              </Typography>
+            )}
+            {videoUrl && (
+              <>
+                <Typography variant="subtitle2" style={{ marginTop: 8 }}>
+                  本次任务录像
+                </Typography>
+                <video
+                  src={videoUrl}
+                  controls
+                  preload="metadata"
+                  style={{ width: "100%", maxHeight: 340 }}
+                >
+                  浏览器不支持内嵌录像，请使用下面的链接。
+                </video>
+                <Typography variant="body2">
+                  <a href={videoUrl} target="_blank" rel="noreferrer">
+                    打开本次录像
+                  </a>
+                </Typography>
+              </>
+            )}
+            {reportUrl && (
+              <Typography variant="body2">
+                <a href={reportUrl} target="_blank" rel="noreferrer">
+                  打开本次原始报告
+                </a>
+              </Typography>
+            )}
+            {task.report && (
+              <Typography variant="body2">
+                物理验收：{task.report.passed === true ? "通过" : "未通过"}；
+                真实夹起：{task.report.grasp_success === true ? "是" : "否"}；
+                放置落定：{task.report.place_success === true ? "是" : "否"}；
+                安全停止：{task.report.safety_stop === true ? "是" : "否"}
+              </Typography>
+            )}
+            {task.report && (
+              <details>
+                <summary>本次任务原始物理报告</summary>
+                <pre
+                  style={{
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "anywhere",
+                    fontSize: 11,
+                  }}
+                >
+                  {JSON.stringify(task.report, undefined, 2)}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
         <details>
           <summary>借用的产品能力</summary>
           <Typography variant="body2">
@@ -716,5 +1092,5 @@ function RobotStation({
   );
 }
 RobotStation.panelType = "RobotStation";
-RobotStation.defaultConfig = { station: defaultStation() };
+RobotStation.defaultConfig = { station: defaultStation(), executionTaskId: "" };
 export default Panel(RobotStation);
