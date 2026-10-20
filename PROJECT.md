@@ -11,6 +11,7 @@
 ## Constraints
 Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。历史无线延迟与专项验收边界继续保留，不再作为已售实车的当前阻塞项。
 ## Current State
+2026-10-20 [真实地图、新底盘与负压实验](plans/scene-hardware-lab-20261020/task_plan.md)三项分别通过：私有实测图known-only往返2.737m；官方J100四轮模型+原生IMU/EKF+Nav2往返3.909m；原生adhesion五例含持压、失压脱落与150.9mm沿墙上行。两条导航碰撞增量均0，旧FishBot默认往返回归通过。工作台/results已接只读报告。仅证明三个独立仿真实验；不把分项相加称为组合爬壁运输，A–D失败保留，见[进度](plans/scene-hardware-lab-20261020/progress.md)。
 2026-10-20 [场景与三维雷达验证](plans/scene-business-validation-20261020/task_plan.md)完成：官方16线PointCloud2进入Nav2；隔离130/9100的D轮畅通往返、绕障往返、堵塞取消三例通过，真实碰撞增量均0。工作台/results展示来源与独立评分。默认仍为合成参考，已有地图导入尚未运动验收；不外推货物签收或sim-to-real。原A/B/C失败保留，见[本轮进度](plans/scene-business-validation-20261020/progress.md)。
 2026-10-18 工作台重构P0–P6完成：四服务身份、分层回执、共享工作面、地图编辑、真实导航/返航/运动取消及原任务恢复已接通。同一MuJoCo实例完成两轮抓放运输，独立物理评分通过。硬件生产浏览器的100ms交互与30分钟长测通过。最终1552项反馈与641项完整前端检查通过；人工控制八项、文字语音预览/确认/原UUID取消四项通过。源码fe06cb4已推既有远端并读回一致。实验ROS实例已清理；本轮只证明仿真闭环。Lichtblick完整源码在独立工作树推进，历史回放不代替当前实时控制验收。范围和证据见[大范围重构](plans/workbench-rebuild-20261018/task_plan.md)、[当前进度](plans/workbench-rebuild-20261018/progress.md)及[运行合同](docs/RUNTIME_CONTEXT.md)。
 2026-10-17 协同日志增长已修复：演示默认不写physics，显式诊断2Hz/默认最多32MiB；独立observer实际manifest去重、900秒/1GiB预算，缺失/超限/IO失败生成正式false评分。96定向、22状态/QoS、1223反馈通过；隔离124/125/126实际验证关闭/轮转/超限，6份源起止一致，零动作。旧90GB日志已由用户清理，不计为本轮释放；见[容量修复](plans/cooperation-log-budget-20261017/progress.md)。
@@ -74,6 +75,7 @@ Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。
 2026-10-07 用户确认先在虚拟环境实现三点视觉巡检，现已完成：MuJoCo车载RGB→三点导航拍摄→绿灯/红灯/空位像素识别→图文报告→返航。最终整轮73.703秒，九帧带拍摄位姿证据，返航误差12.29cm且停稳；独立超时取消通过。入口tools/fishbot_inspection.sh，仅domain97；见docs/VISUAL_INSPECTION.md。识别限定合成工位，实车相机与巡检尚未验收。
 2026-10-06 用户确认直接采用FishBot开源模型，不以现场测量作为前置步骤；连续本地控制、分级限速/停车、触发记录与回放已实现。新入口 tools/fishbot_passage.launch.py 在隔离MuJoCo domain 96完成整段过门、硬停车及取消测试，74项聚焦测试通过；见docs/PASSAGE_CONTROL.md。当前小车充电，本次未操作实车。原domain 93仿真与旧实车脚本保留。接续使用新入口验收实际过门和建图；实车源时间戳、转角反馈、板端断流停车和旧命令拒绝仍需实际反馈验证。
 ## Knowledge Map
+[真实地图、新底盘与负压实验入口](docs/HARDWARE_LAB.md)；[计划](plans/scene-hardware-lab-20261020/task_plan.md)；[验收进度](plans/scene-hardware-lab-20261020/progress.md)。
 [场景、三维雷达与路线验证](docs/SCENE_VALIDATION.md)；[实施计划](plans/scene-business-validation-20261020/task_plan.md)；[当前进度](plans/scene-business-validation-20261020/progress.md)。
 [工作台大范围重构计划](plans/workbench-rebuild-20261018/task_plan.md)；[商业/开源采纳与底层审查](plans/workbench-rebuild-20261018/findings.md)；[当前重构进度](plans/workbench-rebuild-20261018/progress.md)。
 [语音任务入口](docs/VOICE.md)；[语音框架计划](plans/edge-voice-framework-20261015/task_plan.md)；[验收与保留边界](plans/edge-voice-framework-20261015/progress.md)。

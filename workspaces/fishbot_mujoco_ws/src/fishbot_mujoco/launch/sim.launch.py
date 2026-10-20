@@ -107,9 +107,9 @@ def start_navigation(context):
 
 def generate_launch_description():
     share = get_package_share_directory('fishbot_mujoco')
-    controllers = os.path.join(share, 'config', 'controllers.yaml')
+    controllers = LaunchConfiguration('controllers_file')
     description = ParameterValue(Command([
-        'xacro ', os.path.join(share, 'urdf', 'fishbot_mujoco.urdf.xacro'),
+        'xacro ', LaunchConfiguration('robot_description_file'),
         ' headless:=', LaunchConfiguration('headless'),
         ' scene_path:=', LaunchConfiguration('scene_path'),
         ' sim_speed_factor:=1.0']), value_type=str)
@@ -158,6 +158,13 @@ def generate_launch_description():
         DeclareLaunchArgument('web_port', default_value='5173'),
         DeclareLaunchArgument('obstacle', default_value='true'),
         DeclareLaunchArgument('plugins_file', default_value=os.path.join(share, 'config', 'plugins.yaml')),
+        DeclareLaunchArgument('controllers_file', default_value=os.path.join(share, 'config', 'controllers.yaml')),
+        DeclareLaunchArgument('robot_description_file', default_value=os.path.join(share, 'urdf', 'fishbot_mujoco.urdf.xacro')),
+        DeclareLaunchArgument('robot_radius', default_value='0.13'),
+        DeclareLaunchArgument('wheel_odom_topic', default_value='/odom'),
+        DeclareLaunchArgument('imu_broadcaster', default_value='false'),
+        DeclareLaunchArgument('localization_fusion', default_value='false'),
+        DeclareLaunchArgument('fusion_file', default_value=''),
         DeclareLaunchArgument('lidar3d_tf', default_value='false'),
         DeclareLaunchArgument('lidar3d_parent', default_value='laser_link'),
         DeclareLaunchArgument('lidar3d_frame', default_value='lidar3d_link'),
@@ -187,13 +194,21 @@ def generate_launch_description():
              arguments=['joint_state_broadcaster', '--param-file', controllers]),
         Node(package='controller_manager', executable='spawner',
              arguments=['diff_drive_controller', '--param-file', controllers,
-                        '--controller-ros-args', '--ros-args --remap /diff_drive_controller/cmd_vel:=/cmd_vel --remap /diff_drive_controller/odom:=/odom']),
+                        '--controller-ros-args', ['--ros-args --remap /diff_drive_controller/cmd_vel:=/cmd_vel --remap /diff_drive_controller/odom:=', LaunchConfiguration('wheel_odom_topic')]]),
+        Node(package='controller_manager', executable='spawner',
+             arguments=['imu_sensor_broadcaster', '--param-file', controllers],
+             condition=IfCondition(LaunchConfiguration('imu_broadcaster'))),
+        Node(package='robot_localization', executable='ekf_node', name='ekf_filter_node',
+             parameters=[LaunchConfiguration('fusion_file'), {'use_sim_time': True}],
+             remappings=[('odometry/filtered', '/odom')],
+             condition=IfCondition(LaunchConfiguration('localization_fusion'))),
         Node(package='fishbot_mujoco', executable='obstacle_controller.py', output='screen',
              condition=IfCondition(LaunchConfiguration('obstacle'))),
         Node(package='fishbot_mujoco', executable='mission_bridge.py', output='screen',
              arguments=['--port', LaunchConfiguration('bridge_port'),
                         '--ui-port', LaunchConfiguration('web_port'),
                         '--control-profile', LaunchConfiguration('control_profile'),
+                        '--robot-radius', LaunchConfiguration('robot_radius'),
                         '--manual-profile-receipt', LaunchConfiguration('manual_profile_receipt')],
              condition=IfCondition(LaunchConfiguration('bridge'))),
         OpaqueFunction(function=start_readiness),

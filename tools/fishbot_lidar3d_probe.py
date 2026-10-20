@@ -148,7 +148,8 @@ def record_transform_failure(state: dict, error: Exception, *, source: str,
 def observe(*, timeout: float = 15.0, topic: str = '/sensors/lidar3d/points',
             costmap_topic: str = '/global_costmap/costmap',
             target: tuple[float, float] = (-0.25, 0.55),
-            half_size: float = 0.12) -> dict:
+            half_size: float = 0.12, low_obstacle_required: bool = True,
+            not_applicable_reason: str = '') -> dict:
     import rclpy
     from rclpy.node import Node
     from rclpy.executors import SingleThreadedExecutor
@@ -168,6 +169,9 @@ def observe(*, timeout: float = 15.0, topic: str = '/sensors/lidar3d/points',
         'pointcloud': None, 'subscription_endpoints': [],
         'global_parameters': {}, 'costmap': None, 'target_cloud': None,
         'evidence': {},
+        'probe_scope': 'low_obstacle_and_interface' if low_obstacle_required else 'interface_only',
+        'not_applicable': {} if low_obstacle_required else {
+            'low_obstacle_returns_and_costmap': not_applicable_reason or 'No dedicated low obstacle fixture'},
         'tf': {'lookup_attempts': 0, 'successful_lookups': 0, 'failed_lookups': 0,
                'exception_types': {}, 'first_exception': None, 'last_exception': None,
                'frames_yaml': None, 'observer_clock_nanoseconds': None},
@@ -252,7 +256,7 @@ def observe(*, timeout: float = 15.0, topic: str = '/sensors/lidar3d/points',
                     messages=current_messages, source_stamp_sec=current.header.stamp.sec,
                     source_stamp_nanosec=current.header.stamp.nanosec)
                 last_summary_stamp = cloud_stamp_ns(current)
-            if current_grid is not None:
+            if current_grid is not None and low_obstacle_required:
                 result['costmap'] = costmap_region(current_grid, target, half_size)
                 for entry in candidates:
                     current = entry['message']
@@ -304,9 +308,11 @@ def observe(*, timeout: float = 15.0, topic: str = '/sensors/lidar3d/points',
                     and params.get(f'{prefix}.lidar3d.data_type') == 'PointCloud2'
                     and params.get(f'{prefix}.enabled') is True
                     and params.get(f'{prefix}.lidar3d.marking') is True),
-                'low_obstacle_has_3d_returns': bool(result['target_cloud'] and result['target_cloud']['points'] > 0),
-                'low_obstacle_costmap_has_lethal_cells': bool(result['costmap'] and result['costmap']['lethal_cells'] > 0),
             }
+            if low_obstacle_required:
+                evidence.update(
+                    low_obstacle_has_3d_returns=bool(result['target_cloud'] and result['target_cloud']['points'] > 0),
+                    low_obstacle_costmap_has_lethal_cells=bool(result['costmap'] and result['costmap']['lethal_cells'] > 0))
             result['evidence'] = evidence
             if all(evidence.values()):
                 result['status'] = 'complete'
@@ -341,11 +347,15 @@ def main() -> None:
     parser.add_argument('--target-y', type=float, default=0.55)
     parser.add_argument('--half-size', type=float, default=0.12)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--no-low-obstacle', action='store_true', help='Interface-only probe for a scene without this fixture')
+    parser.add_argument('--not-applicable-reason', default='')
     args = parser.parse_args()
     try:
         result = observe(timeout=args.timeout, topic=args.topic,
                          costmap_topic=args.costmap_topic,
-                         target=(args.target_x, args.target_y), half_size=args.half_size)
+                         target=(args.target_x, args.target_y), half_size=args.half_size,
+                         low_obstacle_required=not args.no_low_obstacle,
+                         not_applicable_reason=args.not_applicable_reason)
     except Exception as error:
         result = {'status': 'incomplete', 'reasons': [f'{type(error).__name__}: {error}']}
     text = json.dumps(result, indent=2, allow_nan=False) + '\n'

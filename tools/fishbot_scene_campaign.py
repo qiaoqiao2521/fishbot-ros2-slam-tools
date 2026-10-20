@@ -109,11 +109,18 @@ def wait_runtime(api, domain, process, deadline):
     raise TimeoutError('Startup exceeded original deadline: '+last)
 
 
-def lidar_probe(directory, env):
+def lidar_probe(directory, env, options=None):
     path = Path(directory)/'lidar3d-probe.json'
     try:
-        result = subprocess.run([sys.executable,str(TOOLS/'fishbot_lidar3d_probe.py'),
-            '--timeout','15','--output',str(path)],env=env,cwd=ROOT,capture_output=True,text=True,timeout=20.)
+        options = options or {}
+        command = [sys.executable,str(TOOLS/'fishbot_lidar3d_probe.py'),
+            '--timeout','15','--output',str(path)]
+        if options.get('low_obstacle_required') is False:
+            command += ['--no-low-obstacle', '--not-applicable-reason',
+                        str(options.get('reason', 'Scene has no dedicated low obstacle fixture'))]
+        if 'target' in options:
+            command += ['--target-x',str(options['target'][0]),'--target-y',str(options['target'][1])]
+        result = subprocess.run(command,env=env,cwd=ROOT,capture_output=True,text=True,timeout=20.)
         (Path(directory)/'lidar3d-probe.log').write_text(result.stdout+result.stderr)
         evidence = validation.read_json(path,{'status':'incomplete','reasons':['Probe produced no JSON']})
         evidence['process_returncode'] = result.returncode
@@ -125,12 +132,19 @@ def lidar_probe(directory, env):
 def launch_arguments(case, lidar, domain, port):
     transform = lidar.get('static_transform',{})
     translation = transform.get('translation',[0.,0.,.035])
-    return {'ros_domain_id':str(domain),'headless':'true','rviz':'false','bridge':'true',
+    args = {'ros_domain_id':str(domain),'headless':'true','rviz':'false','bridge':'true',
         'obstacle':'false','bridge_port':str(port),'map':case['map'],'scene_path':lidar['scene'],
         'plugins_file':lidar['plugins'],'params_file':lidar['nav2'],'lidar3d_tf':'true',
         'lidar3d_parent':transform.get('parent_frame','laser_link'),
         'lidar3d_frame':transform.get('child_frame','lidar3d_link'),
         'lidar3d_x':str(translation[0]),'lidar3d_y':str(translation[1]),'lidar3d_z':str(translation[2])}
+    for key in ('robot_description_file', 'controllers_file', 'robot_radius', 'wheel_odom_topic', 'fusion_file'):
+        if case.get(key):
+            args[key] = str(case[key])
+    for key in ('imu_broadcaster', 'localization_fusion'):
+        if key in case:
+            args[key] = 'true' if case[key] else 'false'
+    return args
 
 
 def run_campaign(config,output,*,selected=None,domain=130,port=9100,prepare_only=False):
@@ -166,6 +180,20 @@ def run_campaign(config,output,*,selected=None,domain=130,port=9100,prepare_only
         outcome = None
         try:
             case.update(domain=domain,api=panel['api'])
+            if case.get('base_profile'):
+                base = load_tool('fishbot_base_profile').prepare(case['scene_path'],directory/'base',
+                    profile_path=case['base_profile'],nav2_path=case.get('params_file'))
+                case.update(scene_path=base['scene'],params_file=base['nav2'],
+                    robot_description_file=base['robot_description_file'],
+                    controllers_file=base['controllers_file'],
+                    geometry={'half_length':base['geometry']['half_extents'][0],
+                              'half_width':base['geometry']['half_extents'][1]},
+                    robot_radius=base['geometry']['planning_radius_m'])
+                case['base_profile_receipt'] = base
+                if base.get('fusion_file'):
+                    case.update(fusion_file=base['fusion_file'],localization_fusion=True,
+                                imu_broadcaster=base.get('imu_broadcaster',False),
+                                wheel_odom_topic=base.get('wheel_odom_topic','/wheel/odom'))
             lidar = lidar_helper.prepare(case['scene_path'],directory/'lidar3d',
                 plugins_path=case.get('plugins_file'),nav2_path=case.get('params_file'),audit_contacts=True)
             case.update(scene_path=lidar['scene'],plugins_file=lidar['plugins'],params_file=lidar['nav2'])
@@ -186,7 +214,7 @@ def run_campaign(config,output,*,selected=None,domain=130,port=9100,prepare_only
             deadline = launched+float(config.get('startup_timeout_s',45.))
             runtime = wait_runtime(validation.MissionAPI(panel['api'],timeout=1.),domain,process,deadline)
             validation.write_json(directory/'runtime.json',runtime)
-            probe = lidar_probe(directory,env)
+            probe = lidar_probe(directory,env,case.get('lidar_probe'))
             panel['lidar']['evidence'].append({'case_id':case['id'],'probe':probe,
                 'path':str(directory/'lidar3d-probe.json')})
             # readiness already observed; run_case does a current read, without a second 45s startup budget.

@@ -16,6 +16,22 @@ spec.loader.exec_module(campaign)
 
 
 class SceneCampaign(unittest.TestCase):
+    def test_new_base_geometry_fusion_and_controller_contract_reach_launch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = campaign.validation.load_config(TOOLS/'config/jackal_scene_validation.example.json')
+            with patch.object(campaign.subprocess,'Popen',side_effect=AssertionError('prepare is read-only')):
+                campaign.run_campaign(config,temporary,prepare_only=True)
+            case = campaign.validation.read_json(next(Path(temporary).glob('jackal-roundtrip-*/case.json')))
+            args = case['launch_arguments']
+            self.assertAlmostEqual(case['geometry']['half_length'],.244)
+            self.assertAlmostEqual(case['geometry']['half_width'],.222795)
+            self.assertGreater(float(args['robot_radius']),.33)
+            self.assertEqual(args['wheel_odom_topic'],'/wheel/odom')
+            self.assertEqual(args['localization_fusion'],'true')
+            self.assertEqual(args['imu_broadcaster'],'true')
+            self.assertTrue(Path(args['controllers_file']).is_file())
+            self.assertTrue(Path(args['fusion_file']).is_file())
+
     def test_private_cyclone_domain_does_not_overwrite_explicit_xml(self):
         with tempfile.TemporaryDirectory() as temporary:
             with patch.dict(os.environ,{'RMW_IMPLEMENTATION':'rmw_cyclonedds_cpp','CYCLONEDDS_URI':''}):

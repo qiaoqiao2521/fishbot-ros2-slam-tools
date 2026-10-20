@@ -72,7 +72,8 @@ def load_config(path):
     if not isinstance(raw, dict):
         raise ValueError('Panel config must be a JSON object')
     config = copy.deepcopy(raw)
-    for key in ('scene_path', 'map', 'source_map', 'plugins_file', 'params_file'):
+    for key in ('scene_path', 'map', 'source_map', 'plugins_file', 'params_file',
+                'robot_description_file', 'controllers_file', 'measured_map', 'base_profile'):
         if config.get(key):
             config[key] = resolve_path(config[key], path.parent)
     source = config.get('source')
@@ -158,6 +159,9 @@ def normalized_case(raw, index, config):
     case.setdefault('domain', config['domain'])
     case.setdefault('return_home', config['return_home'])
     case.setdefault('geometry', copy.deepcopy(config['geometry']))
+    for key in ('measured_map', 'lidar_probe', 'base_profile'):
+        if key in config:
+            case.setdefault(key, copy.deepcopy(config[key]))
     if case['expected'] == 'canceled':
         case.setdefault('cancel_after_s', 8.)
     return case
@@ -261,12 +265,12 @@ def prepare_panel(config, output):
                         unscored_static_geometry=unsupported,
                         obstacle_initial={'center': center, 'half_size': half},
                         scene_selection_basis='caller must launch this case scene; mission API alone cannot attest XML identity')
-            for key in ('plugins_file', 'params_file'):
+            for key in ('plugins_file', 'params_file', 'robot_description_file', 'controllers_file'):
                 if panel.get(key):
                     case[key] = panel[key]
             case['launch_arguments'] = {'scene_path': str(scene_path), 'map': panel['map'],
                 'ros_domain_id': str(case['domain']), 'bridge': 'true', 'obstacle': 'false'}
-            for key in ('plugins_file', 'params_file'):
+            for key in ('plugins_file', 'params_file', 'robot_description_file', 'controllers_file'):
                 if case.get(key):
                     case['launch_arguments'][key] = case[key]
             write_json(directory / 'case.json', case)
@@ -470,6 +474,16 @@ def assess(case, evidence, recording):
             check(key, None)
         if expected == 'delivered':
             check('final_pose', None)
+    if case.get('measured_map'):
+        try:
+            spec = importlib.util.spec_from_file_location('fishbot_measured_audit', TOOLS / 'fishbot_real_scene.py')
+            helper = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(helper)
+            measured = helper.audit_recording(case, samples)
+            metrics.update(measured.get('metrics', {}))
+            check('measured_known_free_sweep', measured.get('passed'), measured.get('reason'))
+        except (OSError, ValueError, TypeError, ImportError) as error:
+            check('measured_known_free_sweep', None, str(error))
     passed = checks and all(item['status'] == 'passed' for item in checks.values())
     has_failed = any(item['status'] == 'failed' for item in checks.values())
     acceptance = 'passed' if passed else 'failed' if has_failed else 'incomplete'

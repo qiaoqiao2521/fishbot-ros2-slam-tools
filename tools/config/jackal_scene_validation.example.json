@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "source": {
+    "label": "Clearpath Jackal J100 官方模型适配",
+    "basis": "official_geometry_with_assumed_contact_parameters",
+    "assumption_cells": "尺寸化参考场景；摩擦、伺服与轮胎接触未做厂家标定"
+  },
+  "lidar": {
+    "profile": "baseline-2d"
+  },
+  "plugins_file": "../../workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/config/plugins.yaml",
+  "params_file": "../../workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/config/nav2.yaml",
+  "api": "http://127.0.0.1:9100",
+  "domain": 130,
+  "timeout_s": 180,
+  "startup_timeout_s": 45,
+  "return_home": true,
+  "waypoints": [
+    {
+      "x": 1.75,
+      "y": 0,
+      "yaw": 0
+    }
+  ],
+  "geometry": {
+    "half_length": 0.105,
+    "half_width": 0.125
+  },
+  "cases": [
+    {
+      "id": "jackal-roundtrip",
+      "label": "J100四轮导航往返",
+      "expected": "delivered",
+      "obstacle": null
+    }
+  ],
+  "notes": "官方几何/惯量适配到当前MuJoCo；四轮真实接触。只测试畅通往返，不据此宣称轮胎/转向已标定。",
+  "base_profile": "base_profiles/jackal_j100.yaml",
+  "lidar_probe": {
+    "low_obstacle_required": false,
+    "reason": "J100高位雷达不沿用FishBot低矮近场测试物；本例核接口"
+  }
+}

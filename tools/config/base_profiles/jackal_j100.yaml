@@ -1,0 +1,53 @@
+id: jackal_j100
+label: Clearpath Jackal J100
+source:
+  repository: https://github.com/clearpathrobotics/clearpath_common
+  revision: 78e3677412f1fed881f6436cdaf404f04f28ee4f
+  branch_at_retrieval: jazzy
+  license: BSD-3-Clause
+  files:
+    - clearpath_platform_description/urdf/j100/j100.urdf.xacro
+    - clearpath_platform_description/urdf/j100/drivetrain/wheels.urdf.xacro
+    - clearpath_platform_description/urdf/j100/drivetrain/wheels/outdoor.urdf.xacro
+    - clearpath_platform_description/meshes/j100/j100_base.stl
+    - clearpath_platform_description/meshes/j100/wheels/outdoor.stl
+chassis:
+  length: 0.420
+  width: 0.310
+  height: 0.184
+  mass: 16.523
+  com: [0.012, 0.002, 0.067]
+  inertia: [0.3136, 0.3922, 0.4485, -0.0008, 0.0164, -0.0009]
+drivetrain:
+  wheelbase: 0.262
+  track: 0.37559
+  wheel_vertical_offset: 0.0345
+  wheel_radius: 0.098
+  wheel_width: 0.040
+  wheel_mass: 0.477
+  wheel_inertia: [0.0013, 0.0024, 0.0013]
+localization:
+  enabled: true
+  wheel_odom_topic: /wheel/odom
+  imu_topic: /imu_sensor_broadcaster/imu
+  imu_orientation_variance: 0.000001
+  imu_angular_velocity_variance: 0.000001
+  note: >-
+    Official robot_localization EKF uses wheel vx/vy and native ideal MuJoCo
+    IMU roll/pitch/gyroZ. Wheel yaw/wz, absolute IMU yaw, acceleration and
+    ground-truth pose are excluded. This is simulation-only ideal sensing.
+simulation_assumptions:
+  wheel_friction: [0.5, 0.005, 0.0001]
+  wheel_contact_priority: 1
+  velocity_servo_kv: 8.0
+  wheel_torque_limit_nm: 12.0
+  wheel_speed_limit_rad_s: 12.0
+  footprint_padding_m: 0.015
+  inflation_margin_m: 0.17
+  progress_angle_rad: 0.2
+  rpp_rotation_max_angular_accel_rad_s2: 10.0
+  laser_above_chassis_m: 0.040
+  note: >-
+    Official dimensions, inertia and collision shapes are retained. MuJoCo
+    friction, explicit wheel contact priority and bounded velocity servos are simulation assumptions, not a
+    calibrated J100 motor/tire model. Existing slow navigation limits remain.

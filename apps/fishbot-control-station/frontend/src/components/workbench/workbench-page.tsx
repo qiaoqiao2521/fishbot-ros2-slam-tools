@@ -14,6 +14,7 @@ import {
 import type { ServiceState } from '@/lib/workbench-services'
 import { toolEntry } from '@/lib/workbench-tool-entry'
 import { SceneValidationPanel } from './scene-validation-panel'
+import { HardwareLabPanel } from './hardware-lab-panel'
 import './workbench.css'
 
 const flow = [
@@ -127,6 +128,7 @@ export function WorkbenchPage({ onNavigate, voiceController }: { onNavigate: (ro
 
     <VoicePanel controller={voiceController} />
 
+    <HardwareLabPanel />
     <SceneValidationPanel />
 
     <section className="workbench-supporting" aria-labelledby="workbench-supporting-heading">

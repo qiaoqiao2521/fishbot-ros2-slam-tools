@@ -1844,5 +1844,72 @@ class NativeRulesExportTests(unittest.TestCase):
         with self.assertRaises(MapRulesError): MissionBridge.export_rules(bridge)
 
 
+class SelectedBaseRadiusTests(unittest.TestCase):
+    radius = .3304143036023107
+
+    def request(self, **changes):
+        return {'waypoints': [{'x': 0., 'y': 0., 'yaw': 0.}],
+                'issued_at': 100., **changes}
+
+    def test_selected_base_checks_occupied_cells_beyond_legacy_footprint(self):
+        grid = fixture_grid()
+        grid['data'][22*40+20] = 100  # Cell at y=.2, outside FishBot but inside J100.
+        validate_mission(self.request(), grid, now=100.)
+        with self.assertRaises(APIError) as caught:
+            validate_mission(self.request(), grid, now=100., radius=self.radius)
+        self.assertEqual(caught.exception.issue['target'], 'waypoint')
+        self.assertAlmostEqual(caught.exception.issue['required_clearance_m'], self.radius)
+
+    def test_selected_base_checks_goal_and_frozen_return_against_virtual_wall(self):
+        wall = {'id': 'side', 'kind': 'wall', 'width': .01,
+                'points': [{'x': -.3, 'y': .25}, {'x': .3, 'y': .25}]}
+        validate_mission(self.request(), fixture_grid(), now=100., zones=[wall])
+        with self.assertRaises(MapRulesError) as goal:
+            validate_mission(self.request(), fixture_grid(), now=100., zones=[wall], radius=self.radius)
+        self.assertEqual(goal.exception.issue['target'], 'waypoint')
+        with self.assertRaises(MapRulesError) as returning:
+            validate_mission(self.request(waypoints=[{'x': 1., 'y': 0.}], return_home=True),
+                fixture_grid(), now=100., zones=[wall], radius=self.radius,
+                return_point={'x': 0., 'y': 0., 'yaw': 0.})
+        self.assertEqual(returning.exception.issue['target'], 'return_home')
+
+    def test_selected_base_covers_entire_backup_sweep(self):
+        body = {'mission_id': NativeBackupTests.identity, 'operation': 'backup',
+                'distance_m': 1., 'issued_at': 100.}
+        start = {'x': .5, 'y': 0., 'yaw': 0.}
+        wall = {'id': 'side', 'kind': 'wall', 'width': .01,
+                'points': [{'x': -.1, 'y': .25}, {'x': .1, 'y': .25}]}
+        validate_backup(body, fixture_grid(), start, now=100., zones=[wall])
+        with self.assertRaises(MapRulesError) as caught:
+            validate_backup(body, fixture_grid(), start, now=100., zones=[wall], radius=self.radius)
+        self.assertEqual(caught.exception.issue['target'], 'backup_sweep')
+        self.assertGreaterEqual(caught.exception.issue['required_clearance_m'], self.radius)
+
+    def test_keepout_readback_requires_selected_radius_and_still_rejects_old_radius(self):
+        helper = MapRulesFilterRecoveryTests()
+        bridge = helper.harness()
+        bridge.robot_radius = self.radius
+        helper.params_result(bridge, helper.values())
+        self.assertFalse(bridge.rules_checks['global']['params_ok'])
+        self.assertEqual(bridge.rules_checks['global']['config_reason'], 'robot_radius')
+        values = helper.values()
+        values[4].double_value = self.radius
+        helper.params_result(bridge, values)
+        self.assertTrue(bridge.rules_checks['global']['params_ok'])
+        self.assertFalse(bridge.rules_checks['global']['config_invalid'])
+
+    def test_runtime_preparation_passes_selected_radius_to_admission(self):
+        grid = fixture_grid()
+        grid['data'][22*40+20] = 100
+        bridge = SimpleNamespace(mission=MissionRecord(), ready=True, reason='ready',
+                                 grid=grid, robot_radius=self.radius)
+        with patch.object(MissionBridge, 'capture_start_pose', return_value={'x': 0., 'y': 0., 'yaw': 0.}), \
+                patch('mission_bridge.time.time', return_value=100.):
+            with self.assertRaises(APIError) as caught:
+                MissionBridge.prepare_mission(bridge, self.request())
+        self.assertEqual(caught.exception.outcome, 'rejected')
+        self.assertAlmostEqual(caught.exception.issue['required_clearance_m'], self.radius)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -185,7 +185,7 @@ def validate_cancel(body, current_id, now=None):
         raise APIError('Cancel request expired or has a future timestamp', 408)
 
 
-def validate_mission(body, grid, now=None, zones=None, return_point=None):
+def validate_mission(body, grid, now=None, zones=None, return_point=None, radius=ROBOT_RADIUS):
     if not isinstance(body, dict) or set(body)-{'waypoints', 'return_home', 'issued_at', 'mission_id', 'timeout_s'}:
         raise APIError('Expected waypoints, return_home and issued_at')
     if 'mission_id' in body:
@@ -212,8 +212,8 @@ def validate_mission(body, grid, now=None, zones=None, return_point=None):
                                       f'waypoint {index+1} {name}') for name in ('x', 'y', 'yaw')}
         parsed['yaw'] = math.atan2(math.sin(parsed['yaw']), math.cos(parsed['yaw']))
         try:
-            require_free_point(parsed, grid)
-            require_outside_rules(parsed, zones or [], ROBOT_RADIUS)
+            require_free_point(parsed, grid, radius)
+            require_outside_rules(parsed, zones or [], radius)
         except (APIError, MapRulesError) as error:
             if error.issue is not None:
                 error.issue.update(target='waypoint', waypoint_index=index+1, point=dict(parsed))
@@ -227,8 +227,8 @@ def validate_mission(body, grid, now=None, zones=None, return_point=None):
         start['yaw'] = math.atan2(math.sin(start['yaw']), math.cos(start['yaw']))
     if return_home and any(abs(points[-1][axis]-start[axis]) > 1e-6 for axis in start):
         try:
-            require_free_point(start, grid)
-            require_outside_rules(start, zones or [], ROBOT_RADIUS)
+            require_free_point(start, grid, radius)
+            require_outside_rules(start, zones or [], radius)
         except (APIError, MapRulesError) as error:
             if error.issue is not None:
                 error.issue.update(target='return_home', waypoint_index=None, point=dict(start))
@@ -237,7 +237,7 @@ def validate_mission(body, grid, now=None, zones=None, return_point=None):
     return points, return_home
 
 
-def validate_backup(body, grid, start_pose, now=None, zones=None):
+def validate_backup(body, grid, start_pose, now=None, zones=None, radius=ROBOT_RADIUS):
     """Derive a rearward target once, checking the whole circular-footprint sweep."""
     allowed = {'operation', 'distance_m', 'issued_at', 'mission_id', 'timeout_s'}
     if not isinstance(body, dict) or set(body)-allowed or body.get('operation') != 'backup':
@@ -252,12 +252,12 @@ def validate_backup(body, grid, start_pose, now=None, zones=None):
            'y': start['y']-distance*math.sin(start['yaw']), 'yaw': start['yaw']}
     normalized = {key: body[key] for key in ('mission_id', 'issued_at', 'timeout_s') if key in body}
     points, returning = validate_mission({**normalized, 'waypoints': [end]}, grid,
-                                         now=now, zones=zones)
+                                         now=now, zones=zones, radius=radius)
     # Overlapping discs cover the continuous straight-line capsule. The tiny
     # hypotenuse allowance covers between-sample edges rather than skipping thin
     # map cells or walls; it is at most 0.1 mm at the 1 cm sampling spacing.
     steps = max(1, math.ceil(distance/min(.01, grid['resolution']/2)))
-    coverage_radius = math.hypot(ROBOT_RADIUS, distance/steps/2)
+    coverage_radius = math.hypot(radius, distance/steps/2)
     for index in range(steps+1):
         fraction = index/steps
         point = {'x': start['x']+(end['x']-start['x'])*fraction,
@@ -416,7 +416,7 @@ class ManualGCTiming:
 
 
 class MissionBridge(Node):
-    def __init__(self, domain=93, control_profile='baseline'):
+    def __init__(self, domain=93, control_profile='baseline', robot_radius=ROBOT_RADIUS):
         # Reuse cooperation's precise native TimeSource routing. Business
         # callbacks and the manual timer remain in the default owner group.
         self.clock_callbacks = (MutuallyExclusiveCallbackGroup()
@@ -425,6 +425,9 @@ class MissionBridge(Node):
             rclpy.parameter.Parameter('use_sim_time', value=True)])
         self.lock = threading.RLock()
         self.domain = domain
+        self.robot_radius = finite_number(robot_radius, 'robot_radius')
+        if self.robot_radius <= 0.:
+            raise APIError('robot_radius must be positive')
         self.control_profile = control_profile
         self.manual_adapter = None
         self.manual_guard = None
@@ -1043,7 +1046,7 @@ class MissionBridge(Node):
                     matches = ('keepout_filter' in values[0].string_array_value,
                         values[1].string_value == 'nav2_costmap_2d::KeepoutFilter', values[2].bool_value,
                         values[3].string_value == '/keepout_costmap_filter_info',
-                        abs(values[4].double_value-ROBOT_RADIUS) < 1e-6)
+                        abs(values[4].double_value-getattr(self, 'robot_radius', ROBOT_RADIUS)) < 1e-6)
                     labels = ('filters', 'plugin', 'enabled', 'filter_info_topic', 'robot_radius')
                     check.update(params_ok=all(matches), config_invalid=not all(matches),
                                  config_reason=', '.join(label for label, match in zip(labels, matches) if not match))
@@ -1273,6 +1276,7 @@ class MissionBridge(Node):
                 if self.mission.value['map_id'] != current_map:
                     home = None
             return copy.deepcopy({'mode': 'mujoco', 'domain': self.domain,
+                'robot_radius': getattr(self, 'robot_radius', ROBOT_RADIUS),
                 'ready': self.ready, 'reason': self.reason,
                 'pose': self.pose if self.ready else None,
                 'truth': self.truth if clock_fresh and self.fresh('truth', ros_now, wall) else None,
@@ -1530,7 +1534,8 @@ class MissionBridge(Node):
                         if not isinstance(returning, bool):
                             raise APIError('return_home must be a boolean')
                         points, _ = validate_mission({'waypoints': body.get('waypoints'),
-                            'return_home': False, 'issued_at': time.time()}, self.grid)
+                            'return_home': False, 'issued_at': time.time()}, self.grid,
+                            radius=getattr(self, 'robot_radius', ROBOT_RADIUS))
                         body = {**body, 'waypoints': points, 'return_home': returning}
                         MissionBridge.finish_operation(self, op, (200, self.rules_store.save_route(body)))
                     elif op.kind == 'manual':
@@ -1579,9 +1584,11 @@ class MissionBridge(Node):
             start_pose = MissionBridge.capture_start_pose(self)
             if isinstance(body, dict) and body.get('operation') == 'backup':
                 MissionBridge.require_backup_ready(self, time.monotonic())
-                points, returning = validate_backup(body, self.grid, start_pose, zones=zones)
+                points, returning = validate_backup(body, self.grid, start_pose, zones=zones,
+                    radius=getattr(self, 'robot_radius', ROBOT_RADIUS))
             else:
-                points, returning = validate_mission(body, self.grid, zones=zones, return_point=start_pose)
+                points, returning = validate_mission(body, self.grid, zones=zones, return_point=start_pose,
+                    radius=getattr(self, 'robot_radius', ROBOT_RADIUS))
             return PreparedMission(points, returning, start_pose)
         except (APIError, MapRulesError) as error:
             error.outcome = 'rejected'
@@ -2088,11 +2095,15 @@ def main():
     parser.add_argument('--ui-port', type=int, default=5173)
     parser.add_argument('--control-profile', choices=('baseline', 'passage_manual'), default='baseline')
     parser.add_argument('--manual-profile-receipt', default='')
+    parser.add_argument('--robot-radius', type=float, default=ROBOT_RADIUS,
+                        help='Selected Nav2 circular planning radius in metres; defaults to FishBot')
     args, ros_args = parser.parse_known_args()
     if args.port < 1024 or args.port > 65535:
         raise SystemExit('HTTP port must be between 1024 and 65535')
     if args.ui_port < 1024 or args.ui_port > 65535:
         raise SystemExit('UI port must be between 1024 and 65535')
+    if not math.isfinite(args.robot_radius) or args.robot_radius <= 0.:
+        parser.error('--robot-radius must be finite and positive')
     domain = simulation_domain()
     if args.control_profile == 'passage_manual':
         try:
@@ -2112,7 +2123,8 @@ def run_server(args, ros_args, domain):
     def stop(_signal, _frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, stop)
-    bridge = MissionBridge(domain=domain, control_profile=args.control_profile)
+    bridge = MissionBridge(domain=domain, control_profile=args.control_profile,
+                           robot_radius=getattr(args, 'robot_radius', ROBOT_RADIUS))
     if args.control_profile == 'passage_manual':
         bridge.manual_guard_directory = FilePath(args.manual_profile_receipt).resolve().parent/'command_guard'
     try:

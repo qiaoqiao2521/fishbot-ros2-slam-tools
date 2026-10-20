@@ -2,9 +2,9 @@ import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 /** Serve one operator-selected report. The browser cannot choose a filesystem path. */
-export function sceneReportMiddleware(file: string) {
+export function sceneReportMiddleware(file: string, route = '/scene-validation/report') {
   return async (request: IncomingMessage, response: ServerResponse, next: () => void) => {
-    if (request.url?.split('?')[0] !== '/scene-validation/report') return next()
+    if (request.url?.split('?')[0] !== route) return next()
     response.setHeader('Content-Type', 'application/json; charset=utf-8')
     response.setHeader('Cache-Control', 'no-store')
     if (request.method !== 'GET') {

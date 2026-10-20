@@ -18,11 +18,18 @@ const profile = validateWorkbenchProfile(profilePath ? JSON.parse(fs.readFileSyn
 }, frontendPort)
 const proxy = workbenchProxy(profile)
 const sceneReport = process.env.FISHBOT_SCENE_REPORT || path.join(os.homedir(), '.cache/fishbot/scene-validation/latest/report.json')
+const hardwareReport = process.env.FISHBOT_HARDWARE_REPORT || path.join(os.homedir(), '.cache/fishbot/hardware-lab/latest/report.json')
 export default defineConfig({
   plugins: [react(), {
     name: 'fishbot-scene-report',
-    configureServer(server) { server.middlewares.use(sceneReportMiddleware(sceneReport)) },
-    configurePreviewServer(server) { server.middlewares.use(sceneReportMiddleware(sceneReport)) },
+    configureServer(server) {
+      server.middlewares.use(sceneReportMiddleware(sceneReport))
+      server.middlewares.use(sceneReportMiddleware(hardwareReport, '/hardware-lab/report'))
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(sceneReportMiddleware(sceneReport))
+      server.middlewares.use(sceneReportMiddleware(hardwareReport, '/hardware-lab/report'))
+    },
   }],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   define: {

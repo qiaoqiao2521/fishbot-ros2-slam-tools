@@ -9,11 +9,11 @@ import { sceneReportMiddleware } from './scene-report'
 const cleanup: (() => Promise<void>)[] = []
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close() })
 
-async function fixture() {
+async function fixture(route?: string) {
   const directory = await mkdtemp(path.join(tmpdir(), 'fishbot-scene-report-'))
   cleanup.push(() => rm(directory, { recursive: true, force: true }))
   const file = path.join(directory, 'report.json')
-  const handler = sceneReportMiddleware(file)
+  const handler = sceneReportMiddleware(file, route)
   const server: Server = createServer((request, response) => {
     void handler(request, response, () => { response.statusCode = 404; response.end('not found') })
   })
@@ -25,6 +25,13 @@ async function fixture() {
 }
 
 describe('editable scene report endpoint', () => {
+  it('reuses the fixed-file reader for hardware results without accepting browser paths', async () => {
+    const { file, url } = await fixture('/hardware-lab/report')
+    await writeFile(file, '{"sections":[]}')
+    expect((await fetch(`${url}/hardware-lab/report`)).status).toBe(200)
+    expect((await fetch(`${url}/scene-validation/report`)).status).toBe(404)
+    expect((await fetch(`${url}/hardware-lab/report`, { method: 'POST' })).status).toBe(405)
+  })
   it('reads the selected file again after a local edit without rerunning a task', async () => {
     const { file, url } = await fixture()
     await writeFile(file, JSON.stringify({ schema_version: 9, cases: [{ id: 'clear' }] }))
