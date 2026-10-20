@@ -102,3 +102,24 @@ Knowledge closeout：already_covered。沿用既有任务ID恢复与CapMesh PIT-
 - 证据：忽略的`workbench-review-tests/output/station-live/result.json`及initial/running/success/cancelled/mobile截图；真实运行数据在`workbench-tools/output/station-tasks/<id>/`。显示约10Hz，不声称新50Hz、长期性能、CY或实机通过。
 
 Knowledge closeout：already_covered。沿用PIT-004依赖隔离和现有任务身份/分层验收知识；模型变换、UI加载时机和本轮证据留本项目。
+
+## 2026-10-20 可复制、可改目标任务（已验收；开发过程保留）
+
+已定位场景/规划/评分三处目标一致性，复用既有Station JSON、saveConfig和任务生命周期。控制worker已提供place_xy默认兼容接口与83项局部通过结果，根待独立复核和实际物理验收；UI/评分worker并行实施。未将局部绿灯记为新目标抓放成功。
+
+
+新目标CLI首测(.22,.17)在64.40sim失败：真实物体已落新蓝盘，轨迹in_place_tray/place_floor_contact均true，但release后脱离IK残差0.001792被原门拒绝，整轮不得计成功。失败完整保留于SO101 delivery忽略的output/station-task-goals-20261020/goal-a，控制owner继续定位目标变化后的脱离路径；根未放宽阈值或回退旧中心。目标报告字段也发现会被monitor状态覆盖，已移入reset_record随原报告收尾输出。
+
+
+冻结浏览器第一轮默认任务58d6cdbb成功74.80sim；复制保存/刷新与原快照隔离检查均通过。但副本目标(.20,.20)在32.14sim搬运IK拒绝（residual .001608），任务a2601d76保持失败。控制owner使用保存transport snapshot区分任务不可达与固定60mm中转路线不可达，未改IK/碰撞阈值，根暂停新的物理回合但继续UI与文档工作。首次浏览器结果原样保留output/station-task-goals-before-hover-repair，不被后续成功覆盖。
+
+
+### 数据驱动目标最终验收
+
+- 生产构建通过（仍两项上游包体积警告）；26项面板Jest、定向ESLint、91项SO101定向测试及81 subtest通过。新目标/旧目标拒绝、全外廓与原58mm边界、实际/规划XML与预览一致、台面外拒绝、异步目标、候选碰撞/取消/全失败不部分提交、脱离原采样与异常身份均覆盖。
+- 无运动浏览器13项通过：深复制、蓝盘五片随XY整体平移、原尺寸、保存/导出/刷新完整JSON、旧结果不恢复、JSON再导入、13STL加载和真实390×844无横向溢出；motionPosts=0、pageerror=0。手机按钮显示与布局已验，手机触控复制未另行计通过。最初手机截图1600px和后续并行任务状态自然变化造成的测试假设失败均未计通过；脚本修复为真实viewport与本页面零运动写请求后重验。
+- 冻结浏览器12项完整通过：默认任务`0a7fa8c1-ef91-48b4-a60d-bccffe0e6e05`74.80sim/100.940wall；同页复制改为(.20,.20)、保存刷新，新ID`bc8ada28-efd1-4f8a-bdf3-45fe7014da24`77.06sim/110.560wall成功。两轮之间未改Python；原快照未变。B物块最终(0.198959,0.198737,0.009961)m，位于新盘且在旧盘验收区域之外；落稳约7.50s、无安全停止、控制器完成，随后可再次复制且零额外任务POST。
+- 首次A失败原输入(.22,.17)在最终源码CLI重验75.16sim/63.479wall通过抓放、脱离和回位。默认仍60mm中转/37mm脱离；B正式54mm中转/25.615mm脱离。未知RuntimeError降级缺口已独立复现、分类修复并回归；最后源码对B保存快照离线重演150/150采样、separation_end逐字段一致，无物理步；A为最后源码的完整回合。
+- 初次A64.40sim脱离失败、初次B32.14sim搬运失败和原输入/报告均保留；没有改IK精度、限位、1mm/0.2mm或释放评分，也没有退回旧目标。通用技能自由编排、其他物体/台面高度、CY、真机、20+20与完整50Hz继续未验。
+
+证据：忽略的`output/station-task-goals/`、`station-task-goals-before-hover-repair/`、`station-task-drafts/`和真实task目录；SO101的`output/station-task-goals-20261020/`保留A及离线重演。两实现分支由根串行提交推送，研究仓单独记录。Knowledge closeout：already_covered，沿用Wiki按当前任务选择验收依据、ROS2与FishBot第20节的分层物理验收和PIT-004；本次目标/路径参数留项目，不写个人记忆。

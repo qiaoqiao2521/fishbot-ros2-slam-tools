@@ -39,6 +39,7 @@ import type { SceneMode } from "./live";
 import {
   ACTION_LABELS,
   KIND_LABELS,
+  copyStation,
   defaultStation,
   descendants,
   exportStation,
@@ -314,6 +315,11 @@ function RobotStation({
       setCheckingTask(true);
       try {
         if (!taskId) {
+          // Only a document without an execution selection restores the latest history.
+          // A cleared ID is an explicit new draft, including while saveConfig updates.
+          if (config.executionTaskId != undefined) {
+            return;
+          }
           const result = await requestSimulation<{ tasks: SimulationTask[] }>(
             "/tasks",
             controller.signal,
@@ -388,7 +394,7 @@ function RobotStation({
         clearTimeout(timer);
       }
     };
-  }, [taskId, submitting, refresh, saveConfig]);
+  }, [taskId, config.executionTaskId, submitting, refresh, saveConfig]);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -455,7 +461,7 @@ function RobotStation({
       controller.abort();
     };
   }, [station, sceneSource?.mode, switchingScene]);
-  const changeScene = async (mode: "draft" | "task") => {
+  const changeScene = async (mode: "draft" | "task", draft = station) => {
     sceneController.current?.abort();
     const controller = new AbortController();
     sceneController.current = controller;
@@ -465,7 +471,7 @@ function RobotStation({
     try {
       const source =
         mode === "draft"
-          ? ({ mode, station } as const)
+          ? ({ mode, station: draft } as const)
           : ({ mode, taskId } as const);
       const selectedSource = await selectScene(source, controller.signal);
       if (!controller.signal.aborted) {
@@ -608,6 +614,24 @@ function RobotStation({
     setFuture([]);
     saveConfig({ station: next });
   };
+  const copyTask = () => {
+    if (checkingTask || submitting || cancelling || taskIsActive(task)) {
+      return;
+    }
+    const next = copyStation(task?.station ?? station);
+    setPast((history) => [...history, station]);
+    setFuture([]);
+    setTaskId("");
+    setTask(undefined);
+    setExecutionError("");
+    rejectedTaskId.current = "";
+    saveConfig({ station: next, executionTaskId: "" });
+    setSelected(next.nodes.some((item) => item.id === "place") ? "place" : "");
+    setNotice(
+      "已复制为独立草稿。修改放料坐标系 X/Y，再显式运行；原任务记录保持。",
+    );
+    void changeScene("draft", next);
+  };
   const changeNode = (patch: Partial<StationNode>) => {
     commit({
       ...station,
@@ -708,6 +732,25 @@ function RobotStation({
           >
             重做
           </Button>
+        </div>
+        <div className={classes.row}>
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={
+              checkingTask || submitting || cancelling || taskIsActive(task)
+            }
+            onClick={copyTask}
+          >
+            复制为新任务
+          </Button>
+          <Typography variant="caption" color="text.secondary">
+            {taskIsActive(task) || submitting || cancelling
+              ? "运行结束或取消后可复制；当前任务仍可取消。"
+              : task?.station
+                ? "复制来源：当前任务的提交快照"
+                : "复制来源：当前编辑草稿"}
+          </Typography>
         </div>
         <Typography variant="body2" color="text.secondary">
           编辑草稿随工作台布局保存。三维画面可切换编辑预览或当前任务。
@@ -947,6 +990,7 @@ function RobotStation({
                     type="number"
                     label={`${["X", "Y", "Z"][axis]}（m）`}
                     value={node.position[axis]}
+                    disabled={node.id === "place" && axis === 2}
                     slotProps={{ htmlInput: { step: 0.005 } }}
                     onChange={(event) => {
                       if (event.target.value === "") {
@@ -963,6 +1007,12 @@ function RobotStation({
                   />
                 ))}
               </div>
+            )}
+            {node.id === "place" && (
+              <Typography variant="caption" color="text.secondary">
+                修改 X/Y
+                会同步移动蓝盘、释放点和脱离点。本轮保持盘高、盘尺寸和八步程序，执行范围由下方执行器说明。
+              </Typography>
             )}
             <Typography variant="caption">
               {node.kind === "tool"

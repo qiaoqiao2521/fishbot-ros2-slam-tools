@@ -10,6 +10,7 @@ import { LayoutData } from "@lichtblick/suite-base/context/CurrentLayoutContext/
 import { isLayoutEqual } from "@lichtblick/suite-base/services/LayoutManager/utils/isLayoutEqual";
 
 import {
+  copyStation,
   defaultStation,
   exportStation,
   importStation,
@@ -20,6 +21,55 @@ import {
 } from "./station";
 
 describe("RoboDK-style station editing", () => {
+  it("copies a submitted station without sharing editable scene or program data", () => {
+    const source = defaultStation();
+    const copy = copyStation(source);
+    expect(copy.name).toBe(`${source.name} 副本`);
+    expect(copy.nodes).toEqual(source.nodes);
+    expect(copy.program).toEqual(source.program);
+    copy.nodes.find((node) => node.id === "place")!.position[0] = 0.26;
+    copy.nodes.find((node) => node.id === "cube")!.name = "副本方块";
+    copy.program[0]!.seconds = 3;
+    expect(source.nodes.find((node) => node.id === "place")!.position[0]).toBe(
+      0.24,
+    );
+    expect(source.nodes.find((node) => node.id === "cube")!.name).toBe(
+      "待抓方块",
+    );
+    expect(source.program[0]!.seconds).toBe(1);
+  });
+  it("moves copied release and clearance targets together through the place frame", () => {
+    const source = defaultStation();
+    const copy = copyStation(source);
+    const place = copy.nodes.find((node) => node.id === "place")!;
+    place.position = [0.25, 0.12, 0];
+    expect(
+      worldPosition(
+        copy.nodes.find((node) => node.id === "release")!,
+        copy.nodes,
+      ),
+    ).toEqual([0.25, 0.12, 0.03]);
+    expect(
+      worldPosition(
+        copy.nodes.find((node) => node.id === "clear")!,
+        copy.nodes,
+      ),
+    ).toEqual([0.25, 0.12, 0.1]);
+    expect(copy.program[5]!.target).toBe("release");
+    expect(source.nodes.find((node) => node.id === "place")!.position).toEqual([
+      0.24, 0.14, 0,
+    ]);
+  });
+  it("preserves copied task input through editable JSON export and import", () => {
+    const copy = copyStation(defaultStation());
+    copy.nodes.find((node) => node.id === "place")!.position[1] = 0.15;
+    const restored = importStation(JSON.parse(exportStation(copy))).station;
+    expect(restored.name).toBe(copy.name);
+    expect(restored.nodes).toEqual(copy.nodes);
+    expect(restored.program.map(({ id: _id, ...step }) => step)).toEqual(
+      copy.program.map(({ id: _id, ...step }) => step),
+    );
+  });
   it("keeps world coordinates when changing reference frames", () => {
     const station = defaultStation();
     const before = worldPosition(

@@ -126,6 +126,19 @@ export function defaultStation(): Station {
   };
 }
 
+/** Keep references inside the document, but share no editable data with its source. */
+export function copyStation(station: Station): Station {
+  return {
+    ...station,
+    name: `${station.name} 副本`,
+    nodes: station.nodes.map((node): StationNode => ({
+      ...node,
+      position: [...node.position],
+    })),
+    program: station.program.map((step) => ({ ...step })),
+  };
+}
+
 export function worldPosition(
   node: StationNode,
   nodes: readonly StationNode[],

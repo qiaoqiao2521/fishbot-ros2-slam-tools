@@ -46,3 +46,14 @@ FishBot coop-api的transport仍是车臂协同任务，不能替代SO101独立�
 - 编辑预览只做`mj_forward`，任务场景只读执行中的`MjData`。终态在后置录像编码前捕获；相对URL统一由本机STL白名单服务。缺少新scene字段的旧任务不虚构全臂姿态。
 - 模式切换必须使慢预览请求失效，包括重新选择同一个任务；Node回归覆盖新ID/同ID交错。普通preview POST本身不切模式，任务中编辑草稿不发预览请求。
 - 本机浏览器确认world坐标已被原生3D识别；原生面板在首消息前保留过No coordinate frames/Frame world not found的启动日志。完整模型随后正确渲染，不把这些历史日志当持续物理失败。手机截图需等待13个STL加载，不能只凭canvas存在验收。
+
+## 2026-10-20 任务目标参数化缺口
+
+现有限制有两层：station_executor固定节点/八步验证；VisualGraspController的搬运末三点固定PLACE_CENTER，异步worker也需传目标。原场景与planning clone都从同一workcell生成，因此优先增加可选place_xy并共享该场景，不复制场景实现。物理diagnostics原来按固定中心判盘内，必须同步按实际place_floor位置评分，保留原边界与静稳阈值。
+
+
+### 参数化后的实际路径缺口
+
+新目标(.22,.17)已放盘但固定37mm脱离触腕限，34.154mm前缀在原全臂/释放物1mm与回位检查下可认证。(.20,.20)的28mm释放目标可达，但60/57mm中转不可达；54mm完整五段通过。故保留60/37mm优先，复用原IK与全arm/payload样本认证候选，不按坐标特判或扩大关节范围。
+
+独立审核负例发现RuntimeError泛捕获会把未知后端故障当成IK不可达，已限定已知No vertical前缀；未知错误/取消保留原异常身份。默认/B两轮同源码实跑后再加分类补丁；最终A完整实跑与最终B保存snapshot离线逐字段重演覆盖该影响范围。任务变化与性能/模型候选比较分开，不把三回合称统计鲁棒性。
