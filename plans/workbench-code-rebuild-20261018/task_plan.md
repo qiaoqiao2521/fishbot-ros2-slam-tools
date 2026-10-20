@@ -6,7 +6,7 @@
 
 ## Scope
 
-当前 P1：固定上游构建、真实 SO101 记录导入、只读任务面板和浏览器验收。完成后接 P2/P3 的产品化和新仿真任务，不把回放算作新抓放成功。
+P1 已完成。当前接 P2：借用 RoboDK 的场景树、平移坐标系、目标引用和指令组织，接入 Lichtblick 原生配置与布局保存。交付可编辑工作站和 JSON 文档；P3 的新仿真执行另按真实执行器接口接入。
 
 实现位于独立工作树 `/home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018`，分支 `codex/workbench-code-rebuild-20261018`，基线 `325fa260096d421d07035c4a64cb765e5006501b`。FishBot 原工作区的在途改动原位保留，合并前由根串行对齐。
 

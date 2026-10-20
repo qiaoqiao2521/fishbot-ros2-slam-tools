@@ -46,3 +46,17 @@
 ## Knowledge closeout
 
 `already_covered`：CapMesh PIT-004 已覆盖依赖与发布周期隔离；本轮源码、时序、视口和接口边界记录在项目计划，没有新增通用平台或全局规则。
+
+## 2026-10-20 场景与程序编辑接续
+
+用户要求继续修改项目，尽可能复用 CY 成熟产品成果。沿已有 Lichtblick 底座新增 RobotStation 原生面板，采用 RoboDK 对象树、坐标系归属、目标引用和指令列表设计。布局、保存、播放器和历史回放继续使用上游实现。
+
+本轮编辑范围：平移坐标系、对象/目标/障碍、世界位置保持的重挂父节点、指令排序、撤销重做、人可编辑 JSON 导入导出。坏条目警告并局部跳过，无内容哈希锁、前序任务锁或每日限额。
+
+新入口 `/so101-station`；窄屏 `/so101-station-mobile`。俯视虚线仅是程序顺序，右侧录像仍是历史回合。未定义旋转坐标系、工具 TCP、碰撞规划或执行适配，不能将草稿标为可执行任务。P2 部分实施，P3 未完成。
+
+验证：10 项局部单元测试、生产构建和定向 ESLint 通过；桌面/390px 共 11 项浏览器交互检查通过，编辑/撤销重做/步骤排序/导出/刷新后的完整 JSON 一致/手工导入/坏 JSON 保留草稿/手机编辑均覆盖，pageerror 与运动写请求为 0。最终截图与结果位于被忽略的 `workbench-review-tests/output/station-editor/`。构建保留上游两项包体积警告，不宣称加载性能通过。接续 owner：根 Codex。独立 SO101 full_cycle 仍要求已有 motion-plan/preflight，不能直接消费任意新坐标；需在 SO101 侧接入重新规划及原任务生命周期。
+
+Knowledge closeout：already_covered。继续采用 CapMesh PIT-004 的 Web/机器人依赖隔离，不新增通用知识规则。
+
+本轮修复：上游 `isLayoutEqual` 忽略基线配置中不存在的新键。最初布局只有面板标题，导致 `station` 内容无法保存。两个入口布局现包含完整初始 station，面板默认配置也包含 station；保存通过原 `updateLayout` 与 `overwriteLayout`。移除当前地址的 layoutUrl 后刷新，不再重新导入初始模板。相关原生比较回归有 2 个测试。失败试验未误记为通过。

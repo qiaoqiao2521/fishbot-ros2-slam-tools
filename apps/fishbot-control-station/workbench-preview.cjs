@@ -26,12 +26,11 @@ const server = http.createServer(async (request, response) => {
   response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   response.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
   const pathname = new URL(request.url, "http://localhost").pathname;
-  if ((pathname === "/so101" || pathname === "/so101-mobile") && recordings) {
+  if (["/so101", "/so101-mobile", "/so101-station", "/so101-station-mobile"].includes(pathname)) {
     const base = `http://127.0.0.1:${port}`;
-    const layout = pathname === "/so101-mobile" ? "so101-mobile" : "so101-review";
+    const layout = pathname === "/so101" ? "so101-review" : pathname.slice(1);
     const query = new URLSearchParams({
-      ds: "remote-file",
-      "ds.url": `${base}/records/so101.mcap`,
+      ...(recordings ? { ds: "remote-file", "ds.url": `${base}/records/so101.mcap` } : {}),
       layoutUrl: `${base}/layouts/${layout}.json`,
       time: "0.04",
     });
@@ -45,7 +44,7 @@ const server = http.createServer(async (request, response) => {
   } else if (pathname === "/records/so101.mcap" && recordings) {
     publicPath = path.resolve(recordings);
     request.url = "/so101.mcap";
-  } else if (["/layouts/so101-review.json", "/layouts/so101-mobile.json"].includes(pathname)) {
+  } else if (["/layouts/so101-review.json", "/layouts/so101-mobile.json", "/layouts/so101-station.json", "/layouts/so101-station-mobile.json"].includes(pathname)) {
     publicPath = path.join(workbench, "robot-layouts");
     request.url = `/${path.basename(pathname)}`;
   } else if (pathname.startsWith("/records/") || pathname.startsWith("/layouts/")) {

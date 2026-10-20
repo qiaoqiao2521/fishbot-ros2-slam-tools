@@ -135,6 +135,13 @@ export const getBuiltin: (t: TFunction<"panels">) => PanelInfo[] = (t) => [
     hasCustomToolbar: true,
   },
   {
+    title: "SO101 场景与程序",
+    type: "RobotStation",
+    description: "编辑对象、坐标系、目标点和抓放程序",
+    module: async () => await import("./RobotStation"),
+    hasCustomToolbar: true,
+  },
+  {
     title: "SO101 回合复盘",
     type: "EpisodeReview",
     description: "历史仿真回合的来源、指标与阶段定位",

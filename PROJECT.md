@@ -11,6 +11,7 @@
 ## Constraints
 Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。历史无线延迟与专项验收边界继续保留，不再作为已售实车的当前阻塞项。
 ## Current State
+2026-10-20 新底座增加 RobotStation 场景与程序编辑面板：对象树、平移坐标系、目标引用、步骤排序、撤销重做、原生布局保存及 JSON 导入导出。入口 `/so101-station`，P2 部分实施；新仿真执行仍待 P3，当前验证见[进度](plans/workbench-code-rebuild-20261018/progress.md)。
 2026-10-18 Lichtblick 源码重建 P1 已通过：固定完整源码构建、真实 SO101 MCAP、原生回合面板、桌面 11 项与手机浏览器仿真 9 项验收。当前是本机历史回放入口；P2/P3 新任务、取消与查询、CY 切换待接续。实施与边界见[源码重建计划](plans/workbench-code-rebuild-20261018/task_plan.md)，原跨层计划的在途成果仍待串行整合。
 2026-10-18 工作台重构P1完成：四服务运行身份、代次隔离、五资源来源与分层任务回执已接入，通过隔离ROS节点/Java实际服务与浏览器验收。P2共享工作面实施中；P3–P6待实施。范围、商业采纳依据和未覆盖边界见[大范围重构](plans/workbench-rebuild-20261018/task_plan.md)及[运行合同](docs/RUNTIME_CONTEXT.md)。
 2026-10-17 协同日志增长已修复：演示默认不写physics，显式诊断2Hz/默认最多32MiB；独立observer实际manifest去重、900秒/1GiB预算，缺失/超限/IO失败生成正式false评分。96定向、22状态/QoS、1223反馈通过；隔离124/125/126实际验证关闭/轮转/超限，6份源起止一致，零动作。旧90GB日志已由用户清理，不计为本轮释放；见[容量修复](plans/cooperation-log-budget-20261017/progress.md)。

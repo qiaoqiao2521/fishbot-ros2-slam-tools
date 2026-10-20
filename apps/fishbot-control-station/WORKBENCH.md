@@ -56,3 +56,26 @@ node workbench-review-tests/run-review.cjs
 - 预览服务复用上游已有 `serve-handler`，只提供明确允许的记录、布局和静态资源。
 - Web 依赖与机器人运行环境分别安装。既有执行端继续拥有任务身份、取消和物理终态。
 - 不提交 `node_modules`、构建产物、本地记录、缓存、环境或运行日志。
+
+## 场景与程序编辑（2026-10-20）
+
+首次从 <http://127.0.0.1:5186/so101-station> 导入桌面模板，或从 <http://127.0.0.1:5186/so101-station-mobile> 导入窄屏模板。保存后刷新当前页面，或打开 <http://127.0.0.1:5186/> 继续已有布局；再次打开模板入口会重新导入模板。
+
+- 在对象树或俯视草图选择对象，编辑名称和以米计的 XYZ。
+- 新建目标点、平移坐标系、物体或障碍。改变父坐标系时保持世界位置；改变坐标系位置时带动子节点。
+- 在程序中选择目标，添加移动、张开、闭合、等待步骤，调整顺序。
+- 点击“保存草稿”，使用 Lichtblick 原生布局保存。编辑可撤销/重做；导出 JSON 可备份和手工修改，再导入继续。
+- 导入会报告并跳过坏条目，修复无效父节点；无法识别的文件不会覆盖当前草稿。删除目标保留程序步骤，并提示重新选择目标。
+
+此入口是工作站草稿编辑器。坐标系仅支持平移，工具 TCP 尚未定义，虚线是步骤顺序，不是运动规划。右侧历史录像不随草稿改变。当前不能从此入口启动新的仿真抓放。
+
+来源：CY `re-packages/robodk-probe/README.md` M1–M4 的场景树、参考系、目标与指令组织；Lichtblick 原生 `Panel`、`saveConfig`、`LayoutManager.overwriteLayout`。未移植商业运动引擎或二进制。
+
+局部测试：
+
+```bash
+./workbench-dev.sh test --runInBand packages/suite-base/src/panels/RobotStation/station.test.ts
+node workbench-review-tests/station-editor.cjs
+```
+
+后者验证编辑、撤销重做、步骤排序、JSON往返、刷新恢复和390px编辑，不启动运动。
