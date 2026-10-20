@@ -4,7 +4,7 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v2.0. https://mozilla.org/MPL/2.0/
 
-import type { Station } from "./station";
+import type { Platform, Station } from "./station";
 
 export type SimulationTask = {
   id: string;
@@ -14,7 +14,7 @@ export type SimulationTask = {
   submittedAt?: string;
   simulation_s?: number;
   report?: Record<string, unknown>;
-  artifacts?: { video?: string; report?: string };
+  artifacts?: { video?: string; report?: string; mcap?: string };
   error?: string;
   station?: Station;
 };
@@ -23,6 +23,7 @@ export type SimulationRuntime = {
   ready: boolean;
   message: string;
   capabilities?: string[];
+  executor?: { planners?: string[] };
 };
 
 export class TaskRequestError extends Error {
@@ -39,14 +40,18 @@ export async function requestSimulation<T>(
   path: string,
   signal: AbortSignal,
   body?: unknown,
+  platform: Platform = "so101",
 ): Promise<T> {
-  const response = await fetch(`/api/so101${path}`, {
-    method: body == undefined ? "GET" : "POST",
-    signal,
-    headers:
-      body == undefined ? undefined : { "Content-Type": "application/json" },
-    body: body == undefined ? undefined : JSON.stringify(body),
-  });
+  const response = await fetch(
+    `/api/${platform === "px4" ? "drone" : "so101"}${path}`,
+    {
+      method: body == undefined ? "GET" : "POST",
+      signal,
+      headers:
+        body == undefined ? undefined : { "Content-Type": "application/json" },
+      body: body == undefined ? undefined : JSON.stringify(body),
+    },
+  );
   const data: unknown = await response.json().catch(() => undefined);
   if (!response.ok) {
     const detail =
@@ -109,4 +114,25 @@ export function simulationArtifactUrl(
     return value;
   }
   return undefined;
+}
+
+/** Open a completed recording with Lichtblick's existing remote-file player. */
+export function simulationReplayUrl(
+  artifact: string | undefined,
+  origin: string,
+): string | undefined {
+  const local = simulationArtifactUrl(artifact);
+  if (!local) {
+    return undefined;
+  }
+  const recording = new URL(local, origin);
+  if (recording.origin !== new URL(origin).origin) {
+    return undefined;
+  }
+  const query = new URLSearchParams({
+    ds: "remote-file",
+    "ds.url": recording.href,
+    layoutUrl: new URL("/layouts/drone-review.json", origin).href,
+  });
+  return `/?${query}`;
 }

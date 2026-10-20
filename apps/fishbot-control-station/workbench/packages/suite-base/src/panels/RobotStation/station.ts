@@ -5,22 +5,39 @@
 // License, v2.0. https://mozilla.org/MPL/2.0/
 
 export type Vec3 = [number, number, number];
+export type Platform = "so101" | "px4";
 export type Kind =
-  "frame" | "robot" | "tool" | "object" | "target" | "obstacle";
+  | "frame"
+  | "robot"
+  | "tool"
+  | "object"
+  | "target"
+  | "obstacle";
 export type StationNode = {
   id: string;
   name: string;
   kind: Kind;
   parent: string;
   position: Vec3;
+  size?: Vec3;
 };
 export type Instruction = {
   id: string;
-  action: "move" | "open" | "close" | "wait";
+  action:
+    | "move"
+    | "open"
+    | "close"
+    | "wait"
+    | "takeoff"
+    | "waypoint"
+    | "return_home"
+    | "land";
   target: string;
   seconds: number;
 };
 export type Station = {
+  platform?: Platform;
+  flight?: { speed_m_s: number; planner: "waypoint" | "ego" };
   name: string;
   nodes: StationNode[];
   program: Instruction[];
@@ -39,7 +56,99 @@ export const ACTION_LABELS: Record<Instruction["action"], string> = {
   open: "张开夹爪",
   close: "闭合夹爪",
   wait: "等待",
+  takeoff: "起飞",
+  waypoint: "飞到航点",
+  return_home: "返航",
+  land: "降落",
 };
+
+export function stationPlatform(station: Station): Platform {
+  return station.platform ?? "so101";
+}
+
+export function stationActions(platform: Platform): Instruction["action"][] {
+  return platform === "px4"
+    ? ["takeoff", "waypoint", "wait", "return_home", "land"]
+    : ["move", "open", "close", "wait"];
+}
+
+export function actionNeedsTarget(action: Instruction["action"]): boolean {
+  return ["move", "takeoff", "waypoint"].includes(action);
+}
+
+export function stationKindLabel(kind: Kind, platform: Platform): string {
+  if (platform === "px4") {
+    if (kind === "robot") {
+      return "无人机";
+    }
+    if (kind === "target") {
+      return "航点";
+    }
+  }
+  return KIND_LABELS[kind];
+}
+
+export function defaultDroneStation(): Station {
+  return {
+    platform: "px4",
+    flight: { speed_m_s: 1, planner: "waypoint" },
+    name: "PX4 四旋翼巡航",
+    nodes: [
+      {
+        id: "base",
+        name: "X500 四旋翼",
+        kind: "robot",
+        parent: "world",
+        position: [0, 0, 0],
+      },
+      {
+        id: "home",
+        name: "起降坐标系",
+        kind: "frame",
+        parent: "world",
+        position: [0, 0, 0],
+      },
+      {
+        id: "takeoff",
+        name: "起飞高度",
+        kind: "target",
+        parent: "home",
+        position: [0, 0, 2],
+      },
+      {
+        id: "wp1",
+        name: "航点 1",
+        kind: "target",
+        parent: "home",
+        position: [3, 0, 2],
+      },
+      {
+        id: "wp2",
+        name: "航点 2",
+        kind: "target",
+        parent: "home",
+        position: [3, 3, 3],
+      },
+      {
+        id: "wp3",
+        name: "航点 3",
+        kind: "target",
+        parent: "home",
+        position: [0, 3, 2],
+      },
+    ],
+    program: [
+      { id: "s1", action: "takeoff", target: "takeoff", seconds: 1 },
+      { id: "s2", action: "waypoint", target: "wp1", seconds: 1 },
+      { id: "s3", action: "waypoint", target: "wp2", seconds: 1 },
+      { id: "s4", action: "waypoint", target: "wp3", seconds: 1 },
+      { id: "s5", action: "return_home", target: "home", seconds: 1 },
+      { id: "s6", action: "land", target: "", seconds: 1 },
+    ],
+    notes:
+      "本地 PX4 + Gazebo 四旋翼仿真。X 向东、Y 向北、Z 向上，单位米。航点模式尚不自动绕障；实际飞行状态和轨迹由仿真反馈。",
+  };
+}
 
 // Workcell XY from SO101 grasp_workcell.py. Heights are editable design values,
 // not a collision-checked trajectory. Frame axes are parallel to world in this editor.
@@ -131,11 +240,15 @@ export function copyStation(station: Station): Station {
   return {
     ...station,
     name: `${station.name} 副本`,
-    nodes: station.nodes.map((node): StationNode => ({
-      ...node,
-      position: [...node.position],
-    })),
+    nodes: station.nodes.map(
+      (node): StationNode => ({
+        ...node,
+        position: [...node.position],
+        ...(node.size ? { size: [...node.size] as Vec3 } : {}),
+      }),
+    ),
     program: station.program.map((step) => ({ ...step })),
+    ...(station.flight ? { flight: { ...station.flight } } : {}),
   };
 }
 
@@ -224,7 +337,7 @@ export function removeNode(station: Station, id: string): Station {
 
 export function programWarnings(station: Station): string[] {
   return station.program.flatMap((step, i) =>
-    step.action === "move" &&
+    actionNeedsTarget(step.action) &&
     !station.nodes.some(
       (node) => node.id === step.target && node.kind === "target",
     )
@@ -252,6 +365,14 @@ export function importStation(value: unknown): {
     throw new Error("请选择含 nodes 数组的工作站 JSON；当前草稿未改变。");
   }
   const warnings: string[] = [];
+  const platform: Platform = source.platform === "px4" ? "px4" : "so101";
+  if (
+    source.platform != undefined &&
+    source.platform !== "so101" &&
+    source.platform !== "px4"
+  ) {
+    warnings.push("无法识别的平台，按 SO101 草稿导入。");
+  }
   const nodes: StationNode[] = [];
   for (const [i, raw] of source.nodes.entries()) {
     const item = record(raw);
@@ -276,12 +397,28 @@ export function importStation(value: unknown): {
     if (!validPosition) {
       warnings.push(`对象 ${i + 1} 坐标无效，使用原点。`);
     }
+    const size = item.size;
+    const validSize =
+      Array.isArray(size) &&
+      size.length === 3 &&
+      size.every((x) => typeof x === "number" && Number.isFinite(x) && x > 0);
+    if (
+      platform === "px4" &&
+      kind === "obstacle" &&
+      size != undefined &&
+      !validSize
+    ) {
+      warnings.push(`对象 ${i + 1} 障碍尺寸无效，使用 1 × 1 × 2 m。`);
+    }
     nodes.push({
       id: item.id,
       name: typeof item.name === "string" ? item.name : item.id,
       kind: kind as Kind,
       parent: typeof item.parent === "string" ? item.parent : "world",
       position: validPosition ? (position as Vec3) : [0, 0, 0],
+      ...(platform === "px4" && kind === "obstacle"
+        ? { size: validSize ? ([...size] as Vec3) : ([1, 1, 2] as Vec3) }
+        : {}),
     });
   }
   for (const node of nodes) {
@@ -303,7 +440,7 @@ export function importStation(value: unknown): {
     if (
       !step ||
       typeof step.action !== "string" ||
-      !Object.hasOwn(ACTION_LABELS, step.action)
+      !stationActions(platform).includes(step.action as Instruction["action"])
     ) {
       warnings.push(`步骤 ${i + 1} 无法识别，已跳过。`);
       continue;
@@ -320,7 +457,29 @@ export function importStation(value: unknown): {
           : 1,
     });
   }
-  const station = {
+  const flight = record(source.flight);
+  const speed = flight?.speed_m_s;
+  const validSpeed =
+    typeof speed === "number" &&
+    Number.isFinite(speed) &&
+    speed >= 1 &&
+    speed <= 5;
+  if (platform === "px4" && flight?.speed_m_s != undefined && !validSpeed) {
+    warnings.push("速度上限需在 1–5 m/s，使用 1 m/s。");
+  }
+  const station: Station = {
+    ...(source.platform != undefined ? { platform } : {}),
+    ...(platform === "px4"
+      ? {
+          flight: {
+            speed_m_s: validSpeed ? speed : 1,
+            planner:
+              flight?.planner === "ego"
+                ? ("ego" as const)
+                : ("waypoint" as const),
+          },
+        }
+      : {}),
     name: typeof source.name === "string" ? source.name : "导入工作站",
     nodes,
     program,

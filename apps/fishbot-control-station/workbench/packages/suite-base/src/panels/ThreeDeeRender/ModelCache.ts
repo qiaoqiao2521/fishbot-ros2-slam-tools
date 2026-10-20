@@ -83,12 +83,16 @@ export class ModelCache {
   }
 
   async #loadModel(
-    url: string,
+    requestedUrl: string,
     options: LoadModelOptions,
     reportError: ErrorCallback,
   ): Promise<LoadedModel> {
     const GLB_MAGIC = 0x676c5446; // "glTF"
 
+    // Workbench recordings keep model assets on the current server after a port change.
+    const url = requestedUrl.startsWith("/")
+      ? new URL(requestedUrl, globalThis.location.href).href
+      : requestedUrl;
     const asset = await this.#fetchAsset(url, { referenceUrl: options.referenceUrl });
 
     const buffer = asset.data;
@@ -227,7 +231,8 @@ export class ModelCache {
     // Preload textures. We do this here since we can't pass in an async function in LoadingManager.setURLModifier
     // which is supposed to be used for overriding loading behavior. See also
     // https://threejs.org/docs/index.html#api/en/loaders/managers/LoadingManager.setURLModifier
-    for (const node of xml.querySelectorAll("init_from")) {
+    // Surface init_from values name image IDs, not files; only images own asset URLs.
+    for (const node of xml.querySelectorAll("library_images image init_from")) {
       if (!node.textContent) {
         continue;
       }

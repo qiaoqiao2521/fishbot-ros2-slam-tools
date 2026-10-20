@@ -5,6 +5,8 @@
 
 当前支持历史回合查看、场景编辑预览，以及固定抓放模板的新仿真、实时全臂三维、查询和取消。
 
+无人机使用同一编辑器的 `/drone-station`，飞行执行与 SO101 分开；说明见文末。
+
 ## 启动
 
 条件：Node >=20，已安装系统 Chrome。历史回放另需经过核验的 MCAP；新仿真和编辑预览另需现有 SO101 Python 环境。
@@ -131,3 +133,42 @@ STATION_TEST_URL=http://127.0.0.1:5186 node workbench-review-tests/station-live.
 运行或结果未确认时，复制按钮禁用，原取消/查询入口保持。一个同类新目标只修改任务数据；尚不支持自由组合任意技能、更换物体形状或改变支撑台面高度。新位置无法规划时明确失败，绝不改跑旧蓝盘。
 
 开发验证：`node workbench-review-tests/station-task-drafts.cjs`检查无运动编辑与390px；`node workbench-review-tests/station-task-goals.cjs`会实际执行默认任务和一个改目标副本。后者要求新盘内真实落稳、脱离与回位，不能只凭控制器done计成功。
+
+## PX4 无人机
+
+打开 <http://127.0.0.1:5186/drone-station>；手机布局为 <http://127.0.0.1:5186/drone-station-mobile>。
+飞行执行器位于 `~/dev/ros2/projects/drone`，可用 `DRONE_ROOT` 指向其他安装位置。
+按执行器 README 构建 PX4 v1.17.0、隔离 MAVSDK 环境和官方网格清单。EGO 在该项目 `ego/` 独立构建。
+
+1. 点击“复制为新任务”，编辑航点 XYZ。场景使用 ENU 米制坐标。
+2. 选择航点或已构建的 EGO 绕障模式，设置巡航速度，保存草稿。
+3. 点击“起飞并执行仿真”。默认任务包含 2m 起飞、三个航点、高度变化和返航降落。
+4. 运行中刷新只查询原任务 ID。“取消并降落”停止后续航点并就地降落；“返航降落”按当前规划模式返回起飞点。
+5. 完成后打开本次报告或 MCAP。回放使用原生播放器，拖动时间线不会发送飞行命令。
+
+可导入 `~/dev/ros2/projects/drone/examples/ego-obstacle.json` 体验已验证的三维绕障场景。
+箱体宽/深/高及 XYZ 均可修改；起点与 home 位于 `(1,-1,0)`。
+EGO 规划航点和返航，起飞及降落沿用 PX4；示例的起降上方留空。
+
+任务成功以连续 Gazebo 真值到点、落地及解除电机为准；按钮请求成功不代表任务完成。EGO 使用理想仿真定位，深度来自官方 `gz_x500_depth`；它不是实机避障验收。
+场景显示官方 X500 网格、实际姿态、航点与轨迹。桨叶仅显示固定视觉角度。编辑预览、当前任务和历史回放分别选择。
+
+HTTP 接口为 `/api/drone/runtime`、`/api/drone/tasks`、`/api/drone/tasks/<id>`，以及任务下的 `cancel`、`return-home` 和 `artifacts/report|mcap`。
+MCAP 链接使用 `artifacts/mcap/flight.mcap`，以便原生播放器按后缀选择读取器；无文件名的旧接口仍可读取。
+三维 WebSocket 为 `/api/drone/scene`，独立发布 `/drone/live/scene|telemetry|status`。
+共用服务器只分发一次 WebSocket upgrade，SO101 与无人机连接可以共存。
+
+每个任务的输入快照、遥测、Gazebo 真值、报告、日志和 MCAP 保存在 `workbench-tools/output/drone-tasks/<id>/`；可通过 `DRONE_TASKS_DIR` 修改位置。
+MCAP 使用站内模型资源路径，可在工作台更换端口后继续查看；将记录带到其他机器时，也需要准备官方模型资源。
+
+局部检查：
+
+```bash
+node --test workbench-review-tests/drone-services.test.cjs workbench-review-tests/runtime.test.cjs workbench-review-tests/live.test.cjs
+STATION_TEST_URL=http://127.0.0.1:5187 node workbench-review-tests/drone-task-drafts.cjs
+```
+
+`drone-execution.cjs` 会实际执行航点和取消；设置 `DRONE_REPLAY_TASK_ID=<已有完整任务ID>` 时只验回放。
+`drone-ego-execution.cjs` 会从同一网页导入绕障示例并实际飞行。并行运行浏览器无运动检查可以，但本机飞行使用同一个实例时应依次进行。
+
+浏览器检查使用隔离上下文。真实飞行与故障验收的当前结果以研究仓 `plans/drone-workbench-20261020/progress.md` 为准。

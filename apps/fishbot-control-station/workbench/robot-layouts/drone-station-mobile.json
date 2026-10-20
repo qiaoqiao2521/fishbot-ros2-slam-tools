@@ -1,0 +1,155 @@
+{
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "configById": {
+    "RobotStation!dronestation": {
+      "lichtblickPanelTitle": "PX4 场景与飞行程序",
+      "station": {
+        "platform": "px4",
+        "flight": {
+          "speed_m_s": 1,
+          "planner": "waypoint"
+        },
+        "name": "PX4 四旋翼巡航",
+        "nodes": [
+          {
+            "id": "base",
+            "name": "X500 四旋翼",
+            "kind": "robot",
+            "parent": "world",
+            "position": [0, 0, 0]
+          },
+          {
+            "id": "home",
+            "name": "起降坐标系",
+            "kind": "frame",
+            "parent": "world",
+            "position": [0, 0, 0]
+          },
+          {
+            "id": "takeoff",
+            "name": "起飞高度",
+            "kind": "target",
+            "parent": "home",
+            "position": [0, 0, 2]
+          },
+          {
+            "id": "wp1",
+            "name": "航点 1",
+            "kind": "target",
+            "parent": "home",
+            "position": [3, 0, 2]
+          },
+          {
+            "id": "wp2",
+            "name": "航点 2",
+            "kind": "target",
+            "parent": "home",
+            "position": [3, 3, 3]
+          },
+          {
+            "id": "wp3",
+            "name": "航点 3",
+            "kind": "target",
+            "parent": "home",
+            "position": [0, 3, 2]
+          }
+        ],
+        "program": [
+          {
+            "id": "s1",
+            "action": "takeoff",
+            "target": "takeoff",
+            "seconds": 1
+          },
+          {
+            "id": "s2",
+            "action": "waypoint",
+            "target": "wp1",
+            "seconds": 1
+          },
+          {
+            "id": "s3",
+            "action": "waypoint",
+            "target": "wp2",
+            "seconds": 1
+          },
+          {
+            "id": "s4",
+            "action": "waypoint",
+            "target": "wp3",
+            "seconds": 1
+          },
+          {
+            "id": "s5",
+            "action": "return_home",
+            "target": "home",
+            "seconds": 1
+          },
+          {
+            "id": "s6",
+            "action": "land",
+            "target": "",
+            "seconds": 1
+          }
+        ],
+        "notes": "本地 PX4 + Gazebo 四旋翼仿真。X 向东、Y 向北、Z 向上，单位米。航点模式尚不自动绕障；实际飞行状态和轨迹由仿真反馈。"
+      },
+      "executionTaskId": ""
+    },
+    "3D!dronelive": {
+      "lichtblickPanelTitle": "PX4 · 实时三维 / 编辑预览",
+      "followTf": "world",
+      "followMode": "follow-pose",
+      "cameraState": {
+        "distance": 13,
+        "perspective": true,
+        "phi": 52,
+        "thetaOffset": 45,
+        "target": [0, 0, 0],
+        "targetOffset": [1.5, 1.5, 1],
+        "targetOrientation": [0, 0, 0, 1],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 200
+      },
+      "scene": {
+        "backgroundColor": "#182126",
+        "transforms": {
+          "axisScale": 0.5,
+          "showLabel": false
+        }
+      },
+      "topics": {
+        "/drone/live/scene": {
+          "visible": true
+        }
+      },
+      "layers": {
+        "drone-grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "1 m 网格",
+          "instanceId": "drone-grid",
+          "layerId": "foxglove.Grid",
+          "size": 12,
+          "divisions": 12,
+          "lineWidth": 1,
+          "color": "#516371",
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0],
+          "order": 1
+        }
+      }
+    }
+  },
+  "layout": {
+    "direction": "column",
+    "splitPercentage": 42,
+    "first": "3D!dronelive",
+    "second": "RobotStation!dronestation"
+  }
+}

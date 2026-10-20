@@ -8,10 +8,11 @@ import {
   latestSimulationTask,
   requestSimulation,
   simulationArtifactUrl,
+  simulationReplayUrl,
   taskIsActive,
   TaskRequestError,
 } from "./execution";
-import { defaultStation } from "./station";
+import { defaultDroneStation, defaultStation } from "./station";
 
 describe("SO101 simulation task transport", () => {
   const originalFetch = globalThis.fetch;
@@ -64,6 +65,62 @@ describe("SO101 simulation task transport", () => {
       "/api/so101/tasks/saved-task",
       expect.objectContaining({ method: "GET", body: undefined }),
     );
+  });
+
+  it("routes PX4 submission, return-home and cancel to the drone service only", async () => {
+    const signal = new AbortController().signal;
+    fetchMock.mockResolvedValue(
+      response({ id: "drone-task", status: "running" }),
+    );
+    await requestSimulation(
+      "/tasks",
+      signal,
+      { taskId: "drone-task", station: defaultDroneStation() },
+      "px4",
+    );
+    await requestSimulation("/tasks/drone-task/return-home", signal, {}, "px4");
+    await requestSimulation("/tasks/drone-task/cancel", signal, {}, "px4");
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/drone/tasks",
+      "/api/drone/tasks/drone-task/return-home",
+      "/api/drone/tasks/drone-task/cancel",
+    ]);
+    expect(
+      fetchMock.mock.calls.every(([, options]) => options?.method === "POST"),
+    ).toBe(true);
+  });
+
+  it("reads drone history without dispatching a task", async () => {
+    fetchMock.mockResolvedValue(response({ tasks: [] }));
+    await requestSimulation(
+      "/tasks",
+      new AbortController().signal,
+      undefined,
+      "px4",
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/drone/tasks",
+      expect.objectContaining({ method: "GET", body: undefined }),
+    );
+  });
+
+  it("opens same-origin MCAP in the existing player with a separate review layout", () => {
+    const origin = "http://127.0.0.1:5186";
+    const artifact = "/api/drone/tasks/task-123/artifacts/mcap";
+    const replay = new URL(simulationReplayUrl(artifact, origin)!, origin);
+    expect(replay.searchParams.get("ds")).toBe("remote-file");
+    expect(replay.searchParams.get("ds.url")).toBe(origin + artifact);
+    expect(replay.searchParams.get("layoutUrl")).toBe(
+      origin + "/layouts/drone-review.json",
+    );
+    for (const invalid of [
+      undefined,
+      "//other.example/file.mcap",
+      "https://other.example/file.mcap",
+      "/\\other.example/file.mcap",
+    ]) {
+      expect(simulationReplayUrl(invalid, origin)).toBeUndefined();
+    }
   });
 
   it("preserves a real rejection reason and never retries POST", async () => {

@@ -1,5 +1,17 @@
 # 实施进度
 
+## 2026-10-20 无人机扩展（实施中）
+
+用户批准在同一工作台增加 `/drone-station`，先航点、再 EGO 静态绕障。原 SO101 默认文档与入口保持；RobotStation 按平台选择动作和独立执行 API。
+飞行代码位于独立本地项目 `/home/muqiao/dev/ros2/projects/drone`，没有把 ROS/PX4 依赖加入 Web 构建。
+任务 HTTP 层复用原 SO101 生命周期；共用服务器统一分发 WebSocket，MCAP 继续使用原生播放器。
+
+已通过原 SO101 服务 8 项、无人机服务 5 项、前端 Jest 40 项、无人机无运动浏览器 16 项和 SO101 既有无运动 13 项。最终生产构建通过，保留上游两项包体积警告。
+网页任务 `08793a65-5ed6-4573-b4ed-a98a47d8d3fc` 完成三航点、高度变化、返航、落地/disarm，Gazebo 峰速 0.8156m/s。复制改目标的新任务 `d0d4f904-bce3-4a6a-aa8c-9746342ae279` 空中刷新零重发，取消后实际落地；原任务快照保留。
+MCAP 的 URL 后缀、跨端口资源及 Collada 图片引用已修复。原记录通过原生 seek/播放/暂停/倒退，零控制写请求或 WebSocket，五种官方网格及纹理全 200。浏览器证据在忽略的 `workbench-review-tests/output/drone-replay-final/`、`drone-execution/`、`drone-task-drafts/`。
+EGO 执行器已通过 CLI 静态障碍和移动障碍的完整返航回合，以及深度中断、暂停恢复和障碍内目标的真实故障落地。但最后同一网页示例 `f24689d9-f62e-4f9a-8b95-c8f1e9efb2ff` 暴露规划器深度配对超时，失败已保留，执行器正在进行同 stamp 配对适配及重验。尚未宣布全部交付或切换常用入口。
+完整状态、故障记录和交付由根串行记录于 `/home/muqiao/文档/ChatGPT/ros2/plans/drone-workbench-20261020/`。Knowledge closeout: already_covered。
+
 ## Current
 
 2026-10-18，P1 可运行底座、真实记录与原生回合面板已完成独立验收。隔离分支 `codex/workbench-code-rebuild-20261018` 已推送既有远端，适配提交 `fb4a6622d5df024e7851a92f3351b3f223ef584b` 经 GitHub ref 回读一致。新仿真任务、完整能力迁移与 CY 正式切换仍为 P2–P5。

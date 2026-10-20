@@ -60,13 +60,14 @@ function createSo101Live({runtime}){
  }
  const timer=setInterval(stream,100);timer.unref();
  foxglove.on('error',failure=>console.warn('WARNING: Foxglove scene connection:',failure.message));
- function attach(server){
+ function handleUpgrade(request,socket,head){
+  const url=new URL(request.url,'http://localhost');const allowedOrigin=request.headers.origin;
+  if(url.pathname!=='/api/so101/scene'||(allowedOrigin&&allowedOrigin!==origin)){socket.destroy();return;}
+  sockets.handleUpgrade(request,socket,head,connection=>foxglove.handleConnection(connection,`${request.socket.remoteAddress}:${request.socket.remotePort}`));
+ }
+ function attach(server,{routeUpgrade=true}={}){
   server.on('listening',()=>{const address=server.address();origin=`http://127.0.0.1:${address.port}`;});
-  server.on('upgrade',(request,socket,head)=>{
-   const url=new URL(request.url,'http://localhost');const allowedOrigin=request.headers.origin;
-   if(url.pathname!=='/api/so101/scene'||(allowedOrigin&&allowedOrigin!==origin)){socket.destroy();return;}
-   sockets.handleUpgrade(request,socket,head,connection=>foxglove.handleConnection(connection,`${request.socket.remoteAddress}:${request.socket.remotePort}`));
-  });
+  if(routeUpgrade)server.on('upgrade',handleUpgrade);
   server.on('close',()=>{clearInterval(timer);sockets.close();});
   void loadModel().catch(failure=>console.warn('WARNING: Initial SO101 geometry unavailable:',failure.message));
  }
@@ -101,6 +102,6 @@ function createSo101Live({runtime}){
   }catch(failure){error=failure.message;send(res,400,{error:failure.message,mode,taskId});}
   return true;
  }
- return {attach,handle,preview,selectTask,state,stream,loadModel};
+ return {attach,handleUpgrade,handle,preview,selectTask,state,stream,loadModel};
 }
 module.exports={createSo101Live};

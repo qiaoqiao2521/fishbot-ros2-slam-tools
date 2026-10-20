@@ -5,7 +5,8 @@
 // License, v2.0. https://mozilla.org/MPL/2.0/
 
 import { requestSimulation } from "./execution";
-import type { Station } from "./station";
+import { stationPlatform } from "./station";
+import type { Platform, Station } from "./station";
 
 export type SceneMode = {
   mode: "draft" | "task";
@@ -19,15 +20,29 @@ export async function previewStation(
   station: Station,
   signal: AbortSignal,
 ): Promise<SceneMode> {
-  return await requestSimulation<SceneMode>("/preview", signal, { station });
+  return await requestSimulation<SceneMode>(
+    "/preview",
+    signal,
+    { station },
+    stationPlatform(station),
+  );
 }
 
 export async function selectScene(
   source:
-    { mode: "draft"; station: Station } | { mode: "task"; taskId: string },
+    | { mode: "draft"; station: Station }
+    | { mode: "task"; taskId: string },
   signal: AbortSignal,
+  platform: Platform = source.mode === "draft"
+    ? stationPlatform(source.station)
+    : "so101",
 ): Promise<SceneMode> {
-  return await requestSimulation<SceneMode>("/scene-mode", signal, source);
+  return await requestSimulation<SceneMode>(
+    "/scene-mode",
+    signal,
+    source,
+    platform,
+  );
 }
 
 export function sceneModeLabel(source: SceneMode | undefined): string {

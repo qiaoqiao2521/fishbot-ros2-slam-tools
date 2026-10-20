@@ -29,6 +29,7 @@ import {
   latestSimulationTask,
   requestSimulation,
   simulationArtifactUrl,
+  simulationReplayUrl,
   taskIsActive,
   TaskRequestError,
   taskStatusLabel,
@@ -38,7 +39,7 @@ import { previewStation, sceneModeLabel, selectScene } from "./live";
 import type { SceneMode } from "./live";
 import {
   ACTION_LABELS,
-  KIND_LABELS,
+  actionNeedsTarget,
   copyStation,
   defaultStation,
   descendants,
@@ -47,6 +48,9 @@ import {
   programWarnings,
   removeNode,
   reparent,
+  stationActions,
+  stationKindLabel,
+  stationPlatform,
   worldPosition,
 } from "./station";
 import type { Instruction, Kind, Station, StationNode, Vec3 } from "./station";
@@ -146,7 +150,7 @@ function ScenePreview({
   const project = (p: Vec3) =>
     [30 + (p[0] - minX) * scale, 250 - (p[1] - minY) * scale] as const;
   const route = station.program
-    .filter((step) => step.action === "move")
+    .filter((step) => actionNeedsTarget(step.action))
     .map((step) => station.nodes.find((node) => node.id === step.target))
     .filter((node): node is StationNode => node != undefined)
     .map((node) => project(worldPosition(node, station.nodes)).join(","))
@@ -249,10 +253,12 @@ function RobotStation({
     () => config.station ?? defaultStation(),
     [config.station],
   );
+  const platform = stationPlatform(station);
+  const drone = platform === "px4";
   const layoutManager = useLayoutManager();
   const { getCurrentLayoutState } = useCurrentLayoutActions();
   const layoutId = useCurrentLayoutSelector(selectedLayoutIdSelector);
-  const [selected, setSelected] = useState("cube");
+  const [selected, setSelected] = useState(drone ? "takeoff" : "cube");
   const [past, setPast] = useState<Station[]>([]);
   const [future, setFuture] = useState<Station[]>([]);
   const [notice, setNotice] = useState("");
@@ -260,6 +266,8 @@ function RobotStation({
   const [runtimeError, setRuntimeError] = useState("");
   const [taskId, setTaskId] = useState(config.executionTaskId ?? "");
   const [task, setTask] = useState<SimulationTask>();
+  const [taskHistory, setTaskHistory] = useState<SimulationTask[]>([]);
+  const [historyError, setHistoryError] = useState("");
   const [checkingTask, setCheckingTask] = useState(true);
   const [executionError, setExecutionError] = useState("");
   const [refresh, setRefresh] = useState(0);
@@ -285,6 +293,8 @@ function RobotStation({
     void requestSimulation<SimulationRuntime>(
       "/runtime",
       controller.signal,
+      undefined,
+      platform,
     ).then(
       (value) => {
         if (!controller.signal.aborted) {
@@ -304,7 +314,36 @@ function RobotStation({
     return () => {
       controller.abort();
     };
-  }, [refresh]);
+  }, [refresh, platform]);
+  useEffect(() => {
+    if (!drone) {
+      return;
+    }
+    const controller = new AbortController();
+    void requestSimulation<{ tasks: SimulationTask[] }>(
+      "/tasks",
+      controller.signal,
+      undefined,
+      platform,
+    ).then(
+      (result) => {
+        if (!controller.signal.aborted) {
+          setTaskHistory(result.tasks);
+          setHistoryError("");
+        }
+      },
+      (error: unknown) => {
+        if (!controller.signal.aborted) {
+          setHistoryError(
+            `历史记录暂不可用：${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      },
+    );
+    return () => {
+      controller.abort();
+    };
+  }, [drone, platform, refresh, task?.status]);
   useEffect(() => {
     if (submitting || (taskId !== "" && rejectedTaskId.current === taskId)) {
       return;
@@ -323,6 +362,8 @@ function RobotStation({
           const result = await requestSimulation<{ tasks: SimulationTask[] }>(
             "/tasks",
             controller.signal,
+            undefined,
+            platform,
           );
           if (controller.signal.aborted) {
             return;
@@ -338,6 +379,8 @@ function RobotStation({
         const result = await requestSimulation<SimulationTask>(
           `/tasks/${encodeURIComponent(taskId)}`,
           controller.signal,
+          undefined,
+          platform,
         );
         if (controller.signal.aborted) {
           return;
@@ -394,7 +437,14 @@ function RobotStation({
         clearTimeout(timer);
       }
     };
-  }, [taskId, config.executionTaskId, submitting, refresh, saveConfig]);
+  }, [
+    taskId,
+    config.executionTaskId,
+    submitting,
+    refresh,
+    saveConfig,
+    platform,
+  ]);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -404,6 +454,8 @@ function RobotStation({
         const source = await requestSimulation<SceneMode>(
           "/scene-mode",
           controller.signal,
+          undefined,
+          platform,
         );
         if (
           !controller.signal.aborted &&
@@ -434,7 +486,7 @@ function RobotStation({
         clearTimeout(timer);
       }
     };
-  }, [refresh]);
+  }, [refresh, platform]);
   useEffect(() => {
     if (sceneSource?.mode !== "draft" || switchingScene) {
       return;
@@ -461,7 +513,11 @@ function RobotStation({
       controller.abort();
     };
   }, [station, sceneSource?.mode, switchingScene]);
-  const changeScene = async (mode: "draft" | "task", draft = station) => {
+  const changeScene = async (
+    mode: "draft" | "task",
+    draft = station,
+    selectedTaskId = taskId,
+  ) => {
     sceneController.current?.abort();
     const controller = new AbortController();
     sceneController.current = controller;
@@ -472,8 +528,12 @@ function RobotStation({
       const source =
         mode === "draft"
           ? ({ mode, station: draft } as const)
-          : ({ mode, taskId } as const);
-      const selectedSource = await selectScene(source, controller.signal);
+          : ({ mode, taskId: selectedTaskId } as const);
+      const selectedSource = await selectScene(
+        source,
+        controller.signal,
+        platform,
+      );
       if (!controller.signal.aborted) {
         setSceneSource(selectedSource);
       }
@@ -522,11 +582,16 @@ function RobotStation({
     });
     // Save the ID before POST. A lost response must query this ID, never submit again.
     saveConfig({ executionTaskId: id });
+    // The template must not replace this task selection when the page reloads.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("layoutUrl");
+    window.history.replaceState(window.history.state, "", url);
     try {
       const result = await requestSimulation<SimulationTask>(
         "/tasks",
         controller.signal,
         { taskId: id, station },
+        platform,
       );
       if (!controller.signal.aborted) {
         if (result.id !== id) {
@@ -571,7 +636,9 @@ function RobotStation({
       }
     }
   };
-  const cancelSimulation = async () => {
+  const cancelSimulation = async (
+    action: "cancel" | "return-home" = "cancel",
+  ) => {
     if (!taskId || cancellationController.current) {
       return;
     }
@@ -581,9 +648,10 @@ function RobotStation({
     setExecutionError("");
     try {
       const result = await requestSimulation<SimulationTask>(
-        `/tasks/${encodeURIComponent(taskId)}/cancel`,
+        `/tasks/${encodeURIComponent(taskId)}/${action}`,
         controller.signal,
         {},
+        platform,
       );
       if (!controller.signal.aborted) {
         setTask(result);
@@ -591,7 +659,7 @@ function RobotStation({
     } catch (error) {
       if (!controller.signal.aborted) {
         setExecutionError(
-          `取消结果未确认，请查询原任务：${error instanceof Error ? error.message : String(error)}`,
+          `${action === "return-home" ? "返航" : "取消"}结果未确认，请查询原任务：${error instanceof Error ? error.message : String(error)}`,
         );
       }
     } finally {
@@ -608,6 +676,9 @@ function RobotStation({
   const warnings = programWarnings(station);
   const videoUrl = simulationArtifactUrl(task?.artifacts?.video);
   const reportUrl = simulationArtifactUrl(task?.artifacts?.report);
+  const replayUrl = drone
+    ? simulationReplayUrl(task?.artifacts?.mcap, window.location.origin)
+    : undefined;
   const commit = (next: Station) => {
     setNotice("");
     setPast((history) => [...history, station]);
@@ -626,9 +697,17 @@ function RobotStation({
     setExecutionError("");
     rejectedTaskId.current = "";
     saveConfig({ station: next, executionTaskId: "" });
-    setSelected(next.nodes.some((item) => item.id === "place") ? "place" : "");
+    setSelected(
+      drone
+        ? "takeoff"
+        : next.nodes.some((item) => item.id === "place")
+          ? "place"
+          : "",
+    );
     setNotice(
-      "已复制为独立草稿。修改放料坐标系 X/Y，再显式运行；原任务记录保持。",
+      drone
+        ? "已复制为独立草稿。修改航点 XYZ 或速度，再显式运行；原任务记录保持。"
+        : "已复制为独立草稿。修改放料坐标系 X/Y，再显式运行；原任务记录保持。",
     );
     void changeScene("draft", next);
   };
@@ -657,9 +736,14 @@ function RobotStation({
         {
           id,
           kind,
-          name: `${KIND_LABELS[kind]} ${station.nodes.filter((item) => item.kind === kind).length + 1}`,
+          name: `${stationKindLabel(kind, platform)} ${station.nodes.filter((item) => item.kind === kind).length + 1}`,
           parent: "world",
-          position: [0.2, 0, 0.05],
+          position: drone
+            ? kind === "obstacle"
+              ? [1.5, 0, 1]
+              : [1, 1, kind === "target" ? 2 : 0]
+            : [0.2, 0, 0.05],
+          ...(drone && kind === "obstacle" ? { size: [1, 1, 2] as Vec3 } : {}),
         },
       ],
     });
@@ -691,7 +775,7 @@ function RobotStation({
             }}
           >
             <span style={{ color: COLORS[item.kind] }}>● </span>
-            {item.name} <small>({KIND_LABELS[item.kind]})</small>
+            {item.name} <small>({stationKindLabel(item.kind, platform)})</small>
           </button>
           {renderTree(item.id, depth + 1)}
         </div>
@@ -779,15 +863,17 @@ function RobotStation({
             >
               当前任务
             </Button>
-            <Button
-              size="small"
-              component="a"
-              href="/so101"
-              target="_blank"
-              rel="noreferrer"
-            >
-              历史回放 ↗
-            </Button>
+            {!drone && (
+              <Button
+                size="small"
+                component="a"
+                href="/so101"
+                target="_blank"
+                rel="noreferrer"
+              >
+                历史回放 ↗
+              </Button>
+            )}
           </div>
           <Typography
             variant="body2"
@@ -869,7 +955,9 @@ function RobotStation({
               );
               const link = document.createElement("a");
               link.href = url;
-              link.download = "so101-station.json";
+              link.download = drone
+                ? "drone-station.json"
+                : "so101-station.json";
               link.click();
               setTimeout(() => {
                 URL.revokeObjectURL(url);
@@ -894,6 +982,11 @@ function RobotStation({
               }
               try {
                 const imported = importStation(JSON.parse(await file.text()));
+                if (stationPlatform(imported.station) !== platform) {
+                  throw new Error(
+                    "文件与当前机器人类型不同，请在对应工作台入口导入；当前草稿未改变。",
+                  );
+                }
                 commit(imported.station);
                 setSelected(imported.station.nodes[0]?.id ?? "");
                 setNotice(
@@ -933,17 +1026,19 @@ function RobotStation({
           />
         </div>
         <div className={classes.row}>
-          {(["target", "frame", "object", "obstacle"] as const).map((kind) => (
-            <Button
-              size="small"
-              key={kind}
-              onClick={() => {
-                addNode(kind);
-              }}
-            >
-              添加{KIND_LABELS[kind]}
-            </Button>
-          ))}
+          {(["target", "frame", "object", "obstacle"] as const)
+            .filter((kind) => !drone || kind !== "object")
+            .map((kind) => (
+              <Button
+                size="small"
+                key={kind}
+                onClick={() => {
+                  addNode(kind);
+                }}
+              >
+                添加{stationKindLabel(kind, platform)}
+              </Button>
+            ))}
         </div>
         {node && (
           <>
@@ -990,8 +1085,12 @@ function RobotStation({
                     type="number"
                     label={`${["X", "Y", "Z"][axis]}（m）`}
                     value={node.position[axis]}
-                    disabled={node.id === "place" && axis === 2}
-                    slotProps={{ htmlInput: { step: 0.005 } }}
+                    disabled={
+                      axis === 2 &&
+                      ((!drone && node.id === "place") ||
+                        (drone && node.kind === "robot"))
+                    }
+                    slotProps={{ htmlInput: { step: drone ? 0.1 : 0.005 } }}
                     onChange={(event) => {
                       if (event.target.value === "") {
                         return;
@@ -1008,10 +1107,38 @@ function RobotStation({
                 ))}
               </div>
             )}
-            {node.id === "place" && (
+            {drone && node.kind === "obstacle" && (
+              <div className={classes.fields}>
+                {([0, 1, 2] as const).map((axis) => (
+                  <TextField
+                    key={axis}
+                    size="small"
+                    type="number"
+                    label={`${["宽", "深", "高"][axis]}（m）`}
+                    value={(node.size ?? [1, 1, 2])[axis]}
+                    slotProps={{ htmlInput: { step: 0.1, min: 0.1 } }}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      if (!Number.isFinite(value) || value <= 0) {
+                        return;
+                      }
+                      const size: Vec3 = [...(node.size ?? [1, 1, 2])];
+                      size[axis] = value;
+                      changeNode({ size });
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            {!drone && node.id === "place" && (
               <Typography variant="caption" color="text.secondary">
                 修改 X/Y
                 会同步移动蓝盘、释放点和脱离点。本轮保持盘高、盘尺寸和八步程序，执行范围由下方执行器说明。
+              </Typography>
+            )}
+            {drone && node.kind === "robot" && (
+              <Typography variant="caption" color="text.secondary">
+                起点位于地面。X/Y 设置起飞位置，飞行高度在航点中设置。
               </Typography>
             )}
             <Typography variant="caption">
@@ -1039,10 +1166,73 @@ function RobotStation({
           </>
         )}
         <Divider />
-        <Typography variant="subtitle1">抓放程序</Typography>
+        <Typography variant="subtitle1">
+          {drone ? "飞行程序" : "抓放程序"}
+        </Typography>
         <Typography variant="caption" color="text.secondary">
           动作引用目标点。改名不会丢失引用；虚线不表示规划成功。
         </Typography>
+        {drone && (
+          <>
+            <Typography variant="caption" color="text.secondary">
+              X 向东、Y 向北、Z 向上，单位米。起飞高度来自起飞步骤引用的航点 Z。
+            </Typography>
+            <div className={classes.row}>
+              <TextField
+                size="small"
+                type="number"
+                label="速度上限（m/s）"
+                value={station.flight?.speed_m_s ?? 1}
+                slotProps={{ htmlInput: { min: 1, max: 5, step: 0.1 } }}
+                onChange={(event) => {
+                  const speed = Number(event.target.value);
+                  if (Number.isFinite(speed) && speed >= 1 && speed <= 5) {
+                    commit({
+                      ...station,
+                      flight: {
+                        planner: station.flight?.planner ?? "waypoint",
+                        speed_m_s: speed,
+                      },
+                    });
+                  }
+                }}
+              />
+              <TextField
+                select
+                size="small"
+                label="路径方式"
+                value={station.flight?.planner ?? "waypoint"}
+                onChange={(event) => {
+                  commit({
+                    ...station,
+                    flight: {
+                      speed_m_s: station.flight?.speed_m_s ?? 1,
+                      planner:
+                        event.target.value === "ego" ? "ego" : "waypoint",
+                    },
+                  });
+                }}
+              >
+                <MenuItem value="waypoint">按航点巡航</MenuItem>
+                <MenuItem
+                  value="ego"
+                  disabled={
+                    runtime?.executor?.planners?.includes("ego") !== true
+                  }
+                >
+                  {runtime?.executor?.planners?.includes("ego") === true
+                    ? "EGO-Swarm 自动绕障"
+                    : "EGO-Swarm（执行器未就绪）"}
+                </MenuItem>
+              </TextField>
+            </div>
+            <Typography variant="caption" color="text.secondary">
+              {station.flight?.planner === "ego"
+                ? "EGO-Swarm 使用 Gazebo 理想定位和深度图，结果以本次仿真报告为准。"
+                : "航点模式不自动绕障；请使用空旷仿真场景。"}
+            </Typography>
+          </>
+        )}
         {station.program.map((step, index) => (
           <div className={classes.step} key={step.id}>
             <Typography variant="body2">{index + 1}.</Typography>
@@ -1052,18 +1242,29 @@ function RobotStation({
               aria-label={`步骤 ${index + 1} 动作`}
               value={step.action}
               onChange={(event) => {
+                const action = event.target.value as Instruction["action"];
                 changeStep(step.id, {
-                  action: event.target.value as Instruction["action"],
+                  action,
+                  ...(drone
+                    ? {
+                        target:
+                          action === "return_home"
+                            ? "home"
+                            : actionNeedsTarget(action)
+                              ? step.target
+                              : "",
+                      }
+                    : {}),
                 });
               }}
             >
-              {Object.entries(ACTION_LABELS).map(([value, label]) => (
+              {stationActions(platform).map((value) => (
                 <MenuItem key={value} value={value}>
-                  {label}
+                  {ACTION_LABELS[value]}
                 </MenuItem>
               ))}
             </TextField>
-            {step.action === "move" && (
+            {actionNeedsTarget(step.action) && (
               <TextField
                 select
                 size="small"
@@ -1146,7 +1347,7 @@ function RobotStation({
                 ...station.program,
                 {
                   id: crypto.randomUUID(),
-                  action: "move",
+                  action: drone ? "waypoint" : "move",
                   target: targets[0]?.id ?? "",
                   seconds: 1,
                 },
@@ -1198,7 +1399,7 @@ function RobotStation({
               void startSimulation();
             }}
           >
-            规划并运行仿真
+            {drone ? "起飞并执行仿真" : "规划并运行仿真"}
           </Button>
           <Button
             size="small"
@@ -1209,8 +1410,21 @@ function RobotStation({
               void cancelSimulation();
             }}
           >
-            {cancelling ? "正在取消…" : "取消任务"}
+            {cancelling ? "正在发送请求…" : drone ? "取消并降落" : "取消任务"}
           </Button>
+          {drone && (
+            <Button
+              size="small"
+              disabled={
+                submitting || cancelling || !taskId || !taskIsActive(task)
+              }
+              onClick={() => {
+                void cancelSimulation("return-home");
+              }}
+            >
+              返航降落
+            </Button>
+          )}
           <Button
             size="small"
             disabled={submitting}
@@ -1222,6 +1436,42 @@ function RobotStation({
             {taskId ? "查询原任务" : "刷新执行器"}
           </Button>
         </div>
+        {drone && (
+          <>
+            <TextField
+              select
+              size="small"
+              label="历史任务"
+              value={
+                taskHistory.some((item) => item.id === taskId) ? taskId : ""
+              }
+              disabled={submitting || cancelling || taskIsActive(task)}
+              onChange={(event) => {
+                const selectedTask = taskHistory.find(
+                  (item) => item.id === event.target.value,
+                );
+                if (!selectedTask) {
+                  return;
+                }
+                setTaskId(selectedTask.id);
+                setTask(selectedTask);
+                setExecutionError("");
+                rejectedTaskId.current = "";
+                saveConfig({ executionTaskId: selectedTask.id });
+                void changeScene("task", station, selectedTask.id);
+              }}
+            >
+              <MenuItem value="">选择一次已保存任务</MenuItem>
+              {taskHistory.map((item) => (
+                <MenuItem key={item.id} value={item.id}>
+                  {item.submittedAt ?? item.id} · {taskStatusLabel(item.status)}{" "}
+                  · {item.station?.name ?? item.id}
+                </MenuItem>
+              ))}
+            </TextField>
+            {historyError && <Alert severity="warning">{historyError}</Alert>}
+          </>
+        )}
         {executionError && <Alert severity="warning">{executionError}</Alert>}
         {taskId && (
           <Typography variant="caption" style={{ overflowWrap: "anywhere" }}>
@@ -1284,12 +1534,25 @@ function RobotStation({
                 </a>
               </Typography>
             )}
-            {task.report && (
+            {replayUrl && (
+              <Typography variant="body2">
+                <a href={replayUrl} target="_blank" rel="noreferrer">
+                  回看本次三维轨迹 ↗
+                </a>
+              </Typography>
+            )}
+            {drone && task.report && (
+              <Typography variant="body2">
+                飞行验收：{task.report.passed === true ? "通过" : "未通过"}
+              </Typography>
+            )}
+            {!drone && task.report && (
               <Typography variant="body2">
                 物理验收：{task.report.passed === true ? "通过" : "未通过"}；
-                真实夹起：{task.report.grasp_success === true ? "是" : "否"}；
-                放置落定：{task.report.place_success === true ? "是" : "否"}；
-                安全停止：{task.report.safety_stop === true ? "是" : "否"}
+                真实夹起：
+                {task.report.grasp_success === true ? "是" : "否"}； 放置落定：
+                {task.report.place_success === true ? "是" : "否"}； 安全停止：
+                {task.report.safety_stop === true ? "是" : "否"}
               </Typography>
             )}
             {task.report && (

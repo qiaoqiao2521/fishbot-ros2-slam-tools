@@ -5,7 +5,7 @@
 // License, v2.0. https://mozilla.org/MPL/2.0/
 
 import { previewStation, sceneModeLabel, selectScene } from "./live";
-import { defaultStation } from "./station";
+import { defaultDroneStation, defaultStation } from "./station";
 
 describe("SO101 native live scene source", () => {
   const originalFetch = globalThis.fetch;
@@ -52,6 +52,22 @@ describe("SO101 native live scene source", () => {
       }),
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps PX4 preview and selected task requests in the drone namespace", async () => {
+    const station = defaultDroneStation();
+    const signal = new AbortController().signal;
+    await previewStation(station, signal);
+    await selectScene({ mode: "draft", station }, signal);
+    await selectScene({ mode: "task", taskId: "drone-task" }, signal, "px4");
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/drone/preview",
+      "/api/drone/scene-mode",
+      "/api/drone/scene-mode",
+    ]);
+    expect(fetchMock.mock.calls[2]?.[1]?.body).toBe(
+      JSON.stringify({ mode: "task", taskId: "drone-task" }),
+    );
   });
 
   it("includes the current draft when switching away from a task", async () => {
