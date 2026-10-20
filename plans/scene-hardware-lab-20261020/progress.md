@@ -90,3 +90,31 @@ pending：候选为MuJoCo吸附跨接触分力、角点后腔排气和承载接�
 - 最终浏览器9项通过：3分项9案例、负控任务false、默认零视频预取/自动播放、实际播放超过1秒、解码640×480/18.0667秒、seek10秒实际帧可见、390px含展开指标无横溢、零写请求/页面异常。根回读result.json并查看实际10秒截图。旧全文件200导致seek失败证据留failure-before-send.json。
 - 最终前端16项定向测试、类型/lint和生产构建通过；根31项Python定向测试通过。shell与diff检查通过；未增加ROS节点，所有本轮physics/ffmpeg/浏览器进程已退出，只保留5188成果工作台。
 - 物理生成器、评分器和默认物理参数在正式root-a与half-a期间冻结；随后网页发送层修复不改变物理；不同dt使用独立私有JSON，原输入未改。旧三项报告与源码不改；私有地图、视频、JSONL、venv和编译产物不入Git。根按既有main/qiaoqiao2521远端串行交付，确切版本以本任务Git回执为准。
+
+## P6进行中
+
+- User：补真实密封与新增泵阀重量建模。根负责可选hardware候选集成、实际回合、工作台对照和Git；旧P5理想结果保留。
+- seal_model：独立裙边几何/原生间隙采样/连续泄漏helper与局部测试。
+- pump_hardware：厂家证据、固定硬件实体/质量惯量、单泵共享气路helper与局部测试。
+- 已查明P5每轮面积不符合原胎几何，不能将其通过视为真实吸附轮可制造性。新候选允许上墙失败，结果以实际新输入独立评分为准。
+
+## P6 实际验收与边界
+
+- P6降阶建模完成；整车爬壁任务未成功。两helper/配置/局部测试与根集成已交叉审查；仅根串行改共享SpecMesh、聚合与Git。没有ROS、实机、CY或网络/VPN操作。
+- 首轮hardware-a完成两例：normal failed，negative expectedpassed/taskfalse。原生接触probe随后发现lip摩擦/柔顺被混合覆盖，before/after回执位于私有seal-model-20261020目录，首轮完整保留。
+- 最终hardware-b使用修复后的同一冻结源码/配置，两进程互不共享native状态。normal episode `1693aed7-cfdc-43d4-8eb8-e791f542166d` failed；negative `09568bf0-7d2b-4b83-accf-482a55038e0d` expectedpassed/taskfalse。两XML完全一致、四pad执行器后四drive；完整0–18源秒/各901行，最大gap0.020s。独立reviewer从完整JSONL重score一致，无qpos/qvel/xfrc/qfrc写入。
+- B有泵峰8kPa/每pad30.787608N、轮矩10.248453Nm；负控压力和吸附全0、轮矩9.976646Nm。两案最大穿透0.509177mm、warnings0、外力0、机壳及携带硬件支撑0。实际64个lip priority1、摩擦.05、solref.02，与原声明匹配。没有交接、全车竖墙、额外爬升或墙上保持。完整压力8kPa仍不能上墙，不能把结果包装成漏气已修复或成功爬壁。
+- mass19.823910629kg、新增1.392910629kg，质量/重心由原生模型回读并与独立计算一致；真实气腔/管容已进入network。压力、轮矩、时间与独立任务评分均保留。无泵仍有阀额定电耗，不把系统功耗当纯泵实测。
+- 根当前52项Python定向检查（20ground-wall/7聚合/25真空模块）全过；前端18项、定向lint、tsc/Vite生产构建通过，仅原Browserslist与chunk提示。原ideal-regression实际18s再通过，爬升0.317420748m/停稳4.50s，旧成功无丢失。
+- 原生渲染B录像H264640×480/15fps/271帧、源18s/播放18.066667s。两model-views静态图来自同一B XML，仅隐藏世界表面观察结构，不冒充运动验收。
+- 最新工作台保留原9案例，加硬件两例共11例；suction状态failed，旧成功和负控区分。固定两段录像分别命名，成熟send/Range入口兼容。源码配置/文档入库；私有地图、JSONL、录像、Python环境和浏览器截图不入Git。
+
+## P6 知识回写
+
+pending：候选为原生接触参数混合读回、实际多边形ray/气腔体积、native actuator标量与实际施力的区别。已在本项目findings保存可复用结论。共享知识页 `Wiki/ROS2 与 FishBot.md` 与 `Wiki/开发知识入口.md` 当前仍有其他未提交修改，归属未核实，本轮不覆盖或混合提交；接续owner根Codex，最短入口为本计划P6 findings和三份helper/native测试。未声明知识库已写入。
+
+## P6 最终工作台检查
+
+根对B报告/录像重新执行实际浏览器9项检查：11个原始案例、保留旧成功、新候选失败、负控车辆任务false；显式读取一次、视频零预取；实际解码640×480/18.066667s、播放超过1秒、seek10秒可见真实帧；390px无横溢、零写请求和页面异常。根实际查看桌面截图，失败车辆位于墙前。最终媒体来自B，未用A或旧成功录像替换。只保留既有5188只读工作台，本轮physics、ffmpeg、隔离QA进程均已退出；原项目runtime离线不冒称全部ROS服务在线。
+
+共享知识状态仍为pending；本项目三文件、PROJECT和运行文档已读回，5文档相对链接无缺失、diff检查通过。源码与原始输入在B回合中未修改；随后仅更新文档与私有聚合/媒体。确切Git交付版本以本轮提交回执为准。

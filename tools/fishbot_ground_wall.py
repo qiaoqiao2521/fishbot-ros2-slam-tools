@@ -2,8 +2,8 @@
 """A source-derived free chassis drives continuously from floor to wall.
 
 Only four bounded wheel servos and four native MuJoCo contact-adhesion
-actuators move the vehicle. There is no body pose servo, external lifting
-force, weld or state reset. The hypothetical tire seals are not CFD.
+actuators move the vehicle. Select the old ideal tire-force benchmark or the
+carried pump/valve and finite skirt candidate. Neither resolves CFD or FEM.
 """
 from __future__ import annotations
 
@@ -19,6 +19,8 @@ import uuid
 from typing import Any
 
 from fishbot_suction import Chamber
+import fishbot_vacuum_seal as seal
+from fishbot_vacuum_hardware import load_hardware, hardware_xml, hardware_parts, SharedVacuumNetwork
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = ROOT / 'config/ground_wall_reference.json'
@@ -32,6 +34,16 @@ LIMITATIONS = [
     'Equal wheel speed commands permit actual frictional slip through the corner; this is not a no-slip kinematic gait.',
     'Parking uses ideal wheel encoders and a bounded wheel-angle feedback brake; it does not hold the chassis by a world pose constraint.',
     'This is a native MuJoCo mechanics experiment, not Nav2 wall navigation or sim-to-real validation.',
+]
+HARDWARE_LIMITATIONS = [
+    'Candidate fixed sliding skirt modules, not a manufactured J100 conversion or rolling vacuum tire.',
+    'KNF/Festo masses and ratings are sourced; installation positions, uniform envelope inertia and additional fixtures are assumptions.',
+    'Native soft lip contacts and perimeter rays are a reduced compliance/leak model, not elastomer FEM or calibrated sealing performance.',
+    'One shared pump uses approximate manufacturer curve interpolation and ideal manifold mixing; hose deformation, flow pressure drop and CFD are not resolved.',
+    'Native contact adhesion acts only on actual pad contacts; its normal distribution is an approximation of pressure on the enclosed backplate.',
+    'Gap geometry is sampled at the existing trace source period; gas volumes integrate at every physics step. This sampling approximation is recorded.',
+    'Pump energy is a nameplate upper-bound estimate plus rated valve power, not measured electrical consumption.',
+    'The same 8kPa cap, 12Nm drives, encoder brake and independent climb criteria are retained; this is simulation, not real hardware acceptance.',
 ]
 
 
@@ -75,7 +87,11 @@ def model_xml(c: dict[str, Any]) -> str:
           <geom type="box" size=".006 {d['wheel_width']/2+.001} {d['wheel_radius']*.8}" contype="0" conaffinity="0" mass="0" rgba=".7 .72 .75 1"/>
         </body>''')
         cap = chamber_config(c)['max_pressure_pa'] * a['total_effective_adhesion_area_m2']/4
-        acts.append(f'<adhesion name="vacuum{i}" body="{WHEELS[i]}" gain="1" ctrlrange="0 {cap}"/>')
+        if c.get('vacuum_model', 'ideal') == 'ideal':
+            acts.append(f'<adhesion name="vacuum{i}" body="{WHEELS[i]}" gain="1" ctrlrange="0 {cap}"/>')
+    if c.get('vacuum_model') == 'hardware':
+        bodies.extend([hardware_xml(c['hardware']), seal.pad_bodies_xml(c['seal'])])
+        acts.append(seal.adhesion_actuators_xml(c['seal']))
     for i in range(4):
         limit, speed = a['wheel_torque_limit_nm'], a['wheel_speed_limit_rad_s']
         acts.append(f'<velocity name="drive{i}" joint="axle{i}" kv="{a["velocity_servo_kv"]}" '
@@ -90,8 +106,8 @@ def model_xml(c: dict[str, Any]) -> str:
       <material name="gridmat" texture="grid" texrepeat="8 8" texuniform="true"/></asset>
       <default><geom friction="{a['friction']} .005 .0001" condim="3" solref=".005 1" solimp=".99 .999 .001"/></default>
       <worldbody><light pos="-3 -2 4" dir="1 0 -1" diffuse=".9 .9 .9" castshadow="false"/>
-        <geom name="floor" type="plane" size="4 4 .1" material="gridmat"/>
-        <geom name="wall" type="box" pos=".1 0 1.5" size=".1 2 1.5" material="gridmat"/>
+        <geom name="floor" type="plane" size="4 4 .1" material="gridmat" group="1"/>
+        <geom name="wall" type="box" pos=".1 0 1.5" size=".1 2 1.5" material="gridmat" group="1"/>
         <body name="car" pos="{' '.join(map(str,a['initial_position_m']))}"><freejoint name="free"/>
           <inertial mass="{ch['mass']}" pos="{' '.join(map(str,ch['com']))}" fullinertia="{' '.join(map(str,ch['inertia']))}"/>
           <geom name="chassis" type="box" pos="0 0 {ch['height']/2}" size="{ch['length']/2} {ch['width']/2} {ch['height']/2}" group="3" rgba=".12 .46 .75 1"/>
@@ -152,7 +168,7 @@ class WheelBrake:
         return [forward_rad_s if enabled else 0.0] * 4
 
 
-def _row(model: Any, data: Any, contacts: Any, chambers: Any, phase: str,
+def _row(model: Any, data: Any, contacts: Any, pressures: Any, phase: str,
          pressure_values: Any, energy: float, work: float, brake: WheelBrake,
          contact_forces: Any, seal_contacts: Any, episode_id: str) -> dict[str, Any]:
     import mujoco
@@ -165,12 +181,14 @@ def _row(model: Any, data: Any, contacts: Any, chambers: Any, phase: str,
             'pitch_up_rad': math.atan2(float(rotation[2,0]),float(rotation[0,0])),
             'velocity_m_s': world_velocity[3:].tolist(), 'angular_velocity_rad_s': world_velocity[:3].tolist(),
             'velocity_reference': 'world_frame_at_free_chassis_origin_mjOBJ_XBODY',
-            'wheel_contacts': contacts, 'pressure_pa': [p.pressure_pa for p in chambers],
+            'wheel_contacts': contacts, 'pressure_pa': list(pressures),
             'wheel_normal_contact_force_n': contact_forces, 'wheel_seal_near_contacts': seal_contacts,
             'phase': phase, 'brake_mode': 'wheel_encoder_angle_feedback' if brake.park_angles is not None else 'velocity_drive',
             'brake_reason': brake.reason,
             'adhesion_command_n': [float(x) for x in data.ctrl[:4]],
             'actual_adhesion_force_n': [float(x) for x in data.actuator_force[:4]],
+            'native_adhesion_actuator_force_n': [float(x) for x in data.actuator_force[:4]],
+            'adhesion_force_basis':'native actuator scalars, not world contact resultant; zero contacts can have zero transmission despite nonzero scalar',
             'wheel_torque_nm': [float(x) for x in data.actuator_force[4:]],
             'wheel_velocity_command_rad_s': [float(x) for x in data.ctrl[4:]],
             'pump_electrical_power_w': sum(p['electrical_power_w'] for p in pressure_values),
@@ -190,15 +208,22 @@ def run_case(name: str, c: dict[str, Any], output: Path, render: bool = False) -
     data = mujoco.MjData(model)
     mujoco.mj_forward(model,data)
     a, d = c['assumptions'], c['drivetrain']
-    chambers = [Chamber(chamber_config(c)) for _ in range(4)]
+    hardware = c.get('vacuum_model') == 'hardware'
+    chambers = [] if hardware else [Chamber(chamber_config(c)) for _ in range(4)]
+    network = SharedVacuumNetwork(c['hardware'], [seal.effective_area(c['seal'])]*4) if hardware else None
+    pad_ids = [model.body(n).id for n in seal.pad_body_names(c['seal'])] if hardware else []
+    initial_com = (data.xmat[model.body('car').id].reshape(3,3).T @
+                   (data.subtree_com[model.body('car').id]-data.xpos[model.body('car').id])).tolist()
+    hardware_geom_ids = {model.geom(p['name']+'_collision').id for p in hardware_parts(c['hardware'])} if hardware else set()
     addresses = [model.jnt_qposadr[model.joint(f'axle{i}').id] for i in range(4)]
     brake = WheelBrake(d['wheel_radius'],a['wall_encoder_travel_before_brake_m'],
                        a['parking_encoder_gain_s_inv'],a['wheel_speed_limit_rad_s'])
     energy = work = 0.0
     peaks = dict(wheel_torque_nm=0.0,pressure_pa=0.0,adhesion_force_n=0.0,
                  penetration_m=0.0,applied_body_force=0.0,applied_generalized_force=0.0,
-                 chassis_surface_normal_n=0.0)
+                 chassis_surface_normal_n=0.0,carried_hardware_surface_normal_n=0.0)
     values = [dict(electrical_power_w=0.0) for _ in range(4)]
+    network_state, samples, leaks, sample_source_s = {}, [], [], 0.0
     rows, snapshots = [], []
     renderer = camera = encoder = render_option = None
     render_warning = None
@@ -236,7 +261,30 @@ def run_case(name: str, c: dict[str, Any], output: Path, render: bool = False) -
             phase = ('hold' if brake.park_angles is not None else 'wall_climb' if all_wall else
                      'corner_transfer' if on_wall else 'approach' if enabled else 'settle')
             if step % stride == 0 or step == steps:
-                row = _row(model,data,contacts,chambers,phase,values,energy,work,brake,contact_forces,seal_contacts,episode_id)
+                if hardware:
+                    samples = [seal.sample_gaps(model,data,b,c['seal']) for b in pad_ids]
+                    sample_source_s = float(data.time)
+                pressures = network.pressure_pa if hardware else [p.pressure_pa for p in chambers]
+                row = _row(model,data,contacts,pressures,phase,values,energy,work,brake,contact_forces,seal_contacts,episode_id)
+                if hardware:
+                    pad_normals = [dict(floor=0.0,wall=0.0) for _ in range(4)]
+                    surfaces_by_id = {model.geom('floor').id:'floor',model.geom('wall').id:'wall'}
+                    for j in range(data.ncon):
+                        con = data.contact[j]
+                        pair = [int(con.geom1),int(con.geom2)]
+                        for g,other in (pair,pair[::-1]):
+                            b = int(model.geom_bodyid[g])
+                            if b in pad_ids and other in surfaces_by_id:
+                                contact_force = np.zeros(6)
+                                mujoco.mj_contactForce(model,data,j,contact_force)
+                                pad_normals[pad_ids.index(b)][surfaces_by_id[other]] += max(0.0,float(contact_force[0]))
+                    row.update(vacuum_model='hardware',gap_sample_source_s=sample_source_s,
+                        seal_observation=[seal.evaluate_leak(c['seal'],s,p) for s,p in zip(samples,pressures)],
+                        pneumatic_state=network_state,
+                        pad_total_normal_contact_force_n=pad_normals,
+                        vacuum_system_electrical_power_upper_bound_w=sum(v['electrical_power_w'] for v in values),
+                        vacuum_system_electrical_energy_upper_bound_j=energy,
+                        power_basis='pump_nameplate_upper_bound_plus_rated_valve_power')
                 rows.append(row); stream.write(json.dumps(row)+'\n')
             if renderer is not None and data.time+1e-9 >= next_frame:
                 try:
@@ -264,12 +312,24 @@ def run_case(name: str, c: dict[str, Any], output: Path, render: bool = False) -
             vents = rear_vent_mask(seal_contacts)
             if not all(p['wall'] > 0 for p in contacts[:2]):
                 vents = [False] * 4
-            values = []
-            for i, chamber in enumerate(chambers):
-                command = 1.0 if enabled and name != 'no_pump' and not vents[i] else 0.0
-                sealed = sum(seal_contacts[i].values()) > 0
-                state = chamber.step(c['timestep_s'],command,sealed,100.0 if vents[i] else 1.0)
-                values.append(state); data.ctrl[i] = state['requested_adhesion_n']
+            if hardware:
+                leaks = [seal.evaluate_leak(c['seal'],s,p) for s,p in zip(samples,network.pressure_pa)]
+                # This is a valve policy, not an on/off pressure force model:
+                # a normal-aligned lip requests isolation, while the sampled
+                # perimeter still determines its actual continuous leakage.
+                aligned = [s['status'] == 'sampled' for s in samples]
+                network_state = network.step(c['timestep_s'],float(enabled and name != 'no_pump'),
+                    aligned,vented=vents,
+                    leak_conductance=[s['leak_conductance_m3_s_pa'] for s in leaks])
+                values = [dict(electrical_power_w=network_state['electrical_power_w'])]
+                data.ctrl[:4] = network_state['requested_adhesion_n']
+            else:
+                values = []
+                for i, chamber in enumerate(chambers):
+                    command = 1.0 if enabled and name != 'no_pump' and not vents[i] else 0.0
+                    sealed = sum(seal_contacts[i].values()) > 0
+                    state = chamber.step(c['timestep_s'],command,sealed,100.0 if vents[i] else 1.0)
+                    values.append(state); data.ctrl[i] = state['requested_adhesion_n']
             data.ctrl[4:] = brake.update([data.qpos[j] for j in addresses],all_wall,float(data.time),
                                         a['drive_timeout_s'],a['drive_speed_m_s']/d['wheel_radius'],enabled)
             mujoco.mj_step(model,data)
@@ -279,7 +339,7 @@ def run_case(name: str, c: dict[str, Any], output: Path, render: bool = False) -
             energy += sum(p['electrical_power_w'] for p in values)*c['timestep_s']
             work += float(np.sum(np.maximum(0.0,data.actuator_force[4:]*data.actuator_velocity[4:])))*c['timestep_s']
             peaks['wheel_torque_nm'] = max(peaks['wheel_torque_nm'],float(np.max(np.abs(data.actuator_force[4:]))))
-            peaks['pressure_pa'] = max(peaks['pressure_pa'],max(p.pressure_pa for p in chambers))
+            peaks['pressure_pa'] = max(peaks['pressure_pa'],max(network.pressure_pa if hardware else [p.pressure_pa for p in chambers]))
             peaks['adhesion_force_n'] = max(peaks['adhesion_force_n'],float(np.max(np.abs(data.actuator_force[:4]))))
             peaks['applied_body_force'] = max(peaks['applied_body_force'],float(np.max(np.abs(data.xfrc_applied))))
             peaks['applied_generalized_force'] = max(peaks['applied_generalized_force'],float(np.max(np.abs(data.qfrc_applied))))
@@ -293,6 +353,9 @@ def run_case(name: str, c: dict[str, Any], output: Path, render: bool = False) -
                 if chassis_geom in pair and pair.intersection(surfaces):
                     mujoco.mj_contactForce(model,data,j,force)
                     peaks['chassis_surface_normal_n'] = max(peaks['chassis_surface_normal_n'],max(0.0,float(force[0])))
+                if pair.intersection(hardware_geom_ids) and pair.intersection(surfaces):
+                    mujoco.mj_contactForce(model,data,j,force)
+                    peaks['carried_hardware_surface_normal_n'] = max(peaks['carried_hardware_surface_normal_n'],max(0.0,float(force[0])))
     if renderer is not None:
         renderer.close()
     video_available = False
@@ -304,6 +367,8 @@ def run_case(name: str, c: dict[str, Any], output: Path, render: bool = False) -
             render_warning = f'{type(exc).__name__}: {exc}'
             encoder.kill(); encoder.wait()
     oracle = score(rows,expected=name,criteria=c.get('criteria'))
+    pressure_cap = c['hardware']['pneumatics']['operating_vacuum_limit_pa'] if hardware else chamber_config(c)['max_pressure_pa']
+    area = seal.effective_area(c['seal']) if hardware else chamber_config(c)['effective_area_m2']
     native_checks = {
         'free_chassis_and_four_driven_hinges': model.nq == 11 and model.nv == 10 and model.nu == 8,
         'no_equality_constraint': model.neq == 0,
@@ -311,18 +376,19 @@ def run_case(name: str, c: dict[str, Any], output: Path, render: bool = False) -
         'no_native_warnings': not any(w.number for w in data.warning),
         'colliding_chassis': bool(model.geom_contype[model.geom('chassis').id]) and bool(model.geom_conaffinity[model.geom('chassis').id]),
         'bounded_wheel_torque': peaks['wheel_torque_nm'] <= a['wheel_torque_limit_nm']+1e-8,
-        'bounded_pressure': peaks['pressure_pa'] <= chamber_config(c)['max_pressure_pa']+1e-8,
-        'bounded_adhesion_force': peaks['adhesion_force_n'] <= chamber_config(c)['max_pressure_pa']*chamber_config(c)['effective_area_m2']+1e-8,
+        'bounded_pressure': peaks['pressure_pa'] <= pressure_cap+1e-8,
+        'bounded_adhesion_force': peaks['adhesion_force_n'] <= pressure_cap*area+1e-8,
         'bounded_contact_penetration': peaks['penetration_m'] <= c['maximum_penetration_m'],
         'zero_applied_body_and_generalized_forces': peaks['applied_body_force']==0.0 and peaks['applied_generalized_force']==0.0,
         # The failed no-pump attempt may physically hit its chassis. It must
         # never inherit the successful vehicle's no-chassis-support claim.
-        'successful_climb_not_assisted_by_chassis_contact': name != 'transition' or peaks['chassis_surface_normal_n'] <= 1e-6,
+        'successful_climb_not_assisted_by_chassis_contact': (not oracle['task_motion_success'] if hardware else name != 'transition') or peaks['chassis_surface_normal_n'] <= 1e-6,
+        'successful_climb_not_assisted_by_carried_hardware_contact': not oracle['task_motion_success'] or peaks['carried_hardware_surface_normal_n'] <= 1e-6,
     }
     status = ('failed' if not all(native_checks.values()) else
               'incomplete' if oracle['status'] == 'unknown' else oracle['status'])
-    report = {'id':'ground_to_wall' if name=='transition' else 'pump_off','source_case':name,
-        'episode_id':episode_id,'label':'连续地面转墙并爬升停车' if name=='transition' else '同车无负压对照',
+    report = {'id':('ground_to_wall' if name=='transition' else 'pump_off')+('_hardware' if hardware else ''),'source_case':name,
+        'episode_id':episode_id,'label':('载荷与密封候选：' if hardware else '理想吸附基准：')+('连续地面转墙并爬升停车' if name=='transition' else '同车无负压对照'),
         'status':status,'oracle_status':oracle['status'],'oracle':oracle,'native_checks':native_checks,
         'task_motion_success': oracle['task_motion_success'], 'metrics':oracle['metrics'],
         'checks':dict(oracle['checks'],**native_checks),'physical_peaks':peaks,
@@ -331,7 +397,12 @@ def run_case(name: str, c: dict[str, Any], output: Path, render: bool = False) -
         'model':{'nq':model.nq,'nv':model.nv,'nu':model.nu,'neq':model.neq,
                  'mass_kg':float(sum(model.body_mass)), 'wheel_order':list(WHEELS),
                  'chassis_collision_enabled':bool(model.geom_contype[model.geom('chassis').id]),
-                 'pressure_model':'four_independent_existing_Chamber_models',
+                 'vacuum_model':'hardware' if hardware else 'ideal',
+                 'initial_chassis_frame_center_of_mass_m':initial_com,
+                 'effective_area_each_m2':area,'operating_pressure_cap_pa':pressure_cap,
+                 'added_hardware_and_seal_mass_kg':float(sum(model.body_mass))-c['chassis']['mass']-4*d['wheel_mass'],
+                 'pressure_model':'single_shared_manifold_and_delayed_valves' if hardware else 'four_independent_existing_Chamber_models',
+                 'seal_geometry_period_s':stride*c['timestep_s'] if hardware else None,
                  'brake_mode':'ideal_wheel_encoder_angle_feedback_through_bounded_velocity_servos'},
         'warnings':[int(w.number) for w in data.warning], 'source_duration_s':float(data.time),
         'trace_rows':len(rows),'runtime_wall_s':time.monotonic()-started,
@@ -340,7 +411,17 @@ def run_case(name: str, c: dict[str, Any], output: Path, render: bool = False) -
             'episode_id':episode_id,
             'fps':fps,'frame_count':nframes,'source_start_s':0.0,'source_end_s':float(data.time),
             'playback_duration_s':nframes/fps if nframes else None,'realtime_speed':1.0},
-        'render_warning':render_warning,'limitations':LIMITATIONS}
+        'render_warning':render_warning,'limitations':HARDWARE_LIMITATIONS if hardware else LIMITATIONS}
+    if hardware:
+        report.update(vacuum_system_electrical_energy_upper_bound_j=energy,
+            legacy_pump_energy_field_basis='compatibility_alias_for_whole_vacuum_system_upper_bound_estimate',
+            seal_geometry=seal.chamber_geometry(c['seal']),
+            actual_chamber_volumes_m3=network.config['pneumatics'].get('chamber_volumes_m3'),
+            reason=('载荷/密封候选未完成全车上墙、追加爬升与保持。原理想结果保留；查看密封开口、腔压和原生接触。'
+                if name == 'transition' and not oracle['task_motion_success'] else
+                '同一载荷与密封几何关闭泵，未完成上墙保持；这是负控通过，车辆任务仍失败。'
+                if name == 'no_pump' and not oracle['task_motion_success'] else
+                '查看独立物理评分；本案例不外推实际硬件。'))
     (output/'report.json').write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n')
     return report
 
@@ -351,8 +432,13 @@ def main() -> int:
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--case',choices=CASES,action='append')
     parser.add_argument('--render',action='store_true')
+    parser.add_argument('--vacuum-model',choices=('ideal','hardware'),default='ideal')
     args = parser.parse_args()
     c = load_config(args.config)
+    c['vacuum_model'] = args.vacuum_model
+    if args.vacuum_model == 'hardware':
+        c['seal'] = seal.load_config()
+        c['hardware'] = load_hardware(seal_config=c['seal'])
     args.output.mkdir(parents=True,exist_ok=True)
     reports = []
     for name in args.case or CASES:
@@ -360,7 +446,7 @@ def main() -> int:
             reports.append(run_case(name,c,args.output/name,args.render))
         except Exception as exc:
             warning = f'{type(exc).__name__}: {exc}'
-            item = {'id':'ground_to_wall' if name=='transition' else 'pump_off',
+            item = {'id':('ground_to_wall' if name=='transition' else 'pump_off')+('_hardware' if args.vacuum_model=='hardware' else ''),
                     'source_case':name,'status':'incomplete','oracle_status':'unknown',
                     'task_motion_success':False,'warning':warning}
             (args.output/name).mkdir(parents=True,exist_ok=True)
@@ -370,7 +456,7 @@ def main() -> int:
     report = {'schema':'fishbot.ground-wall.v1','scope':'simulation',
               'generated_at':datetime.now(timezone.utc).isoformat(),'label':c['label'],
               'status':'passed' if all(x['status']=='passed' for x in reports) else 'failed' if any(x['status']=='failed' for x in reports) else 'incomplete',
-              'config':c,'cases':reports,'limitations':LIMITATIONS}
+              'config':c,'cases':reports,'limitations':HARDWARE_LIMITATIONS if args.vacuum_model=='hardware' else LIMITATIONS}
     (args.output/'report.json').write_text(json.dumps(report,indent=2,ensure_ascii=False)+'\n')
     print(json.dumps({'status':report['status'],'cases':[(x['id'],x['status']) for x in reports],
                       'report':str(args.output/'report.json')},ensure_ascii=False))

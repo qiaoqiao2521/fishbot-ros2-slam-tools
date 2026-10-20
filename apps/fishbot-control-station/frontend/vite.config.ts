@@ -20,6 +20,7 @@ const proxy = workbenchProxy(profile)
 const sceneReport = process.env.FISHBOT_SCENE_REPORT || path.join(os.homedir(), '.cache/fishbot/scene-validation/latest/report.json')
 const hardwareReport = process.env.FISHBOT_HARDWARE_REPORT || path.join(os.homedir(), '.cache/fishbot/hardware-lab/latest/report.json')
 const transitionVideo = process.env.FISHBOT_TRANSITION_VIDEO || path.join(os.homedir(), '.cache/fishbot/hardware-lab/latest/transition.mp4')
+const hardwareModelVideo = process.env.FISHBOT_HARDWARE_MODEL_VIDEO || path.join(os.homedir(), '.cache/fishbot/hardware-lab/latest/transition-hardware.mp4')
 export default defineConfig({
   plugins: [react(), {
     name: 'fishbot-scene-report',
@@ -27,11 +28,13 @@ export default defineConfig({
       server.middlewares.use(sceneReportMiddleware(sceneReport))
       server.middlewares.use(sceneReportMiddleware(hardwareReport, '/hardware-lab/report'))
       server.middlewares.use(transitionVideoMiddleware(transitionVideo))
+      server.middlewares.use(transitionVideoMiddleware(hardwareModelVideo, '/hardware-lab/transition-hardware.mp4'))
     },
     configurePreviewServer(server) {
       server.middlewares.use(sceneReportMiddleware(sceneReport))
       server.middlewares.use(sceneReportMiddleware(hardwareReport, '/hardware-lab/report'))
       server.middlewares.use(transitionVideoMiddleware(transitionVideo))
+      server.middlewares.use(transitionVideoMiddleware(hardwareModelVideo, '/hardware-lab/transition-hardware.mp4'))
     },
   }],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },

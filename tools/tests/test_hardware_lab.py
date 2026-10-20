@@ -74,4 +74,14 @@ class HardwareLab(unittest.TestCase):
             self.assertEqual(section['status'],'failed')
             self.assertEqual(len(section['cases']),1)
 
+    def test_failed_hardware_candidate_does_not_erase_ideal_success(self):
+        with tempfile.TemporaryDirectory() as root:
+            root=Path(root)
+            ideal=root/'ideal.json'; ideal.write_text('{"cases":[{"id":"ground_to_wall","status":"passed","task_motion_success":true}]}')
+            hardware=root/'hardware.json'; hardware.write_text('{"cases":[{"id":"ground_to_wall_hardware","status":"failed","task_motion_success":false}]}')
+            section=lab.collect(transition=ideal,hardware_transition=hardware,output=root/'out')['sections'][2]
+            self.assertEqual(section['status'],'failed')
+            self.assertEqual([c['status'] for c in section['cases']],['passed','failed'])
+            self.assertFalse(section['cases'][1]['metrics']['task_motion_success'])
+
 if __name__=='__main__': unittest.main()

@@ -45,7 +45,11 @@ export function HardwareLabPanel({ initialReport }: { initialReport?: unknown })
         <p className="hardware-lab-basis"><span>依据</span>{section.basis}</p>
         {section.id === 'suction' && section.cases.some((item) => item.id === 'ground_to_wall') && <figure className="hardware-lab-transition">
           <video controls preload="none" playsInline aria-label="仿真整车从地面转上墙录像" src="/hardware-lab/transition.mp4">当前浏览器无法播放录像。</video>
-          <figcaption>仿真整车从地面转上墙。采用专用吸附底盘，不代表 Jackal J100 或真机已具备该能力。录像呈现过程，验收以原始案例指标为准。</figcaption>
+          <figcaption>理想吸附基准：仿真整车从地面转上墙。采用专用吸附底盘，不代表 Jackal J100 或真机已具备该能力。录像呈现过程，验收以原始案例指标为准。</figcaption>
+        </figure>}
+        {section.id === 'suction' && section.cases.some((item) => item.id === 'ground_to_wall_hardware') && <figure className="hardware-lab-transition">
+          <video controls preload="none" playsInline aria-label="含泵阀载荷与固定裙边间隙的整车转墙候选录像" src="/hardware-lab/transition-hardware.mp4">当前浏览器无法播放录像。</video>
+          <figcaption>硬件候选：加入泵阀载荷与固定裙边间隙。录像展示试验过程，失败案例不代表上墙成功；验收以对应案例结果和原始指标为准。</figcaption>
         </figure>}
         {section.retained && <p className="hardware-lab-retained">包含上次读取的证据，本次缺失部分尚未更新。</p>}
         {section.cases.length === 0 ? <p className="hardware-lab-case-empty">该分项尚无案例。</p> : <ul className="hardware-lab-cases">{section.cases.map((item, index) => <li key={`${index}-${item.id}`} data-hardware-case-id={item.id}>

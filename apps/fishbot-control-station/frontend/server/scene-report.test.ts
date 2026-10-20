@@ -13,7 +13,7 @@ async function fixture(route?: string, video = false) {
   const directory = await mkdtemp(path.join(tmpdir(), 'fishbot-scene-report-'))
   cleanup.push(() => rm(directory, { recursive: true, force: true }))
   const file = path.join(directory, 'report.json')
-  const handler = video ? transitionVideoMiddleware(file) : sceneReportMiddleware(file, route)
+  const handler = video ? transitionVideoMiddleware(file, route) : sceneReportMiddleware(file, route)
   const server: Server = createServer((request, response) => {
     void handler(request, response, () => { response.statusCode = 404; response.end('not found') })
   })
@@ -25,6 +25,22 @@ async function fixture(route?: string, video = false) {
 }
 
 describe('editable scene report endpoint', () => {
+  it('serves a separate fixed hardware-model recording with seek support and no arbitrary paths', async () => {
+    const route = '/hardware-lab/transition-hardware.mp4'
+    const { file, url } = await fixture(route, true)
+    await writeFile(file, Buffer.from([10, 20, 30, 40, 50, 60]))
+    const response = await fetch(`${url}${route}?path=/etc/passwd`, { headers: { Range: 'bytes=2-4' } })
+    expect(response.status).toBe(206)
+    expect(response.headers.get('content-type')).toBe('video/mp4')
+    expect(response.headers.get('content-range')).toBe('bytes 2-4/6')
+    expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([30, 40, 50])
+    expect((await fetch(`${url}/hardware-lab/transition.mp4`)).status).toBe(404)
+    expect((await fetch(`${url}${route}/other`)).status).toBe(404)
+    const mutation = await fetch(`${url}${route}`, { method: 'POST' })
+    expect(mutation.status).toBe(405)
+    expect(mutation.headers.get('allow')).toBe('GET')
+  })
+
   it('serves the exact transition video bytes with the video MIME type', async () => {
     const { file, url } = await fixture(undefined, true)
     const bytes = Buffer.from([0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50])

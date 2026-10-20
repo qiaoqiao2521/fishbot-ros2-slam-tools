@@ -1,0 +1,110 @@
+{
+  "label": "Single-pump vacuum hardware reference conversion",
+  "basis": "manufacturer_component_specs_with_assumed_installation",
+  "installation_mode": "skirt_shoes",
+  "seal_config": "vacuum_seal.json",
+  "sources": {
+    "pump": {
+      "manufacturer": "KNF",
+      "model": "N 86 KNDC, 24 V DC",
+      "product_url": "https://knf.com/en/uk/solutions/pumps/series/diaphragm-gas-pump-n-86",
+      "datasheet_url": "https://knf.com/fileadmin/Global_files/Downloads/Product_OEM_Process/Datasheets/KNF-Datasheet_N86_05_2023_web.pdf",
+      "pages": [1, 3],
+      "facts": "0.6 kg; drawing envelope 106 x 43 x 74 mm; 6.5 L/min STP at atmosphere; 100 mbar absolute ultimate vacuum; 24 V and maximum 0.65 A.",
+      "curve_basis": "Coarse manual readings of the N86 KNDC vacuum-side plot on page 3; interpolated points are approximate, not manufacturer tabulated numerical data. The 100 and 1000 mbar endpoints use the specified endpoint ratings. The datasheet says STP without defining its temperature/pressure; this model explicitly assumes 273.15 K and 101325 Pa for conversion to ambient-volume leakage."
+    },
+    "valves": {
+      "manufacturer": "Festo",
+      "model": "MHA1-M1H-2/2G-0,9-HC, part 197038",
+      "datasheet_url": "https://media.festo.com/media/204688_documentation.pdf",
+      "pages": [4, 5, 7, 8, 24, 63],
+      "facts": "2/2 normally closed vacuum-compatible valve; vacuum at connection 2; 10 g, 24 V DC, 1 W, opening 4 ms and closing 5 ms; 10 mm family width.",
+      "geometry_basis": "Conservative 42 x 10 x 28 mm collision envelope covering valve and connector; simplified assumed bounding box, not a CAD reproduction. Eight valves provide four isolation and four atmospheric vent paths."
+    },
+    "hose": {
+      "manufacturer": "Festo",
+      "model": "PUN-H-6X1-BL, part 197384",
+      "datasheet_url": "https://ftp.festo.com/public/PNEUMATIC/SOFTWARE_SERVICE/DataSheet/EN_GB/197384.pdf",
+      "facts": "OD 6 mm, ID 4 mm, 0.0183 kg/m; vacuum rating -0.95 bar; flow-relevant bending radius 26 mm.",
+      "geometry_basis": "Fixed straight collision segments and rigidly carried mass. Endpoints, route length and bends are installation assumptions. Tube flexibility, bend losses and fatigue are not simulated."
+    }
+  },
+  "pump": {
+    "mass_kg": 0.6,
+    "dimensions_m": [0.106, 0.043, 0.074],
+    "position_m": [-0.065, 0.0, 0.225],
+    "voltage_v": 24.0,
+    "maximum_current_a": 0.65,
+    "electrical_power_upper_bound_w": 15.6,
+    "absolute_pressure_pa_flow_stp_l_min": [[10000, 0.0], [20000, 0.24], [40000, 1.2], [60000, 2.65], [80000, 4.45], [100000, 6.5]],
+    "inertia_basis": "Uniform envelope box approximation. Manufacturer gives total mass and outside dimensions, not the internal COM or inertia tensor.",
+    "position_basis": "Assumed rear-top mount, bottom 188 mm above chassis frame origin; not a finished mechanical design."
+  },
+  "installation": {
+    "mount_plate": {
+      "dimensions_m": [0.30, 0.14, 0.003],
+      "position_m": [0.0, 0.0, 0.1855],
+      "density_kg_m3": 2700.0,
+      "basis": "Assumed solid aluminium plate without holes. Mass is density times volume."
+    },
+    "manifold": {
+      "mass_kg": 0.12,
+      "dimensions_m": [0.08, 0.11, 0.024],
+      "position_m": [0.075, 0.0, 0.200],
+      "basis": "Assumed custom manifold including fittings; outside envelope and mass allowance, not a sourced commercial part."
+    },
+    "valves": {
+      "mass_each_kg": 0.01,
+      "dimensions_m": [0.042, 0.010, 0.028],
+      "position_x_m": 0.075,
+      "position_z_m": 0.226,
+      "y_positions_m": [-0.049, -0.035, -0.021, -0.007, 0.007, 0.021, 0.035, 0.049],
+      "opening_s": 0.004,
+      "closing_s": 0.005,
+      "power_each_w": 1.0,
+      "basis": "Sourced valve mass, rating and switching delay; assumed connector envelope and mounting positions."
+    },
+    "hose": {
+      "outer_diameter_m": 0.006,
+      "inner_diameter_m": 0.004,
+      "linear_mass_kg_m": 0.0183,
+      "routing_waypoints_m": [
+        [[0.090, 0.045, 0.210], [0.150, 0.090, 0.195]],
+        [[0.090, -0.045, 0.210], [0.150, -0.090, 0.195]],
+        [[0.060, 0.045, 0.210], [-0.150, 0.090, 0.195]],
+        [[0.060, -0.045, 0.210], [-0.150, -0.090, 0.195]]
+      ],
+      "pump_route_m": [[-0.065, 0.025, 0.250], [-0.010, 0.080, 0.250], [0.075, 0.045, 0.210]],
+      "basis": "Sourced tube dimensions and linear mass, assumed retained routing waypoints; each final point is derived from its real skirt backplate port. No rotating pneumatic interfaces, straight segments only, no flexural dynamics."
+    },
+    "electrics": {
+      "mass_kg": 0.10,
+      "dimensions_m": [0.07, 0.05, 0.02],
+      "position_m": [-0.065, -0.065, 0.198],
+      "basis": "Assumed driver, cable and connector allowance. Existing vehicle battery is retained; no new battery is silently assigned zero mass. Electrical compatibility and capacity remain unverified."
+    }
+  },
+  "pneumatics": {
+    "ambient_pressure_pa": 101325.0,
+    "ambient_temperature_k": 293.15,
+    "reference_pressure_pa": 101325.0,
+    "reference_temperature_k": 273.15,
+    "operating_vacuum_limit_pa": 8000.0,
+    "manifold_internal_volume_m3": 0.00005,
+    "pump_internal_volume_m3": 0.000005,
+    "sealed_leak_conductance_each_m3_s_pa": 0.0000000025,
+    "vent_conductance_each_m3_s_pa": 0.000001,
+    "manifold_leak_conductance_m3_s_pa": 0.0000000001,
+    "basis": "One pump supplies a shared manifold and delayed isolation/vent valves. High conductance open branches are mixed by gas-volume conservation; no per-wheel copy of total pump flow. Per-branch chamber volume is derived from the real nominal skirt void plus its actual hose inner volume. Common volume is assumed manifold/pump void plus main-hose inner volume. Leak values and STP conversion conditions are explicit reduced-order assumptions. The 8 kPa operating cap is a relief/control assumption retained from the previous experiment, not the pump ultimate-vacuum rating.",
+    "regulation_basis": "Assumed ideal average-duty regulator at the inherited 8 kPa operating cap. Pump dynamics and pressure ripple are not resolved; duty and one-pump average flow are reported.",
+    "energy_basis": "Pump running power uses its 24 V x 0.65 A nameplate maximum times reported average duty as an upper-bound estimate, plus rated energized valve power. Not measured consumption; no total vehicle electrical power claim."
+  },
+  "limitations": [
+    "This is a source-attributed pump and valve installation envelope with rigid mass and collision, not manufacturing CAD or a validated bill of materials.",
+    "Valve/connector envelopes, all mounting positions, manifold mass and electronics allowance are assumptions. Default skirt shoes are fixed to the car and need no rotary pneumatic union.",
+    "Pump curve points are coarse manual estimates from a published graph; actual installed flow, seal leakage and electrical power require measurement.",
+    "Pneumatic branches share one pump. Mixing neglects finite branch pressure gradients and bend losses; contact loss opens leakage during physical valve switching delay.",
+    "Flexible hose deformation, rotating seal drag, vibration isolation, thermal loading and cable routing are not resolved.",
+    "The separate seal model owns four fixed underbody skirt shoes and their actual geometric area. This file does not make an ordinary J100 tire a suction cup."
+  ]
+}

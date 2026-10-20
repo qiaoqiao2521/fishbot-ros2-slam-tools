@@ -59,6 +59,24 @@ class GroundWallControlTests(unittest.TestCase):
         self.assertIsNone(tree.find('equality'))
         self.assertIsNone(tree.find('.//mocap'))
 
+    def test_hardware_mode_puts_adhesion_on_real_pads_and_carries_hardware_mass(self):
+        import mujoco
+        c = plant.load_config()
+        c['seal'] = plant.seal.load_config()
+        c.update(vacuum_model='hardware',hardware=plant.load_hardware(seal_config=c['seal']))
+        xml = plant.model_xml(c)
+        tree = ET.fromstring(xml)
+        self.assertEqual([a.get('body') for a in tree.findall('.//actuator/adhesion')],
+                         plant.seal.pad_body_names(c['seal']))
+        self.assertEqual(tree.find('.//geom[@name="floor"]').get('group'),'1')
+        model = mujoco.MjModel.from_xml_string(xml)
+        expected = c['chassis']['mass']+4*c['drivetrain']['wheel_mass']
+        expected += sum(p['mass_kg'] for p in plant.hardware_parts(c['hardware']))
+        expected += 4*c['seal']['module_mass_kg']
+        self.assertAlmostEqual(float(sum(model.body_mass)),expected,places=9)
+        self.assertEqual((model.nq,model.nv,model.nu,model.neq),(11,10,8,0))
+        self.assertLess(plant.seal.effective_area(c['seal']),.004)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -29,9 +29,9 @@ export function sceneReportMiddleware(file: string, route = '/scene-validation/r
 }
 
 /** Serve only the selected transition recording, never its containing directory. */
-export function transitionVideoMiddleware(file: string) {
+export function transitionVideoMiddleware(file: string, route = '/hardware-lab/transition.mp4') {
   return (request: IncomingMessage, response: ServerResponse, next: () => void) => {
-    if (request.url?.split('?')[0] !== '/hardware-lab/transition.mp4') return next()
+    if (request.url?.split('?')[0] !== route) return next()
     response.setHeader('Cache-Control', 'no-store')
     if (request.method !== 'GET') {
       response.statusCode = 405

@@ -55,9 +55,32 @@ describe('hardware lab panel', () => {
     expect(html).not.toContain('autoPlay')
     expect(html).not.toContain('autoplay')
     expect(html).toContain('不代表 Jackal J100 或真机已具备该能力')
+    expect(html).toContain('理想吸附基准')
     expect(html).toContain('试验未满足停车条件')
     const unrelated = renderToStaticMarkup(<HardwareLabPanel initialReport={{ ...fixture, sections: [{ ...fixture.sections[0], cases: transition.cases }, ...fixture.sections.slice(1)] }} />)
     expect(unrelated).not.toContain('<video')
+  })
+
+  it('keeps the ideal recording beside a distinct failed hardware candidate and its no-pump result', () => {
+    const suction = { ...fixture.sections[2], status: 'failed', cases: [
+      { id: 'ground_to_wall', label: '理想整车转墙', status: 'passed', reason: '理想密封基准完成', metrics: {} },
+      { id: 'ground_to_wall_hardware', label: '含载荷转墙候选', status: 'failed', reason: '裙边泄漏后未完成转墙', metrics: { payload_kg: 2.0 } },
+      { id: 'pump_off_hardware', label: '同载荷无泵对照', status: 'passed', reason: '负控未完成转墙，符合预期', metrics: { task_motion_success: false } },
+    ] }
+    const html = renderToStaticMarkup(<HardwareLabPanel initialReport={{ ...fixture, sections: [...fixture.sections.slice(0, 2), suction] }} />)
+    expect(html.match(/<video /g)).toHaveLength(2)
+    expect(html).toContain('src="/hardware-lab/transition.mp4"')
+    expect(html).toContain('src="/hardware-lab/transition-hardware.mp4"')
+    expect(html).toContain('理想吸附基准')
+    expect(html).toContain('泵阀载荷与固定裙边间隙')
+    expect(html).toContain('失败案例不代表上墙成功')
+    expect(html).toContain('裙边泄漏后未完成转墙')
+    expect(html).toContain('pump_off_hardware')
+    expect(html).toContain('task_motion_success')
+    expect(html).not.toContain('autoplay')
+    const hardwareOnly = renderToStaticMarkup(<HardwareLabPanel initialReport={{ ...fixture, sections: [...fixture.sections.slice(0, 2), { ...suction, cases: suction.cases.slice(1) }] }} />)
+    expect(hardwareOnly).toContain('src="/hardware-lab/transition-hardware.mp4"')
+    expect(hardwareOnly).not.toContain('src="/hardware-lab/transition.mp4"')
   })
 
   it('only GETs the fixed report endpoint once and keeps future metadata compatible', async () => {
