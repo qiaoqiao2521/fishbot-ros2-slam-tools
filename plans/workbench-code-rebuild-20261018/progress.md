@@ -1,6 +1,6 @@
 # 实施进度
 
-## 2026-10-20 无人机扩展（实施中）
+## 2026-10-20 无人机扩展（本轮已交付）
 
 用户批准在同一工作台增加 `/drone-station`，先航点、再 EGO 静态绕障。原 SO101 默认文档与入口保持；RobotStation 按平台选择动作和独立执行 API。
 飞行代码位于独立本地项目 `/home/muqiao/dev/ros2/projects/drone`，没有把 ROS/PX4 依赖加入 Web 构建。
@@ -9,7 +9,10 @@
 已通过原 SO101 服务 8 项、无人机服务 5 项、前端 Jest 40 项、无人机无运动浏览器 16 项和 SO101 既有无运动 13 项。最终生产构建通过，保留上游两项包体积警告。
 网页任务 `08793a65-5ed6-4573-b4ed-a98a47d8d3fc` 完成三航点、高度变化、返航、落地/disarm，Gazebo 峰速 0.8156m/s。复制改目标的新任务 `d0d4f904-bce3-4a6a-aa8c-9746342ae279` 空中刷新零重发，取消后实际落地；原任务快照保留。
 MCAP 的 URL 后缀、跨端口资源及 Collada 图片引用已修复。原记录通过原生 seek/播放/暂停/倒退，零控制写请求或 WebSocket，五种官方网格及纹理全 200。浏览器证据在忽略的 `workbench-review-tests/output/drone-replay-final/`、`drone-execution/`、`drone-task-drafts/`。
-EGO 执行器已通过 CLI 静态障碍和移动障碍的完整返航回合，以及深度中断、暂停恢复和障碍内目标的真实故障落地。但最后同一网页示例 `f24689d9-f62e-4f9a-8b95-c8f1e9efb2ff` 暴露规划器深度配对超时，失败已保留，执行器正在进行同 stamp 配对适配及重验。尚未宣布全部交付或切换常用入口。
+EGO 执行器通过 CLI 静态障碍和移动障碍的完整返航回合，以及深度中断、暂停恢复和障碍内目标的真实故障落地。网页先后暴露传感输入间隔与规划速度预算问题；原失败保留，执行源使用同 stamp 配对、匹配的 SensorDataQoS 和保守各轴参数，保持 PVA 与原失效阈值。
+最终同一网页示例 `5c1ac934-4843-477a-ad84-4539eed8e4ed` 完成三航点、规划返航及落地/disarm，Gazebo 峰速 0.6493m/s、MAVSDK 峰速 0.5579m/s，机体保守净空 0.3079m。根独立检查五段最后一秒真值，最大误差均小于 0.5m；本轮无碰撞。实际输入经导入/保存/刷新保持，只有一次起飞 POST。
+常用入口已切至 <http://127.0.0.1:5186/drone-station>，旧 SO101 入口保留。最终 EGO MCAP 从 5187 录制后在 5186 原生 seek/播放/暂停/倒退通过，五种官方网格与纹理全 200，零控制写请求或 WebSocket。SO101 原脚本在 5186 再次 13 项通过，零运动请求。隔离 5187 服务已退出。
+最终证据位于 `drone-ego-execution-sensor-qos/`、`drone-replay-ego-5186/` 和 `station-task-drafts-5186/`；旧失败及 5187 回归均独立保留。传感停滞的底层 Fast DDS 原因未完全证明，不把单个通过回合扩大成可靠性保证。范围限本机单架、静态障碍、Gazebo 理想定位；起飞/降落由 PX4 执行，未验起降段避障。
 完整状态、故障记录和交付由根串行记录于 `/home/muqiao/文档/ChatGPT/ros2/plans/drone-workbench-20261020/`。Knowledge closeout: already_covered。
 
 ## Current

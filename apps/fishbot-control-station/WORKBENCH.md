@@ -170,5 +170,6 @@ STATION_TEST_URL=http://127.0.0.1:5187 node workbench-review-tests/drone-task-dr
 
 `drone-execution.cjs` 会实际执行航点和取消；设置 `DRONE_REPLAY_TASK_ID=<已有完整任务ID>` 时只验回放。
 `drone-ego-execution.cjs` 会从同一网页导入绕障示例并实际飞行。并行运行浏览器无运动检查可以，但本机飞行使用同一个实例时应依次进行。
+这两个脚本接受 `DRONE_QA_OUTPUT=/absolute/path/to/new-output`；复验时使用新目录保留之前的成功和失败证据。
 
 浏览器检查使用隔离上下文。真实飞行与故障验收的当前结果以研究仓 `plans/drone-workbench-20261020/progress.md` 为准。

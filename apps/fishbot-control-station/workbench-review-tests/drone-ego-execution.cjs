@@ -7,7 +7,7 @@ const upstream = createRequire(path.join(__dirname, '../workbench/package.json')
 const { chromium, expect } = upstream('@playwright/test');
 const base = process.env.STATION_TEST_URL ?? 'http://127.0.0.1:5187';
 const source = '/home/muqiao/dev/ros2/projects/drone/examples/ego-obstacle.json';
-const output = path.join(__dirname, 'output/drone-ego-execution');
+const output = process.env.DRONE_QA_OUTPUT ?? path.join(__dirname, 'output/drone-ego-execution');
 fs.mkdirSync(output, { recursive: true });
 const result = { passed: false, checks: [], posts: [], pageErrors: [] };
 const save = () => fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(result, null, 2));
