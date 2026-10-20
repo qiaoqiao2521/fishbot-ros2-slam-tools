@@ -1,157 +1,5 @@
 {
   "configById": {
-    "Image!so101camera": {
-      "lichtblickPanelTitle": "SO101 · 原始录像",
-      "imageMode": {
-        "imageTopic": "/so101/camera/overview"
-      }
-    },
-    "3D!so101object": {
-      "lichtblickPanelTitle": "物体姿态 · 原始记录",
-      "followTf": "world",
-      "followMode": "follow-pose",
-      "cameraState": {
-        "distance": 0.8,
-        "perspective": true,
-        "phi": 40,
-        "thetaOffset": 45,
-        "target": [
-          0,
-          0,
-          0
-        ],
-        "targetOffset": [
-          0.21,
-          0,
-          0.02
-        ],
-        "targetOrientation": [
-          0,
-          0,
-          0,
-          1
-        ],
-        "fovy": 45,
-        "near": 0.002,
-        "far": 5
-      },
-      "scene": {
-        "backgroundColor": "#182126",
-        "transforms": {
-          "axisScale": 0.03,
-          "showLabel": false
-        }
-      },
-      "topics": {
-        "/so101/scene": {
-          "visible": true
-        }
-      },
-      "layers": {
-        "so101-grid": {
-          "visible": true,
-          "frameLocked": true,
-          "label": "0.05m 网格",
-          "instanceId": "so101-grid",
-          "layerId": "foxglove.Grid",
-          "size": 0.6,
-          "divisions": 12,
-          "lineWidth": 1,
-          "color": "#516371",
-          "position": [
-            0.21,
-            0,
-            0
-          ],
-          "rotation": [
-            0,
-            0,
-            0
-          ],
-          "order": 1
-        }
-      }
-    },
-    "Plot!so101contact": {
-      "lichtblickPanelTitle": "双指接触力",
-      "paths": [
-        {
-          "value": "/so101/contact.fixed_finger_n",
-          "label": "固定指",
-          "color": "#efb366",
-          "timestampMethod": "receiveTime",
-          "enabled": true
-        },
-        {
-          "value": "/so101/contact.moving_finger_n",
-          "label": "活动指",
-          "color": "#4ccdc4",
-          "timestampMethod": "receiveTime",
-          "enabled": true
-        }
-      ],
-      "showXAxisLabels": true,
-      "showYAxisLabels": true,
-      "showLegend": true,
-      "legendDisplay": "top",
-      "showPlotValuesInLegend": true,
-      "isSynced": true,
-      "xAxisVal": "timestamp",
-      "sidebarDimension": 180,
-      "yAxisLabel": "N"
-    },
-    "Plot!so101joints": {
-      "lichtblickPanelTitle": "关节角度",
-      "paths": [
-        {
-          "value": "/so101/joints.position.shoulder_pan",
-          "label": "肩平转",
-          "color": "#56b4e9",
-          "timestampMethod": "receiveTime",
-          "enabled": true
-        },
-        {
-          "value": "/so101/joints.position.shoulder_lift",
-          "label": "肩俯仰",
-          "color": "#e69f00",
-          "timestampMethod": "receiveTime",
-          "enabled": true
-        },
-        {
-          "value": "/so101/joints.position.elbow_flex",
-          "label": "肘",
-          "color": "#009e73",
-          "timestampMethod": "receiveTime",
-          "enabled": true
-        },
-        {
-          "value": "/so101/joints.position.wrist_flex",
-          "label": "腕俯仰",
-          "color": "#cc79a7",
-          "timestampMethod": "receiveTime",
-          "enabled": true
-        },
-        {
-          "value": "/so101/joints.position.wrist_roll",
-          "label": "腕旋转",
-          "color": "#f0e442",
-          "timestampMethod": "receiveTime",
-          "enabled": true
-        }
-      ],
-      "showXAxisLabels": true,
-      "showYAxisLabels": true,
-      "showLegend": true,
-      "legendDisplay": "top",
-      "showPlotValuesInLegend": true,
-      "isSynced": true,
-      "xAxisVal": "timestamp",
-      "sidebarDimension": 180,
-      "yAxisLabel": "rad"
-    },
-    "EpisodeReview!so101episode": {
-      "lichtblickPanelTitle": "回合结果与阶段"
-    },
     "RobotStation!so101station": {
       "lichtblickPanelTitle": "SO101 场景与程序",
       "station": {
@@ -162,99 +10,63 @@
             "name": "SO101",
             "kind": "robot",
             "parent": "world",
-            "position": [
-              0,
-              0,
-              0
-            ]
+            "position": [0, 0, 0]
           },
           {
             "id": "jaw",
             "name": "双指夹爪",
             "kind": "tool",
             "parent": "base",
-            "position": [
-              0,
-              0,
-              0
-            ]
+            "position": [0, 0, 0]
           },
           {
             "id": "pick",
             "name": "取料坐标系",
             "kind": "frame",
             "parent": "world",
-            "position": [
-              0.24,
-              -0.13,
-              0
-            ]
+            "position": [0.24, -0.13, 0]
           },
           {
             "id": "cube",
             "name": "待抓方块",
             "kind": "object",
             "parent": "pick",
-            "position": [
-              0,
-              0,
-              0.01
-            ]
+            "position": [0, 0, 0.01]
           },
           {
             "id": "approach",
             "name": "接近点",
             "kind": "target",
             "parent": "pick",
-            "position": [
-              0,
-              0,
-              0.08
-            ]
+            "position": [0, 0, 0.08]
           },
           {
             "id": "grasp",
             "name": "抓取点",
             "kind": "target",
             "parent": "pick",
-            "position": [
-              0,
-              0,
-              0.02
-            ]
+            "position": [0, 0, 0.02]
           },
           {
             "id": "place",
             "name": "放料坐标系",
             "kind": "frame",
             "parent": "world",
-            "position": [
-              0.24,
-              0.14,
-              0
-            ]
+            "position": [0.24, 0.14, 0]
           },
           {
             "id": "release",
             "name": "释放点",
             "kind": "target",
             "parent": "place",
-            "position": [
-              0,
-              0,
-              0.03
-            ]
+            "position": [0, 0, 0.03]
           },
           {
             "id": "clear",
             "name": "脱离点",
             "kind": "target",
             "parent": "place",
-            "position": [
-              0,
-              0,
-              0.1
-            ]
+            "position": [0, 0, 0.1]
           }
         ],
         "program": [
@@ -310,6 +122,128 @@
         "notes": "程序草稿。接近高度、绕障、释放和回位需由执行器规划验证。坐标系仅支持平移，尚未定义工具 TCP。"
       },
       "executionTaskId": ""
+    },
+    "3D!so101live": {
+      "lichtblickPanelTitle": "SO101 · 实时三维 / 编辑预览",
+      "followTf": "world",
+      "followMode": "follow-pose",
+      "cameraState": {
+        "distance": 0.9,
+        "perspective": true,
+        "phi": 40,
+        "thetaOffset": 45,
+        "target": [0, 0, 0],
+        "targetOffset": [0.2, 0, 0.1],
+        "targetOrientation": [0, 0, 0, 1],
+        "fovy": 45,
+        "near": 0.002,
+        "far": 5
+      },
+      "scene": {
+        "backgroundColor": "#182126",
+        "transforms": {
+          "axisScale": 0.03,
+          "showLabel": false
+        }
+      },
+      "topics": {
+        "/so101/live/scene": {
+          "visible": true
+        }
+      },
+      "layers": {
+        "so101-grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "0.05m 网格",
+          "instanceId": "so101-grid",
+          "layerId": "foxglove.Grid",
+          "size": 0.6,
+          "divisions": 12,
+          "lineWidth": 1,
+          "color": "#516371",
+          "position": [0.21, 0, 0],
+          "rotation": [0, 0, 0],
+          "order": 1
+        }
+      }
+    },
+    "Plot!so101livecontact": {
+      "lichtblickPanelTitle": "实时双指接触力",
+      "paths": [
+        {
+          "value": "/so101/live/contact.fixed_finger_n",
+          "label": "固定指",
+          "color": "#efb366",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/so101/live/contact.moving_finger_n",
+          "label": "活动指",
+          "color": "#4ccdc4",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "top",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 180,
+      "yAxisLabel": "N"
+    },
+    "Plot!so101livejoints": {
+      "lichtblickPanelTitle": "实时关节角度",
+      "paths": [
+        {
+          "value": "/so101/live/joints.position.shoulder_pan",
+          "label": "肩平转",
+          "color": "#56b4e9",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/so101/live/joints.position.shoulder_lift",
+          "label": "肩俯仰",
+          "color": "#e69f00",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/so101/live/joints.position.elbow_flex",
+          "label": "肘",
+          "color": "#009e73",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/so101/live/joints.position.wrist_flex",
+          "label": "腕俯仰",
+          "color": "#cc79a7",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/so101/live/joints.position.wrist_roll",
+          "label": "腕旋转",
+          "color": "#f0e442",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "top",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 180,
+      "yAxisLabel": "rad"
     }
   },
   "globalVariables": {},
@@ -319,17 +253,17 @@
   },
   "layout": {
     "direction": "row",
-    "splitPercentage": 48,
+    "splitPercentage": 40,
     "first": "RobotStation!so101station",
     "second": {
       "direction": "column",
-      "splitPercentage": 52,
-      "first": "Image!so101camera",
+      "splitPercentage": 76,
+      "first": "3D!so101live",
       "second": {
         "direction": "row",
         "splitPercentage": 50,
-        "first": "EpisodeReview!so101episode",
-        "second": "Plot!so101contact"
+        "first": "Plot!so101livecontact",
+        "second": "Plot!so101livejoints"
       }
     }
   }

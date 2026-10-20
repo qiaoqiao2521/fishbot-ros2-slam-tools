@@ -108,6 +108,7 @@ function createSo101Runtime(options = {}) {
       const state=readJSON(path.join(dir,'status.json')) ?? {};
       if (!TERMINAL.has(state.status)) failed(`执行器结束但未提交终态（exit=${code}, signal=${signal ?? 'none'}）。请查看保留日志。`);
     });
+    options.onTaskCreated?.(id);
     return {code:202,value:task(id)};
   }
   function cancel(id) {
@@ -145,6 +146,6 @@ function createSo101Runtime(options = {}) {
     } catch(error) {send(response,request.method==='POST'?400:500,{error:error.message});}
     return true;
   }
-  return {handle,runtime,task,listTasks,submit,cancel};
+  return {handle,runtime,task,listTasks,submit,cancel,paths:{sourceRoot,python,script,tasksRoot}};
 }
 module.exports={createSo101Runtime};

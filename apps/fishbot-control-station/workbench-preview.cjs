@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
 const { createSo101Runtime } = require("./so101-runtime.cjs");
+const { createSo101Live } = require("./so101-live.cjs");
 
 const workbench = path.join(__dirname, "workbench");
 const serveHandler = createRequire(path.join(workbench, "web", "package.json"))("serve-handler");
@@ -18,8 +19,11 @@ if (!fs.existsSync(path.join(build, "index.html"))) {
   throw new Error("Build the workbench first: ./workbench-dev.sh web:build:prod");
 }
 
-const runtime = createSo101Runtime();
+let live;
+const runtime = createSo101Runtime({onTaskCreated: id => live?.selectTask(id)});
+live = createSo101Live({runtime});
 const server = http.createServer(async (request, response) => {
+  if (await live.handle(request, response, serveHandler)) return;
   if (await runtime.handle(request, response, serveHandler)) return;
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { Allow: "GET, HEAD" });
@@ -32,10 +36,11 @@ const server = http.createServer(async (request, response) => {
   if (["/so101", "/so101-mobile", "/so101-station", "/so101-station-mobile"].includes(pathname)) {
     const base = `http://127.0.0.1:${port}`;
     const layout = pathname === "/so101" ? "so101-review" : pathname.slice(1);
+    const station = pathname.startsWith("/so101-station");
     const query = new URLSearchParams({
-      ...(recordings ? { ds: "remote-file", "ds.url": `${base}/records/so101.mcap` } : {}),
+      ...(station ? {ds:"foxglove-websocket", "ds.url":`ws://127.0.0.1:${port}/api/so101/scene`} :
+        recordings ? {ds:"remote-file", "ds.url":`${base}/records/so101.mcap`, time:"0.04"} : {}),
       layoutUrl: `${base}/layouts/${layout}.json`,
-      time: "0.04",
     });
     response.writeHead(302, { Location: `/?${query}` });
     response.end();
@@ -70,6 +75,7 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
+live.attach(server);
 server.listen(port, "127.0.0.1", () => {
   const base = `http://127.0.0.1:${port}`;
   console.log(`Workbench preview: ${base}`);

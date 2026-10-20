@@ -12,7 +12,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { makeStyles } from "tss-react/mui";
 
 import Panel from "@lichtblick/suite-base/components/Panel";
@@ -34,6 +34,8 @@ import {
   taskStatusLabel,
 } from "./execution";
 import type { SimulationRuntime, SimulationTask } from "./execution";
+import { previewStation, sceneModeLabel, selectScene } from "./live";
+import type { SceneMode } from "./live";
 import {
   ACTION_LABELS,
   KIND_LABELS,
@@ -242,7 +244,10 @@ function RobotStation({
   saveConfig: SaveConfig<Config>;
 }): React.JSX.Element {
   const { classes } = useStyles();
-  const station = config.station ?? defaultStation();
+  const station = useMemo(
+    () => config.station ?? defaultStation(),
+    [config.station],
+  );
   const layoutManager = useLayoutManager();
   const { getCurrentLayoutState } = useCurrentLayoutActions();
   const layoutId = useCurrentLayoutSelector(selectedLayoutIdSelector);
@@ -259,6 +264,12 @@ function RobotStation({
   const [refresh, setRefresh] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [sceneSource, setSceneSource] = useState<SceneMode>();
+  const [sceneError, setSceneError] = useState("");
+  const [sceneStatusError, setSceneStatusError] = useState("");
+  const [switchingScene, setSwitchingScene] = useState(false);
+  const sceneController = useRef<AbortController>();
+  const sceneRevision = useRef(0);
   const submissionController = useRef<AbortController>();
   const cancellationController = useRef<AbortController>();
   const rejectedTaskId = useRef("");
@@ -378,10 +389,106 @@ function RobotStation({
       }
     };
   }, [taskId, submitting, refresh, saveConfig]);
+  useEffect(() => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const lookup = async () => {
+      const revision = sceneRevision.current;
+      try {
+        const source = await requestSimulation<SceneMode>(
+          "/scene-mode",
+          controller.signal,
+        );
+        if (
+          !controller.signal.aborted &&
+          revision === sceneRevision.current &&
+          !sceneController.current
+        ) {
+          setSceneSource(source);
+          setSceneStatusError("");
+        }
+      } catch (error) {
+        if (!controller.signal.aborted && revision === sceneRevision.current) {
+          setSceneStatusError(
+            `三维状态暂未确认：${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          timer = setTimeout(() => {
+            void lookup();
+          }, 1500);
+        }
+      }
+    };
+    void lookup();
+    return () => {
+      controller.abort();
+      if (timer != undefined) {
+        clearTimeout(timer);
+      }
+    };
+  }, [refresh]);
+  useEffect(() => {
+    if (sceneSource?.mode !== "draft" || switchingScene) {
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      void previewStation(station, controller.signal).then(
+        () => {
+          if (!controller.signal.aborted) {
+            setSceneError("");
+          }
+        },
+        (error: unknown) => {
+          if (!controller.signal.aborted) {
+            setSceneError(
+              `预览保留上次有效场景，草稿仍可继续编辑：${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        },
+      );
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [station, sceneSource?.mode, switchingScene]);
+  const changeScene = async (mode: "draft" | "task") => {
+    sceneController.current?.abort();
+    const controller = new AbortController();
+    sceneController.current = controller;
+    sceneRevision.current += 1;
+    setSwitchingScene(true);
+    setSceneError("");
+    try {
+      const source =
+        mode === "draft"
+          ? ({ mode, station } as const)
+          : ({ mode, taskId } as const);
+      const selectedSource = await selectScene(source, controller.signal);
+      if (!controller.signal.aborted) {
+        setSceneSource(selectedSource);
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setSceneError(
+          `切换未完成，保留当前画面：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        sceneController.current = undefined;
+        setSwitchingScene(false);
+      }
+    }
+  };
   useEffect(
     () => () => {
       submissionController.current?.abort();
       cancellationController.current?.abort();
+      sceneController.current?.abort();
     },
     [],
   );
@@ -422,6 +529,14 @@ function RobotStation({
           );
         }
         setTask(result);
+        sceneRevision.current += 1;
+        setSceneSource({
+          mode: "task",
+          taskId: id,
+          phase: result.phase,
+          status: result.status,
+        });
+        setSceneError("");
       }
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -595,8 +710,71 @@ function RobotStation({
           </Button>
         </div>
         <Typography variant="body2" color="text.secondary">
-          编辑草稿随工作台布局保存。右侧录像是历史回合，不随草稿改变。
+          编辑草稿随工作台布局保存。三维画面可切换编辑预览或当前任务。
         </Typography>
+        <div role="region" aria-label="三维画面来源">
+          <div className={classes.row}>
+            <Button
+              size="small"
+              variant={sceneSource?.mode === "draft" ? "contained" : "outlined"}
+              aria-pressed={sceneSource?.mode === "draft"}
+              disabled={switchingScene}
+              onClick={() => {
+                void changeScene("draft");
+              }}
+            >
+              编辑预览
+            </Button>
+            <Button
+              size="small"
+              variant={sceneSource?.mode === "task" ? "contained" : "outlined"}
+              aria-pressed={sceneSource?.mode === "task"}
+              disabled={!taskId || switchingScene || submitting}
+              onClick={() => {
+                void changeScene("task");
+              }}
+            >
+              当前任务
+            </Button>
+            <Button
+              size="small"
+              component="a"
+              href="/so101"
+              target="_blank"
+              rel="noreferrer"
+            >
+              历史回放 ↗
+            </Button>
+          </div>
+          <Typography
+            variant="body2"
+            style={{ overflowWrap: "anywhere", marginTop: 8 }}
+          >
+            {sceneModeLabel(sceneSource)}
+          </Typography>
+          {sceneSource?.mode === "task" && (
+            <Typography variant="caption" color="text.secondary">
+              {sceneSource.status
+                ? taskStatusLabel(sceneSource.status)
+                : "等待任务状态"}
+              {sceneSource.phase ? ` · ${sceneSource.phase}` : ""}
+              {sceneSource.simulation_s != undefined
+                ? ` · ${sceneSource.simulation_s.toFixed(2)} s`
+                : ""}
+              {" · 编辑只保存草稿；取消或结束后保留最后实际姿态。"}
+            </Typography>
+          )}
+          {sceneStatusError && (
+            <Alert severity="warning" style={{ marginTop: 8 }}>
+              {sceneStatusError}
+            </Alert>
+          )}
+          {sceneError && (
+            <Alert severity="warning" style={{ marginTop: 8 }}>
+              {sceneError}
+            </Alert>
+          )}
+        </div>
         <TextField
           label="工作站名称"
           size="small"
@@ -955,7 +1133,7 @@ function RobotStation({
           </Typography>
         )}
         <Typography variant="body2" color="text.secondary">
-          运行使用提交时的草稿快照。后续编辑不会改变已提交任务；右侧共享时间轴仍是历史回放。
+          运行使用提交时的草稿快照，并自动显示该任务的实时三维。后续编辑不会改变已提交任务；取消或结束后保留最后实际姿态。
         </Typography>
         <div className={classes.row}>
           <Button
@@ -1083,8 +1261,8 @@ function RobotStation({
         <details>
           <summary>借用的产品能力</summary>
           <Typography variant="body2">
-            RoboDK：场景树、坐标系归属、目标引用和指令列表。Lichtblick：原生面板、布局保存、录像、曲线和共享时间轴。草稿采用普通
-            JSON，可手工修改。
+            RoboDK：场景树、坐标系归属、目标引用和指令列表。Lichtblick：原生三维、WebSocket
+            数据源、布局保存、录像与曲线。草稿采用普通 JSON，可手工修改。
           </Typography>
         </details>
       </div>

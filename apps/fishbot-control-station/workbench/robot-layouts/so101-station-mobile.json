@@ -10,99 +10,63 @@
             "name": "SO101",
             "kind": "robot",
             "parent": "world",
-            "position": [
-              0,
-              0,
-              0
-            ]
+            "position": [0, 0, 0]
           },
           {
             "id": "jaw",
             "name": "双指夹爪",
             "kind": "tool",
             "parent": "base",
-            "position": [
-              0,
-              0,
-              0
-            ]
+            "position": [0, 0, 0]
           },
           {
             "id": "pick",
             "name": "取料坐标系",
             "kind": "frame",
             "parent": "world",
-            "position": [
-              0.24,
-              -0.13,
-              0
-            ]
+            "position": [0.24, -0.13, 0]
           },
           {
             "id": "cube",
             "name": "待抓方块",
             "kind": "object",
             "parent": "pick",
-            "position": [
-              0,
-              0,
-              0.01
-            ]
+            "position": [0, 0, 0.01]
           },
           {
             "id": "approach",
             "name": "接近点",
             "kind": "target",
             "parent": "pick",
-            "position": [
-              0,
-              0,
-              0.08
-            ]
+            "position": [0, 0, 0.08]
           },
           {
             "id": "grasp",
             "name": "抓取点",
             "kind": "target",
             "parent": "pick",
-            "position": [
-              0,
-              0,
-              0.02
-            ]
+            "position": [0, 0, 0.02]
           },
           {
             "id": "place",
             "name": "放料坐标系",
             "kind": "frame",
             "parent": "world",
-            "position": [
-              0.24,
-              0.14,
-              0
-            ]
+            "position": [0.24, 0.14, 0]
           },
           {
             "id": "release",
             "name": "释放点",
             "kind": "target",
             "parent": "place",
-            "position": [
-              0,
-              0,
-              0.03
-            ]
+            "position": [0, 0, 0.03]
           },
           {
             "id": "clear",
             "name": "脱离点",
             "kind": "target",
             "parent": "place",
-            "position": [
-              0,
-              0,
-              0.1
-            ]
+            "position": [0, 0, 0.1]
           }
         ],
         "program": [
@@ -158,6 +122,51 @@
         "notes": "程序草稿。接近高度、绕障、释放和回位需由执行器规划验证。坐标系仅支持平移，尚未定义工具 TCP。"
       },
       "executionTaskId": ""
+    },
+    "3D!so101live": {
+      "lichtblickPanelTitle": "SO101 · 实时三维 / 编辑预览",
+      "followTf": "world",
+      "followMode": "follow-pose",
+      "cameraState": {
+        "distance": 0.9,
+        "perspective": true,
+        "phi": 40,
+        "thetaOffset": 45,
+        "target": [0, 0, 0],
+        "targetOffset": [0.2, 0, 0.1],
+        "targetOrientation": [0, 0, 0, 1],
+        "fovy": 45,
+        "near": 0.002,
+        "far": 5
+      },
+      "scene": {
+        "backgroundColor": "#182126",
+        "transforms": {
+          "axisScale": 0.03,
+          "showLabel": false
+        }
+      },
+      "topics": {
+        "/so101/live/scene": {
+          "visible": true
+        }
+      },
+      "layers": {
+        "so101-grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "0.05m 网格",
+          "instanceId": "so101-grid",
+          "layerId": "foxglove.Grid",
+          "size": 0.6,
+          "divisions": 12,
+          "lineWidth": 1,
+          "color": "#516371",
+          "position": [0.21, 0, 0],
+          "rotation": [0, 0, 0],
+          "order": 1
+        }
+      }
     }
   },
   "globalVariables": {},
@@ -165,5 +174,10 @@
   "playbackConfig": {
     "speed": 1
   },
-  "layout": "RobotStation!so101station"
+  "layout": {
+    "direction": "column",
+    "splitPercentage": 42,
+    "first": "3D!so101live",
+    "second": "RobotStation!so101station"
+  }
 }

@@ -84,3 +84,21 @@ Knowledge closeout：already_covered。继续采用 CapMesh PIT-004 的 Web/机�
 Knowledge closeout：already_covered。沿用既有任务ID恢复与CapMesh PIT-004依赖隔离，接口细节留项目文档。
 
 执行器已提交推送既有 SO101 分支 `codex/colab-twin-20261001`，提交 `c33a4df`。本工作台通过 `SO101_ROOT` 指向该交付工作树。新增执行UI后，原编辑器11项浏览器验收也通过；零运动写请求，旧编辑/保存/导入行为保持。
+
+## 2026-10-20 当前任务实时三维（已验收）
+
+用户授权将新任务和编辑草稿接入成熟3D底座。复用现有 @foxglove/ws-protocol、ws 和 Lichtblick 原生3D/数据源，沿用原MuJoCo模型/FK，不新增渲染器。SO101 worker输出世界空间的完整机械臂、夹爪、物体及场景；Node只转标准SceneUpdate和同源STL。预览与任务画面显式切换，草稿编辑不得覆盖运行状态；取消/终态强制保留最后物理姿态。原控制与评分保持。根负责WS/整合，内部worker分别负责几何和UI/布局。
+
+验收：改物体/障碍的预览确实更新，完整新回合的机械臂/物体同步，取消/终态姿态保持，任务隔离，原编辑和执行接口无回归。后续由根记录实际结果，不能把消息数或页面启动当三维验收。
+
+
+### 实际结果与交付范围
+
+- Web生产构建通过，保留上游两个包体积警告；23项RobotStation Jest、8项Node进程/原生协议测试、SO10119项几何/执行适配测试、定向ESLint及语法检查通过。原编辑器11项浏览器交互也通过，预览POST允许，但运动提交为0。
+- 完整浏览器新任务`e6ddc0ce-682c-4923-aebb-1990b3840784`：74.74sim/106.662wall，真实夹起、放稳、脱离和回位通过，无安全停止；静稳7.52s、scene_seq=838、scene_final=true。最终物块中心约(0.238631,0.139046,0.009961)m，实际到达蓝盘。
+- 另一网页任务`5f390fa1-ad63-433f-ab4d-32cf7d9fe924`：5.12sim取消，scene_seq=36、scene_final=true。Web当前源与原任务末态几何逐值一致；切到草稿再切回可恢复同一末态，未回跳到默认姿态。
+- 独立浏览器覆盖：修改方块与附加障碍确实更新三维且零运动；完整13STL加载、17实例；运行中编辑隔离、刷新同ID零重发、实际模型运动、新录像Range、终态保持、390px完整模型和无横向溢出。pageerror=0、模型请求失败=0。首次手机截图在模型未加载完时拍摄，未作为完整模型验收；等待13个资源后重新目视确认。
+- 复核补齐可选显示模块导入降级：导入移至scene callback内，由原warning catch处理；额外回归证实缺显示模块仍保留原定位拒绝结果，没有把显示异常覆盖为物理失败。正常模块路径不改物理控制。
+- 证据：忽略的`workbench-review-tests/output/station-live/result.json`及initial/running/success/cancelled/mobile截图；真实运行数据在`workbench-tools/output/station-tasks/<id>/`。显示约10Hz，不声称新50Hz、长期性能、CY或实机通过。
+
+Knowledge closeout：already_covered。沿用PIT-004依赖隔离和现有任务身份/分层验收知识；模型变换、UI加载时机和本轮证据留本项目。

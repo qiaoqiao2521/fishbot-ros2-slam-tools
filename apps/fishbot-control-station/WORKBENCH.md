@@ -3,11 +3,11 @@
 新底座使用完整 Lichtblick v1.29.1 源码。布局、播放器、时间线、3D、图像和曲线直接使用上游实现。
 来源、精确版本和许可见 [UPSTREAM.md](workbench/UPSTREAM.md)。实施进度见 [SpecMesh](../../plans/workbench-code-rebuild-20261018/task_plan.md)。
 
-当前支持历史回合查看，以及固定抓放模板的新仿真启动、查询和取消。
+当前支持历史回合查看、场景编辑预览，以及固定抓放模板的新仿真、实时全臂三维、查询和取消。
 
 ## 启动
 
-条件：Node >=20，已安装系统 Chrome，已准备经过核验的 MCAP 目录。
+条件：Node >=20，已安装系统 Chrome。历史回放另需经过核验的 MCAP；新仿真和编辑预览另需现有 SO101 Python 环境。
 在本目录执行：
 
 ```bash
@@ -16,7 +16,7 @@
 WORKBENCH_RECORDINGS_DIR=/absolute/path/to/verified-recording node workbench-preview.cjs
 ```
 
-`WORKBENCH_RECORDINGS_DIR` 必须包含 `so101.mcap`。默认只监听 `127.0.0.1:5186`，端口可通过 `WORKBENCH_PORT` 指定。
+历史回放使用的 `WORKBENCH_RECORDINGS_DIR` 必须包含 `so101.mcap`。默认只监听 `127.0.0.1:5186`，端口可通过 `WORKBENCH_PORT` 指定。
 打开 <http://127.0.0.1:5186/so101>，自动加载记录与项目布局，并定位首个视频帧的物理时间0.04秒。
 
 界面包括原录像、保存的物体三维姿态、双指接触力、关节角度，以及回合结果和阶段按钮。
@@ -35,7 +35,7 @@ WORKBENCH_RECORDINGS_DIR=/absolute/path/to/verified-recording node workbench-pre
 输出和环境保存在被 Git 忽略的 `workbench-tools/output/`。
 
 三维视图显示原记录中的方块中心与姿态。原记录没有保存连杆变换，因此全臂动作通过同步录像观察。
-全臂 FK、实时仿真与任务控制分别接入后再验收。
+历史记录仍只显示已有字段。当前任务的完整机械臂三维使用下述实时接口。
 
 ## 验证
 
@@ -67,7 +67,7 @@ node workbench-review-tests/run-review.cjs
 - 点击“保存草稿”，使用 Lichtblick 原生布局保存。编辑可撤销/重做；导出 JSON 可备份和手工修改，再导入继续。
 - 导入会报告并跳过坏条目，修复无效父节点；无法识别的文件不会覆盖当前草稿。删除目标保留程序步骤，并提示重新选择目标。
 
-此入口支持工作站草稿编辑。坐标系仅支持平移，工具 TCP 尚未定义，虚线是步骤顺序，不是运动规划。右侧历史录像不随草稿改变。下方任务栏可以运行当前受支持的固定抓放模板。
+此入口支持工作站草稿编辑。坐标系仅支持平移，工具 TCP 尚未定义，虚线是步骤顺序，不是运动规划。右侧原生 3D 可切换编辑预览和当前任务。下方任务栏可以运行当前受支持的固定抓放模板。
 
 来源：CY `re-packages/robodk-probe/README.md` M1–M4 的场景树、参考系、目标与指令组织；Lichtblick 原生 `Panel`、`saveConfig`、`LayoutManager.overwriteLayout`。未移植商业运动引擎或二进制。
 
@@ -86,7 +86,7 @@ node workbench-review-tests/station-editor.cjs
 
 当前支持原始八步模板、取料中心 XY 各 ±10mm 内的方块移动，以及 50×56×130mm 的附加障碍。其他目标点、步骤顺序和自定义时长会给出明确错误，不会偷偷运行旧配置。现有固定障碍保留；释放复用 floor_yaw 和 28mm 指间高度，原碰撞与释放判据保持。
 
-任务栏显示原 ID、阶段、原物理结果与本次录像。刷新仅查询任务；提交响应未知时点击“查询原任务”，不会自动再提交。点击“取消任务”请求现有执行循环协作停止，终态落盘后才显示已取消。历史回放右侧仍显示原记录，本次结果显示在任务栏。
+任务栏显示原 ID、阶段、原物理结果与本次录像。刷新仅查询任务；提交响应未知时点击“查询原任务”，不会自动再提交。点击“取消任务”请求现有执行循环协作停止，终态落盘后才显示已取消。运行自动切到本次任务三维；完成或取消后保留最后实际姿态，本次录像与报告仍在任务栏。历史回放通过独立入口打开。
 
 预览服务通过 `SO101_ROOT` 和 `SO101_PYTHON` 指向已有项目与环境。默认使用本机 `~/dev/ros2/projects/so101` 及 `~/.cache/so101-graspgenx/upstream/.venv/bin/python`。可复现交付环境使用：
 
@@ -101,3 +101,22 @@ node workbench-preview.cjs
 接口：`GET /api/so101/runtime`、`GET/POST /api/so101/tasks`、`GET /api/so101/tasks/<id>`、`POST /api/so101/tasks/<id>/cancel`；录像与报告由同源产物链接读取。服务继续只监听回环地址，不接实机。
 
 开发验证：`node --test workbench-review-tests/runtime.test.cjs`；启动服务后用 `STATION_TEST_URL=http://127.0.0.1:5186 node workbench-review-tests/station-execution.cjs` 运行一次真实抓放及取消验收。
+
+## 当前任务实时三维
+
+`/so101-station` 使用 Lichtblick 原生 Foxglove WebSocket 数据源和 3D 面板。点击“编辑预览”查看当前草稿；修改物体或障碍约 250ms 后提交几何预览。预览调用 MuJoCo `mj_forward`，不运行控制器、不推进物理。
+
+点击“规划并运行仿真”后，画面自动跟随该任务。13 个原始 STL 组成 17 个机械臂/夹爪网格实例，桌面、料盘、障碍和自由物块均取自 MuJoCo 场景；旋转和位置由实际 `MjData` 输出，不用脚本把物体附着到夹爪。
+
+运行中改草稿不会替换任务画面。点击“当前任务”可从预览返回所选任务。终态在视频编码前强制发布实际末态；已取消或已结束的任务保持该姿态。缺少 scene 的旧记录显示空场景，不用最后关节值虚构连杆姿态。
+
+实时发布约 10Hz，阶段变化和终态立即更新；接触力与关节曲线只发布执行器已有真实字段。显示频率与物理控制周期不同，本版不声明完整闭环 50Hz。手机模板使用上下排列的原生 3D 与编辑面板。
+
+接口：`GET/POST /api/so101/scene-mode`、`POST /api/so101/preview`、`GET /api/so101/scene-state`、`GET/HEAD /api/so101/meshes/<原始STL>`；WebSocket 为 `/api/so101/scene`。频道为 `/so101/live/scene`、`joints`、`contact` 和 `status`；场景使用标准 `foxglove.SceneUpdate` schema。
+
+```bash
+node --test workbench-review-tests/runtime.test.cjs workbench-review-tests/live.test.cjs
+STATION_TEST_URL=http://127.0.0.1:5186 node workbench-review-tests/station-live.cjs
+```
+
+后者会真实运行一轮完整抓放及另一轮协作取消，检查编辑预览、运行隔离、刷新、实际末态和手机布局；产物继续被 Git 忽略。固定模板以外的程序、旋转参考系、工具 TCP、CY部署和手机真机仍待后续接入及验收。
