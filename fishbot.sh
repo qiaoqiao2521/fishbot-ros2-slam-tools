@@ -7,8 +7,9 @@ case "${1:-help}" in
     echo 'check checks layout; check-feedback runs offline behavioral regressions.'
     echo 'Simulation extensions: localization-recovery [options] | object-inspection <new-output-directory> | arena <command>'
     echo 'Scene validation: scene-validation --output DIRECTORY [--cases clear detour blocked]'
-    echo 'Hardware lab: hardware-report --real REPORT --base REPORT --suction REPORT --output DIRECTORY (read-only)'
+    echo 'Hardware lab: hardware-report --real REPORT --base REPORT --suction REPORT [--transition REPORT] --output DIRECTORY (read-only)'
     echo 'Pressure physics: suction --output DIRECTORY [--render]'
+    echo 'Continuous whole-vehicle transition: wall-transition --output DIRECTORY [--render]'
     echo 'Voice tasks: voice {install|serve|asr|parse|sim}; speech previews never start a task automatically.'
     echo 'stack/teleop/save-map operate on the live ROS graph.'
     ;;
@@ -19,6 +20,7 @@ case "${1:-help}" in
   scene-validation) shift; exec bash "$ROOT/tools/fishbot_scene_validation.sh" "$@" ;;
   hardware-report) shift; exec /usr/bin/python3 "$ROOT/tools/fishbot_hardware_lab.py" "$@" ;;
   suction) shift; exec bash "$ROOT/tools/fishbot_suction.sh" "$@" ;;
+  wall-transition) shift; exec bash "$ROOT/tools/fishbot_suction.sh" --ground-wall "$@" ;;
   localization-recovery) shift; exec bash "$ROOT/tools/fishbot_localization_recovery.sh" "$@" ;;
   object-inspection) shift; exec bash "$ROOT/tools/fishbot_object_inspection.sh" "$@" ;;
   stack-gate) shift; exec /usr/bin/python3 -B "$ROOT/tools/fishbot_stack_gate.py" "$@" ;;

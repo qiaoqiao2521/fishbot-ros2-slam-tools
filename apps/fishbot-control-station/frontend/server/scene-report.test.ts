@@ -4,16 +4,16 @@ import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { sceneReportMiddleware } from './scene-report'
+import { sceneReportMiddleware, transitionVideoMiddleware } from './scene-report'
 
 const cleanup: (() => Promise<void>)[] = []
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close() })
 
-async function fixture(route?: string) {
+async function fixture(route?: string, video = false) {
   const directory = await mkdtemp(path.join(tmpdir(), 'fishbot-scene-report-'))
   cleanup.push(() => rm(directory, { recursive: true, force: true }))
   const file = path.join(directory, 'report.json')
-  const handler = sceneReportMiddleware(file, route)
+  const handler = video ? transitionVideoMiddleware(file) : sceneReportMiddleware(file, route)
   const server: Server = createServer((request, response) => {
     void handler(request, response, () => { response.statusCode = 404; response.end('not found') })
   })
@@ -25,6 +25,48 @@ async function fixture(route?: string) {
 }
 
 describe('editable scene report endpoint', () => {
+  it('serves the exact transition video bytes with the video MIME type', async () => {
+    const { file, url } = await fixture(undefined, true)
+    const bytes = Buffer.from([0, 0, 0, 24, 102, 116, 121, 112, 109, 112, 52, 50])
+    await writeFile(file, bytes)
+    const response = await fetch(`${url}/hardware-lab/transition.mp4?path=/etc/passwd`)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('video/mp4')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes)
+    expect((await fetch(`${url}/hardware-lab/transition.mp4/other`)).status).toBe(404)
+  })
+
+  it('reports an absent transition recording and rejects all video mutations', async () => {
+    const { file, url } = await fixture(undefined, true)
+    expect((await fetch(`${url}/hardware-lab/transition.mp4`)).status).toBe(404)
+    await writeFile(file, 'recording')
+    const response = await fetch(`${url}/hardware-lab/transition.mp4`, { method: 'POST' })
+    expect(response.status).toBe(405)
+    expect(response.headers.get('allow')).toBe('GET')
+    expect((await fetch(`${url}/hardware-lab/transition.mp4`, { method: 'HEAD' })).status).toBe(405)
+  })
+
+  it('supports video seek ranges and reports unsatisfiable ranges without changing the file', async () => {
+    const { file, url } = await fixture(undefined, true)
+    await writeFile(file, Buffer.from([0, 1, 2, 3, 4, 5]))
+    for (const [range, expected, contentRange] of [
+      ['bytes=1-3', [1, 2, 3], 'bytes 1-3/6'],
+      ['bytes=4-', [4, 5], 'bytes 4-5/6'],
+      ['bytes=-2', [4, 5], 'bytes 4-5/6'],
+    ] as const) {
+      const response = await fetch(`${url}/hardware-lab/transition.mp4`, { headers: { Range: range } })
+      expect(response.status).toBe(206)
+      expect(response.headers.get('content-type')).toBe('video/mp4')
+      expect(response.headers.get('content-range')).toBe(contentRange)
+      expect(response.headers.get('accept-ranges')).toBe('bytes')
+      expect([...new Uint8Array(await response.arrayBuffer())]).toEqual(expected)
+    }
+    const invalid = await fetch(`${url}/hardware-lab/transition.mp4`, { headers: { Range: 'bytes=9-' } })
+    expect(invalid.status).toBe(416)
+    expect(invalid.headers.get('content-range')).toBe('bytes */6')
+  })
+
   it('reuses the fixed-file reader for hardware results without accepting browser paths', async () => {
     const { file, url } = await fixture('/hardware-lab/report')
     await writeFile(file, '{"sections":[]}')

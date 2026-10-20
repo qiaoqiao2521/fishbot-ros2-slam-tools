@@ -23,6 +23,9 @@
 .hardware-lab-basis { margin: 8px 0 15px; font-size: 10px; color: #61748b; line-height: 1.7; overflow-wrap: anywhere; }
 .hardware-lab-basis > span { display: block; color: #78889d; }
 .hardware-lab-retained { margin: 8px 0; color: #9a660c; font-size: 10px; }
+.hardware-lab-transition { margin: 12px 0; }
+.hardware-lab-transition video { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border-radius: 6px; background: #142238; }
+.hardware-lab-transition figcaption { margin-top: 7px; color: #61748b; font-size: 10px; line-height: 1.7; }
 .hardware-lab-case-empty { margin: 12px 0; color: #78889d; font-size: 11px; }
 .hardware-lab-cases { margin: 0; padding: 0; list-style: none; }
 .hardware-lab-cases > li { min-width: 0; padding: 13px 0; border-top: 1px solid #e7edf5; }

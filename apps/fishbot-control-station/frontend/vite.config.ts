@@ -4,7 +4,7 @@ import os from 'node:os'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { validateWorkbenchProfile, workbenchProxy } from './src/lib/workbench-profile'
-import { sceneReportMiddleware } from './server/scene-report'
+import { sceneReportMiddleware, transitionVideoMiddleware } from './server/scene-report'
 
 const frontendPort = Number(process.env.FRONTEND_PORT || '5173')
 const profilePath = process.env.FISHBOT_WORKBENCH_PROFILE
@@ -19,16 +19,19 @@ const profile = validateWorkbenchProfile(profilePath ? JSON.parse(fs.readFileSyn
 const proxy = workbenchProxy(profile)
 const sceneReport = process.env.FISHBOT_SCENE_REPORT || path.join(os.homedir(), '.cache/fishbot/scene-validation/latest/report.json')
 const hardwareReport = process.env.FISHBOT_HARDWARE_REPORT || path.join(os.homedir(), '.cache/fishbot/hardware-lab/latest/report.json')
+const transitionVideo = process.env.FISHBOT_TRANSITION_VIDEO || path.join(os.homedir(), '.cache/fishbot/hardware-lab/latest/transition.mp4')
 export default defineConfig({
   plugins: [react(), {
     name: 'fishbot-scene-report',
     configureServer(server) {
       server.middlewares.use(sceneReportMiddleware(sceneReport))
       server.middlewares.use(sceneReportMiddleware(hardwareReport, '/hardware-lab/report'))
+      server.middlewares.use(transitionVideoMiddleware(transitionVideo))
     },
     configurePreviewServer(server) {
       server.middlewares.use(sceneReportMiddleware(sceneReport))
       server.middlewares.use(sceneReportMiddleware(hardwareReport, '/hardware-lab/report'))
+      server.middlewares.use(transitionVideoMiddleware(transitionVideo))
     },
   }],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },

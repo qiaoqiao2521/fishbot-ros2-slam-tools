@@ -2,7 +2,7 @@
 
 ## Current
 
-三个分项已分别实际通过，旧FishBot默认往返回归也通过。J100-E具备原生Nav2成功、同UUID和独立物理停车证据；所有ROS实验已结束。工作台已接最终报告并完成实际浏览器复核；源码验证完成，具体远端交付以本任务Git回执为准。
+原三分项与旧FishBot往返已通过并推送ba03c62。新增P5同一整车地面→墙面连续转接已通过根独立复跑与半步长复验，原地面/墙面分项不代替本轮结果。本轮无ROS运动。
 
 ## Ownership
 
@@ -60,3 +60,33 @@ D轮新输入含完整几何、匹配inflation、官方mesh固定轴quat修复�
 最终工作台9项复核通过：三个分项7个案例真实通过，J100原task/native UUID/终态4显示准确；显式GET一次、初始0次、零写入、零页面异常，390px无横溢。根独立GET读回与截图核对一致。旧12项浏览器证据保留，新截图位于私有hardware-lab/browser-qa/final。
 
 实验端口9102/9103/9105已关闭，5188只读成果工作台保持可访问。根独立发现ROS域132/133/134/135均无节点，退出确认见本任务清理回执；仅ROS_LOCALHOST_ONLY弃用提示，未改网络设置。远端源码由根串行推送并读回，不改网络/VPN、原实车或其他ROS域。源码/输入/运行记录均留原路径，不把私有地图、日志、环境和编译产物纳入Git。
+
+## P5进行中
+
+- 根：接口整合、SpecMesh、独立物理验收、视频、报告/Git；串行维护共享文件。
+- transition_physics：私有cache先验证完整四轮/碰撞机壳与原生吸附，暂不改旧suction输入。
+- transition_review：只读官方接触语义、可复用机制与评分复核。
+- transition_workbench：固定只读MP4入口与条件视频展示，保留旧三分项。
+- knowledge pending：根据真实转接结果判断可复用增量，owner根；不把理想轮式接触说成真实负压密封方案。
+
+## P5实际验收
+
+- 源码由physics冻结后，根root-a独立复跑两例/render：ground_to_wall passed/task_motion_success=true，episode `20dc7080-59dc-4735-b563-cdf79baed576`；pump_off expected passed/task_motion_success=false，episode `4d1ea312-a646-4e83-b3c4-b7a7f218a8bb`。各901行，source0–18s，最大采样间隙0.020s。
+- ground_to_wall：初始承载0.04s，交接4.50s，全轮墙面承载/离地8.52s；之后爬升0.31742075m，末连续停稳4.50s。最大轮矩10.51327Nm<12，接触穿透0.509mm，外加body/generalized force0，native warnings0，机壳支撑0。完整机壳碰撞启用，模型18.431kg、4hinge、自由体、0equality。
+- pump_off：全程压力/实际吸附力0，未四轮全上墙，物理任务未完成。实际机壳接触峰643.679N保留；只证明关闭吸附的负控行为，不称取消/防护成功。
+- half-a仅把dt从0.0002改0.0001，normal再通过，爬升0.31730670m、停稳4.50s，差0.114mm；源18s/901行与阈值保持。这是步长复验，不叫新策略改进。
+- 独立reviewer解析原模型、审查AST无运行期状态/外力写入，并从formal-f、root-a、half-a完整JSONL再次score，和根结果一致。
+- 根实际查看root-a初始/俯仰/保持三帧，完整车可见。ffprobe H264640×480/15fps/271帧，视频18.066667s，源18s含末帧；固定GET200/video/mp4，原生源速。
+- 根31项Python定向检查与前端最终16项定向检查通过，tsc/Vite构建通过。原源码/五负压分项未改；wrapper、聚合与条件播放器兼容旧入口。
+- 旧报告real-a、jackal-e、suction/root-e保留，加P5两例聚合共9例。媒体单文件固定读取，不开目录、不启动ROS。后端原runtime离线不影响只读报告，也不冒称全部服务在线。
+
+## P5知识状态
+
+pending：候选为MuJoCo吸附跨接触分力、角点后腔排气和承载接触/近接触的区分。原Wiki/ROS2 与 FishBot.md与开发知识入口.md已存在其他未提交修改，归属未核实，本轮不覆盖或混合提交。候选与来源先保存在本项目findings；接续owner根Codex，最短入口为本计划findings的P5实施结论与tools/fishbot_ground_wall.py。未宣称共享知识已写入；本轮是单一理想机构，不推广未标定硬件参数。
+
+## P5最终工作台与交付
+
+- 根独立实际GET验证前缀/后缀Range均206且16字节，越界416/Content-Range正确；播放器通过成熟send1.2.1读取固定单文件。
+- 最终浏览器9项通过：3分项9案例、负控任务false、默认零视频预取/自动播放、实际播放超过1秒、解码640×480/18.0667秒、seek10秒实际帧可见、390px含展开指标无横溢、零写请求/页面异常。根回读result.json并查看实际10秒截图。旧全文件200导致seek失败证据留failure-before-send.json。
+- 最终前端16项定向测试、类型/lint和生产构建通过；根31项Python定向测试通过。shell与diff检查通过；未增加ROS节点，所有本轮physics/ffmpeg/浏览器进程已退出，只保留5188成果工作台。
+- 物理生成器、评分器和默认物理参数在正式root-a与half-a期间冻结；随后网页发送层修复不改变物理；不同dt使用独立私有JSON，原输入未改。旧三项报告与源码不改；私有地图、视频、JSONL、venv和编译产物不入Git。根按既有main/qiaoqiao2521远端串行交付，确切版本以本任务Git回执为准。

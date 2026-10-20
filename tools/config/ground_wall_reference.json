@@ -1,0 +1,31 @@
+{
+  "label": "J100 尺寸专用吸附轮改装参考车：地面连续转墙",
+  "basis": "source_derived_chassis_with_assumed_adhesive_wheels",
+  "source": {
+    "repository": "https://github.com/clearpathrobotics/clearpath_common",
+    "revision": "78e3677412f1fed881f6436cdaf404f04f28ee4f",
+    "license": "BSD-3-Clause",
+    "profile": "tools/config/base_profiles/jackal_j100.yaml"
+  },
+  "assumptions": {
+    "friction": 0.8, "velocity_servo_kv": 8.0,
+    "wheel_torque_limit_nm": 12.0, "wheel_speed_limit_rad_s": 12.0,
+    "total_effective_adhesion_area_m2": 0.08,
+    "seal_gap_m": 0.002, "drive_speed_m_s": 0.12,
+    "parking_encoder_gain_s_inv": 20.0,
+    "wall_encoder_travel_before_brake_m": 0.32,
+    "pump_start_s": 0.5, "drive_timeout_s": 16.0,
+    "initial_position_m": [-0.65, 0.0, 0.0675],
+    "note": "Four hypothetical independently valved adhesive tires; area and contact seals are reduced-order assumptions, not manufactured hardware or a calibration of J100 tires."
+  },
+  "timestep_s": 0.0002,
+  "duration_s": 18.0,
+  "maximum_penetration_m": 0.005,
+  "trace_hz": 50,
+  "render_fps": 15,
+  "criteria": {
+    "minimum_rise_m": 0.20,
+    "hold_s": 0.7,
+    "maximum_sample_gap_s": 0.05
+  }
+}

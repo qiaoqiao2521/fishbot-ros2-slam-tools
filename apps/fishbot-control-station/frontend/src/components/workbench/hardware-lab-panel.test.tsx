@@ -43,6 +43,21 @@ describe('hardware lab panel', () => {
     expect(html).toContain('2.7')
     expect(html).toContain('map-roundtrip')
     expect(html).not.toContain('全部通过')
+    expect(html).not.toContain('<video')
+  })
+
+  it('shows a manually played recording only for the ground-to-wall suction case', () => {
+    const transition = { ...fixture.sections[2], cases: [{ id: 'ground_to_wall', label: '整车转墙', status: 'failed', reason: '试验未满足停车条件', metrics: {} }] }
+    const html = renderToStaticMarkup(<HardwareLabPanel initialReport={{ ...fixture, sections: [...fixture.sections.slice(0, 2), transition] }} />)
+    expect(html).toContain('src="/hardware-lab/transition.mp4"')
+    expect(html).toContain('controls=""')
+    expect(html).toContain('preload="none"')
+    expect(html).not.toContain('autoPlay')
+    expect(html).not.toContain('autoplay')
+    expect(html).toContain('不代表 Jackal J100 或真机已具备该能力')
+    expect(html).toContain('试验未满足停车条件')
+    const unrelated = renderToStaticMarkup(<HardwareLabPanel initialReport={{ ...fixture, sections: [{ ...fixture.sections[0], cases: transition.cases }, ...fixture.sections.slice(1)] }} />)
+    expect(unrelated).not.toContain('<video')
   })
 
   it('only GETs the fixed report endpoint once and keeps future metadata compatible', async () => {

@@ -43,6 +43,10 @@ export function HardwareLabPanel({ initialReport }: { initialReport?: unknown })
         <div className="hardware-lab-section-title"><h3 id={`hardware-lab-${section.id}`}>{section.title}</h3><span className={`hardware-lab-status hardware-lab-status-${section.status}`}>{statusLabels[section.status]}</span></div>
         <p className="hardware-lab-summary">{section.summary}</p>
         <p className="hardware-lab-basis"><span>依据</span>{section.basis}</p>
+        {section.id === 'suction' && section.cases.some((item) => item.id === 'ground_to_wall') && <figure className="hardware-lab-transition">
+          <video controls preload="none" playsInline aria-label="仿真整车从地面转上墙录像" src="/hardware-lab/transition.mp4">当前浏览器无法播放录像。</video>
+          <figcaption>仿真整车从地面转上墙。采用专用吸附底盘，不代表 Jackal J100 或真机已具备该能力。录像呈现过程，验收以原始案例指标为准。</figcaption>
+        </figure>}
         {section.retained && <p className="hardware-lab-retained">包含上次读取的证据，本次缺失部分尚未更新。</p>}
         {section.cases.length === 0 ? <p className="hardware-lab-case-empty">该分项尚无案例。</p> : <ul className="hardware-lab-cases">{section.cases.map((item, index) => <li key={`${index}-${item.id}`} data-hardware-case-id={item.id}>
           <div className="hardware-lab-case-title"><strong>{item.label}</strong><span className={`hardware-lab-status hardware-lab-status-${item.status}`}>{statusLabels[item.status]}</span></div>
