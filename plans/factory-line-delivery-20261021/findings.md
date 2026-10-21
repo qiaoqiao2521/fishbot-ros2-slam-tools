@@ -37,3 +37,5 @@ fixed direct末段真实cmd线速度0而角速度正负交替，map 15mm圈30源
 阶段整改采用原生配置实例而非新控制器：Nav2 1.3.13 [FollowPathAction](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_behavior_tree/plugins/action/follow_path_action.cpp)确实将controller_id/goal_checker_id写入原action；[NavigateToPoseNavigator](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_bt_navigator/src/navigators/navigate_to_pose.cpp)在goalReceived读取behavior_tree，不允许活动目标用不同树直接抢占。现桥原目标终态后才下一动作，故可复用阶段树而无需额外owner/重发机制。软件XML绑定不等于已证原生插件消费，多实例生命周期、连续新回合和完整物理回合仍待验。
 
 2026-10-22静止阶段实跑补充：Nav2 controller_server先处理goal更新、costmap freshness并调用`isGoalReached()`，只有未到达才进入`computeAndPublishVelocity()`；RPP的`/received_global_plan`发布位于`computeVelocityCommands()`内部。原e两个目标均取当前AMCL位姿，日志连续显示`Received a goal`和`Reached the goal!`，中间没有控制计算。因此零路径消息不能解释成DDS QoS失配，也不能证明StagingPath或FollowPath消费了路径。BestEffort订阅通常可接收Reliable/Volatile发布；若要观察阶段控制器，必须使用会进入控制循环且产生至少一次控制计算的路径/目标，并同时保存消息、endpoint QoS和阶段时序，不能靠只改订阅QoS把静止测试变成成功。
+
+同一e日志的17条旧时戳车体命令拒绝分布在两个静止Goal结束及清理周围，没有造成样本离开`car_hold`。它记录的是该旧命令被物理侧拒绝，不证明新鲜命令可被接纳，也不覆盖运动中的命令时效、导航或交付验收。
