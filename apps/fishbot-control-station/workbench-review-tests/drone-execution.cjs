@@ -430,7 +430,7 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
       checked('requested-waypoints-and-independent-land-disarm-report');
       checked('terminal-task-exposes-report-and-range-readable-mcap');
 
-      if (!cancelOnly) {
+      if (!cancelOnly && process.env.DRONE_SINGLE_FLIGHT !== '1') {
         await panel.getByRole('button', { name: '复制为新任务', exact: true }).click();
         const changedNode = original.nodes.find(node => node.id === (waypoints[1] ?? waypoints[0]).target);
         await panel.locator('[aria-label="工作站对象树"]').getByRole('button').filter({ hasText: changedNode.name }).click();
