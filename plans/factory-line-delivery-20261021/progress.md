@@ -1,7 +1,7 @@
 # F1 Progress
 
 ## Current
-in_progress：修复后fixed direct窗口已结束且归还，未追加via/重试。身份接线实际接纳且1次start成立；A task437abb20-ffbf-4dd6-a749-71f0d1cb709a入站Nav原120墙秒超时、原UUID终态5，未Dock/抓放/载货；原score false，B未执行。报告器对合法null终点误差调用.get，导致原result未落盘/调用进程134；原run_id不可恢复，不伪造。独立cleanup/原native终态核对后仅SIGINT owned组，reconciled-cleanup确认无存活/9111关闭。已最小修复null指标并22项回归过；只读reconciled-result保留失败与缺口。最后30源秒地图跨15mm目标圈110次，cmd v=0、w交替，入站末端收敛待修；目前仅源码/证据审查，无FishBot实例，下一窗口另约。
+in_progress：修复后fixed direct窗口已结束且归还，未追加via/重试。身份接线实际接纳且1次start成立；A task437abb20-ffbf-4dd6-a749-71f0d1cb709a入站Nav原120墙秒超时、原UUID终态5，未Dock/抓放/载货；原score false，B未执行。报告器对合法null终点误差调用.get，导致原result未落盘/调用进程134；原run_id不可恢复，不伪造。独立cleanup/原native终态核对后仅SIGINT owned组，reconciled-cleanup确认无存活/9111关闭。已最小修复null指标并22项回归过；只读reconciled-result保留失败与缺口。最后30源秒地图跨15mm目标圈110次，cmd v=0、w交替，入站末端收敛待修；目前仅源码/证据审查，无FishBot实例，下一窗口另约。 阶段XY最小软件候选已接并局部检查通过：同RPP/检查器复制两配置，只有入站stateful=true；显式staging=True且非载货才选树，其他及旧/null字段保留默认。新prepare/多插件实际加载、原13项和完整运输pending，旧fixed输入未改，无FishBot实例。
 
 ## Done
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
@@ -104,3 +104,26 @@ owner=FishBot root。最新研究根排程尚未给F1放行：SO101独立XY两�
 
 
 独立原nav_status已核UUID846d3462e24c477e99cd3b7a51f10072：status2接收于1792574087.019367、3于1792574207.048853、5于1792574207.073928墙时。不是只采信bridge终态。knowledge_status=already_covered：Wiki/ROS2 与 FishBot第19节已记录双XY锁、关闭后位置/朝向往返及独立原ID/物理评分边界，本次追加量化证据留项目，不复制原日志；null指标修复为通用可选值处理，无新知识页。root后续先恢复入站收敛基线；保持原目标容差、物理评分、期限，不扩展本轮窗口。
+
+
+## 阶段XY软件候选（禁止冒充运动通过）
+按研究根授权只做软件整改：复用原Nav2 1.3.13 FollowPath.controller_id/goal_checker_id与NavigateToPose.behavior_tree，为入站复制同一RPP/目标检查器配置，仅stateful=true；原交付FollowPath/general_goal_checker false保持。两个XML共用原规划/恢复图，主树显式绑定general_goal_checker，staging树显式绑定StagingPath/staging_goal_checker，避免多checker时空ID歧义。所有原速度、容差、碰撞、进度期限和120/360保持，DockRobot/owner/原UUID/取消清理不变。无运行时参数交易或新控制器算法。
+
+新prepare生成staging_navigation_behavior_tree；bridge仅显式staging=True的非载货入站在原NavigateToPose请求设置该路径，carrying及旧manifest默认空路径。native_actions.goal_behavior_tree单列实际请求，非控制器逐条消费ACK。官方同版源码已核对FollowPath端口与逐goal行为树装载；切换必须在前动作终态后，现owner合同保持。私人P8 runner生成输入观察纳入可选staging XML，旧证据不改写。
+
+纯软件36项（3个阶段配置/XML、1个桥请求路由、22个factory、10个policy）检查通过，未启动ROS/编译/物理步进。原13项prepare及实际多插件生命周期尚未重跑，留下一明确窗口；现有fixed prepared尚无阶段树，不可用它验新候选。旧failed/unknown/reconciled记录与物理评分均保持，root不自动native/via。
+
+
+阶段候选完整core108项纯软件回归过15.452s；补充可选staging路径为null时保持旧默认的路由断言后，3个阶段配置+1个路由复验过。分别用原FishBot/planar与J100/3D完整YAML/原BT复制到临时目录核对，两个阶段引用相同RPP类、Simple/Stopped检查器保持、.015/.035不变、ID均可解析到声明列表，未初始化ROS/步进物理/编译。该检查不是插件实际加载、prepare完整回归或运输验收。当前候选只在新prepare生效，旧fixed失败场景不修改，等明确软件/仿真窗口后生成新的共享stage场景再验收。
+
+
+knowledge_status=pending（仅新阶段候选）：双RPP实例/阶段树目前仅软件配置与路由验证，未取得原生加载/完整运输证据，不向知识库写成已修复。owner=FishBot root；最短接续是下一明确窗口先做prepare/native消息与插件加载检查，再新共享场景direct原单轮，原评分/期限保持。既有双XY锁风险经验为already_covered。
+
+
+为避免未来普通非载货导航误选入站树，bridge另用显式staging=True角色；只在既有vision/ideal两个入站调用处设置，载货优先保持默认。非staging的普通导航、旧/null manifest均默认树，不扩大作用域；该收紧仍纯软件，目标与原owner/期限保持。下一共享目录预定occupied-policy-staged-20261021/scene及direct/run、via/run，尚未生成或启动；明确窗口先原13项prepare/多插件加载与切树，再正式同源direct。
+
+
+显式角色收紧后的111项局部回归首轮110通过，唯一失败为原vision入站测试仍期望旧kwargs（缺staging=True），原27.135s失败日志保留；已更新该原入站合同，未改任何物理条件，重跑到新corrected日志。此前108过/36过/4过保持各自版本边界，不把此首轮说成全绿。
+
+
+显式角色合同修正后core+staging共111项全部通过12.996s（新corrected日志），原110/1失败日志保留。已收到无人机/研究根明确限定窗口：仅原13prepare与一个隔离实例两次AMCL当前位姿静止Goal加载核对（staging→默认，前UUID terminal后才下一）；car_hold保持，不扩完整direct/via/P8/QA或批次。完成后核原UUID/参数/独立静止与owned清理，立即归还。软件切片先冻结版本再检查；若静止Goal有误差不释放hold追目标，只保留失败/取消原ID，不重发。

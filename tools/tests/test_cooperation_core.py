@@ -305,6 +305,23 @@ class BridgeRaceTests(unittest.TestCase):
 
     def goal(self):return {'x':0.,'y':0.,'yaw':0.}
 
+    def test_navigation_requests_staging_tree_only_before_loading_and_keeps_legacy_default(self):
+        p=self.bridge;sent=[]
+        p.dispatch_goal=lambda client,request,**options:sent.append((request,options))
+        self.namespace['manifest']['staging_navigation_behavior_tree']='/prepared/staging.xml'
+        p.navigate(self.goal(),staging=True)
+        p.navigate(self.goal(),carrying=True,staging=True)
+        p.navigate(self.goal())
+        self.namespace['manifest']['staging_navigation_behavior_tree']=None
+        p.navigate(self.goal(),staging=True)
+        self.namespace['manifest'].pop('staging_navigation_behavior_tree')
+        p.navigate(self.goal(),staging=True)
+        self.assertEqual([request.behavior_tree for request,options in sent],
+                         ['/prepared/staging.xml','','','',''])
+        self.assertEqual([options['goal_behavior_tree'] for request,options in sent],
+                         ['/prepared/staging.xml','','','',''])
+        self.assertTrue(all(options['timeout']==120 for request,options in sent))
+
     def test_physical_wait_reports_valid_but_discontinuous_source_without_accepting_it(self):
         p=self.bridge
         p.check=lambda **unused:{'stamp':round((self.clock-100.)/.01)*.2}
@@ -1325,7 +1342,8 @@ class BridgeRaceTests(unittest.TestCase):
                 self.assertEqual(steps[-3:],[('align_rgb',),('dock',),('cleanup',)])
                 nav=[item for item in steps if item[0]=='nav']
                 self.assertEqual(len(nav),1 if mode=='vision' else 0)
-                if nav:self.assertEqual(nav[0][1:],({'x':.7,'y':0.,'yaw':0.},{'station_localization':False}))
+                if nav:self.assertEqual(nav[0][1:],({'x':.7,'y':0.,'yaw':0.},
+                    {'station_localization':False,'staging':True}))
                 self.assertFalse(any('请 SO101 装货' in item['message'] for item in p.events))
 
     def test_dock_action_has_no_hidden_staging_and_requires_payload_success(self):

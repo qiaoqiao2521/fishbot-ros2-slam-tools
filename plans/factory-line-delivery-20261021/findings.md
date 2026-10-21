@@ -32,3 +32,6 @@ ARIAC2025 仅作订单、工位与交付评价语义参照。官方来源已由�
 失败任务的原oracle可合法返回final_true_pose_error=None；汇总器必须保留缺失，而不是调用.get导致报告与finally二次失败。最小or{}只让读取可用，输出仍None、原false评分不变。实际fixed direct入站超时揭示该缺口，22项回归覆盖。原内存run_id/源码end快照丢失时，只读恢复摘要应明确不可恢复，不伪造ID或起止一致；同task/episode/native UUID仍可独立验收失败与清理。
 
 fixed direct末段真实cmd线速度0而角速度正负交替，map 15mm圈30源秒跨110次；状态锁成对关闭可能将入站也带入位置/朝向切换。派生身份修复已通过真实ROS接纳，但不是完整配送已修复。需要阶段控制合同整改，再冻结同源direct/via；不把该入站失败当两种路线的对照。
+
+
+阶段整改采用原生配置实例而非新控制器：Nav2 1.3.13 [FollowPathAction](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_behavior_tree/plugins/action/follow_path_action.cpp)确实将controller_id/goal_checker_id写入原action；[NavigateToPoseNavigator](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_bt_navigator/src/navigators/navigate_to_pose.cpp)在goalReceived读取behavior_tree，不允许活动目标用不同树直接抢占。现桥原目标终态后才下一动作，故可复用阶段树而无需额外owner/重发机制。软件XML绑定不等于已证原生插件消费，多实例生命周期、连续新回合和完整物理回合仍待验。

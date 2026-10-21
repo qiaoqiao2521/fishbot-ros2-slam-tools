@@ -22,3 +22,7 @@ F0 根对话只维护研究目录总计划；本 owner 维护 FishBot 的本三�
 保留--candidate为显示标签、candidate_label_loads_code=false。下一入口优先真实路线/中转选择：加载具名策略对象，输入冻结订单/同一地图与通道状态，输出交付前的中转选择；由原owner接纳后复用现有原生动作，策略不直接发速度。不重写调度器。加载回执应含实际对象模块/文件/配置、调用输入和返回值，并与冻结请求/accepted UUID逐项绑定；只记录源码或标签不等于运行候选。先确认原egress/目标合同能表达的最小可替换范围，再扩展薄字段。
 
 对照使用同一场景/目标/起点和原预算、评分，比较实际独立路径、源/墙时间及失败；不重复已通过open基线来充数。当前订单间reset同时复位车辆和货物，不能以此证明连续订单排序减少里程。此项owner=FishBot root：cooperation_factory_policy.py与--policy-config已实际调用函数并派生运行manifest，31项软件合同检查通过。下一步在P8结束并清理后串行跑occupied的direct/via同场景对照；原物理/预算裁判保持，未验收不称路线更优。首版只支持无body-frame egress_motion的FishBot，每run选择一个共享中转点。
+
+
+## 入站阶段XY状态最小候选（仅软件）
+fixed direct原入站120秒失败：15mm圈30源秒跨110次、v=0/w反转，尚未到路线选择阶段。优先复用原Nav2 1.3.13 FollowPath.controller_id/goal_checker_id及NavigateToPose.behavior_tree；不新增控制器实现/调度器/动作owner。为入站复制同一RPP及目标检查器配置，只有stateful=true；载货交付保留原FollowPath/目标检查器的false。各阶段显式树选择插件，原XY/yaw容差、速度、碰撞、进度期限、120/360与原oracle保持。新manifest提供staging树，旧manifest无字段时保持默认行为；实际请求路径单列，不冒充控制器消费回执。根只做纯软件配置/XML/请求路由检查，原13项prepare/native检查及新场景/完整运输须等明确窗口；不复用旧fixed prepared冒充新候选。

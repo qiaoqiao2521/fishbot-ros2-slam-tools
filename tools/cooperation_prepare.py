@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepare separate laser localization and full-height collision maps."""
 import argparse
+import copy
 import hashlib
 import importlib.util
 import json
@@ -49,6 +50,34 @@ def navigation_behavior(project, output):
     path.chmod(0o600)
     return path,[{'path':str(source),'sha256':hashlib.sha256(source.read_bytes()).hexdigest()}
                  for source in (helper,default,validity)]
+
+
+def staging_navigation(params, behavior_path, output):
+    """Isolate transit XY latches using existing native plugins and trees."""
+    controller = params['controller_server']['ros__parameters']
+    controller['StagingPath'] = copy.deepcopy(controller['FollowPath'])
+    controller['StagingPath']['stateful'] = True
+    controller['staging_goal_checker'] = copy.deepcopy(controller['general_goal_checker'])
+    controller['staging_goal_checker']['stateful'] = True
+    for field, name in (('controller_plugins','StagingPath'),
+                        ('goal_checker_plugins','staging_goal_checker')):
+        if name not in controller[field]:
+            controller[field].append(name)
+    main = ET.fromstring(Path(behavior_path).read_text())
+    for follow in main.iter('FollowPath'):
+        follow.set('goal_checker_id','general_goal_checker')
+    staging = copy.deepcopy(main)
+    for selector in staging.iter('ControllerSelector'):
+        selector.set('default_controller','StagingPath')
+    for follow in staging.iter('FollowPath'):
+        follow.set('controller_id','StagingPath')
+        follow.set('goal_checker_id','staging_goal_checker')
+    stage_path = Path(output)/'cooperation-staging-navigation.xml'
+    for path, tree in ((Path(behavior_path),main),(stage_path,staging)):
+        path.write_text('<!-- Derived from official Nav2 1.3.13 behavior trees; Apache-2.0. -->\n'+
+                        ET.tostring(tree,encoding='unicode')+'\n')
+        path.chmod(0o600)
+    return stage_path
 
 
 def laser_slice(vertices, height):
@@ -302,12 +331,14 @@ def prepare(args):
     manifest['transport_height_envelope'] = height_envelope(model, data, manifest,
         padding_m=float(params['local_costmap']['local_costmap']['ros__parameters'].get('footprint_padding', .01)))
     composition_navigation(params, manifest, args.output)
+    staging_behavior = staging_navigation(params,behavior_path,args.output)
     nav_path=args.output/'cooperation-nav2.yaml';nav_path.write_text(yaml.safe_dump(params,sort_keys=False))
     manifest.update(map_yaml=str(localization_path),localization_map_yaml=str(localization_path),
         collision_map_yaml=str(collision_path),nav2_yaml=str(nav_path),static_map_rectangles=rectangles,
         localization_laser_height_m=laser_height,localization_slice_polygons=slices,
         localization_parameters=localization_parameters,
         navigation_behavior_tree=str(behavior_path),
+        staging_navigation_behavior_tree=str(staging_behavior),
         navigation_behavior_tree_sha256=hashlib.sha256(behavior_path.read_bytes()).hexdigest(),
         navigation_behavior_tree_sources=behavior_sources,
         navigation_behavior_tree_license='Apache-2.0 (Nav2 1.3.13)',

@@ -997,16 +997,17 @@ def run(args):
             self.cleanup_summary.update(state='unknown', finished_wall_time=time.time())
             return False
 
-        def navigate(self, goal, *, carrying=False, station_localization=False):
+        def navigate(self, goal, *, carrying=False, station_localization=False, staging=False):
             request = NavigateToPose.Goal()
             request.pose = PoseStamped()
             request.pose.header.frame_id = 'map'
             request.pose.header.stamp = self.get_clock().now().to_msg()
             request.pose.pose.position.x, request.pose.pose.position.y = goal['x'], goal['y']
             request.pose.pose.orientation.z, request.pose.pose.orientation.w = math.sin(goal['yaw']/2), math.cos(goal['yaw']/2)
+            request.behavior_tree = (manifest.get('staging_navigation_behavior_tree') or '') if staging and not carrying else ''
             return self.dispatch_goal(self.nav,request,carrying=carrying,label='Nav2',timeout=120,
                 station_localization=station_localization,allow_outside_station=station_localization,
-                goal_pose=copy.deepcopy(goal))
+                goal_pose=copy.deepcopy(goal),goal_behavior_tree=request.behavior_tree)
 
         def dock_at_station(self):
             request = DockRobot.Goal()
@@ -1033,7 +1034,8 @@ def run(args):
                 label='DriveOnHeading', timeout=120, goal_motion=body_goal)
 
         def dispatch_goal(self,client,request,*,carrying=False,label,timeout,station_localization=False,
-                          allow_outside_station=False,docking_guard=False,goal_pose=None,goal_motion=None):
+                          allow_outside_station=False,docking_guard=False,goal_pose=None,goal_motion=None,
+                          goal_behavior_tree=None):
             token = self.owner()
             self.hold(True, token)
             try:
@@ -1043,7 +1045,7 @@ def run(args):
                     dispatch = {'token': token, 'epoch': self.dispatch_epoch, 'label': label, 'request': None, 'handle': None,
                                 'result': None, 'cancel': None, 'received': False, 'aborted': False, 'error': None,
                                 'carrying': bool(carrying), 'goal_pose': copy.deepcopy(goal_pose),
-                                'goal_motion': copy.deepcopy(goal_motion)}
+                                'goal_motion': copy.deepcopy(goal_motion), 'goal_behavior_tree':goal_behavior_tree}
                     self.dispatches.append(dispatch)
                     sent = client.send_goal_async(request)
                     dispatch['request'] = sent
@@ -1150,11 +1152,11 @@ def run(args):
                 if self.perception_config['mode'] == 'vision':
                     # The original staging view avoids the arm's oblique
                     # occlusion. Approach uses AMCL; RGB drives the dock leg.
-                    self.navigate(self.stations()['staging'],station_localization=False)
+                    self.navigate(self.stations()['staging'],station_localization=False,staging=True)
                 elif self.station_capture_ready():
                     self.event('car','docking','已在工位停靠捕获区，继续对准原生停靠。')
                 else:
-                    self.navigate(self.stations()['staging'],station_localization=True)
+                    self.navigate(self.stations()['staging'],station_localization=True,staging=True)
                 self.align_station_map()
                 sensor_label = 'AprilTag RGB 观测' if self.perception_config['mode'] == 'vision' else '相对工位观测'
                 self.event('car','docking',f'已到工位附近，使用{sensor_label}进行原生近距离精停靠。')
@@ -1540,6 +1542,7 @@ def run(args):
                     'label': item.get('label'), 'accepted': bool(handle and handle.accepted),
                     'carrying': bool(item.get('carrying', False)), 'goal_pose': copy.deepcopy(item.get('goal_pose')),
                     'goal_motion': copy.deepcopy(item.get('goal_motion')),
+                    'goal_behavior_tree': item.get('goal_behavior_tree'),
                     'stopped_before_hold': copy.deepcopy(item.get('stopped_before_hold')),
                     'status': status, 'result_known': known, 'terminal': dispatch_terminal(item),
                     'cancel_requested_wall_time': item.get('cancel_requested_wall_time')})

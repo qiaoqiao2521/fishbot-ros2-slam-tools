@@ -209,3 +209,11 @@ python3 -B tools/cooperation_workflow.py \
 网页的“当前运行组合”来自实际manifest；配置草稿只导出新场景输入。选择草稿不会替换活动世界。实际运行三批模板时，原workflow负责派发和回合重置，网页不重复启动这两个动作。单批入口保留原有任务操作。
 
 组合实现和实际验收分开记录。最终四组合运输面板的状态、旧失败和剩余限制以[当前P8进度](../plans/cooperation-workflow-20261014/progress.md#p8-current)为准；不把导出配置、topic存在或网页状态视为完整运输通过。
+
+
+### 入站与交付的XY状态候选（仅软件验证）
+新prepare为入站提供独立staging行为树，使用原RPP类的StagingPath和原目标检查器的staging_goal_checker两个配置实例；只有stateful改为true，其余速度/容差/碰撞/进度参数复制原值。原FollowPath和general_goal_checker保持交付配置false。入站完成后仍须原DockRobot与物理停稳，锁住过渡XY不能替代工位精度验收。
+
+bridge仅在显式staging=True的非载货入站请求使用manifest.staging_navigation_behavior_tree；载货请求留空以使用原默认交付树，旧manifest没有新字段也留默认。native_actions.goal_behavior_tree记录实际请求字符串，属于桥侧冻结输入，不是控制器消费回执。阶段树只能在前一原生动作已终态后切换，原owner/取消/cleanup和120/360期限保持。
+
+该候选仅通过纯软件XML、配置隔离和请求路由检查，尚未新prepare/native验证。旧fixed direct已保留为入站失败，不自动热换或重跑；下一次须新共享prepare与明确资源窗口。

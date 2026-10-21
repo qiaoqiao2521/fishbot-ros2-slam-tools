@@ -87,6 +87,9 @@ new_action=branch.find('ComputePathToPose') if branch is not None else None
 planner_unchanged=new_action is not None and new_action.attrib==original_action.attrib
 original_parent.remove(original_action)
 if branch is not None:behavior.find('.//RateController/RecoveryNode').remove(branch)
+follow=behavior.find('.//FollowPath')
+if follow.get('goal_checker_id')=='general_goal_checker':
+ follow.attrib.pop('goal_checker_id')  # Only the new explicit native checker binding differs.
 other_nodes_unchanged=ET.tostring(default)==ET.tostring(behavior)
 preserved={name:{key:params[name][name]['ros__parameters'].get(key)==source[name][name]['ros__parameters'].get(key)
                  for key in ('robot_radius','footprint_padding')}

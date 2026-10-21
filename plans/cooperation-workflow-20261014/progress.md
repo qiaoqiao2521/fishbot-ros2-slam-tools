@@ -291,3 +291,6 @@ F1 direct窗口首run为零订单readiness失败：派生manifest未贯通sim身
 
 
 F1 fixed direct已运行并安全归还窗口：派生身份接纳成功，A入站Nav原120墙秒超时、UUID846d3462e24c477e99cd3b7a51f10072终态5，未到载货，原score false、B未执行。末30源秒map15mm圈110次切换，cmd v=0/w正负，双stateful=false的入站合同待查。报告None终点指标触发二次异常导致原result/end快照丢失，根最小修复两行并22项过，只读恢复摘要保留缺口；owned组独立清理无存活/9111关闭。P8 O六参数仍未得到新载货验证，不能用F1入站失败判载货候选。
+
+
+F1阶段XY合同最小软件候选已接：原RPP/检查器两个配置实例，入站stateful=true、交付false保持，原参数与期限不变。独立BT通过原NavigateToPose.behavior_tree选择，旧/null字段兼容默认；actual request路径单列而非消费ACK。108项core及36项配置/报告检查过，额外4项optional复验通过；两个原车型完整YAML/BT纯软件解析通过，无ROS/编译/物理步进。原prepare/native多插件和完整运输尚待明确窗口。P8私人runner已纳入可选staging XML起止观察，不改旧结果；未新运行O载货或四组合。
