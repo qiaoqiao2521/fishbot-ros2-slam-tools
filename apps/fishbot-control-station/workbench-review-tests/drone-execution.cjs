@@ -112,6 +112,58 @@ const worldPosition = (station, id) => {
   const parent = node.parent === 'world' ? [0, 0, 0] : worldPosition(station, node.parent);
   return node.position.map((value, index) => value + parent[index]);
 };
+const boxFootprints = station => station.nodes.filter(node => node.kind === 'obstacle' && node.enabled !== false)
+  .map(node => ({ id: node.id, center: worldPosition(station, node.id), size: node.size ?? [1, 1, 2] }));
+const insideFootprint = (position, box) => Math.abs(position[0] - box.center[0]) <= box.size[0] / 2
+  && Math.abs(position[1] - box.center[1]) <= box.size[1] / 2;
+const boxesBelow = (position, boxes) => boxes.filter(box => insideFootprint(position, box)
+  && position[2] > box.center[2] + box.size[2] / 2);
+const assertCancelWindow = (task, station, target, expectedVisits, expectedBoxes) => {
+  assert.equal(task.phase, 'waiting', 'Cancel must still be inside the imported wait window');
+  assert.equal(task.telemetry.armed, true, 'Cancel must be issued to an airborne armed task');
+  assert.equal(task.report.visits.filter(visit => visit.phase === 'waypoint').length, expectedVisits);
+  assert(Math.hypot(...task.pose.position.map((value, i) => value - target[i])) <= (station.flight?.acceptance?.position_tolerance_m ?? .5));
+  const below = boxesBelow(task.pose.position, boxFootprints(station));
+  if (expectedBoxes.length) {
+    assert(below.length > 0, 'Over-box cancellation must occur above an actual box footprint');
+    for (const box of expectedBoxes) assert(below.some(item => item.id === box.id), `Cancel position must remain above ${box.id}`);
+  }
+  return below;
+};
+const assertOutsideBoxes = (position, boxes, label) => {
+  assert(Array.isArray(position) && position.length === 3 && position.every(Number.isFinite), `${label} must be an actual finite XYZ pose`);
+  for (const box of boxes) assert(!insideFootprint(position, box), `${label} must leave box ${box.id}'s footprint`);
+};
+const assertOverBoxRecovery = (task, cancelWindow, boxes, truth) => {
+  assert(boxes.length > 0, 'Over-box recovery requires a verified box below the cancellation pose');
+  const recovery = task.report.recovery;
+  const firstDescent = recovery.checks.find(check => check.kind === 'descent');
+  assert(firstDescent, 'Recovery must check the original descent column first');
+  assert.equal(recovery.checks[0], firstDescent, 'The original column must be checked before retreat');
+  assert.equal(firstDescent.safe, false, 'The original over-box descent must be rejected');
+  assert.equal(firstDescent.source, 'current_depth_occupancy');
+  for (const box of boxes) assert(insideFootprint(firstDescent.target, box), `The rejected descent must be above ${box.id}`);
+  assert(recovery.traversed.length > 0, 'Cancellation above a box must actually retreat');
+  assert(truth.length > 0, 'Cancellation needs independent Gazebo truth samples');
+  const cancelTruth = truth.reduce((nearest, sample) => Math.abs(sample.simulation_s - cancelWindow.simulation_s)
+    < Math.abs(nearest.simulation_s - cancelWindow.simulation_s) ? sample : nearest);
+  assert(Math.abs(cancelTruth.simulation_s - cancelWindow.simulation_s) <= .25, 'Gazebo truth must cover the cancellation instant');
+  for (const box of boxes) assert(boxesBelow(cancelTruth.pose.position, [box]).length === 1, `Gazebo truth must confirm cancellation above ${box.id}`);
+  const landings = truth.filter(sample => sample.phase === 'landing' && sample.simulation_s >= cancelWindow.simulation_s);
+  assert(landings.length > 0, 'Gazebo truth must contain the actual landing phase after cancellation');
+  for (const sample of landings) assertOutsideBoxes(sample.pose.position, boxes, 'Actual landing pose');
+  assertOutsideBoxes(truth.at(-1).pose.position, boxes, 'Last Gazebo truth pose');
+  assertOutsideBoxes(task.report.final_truth_pose?.position, boxes, 'Terminal Gazebo truth pose');
+  assertLanded(task);
+  return { firstDescent, cancelTruth, firstLandingTruth: landings[0], lastTruth: truth.at(-1),
+    finalTruthPose: task.report.final_truth_pose, landingTruthSamples: landings.length };
+};
+const readTaskTruth = task => {
+  const root = process.env.DRONE_TASKS_ROOT ?? path.join(__dirname, '../workbench-tools/output/drone-tasks');
+  const directory = path.join(root, task.id);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'request.json'), 'utf8')).id, task.id, 'Local truth must belong to the selected task');
+  return fs.readFileSync(path.join(directory, 'truth.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+};
 const programMeaning = program => program.map(step => ({ action: step.action, target: step.target ?? '', seconds: step.seconds ?? 1 }));
 const assertAcceptance = (task, station, complete = true) => {
   const limits = station.flight?.acceptance ?? {};
@@ -398,9 +450,15 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
         const atWindow = await waitTask(page.request, first.id, task => task.phase === 'waiting'
           && task.report.visits.filter(visit => visit.phase === 'waypoint').length === preceding.length,
         'flight reaches the imported cancellation wait window');
-        assert(Math.hypot(...atWindow.pose.position.map((value, i) => value - target[i])) <= (original.flight?.acceptance?.position_tolerance_m ?? .5));
-        result.cancelWindow = atWindow;
+        const expectedBoxes = boxesBelow(target, boxFootprints(original));
+        assertCancelWindow(atWindow, original, target, preceding.length, expectedBoxes);
         await page.screenshot({ path: path.join(output, 'cancel-window.png'), fullPage: true });
+        // Screenshot/UI latency must not let an expired wait window pass on a stale pose.
+        const beforeClick = updateTask(await readTask(page.request, first.id));
+        result.cancelBoxes = assertCancelWindow(beforeClick, original, target, preceding.length, expectedBoxes);
+        result.cancelOverBox = expectedBoxes.length > 0;
+        result.cancelWindow = beforeClick;
+        save();
         const cancellation = page.waitForResponse(response => response.url() === `${taskUrl(first.id)}/cancel` && response.request().method() === 'POST');
         await panel.getByRole('button', { name: '停止并安全返回降落', exact: true }).click();
         await json(await cancellation);
@@ -424,19 +482,10 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
         assert.equal(first.report.recovery.outcome, 'landed');
         assert.equal(first.report.recovery.trigger, 'operator_cancel');
         assert.equal(first.report.cancelled_before_takeoff, undefined);
-        const target = result.cancelWindow.pose.position;
-        const below = original.nodes.filter(node => node.kind === 'obstacle' && node.enabled !== false).filter(node => {
-          const center = worldPosition(original, node.id), size = node.size ?? [1, 1, 2];
-          return Math.abs(target[0] - center[0]) < size[0] / 2 && Math.abs(target[1] - center[1]) < size[1] / 2 && target[2] > center[2] + size[2] / 2;
-        });
-        if (below.length) {
-          assert(first.report.recovery.checks.some(check => check.kind === 'descent' && !check.safe), 'The blocked descent column must be rejected');
-          assert(first.report.recovery.traversed.length > 0, 'Cancellation above a box must actually retreat');
-          const landing = first.report.recovery.landing_column.at(-1);
-          for (const box of below) {
-            const center = worldPosition(original, box.id), size = box.size ?? [1, 1, 2];
-            assert(Math.abs(landing[0] - center[0]) > size[0] / 2 || Math.abs(landing[1] - center[1]) > size[1] / 2, 'The final landing column must leave the box footprint');
-          }
+        if (result.cancelOverBox || result.cancelBoxes.length) {
+          result.cancelRecoveryEvidence = assertOverBoxRecovery(first, result.cancelWindow, result.cancelBoxes, readTaskTruth(first));
+          save();
+          checked('over-box-cancel-rejects-first-descent-and-truth-exits-before-landing');
         }
         assert.equal(result.posts.filter(post => new URL(post.url).pathname === '/api/drone/tasks').length, 1);
         assert.equal(result.posts.filter(post => post.url.endsWith('/cancel')).length, 1);
