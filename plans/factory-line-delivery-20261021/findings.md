@@ -39,3 +39,7 @@ fixed direct末段真实cmd线速度0而角速度正负交替，map 15mm圈30源
 2026-10-22静止阶段实跑补充：Nav2 controller_server先处理goal更新、costmap freshness并调用`isGoalReached()`，只有未到达才进入`computeAndPublishVelocity()`；RPP的`/received_global_plan`发布位于`computeVelocityCommands()`内部。原e两个目标均取当前AMCL位姿，日志连续显示`Received a goal`和`Reached the goal!`，中间没有控制计算。因此零路径消息不能解释成DDS QoS失配，也不能证明StagingPath或FollowPath消费了路径。BestEffort订阅通常可接收Reliable/Volatile发布；若要观察阶段控制器，必须使用会进入控制循环且产生至少一次控制计算的路径/目标，并同时保存消息、endpoint QoS和阶段时序，不能靠只改订阅QoS把静止测试变成成功。
 
 同一e日志的17条旧时戳车体命令拒绝分布在两个静止Goal结束及清理周围，没有造成样本离开`car_hold`。它记录的是该旧命令被物理侧拒绝，不证明新鲜命令可被接纳，也不覆盖运动中的命令时效、导航或交付验收。
+
+2026-10-22 0.25m两阶段运动探针补充：RPP的`/received_global_plan`发布端在DDS发现中确有两个原生`controller_server` endpoint；rclpy普通消息回调未暴露`publisher_gid`，所以该字段只能作诊断，不能把“两阶段消息GID不相交”设为通过条件。Stage1收到364份计划、365条控制命令且原Goal4，已经证明Staging树进入控制循环；Stage1物理终点误差0.0940874m仍失败。Stage2从该偏差状态进入RPP碰撞重试与恢复，原Goal5。实体碰撞几何的局部净距与Nav2含0.3m inflation的collision map不是同一判据；目前只能确认二者判据差异，缺少RPP局部扫掠/costmap逐点代价证据，不能独占根因或换成开阔场景冒充原厂区路径通过。
+
+探针RCL上下文退出后，清理阶段的hold由真实physics源确认；这与launch/端口回收分开验收。阶段探针本身不改控制器、收敛或安全门槛。下一软件单位宜先只读提取Stage2的计划、局部costmap、RPP候选carrot/碰撞采样，并检查是否由终点收敛与inflation共同造成；任何修复须在新prepare、原场景和原评分下独立验收。

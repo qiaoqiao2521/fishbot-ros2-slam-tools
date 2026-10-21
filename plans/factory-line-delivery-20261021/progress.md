@@ -130,3 +130,12 @@ knowledge_status=pending（仅新阶段候选）：双RPP实例/阶段树目前�
 
 
 限定静止窗口已结束并归还：`d`仅因未加载ROS环境而在rclpy导入前失败，零launch/端口。补正环境后`e`在domain143/9113一次启动，源码e4527a0，manifest staged与probe起止副本同hash。控制器双RPP、双GoalChecker六参数实际读回一致且运行前后不变，planner/controller/bt三节点active；请求行为树为staged XML，AMCL无运动更新产生新源戳7.6/8.5。staging/默认两个独立UUID均status4、result error0，两个follow_path子目标各自status4，439个独立物理样本全程car_hold，源0.82–10.02s。owned launch、9113、native上下文均已清理，未跑运输/13项/via/P8，窗口已归还。原探针`passed=false`，但后续只读原launch日志确认不是QoS不兼容：两Goal均以当前AMCL位姿发出，controller_server在`Reached the goal!`后直接结束，未到达先于`computeVelocityCommands`的调用点，因此RPP没有计算控制量，也未发布`/received_global_plan`；它是静止同点fixture无法证明阶段消费的预期结果。发布端默认Reliable/Volatile、KeepLast10，探针sensor-data为BestEffort/Volatile、KeepLast5，常见RMW本可建立匹配；原结果未保存端点QoS诊断，原“QoS不兼容”因果已撤回，改QoS仅保留为待验证的诊断假设。`e`还在原有限`d`授权明确“不自动e”后多执行了一次，属于流程偏差，失败保留且未自动续跑。原launch共有17条`Rejected car reference: stamped car command is stale or in the future`，其中首Goal结束到次Goal开始之间7条，其余在次Goal结束和清理阶段；这些旧时戳命令被拒未破坏观测到的hold，但本轮不能外推为运动中命令时效通过。原始结果`~/.cache/fishbot/factory-line-delivery-20261021/staging-native-load-e4527a0-e/run/`保留；私人探针后续改动仅py_compile通过，无新原生结果。
+
+## 0.25m运动探针：首阶段有控制消费，第二段安全层拒绝
+源码`baeee9c`、独占domain143/9113的`staging-native-motion-baeee9c-20261022-d`只做0.25m两阶段探针，未启动运输任务。私有探针把PublisherInfo的两发布端与消息回调GID分开：端点实际发现两个原生`controller_server`发布端，回调包装层`publisher_gid=None`只记`unavailable`，不再用不可观察的GID互斥否证阶段消费；每阶段以计划消息、控制命令、原Goal UUID/终态和物理位移分别判据。探针仍因阶段失败而`passed=false`，错误为等待第二Goal终态超时；原始214781290字节结果、launch日志和源码起止副本保留。
+
+Staging Goal UUID`b397308cebdb4f529642c6dc7e2ffb97`原状态2→4，result error0；收到364份`/received_global_plan`和365条`/cmd_vel_nav`，真值位移0.174915m，但终点`(-.0469720,-2.1684766,+1.6038226)`相对`(0,-2.25,+π/2)`为XY0.0940874m/yaw0.0330263rad，超过原0.04m/0.05rad验收，不能计阶段到达。第二Goal UUID`a8d75a9bc5aa4b789570ce6b2a83364a`从该偏差位姿发起，原状态2→3→5；RPP反复报collision ahead并patience exceeded，原树清除costmap后的重试和spin/backup恢复同样被碰撞拒绝，未产生计划或控制命令。controller参数运行前一致，planner/controller/bt三节点active；探针等待终态超时后取消该原Goal。
+
+只读分层解释：实体占用箱中心(.35,-2.10,.25)、完整尺寸(.12,.30,.50)，原完整碰撞几何静态预检在该局部仍为可走；Nav2 collision地图另含0.3m inflation，地图本身最近占用像元距起终点约0.29m。该差异可解释安全层为何比静态几何更早拒绝，但本轮未抓RPP所用局部轨迹与costmap逐点代价，不能把costmap inflation独占为因果，也不把第二段失败归为RPP阶段切换失效。Stage1没有达到原评分，整个fixture不可替换原配送或换路线记通过。
+
+收尾独立读回`owned_launch_stopped=true`、`owned_port_closed=true`、`retained_launch_pid=null`、`native_terminal_known=true`、探针RCL上下文关闭；最终hold发布后被真实物理源观察，源戳91.46s、速度与角速度均约1e-17。该独立hold字段在原失败前未写回，保留缺口。资源owner消息明确本轮后交回SO101，因此未新启ROS/MuJoCo、未另换开阔fixture、未执行via/完整direct/P8；当前无本组owned进程或9113监听。
