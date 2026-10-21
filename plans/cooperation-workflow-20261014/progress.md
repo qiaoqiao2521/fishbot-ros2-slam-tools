@@ -288,3 +288,6 @@ F1 direct窗口首run为零订单readiness失败：派生manifest未贯通sim身
 
 
 显式manifest薄修复：78项sim/launch/factory/policy相关回归过62.003s；真实raw派生身份接纳/旧身份仍拒绝单项过5.910s，原prepared不变、默认调用保持。所属F1准备新共享occupied-policy-fixed-20261021，另申请direct窗口；P8没有新动作。完整反馈1678与147原生离线是该薄修复前快照，未假称最新全量重跑。
+
+
+F1 fixed direct已运行并安全归还窗口：派生身份接纳成功，A入站Nav原120墙秒超时、UUID846d3462e24c477e99cd3b7a51f10072终态5，未到载货，原score false、B未执行。末30源秒map15mm圈110次切换，cmd v=0/w正负，双stateful=false的入站合同待查。报告None终点指标触发二次异常导致原result/end快照丢失，根最小修复两行并22项过，只读恢复摘要保留缺口；owned组独立清理无存活/9111关闭。P8 O六参数仍未得到新载货验证，不能用F1入站失败判载货候选。

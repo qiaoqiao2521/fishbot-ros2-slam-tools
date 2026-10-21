@@ -1,7 +1,7 @@
 # F1 Progress
 
 ## Current
-首个open完整切片2/2保持，occupied-v2物理1/2保持。新策略加载2957912与1678统一反馈/147原生离线检查已通过。direct首run3f80df76-e520-4fd8-a65c-ad6671a0ffd5在readiness70.315墙秒超时，0 start/reset/cancel、0订单；真实direct函数已调用，但物理生产器仍固定读取world旁旧manifest，桥按原身份拒收。原result保留unknown/未评分，独立reconciled-cleanup已确认idle/idNone、18 owned无存活与9111关闭。窗口已归还。显式manifest最小修复e573eb6已推送并读回，78项相关回归及追加身份接纳单项通过；fixed新共享prepare已核对，当前测试/prepare/owned ROS全部退出。等待研究根与无人机owner明确交回fixed direct新窗口；其余队列由研究根安排，当前不启动，via另约。
+in_progress：修复后fixed direct窗口已结束且归还，未追加via/重试。身份接线实际接纳且1次start成立；A task437abb20-ffbf-4dd6-a749-71f0d1cb709a入站Nav原120墙秒超时、原UUID终态5，未Dock/抓放/载货；原score false，B未执行。报告器对合法null终点误差调用.get，导致原result未落盘/调用进程134；原run_id不可恢复，不伪造。独立cleanup/原native终态核对后仅SIGINT owned组，reconciled-cleanup确认无存活/9111关闭。已最小修复null指标并22项回归过；只读reconciled-result保留失败与缺口。最后30源秒地图跨15mm目标圈110次，cmd v=0、w交替，入站末端收敛待修；目前仅源码/证据审查，无FishBot实例，下一窗口另约。
 
 ## Done
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
@@ -91,3 +91,16 @@ root核实修复、读回新prepare后申请direct新窗口；明确交回前不
 
 ## 可恢复交接
 owner=FishBot root。最新研究根排程尚未给F1放行：SO101独立XY两短回合后，无人机还有native48正负与箱顶取消闭环；不能把SO结束当自动放行。当前没有FishBot ROS/MuJoCo/浏览器QA/测试/prepare在途，源码修复e573eb6及共享fixed输入已完成验证并保留。接续只在原对话收到明确窗口后，以本节fixed父目录、新direct/run执行一次；同次运行对账不重派。完成或失败后保留原oracle与原1000/360期限，owned清理，再同时通知研究根和无人机；via及P8另约。知识updated(local)与全部原失败状态保持。
+
+
+## fixed direct真实结果：入站失败，未进入载货
+任务437abb20-ffbf-4dd6-a749-71f0d1cb709a、回合4bf9999c-94da-45bd-bd48-e5ebc6597608；实际direct函数与derived身份已接纳，唯一start。入站目标(-1.1,-1.8,0)，原Nav UUID846d3462e24c477e99cd3b7a51f10072在120墙秒取消终态5、result_known=true。标记wall持续120.87754s，未触360；无Dock/抓放/运输。原score-1792574214379374646.json passed=false/原K=false，交付误差None是未到交付的合法状态，B未执行。
+
+报告器把None当dict，order_report在正文与finally各抛AttributeError，原result及source-end快照未落盘，caller134。不能用调用退出码替代原oracle，原run_id仅曾在内存，现不可恢复。null指标两行兼容修复保留None和failed；22项factory检查过.007s。只读reconciled-result.json从原declaration/terminal/score/markers/cleanup恢复摘要，original_run_id=None、source end未观察，不冒充原runner成功完成或源码全起止一致。
+
+原bridge cleanup verified（native_terminal/quiet/hold/guard_disabled），独立observer连续quiet1.88源秒通过。根复核task/UUID/owned命令行与PGID，SIGINT仅launch2478406组；reconciled-cleanup.json记录所有owned身份消失、9111关闭。窗口已分别明确归还无人机与研究根；无自动重试、无via、无新P8。
+
+只读原observer入站末端：source95.38–125.38的1501个去重map姿态，goal距离5.743–23.660mm、yaw1.989–2.545rad，15mm圈跨110次。下游cmd v始终0、w-.68653至+.59992；真实车体hold=false、yawrate-.60159至+.56764，XY仅约9×7mm范围运动。符合圈内终态转向/圈外路径转向切换，非单纯转不动；没有controller内部逐分支回执，不能独占因果。证据inbound-convergence-readback.json，原source/姿态/动作门槛保持。下一修复先查阶段XY状态锁/紧目标圈的控制合同，不能把它记为路线策略差异。
+
+
+独立原nav_status已核UUID846d3462e24c477e99cd3b7a51f10072：status2接收于1792574087.019367、3于1792574207.048853、5于1792574207.073928墙时。不是只采信bridge终态。knowledge_status=already_covered：Wiki/ROS2 与 FishBot第19节已记录双XY锁、关闭后位置/朝向往返及独立原ID/物理评分边界，本次追加量化证据留项目，不复制原日志；null指标修复为通用可选值处理，无新知识页。root后续先恢复入站收敛基线；保持原目标容差、物理评分、期限，不扩展本轮窗口。

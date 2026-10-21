@@ -112,6 +112,21 @@ class ScoreTests(unittest.TestCase):
         self.assertEqual(value['task_verdict'], 'unknown')
         self.assertIsNone(value['metrics']['final_position_error_m'])
 
+    def test_failed_before_delivery_preserves_null_pose_and_rest_without_losing_report(self):
+        score = copy.deepcopy(self.score)
+        score.update(passed=False,original_k_oracle_passed=False)
+        score['task_delivery_acceptance']['passed'] = False
+        attempt = score['task_delivery_acceptance']['attempts'][0]
+        attempt.update(passed=False,final_true_pose_error=None,final_true_pose_and_cargo_stop=None,
+                       carrying_nav_uuid=None)
+        value = self.report(score,terminal={'task':{'status':'failed'}})
+        self.assertEqual(value['task_verdict'],'failed')
+        self.assertTrue(value['execution']['terminal_observed'])
+        self.assertIsNone(value['metrics']['final_position_error_m'])
+        self.assertIsNone(value['metrics']['final_yaw_error_rad'])
+        self.assertIsNone(value['metrics']['continuous_final_stop_source_s'])
+        self.assertIsNone(value['carrying_nav_uuid'])
+
     def test_guard_intervention_remains_separate_telemetry(self):
         value = self.report()
         self.assertEqual(value['task_verdict'], 'passed')

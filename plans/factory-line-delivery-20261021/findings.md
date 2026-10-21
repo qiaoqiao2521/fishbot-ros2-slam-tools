@@ -27,3 +27,8 @@ ARIAC2025 仅作订单、工位与交付评价语义参照。官方来源已由�
 
 
 实际派生manifest需要贯通生产器：首direct零订单启动失败揭示cooperation_sim.source_identity固定从world旁读scene-manifest，launch却只给bridge传derived路径。模拟器实际仍有物理帧，但bridge按现有manifest身份合同拒收，因此无ready。薄修复显式--manifest→Physics→source_identity并由launch共传，两端同源；保留无新参数的默认。原result保留unknown/未评分及独立owned清理回执，不当运输失败样本或成功成绩。
+
+
+失败任务的原oracle可合法返回final_true_pose_error=None；汇总器必须保留缺失，而不是调用.get导致报告与finally二次失败。最小or{}只让读取可用，输出仍None、原false评分不变。实际fixed direct入站超时揭示该缺口，22项回归覆盖。原内存run_id/源码end快照丢失时，只读恢复摘要应明确不可恢复，不伪造ID或起止一致；同task/episode/native UUID仍可独立验收失败与清理。
+
+fixed direct末段真实cmd线速度0而角速度正负交替，map 15mm圈30源秒跨110次；状态锁成对关闭可能将入站也带入位置/朝向切换。派生身份修复已通过真实ROS接纳，但不是完整配送已修复。需要阶段控制合同整改，再冻结同源direct/via；不把该入站失败当两种路线的对照。

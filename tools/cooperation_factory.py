@@ -130,8 +130,8 @@ def order_report(order, *, task_id, episode_id, terminal, score, score_file,
         score.get('passed') is True and score.get('original_k_oracle_passed') is True
         and delivery.get('required') is True and delivery.get('passed') is True
         and bound and attempt.get('passed') is True) else 'failed'
-    pose_error = attempt.get('final_true_pose_error', {})
-    rest = attempt.get('final_true_pose_and_cargo_stop', {})
+    pose_error = attempt.get('final_true_pose_error') or {}
+    rest = attempt.get('final_true_pose_and_cargo_stop') or {}
     status = terminal.get('task', {}).get('status') if terminal else None
     valid_elapsed = (type(elapsed_wall_s) in (int, float)
                      and math.isfinite(elapsed_wall_s) and elapsed_wall_s >= 0.)
