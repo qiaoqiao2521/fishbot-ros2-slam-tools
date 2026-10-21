@@ -121,7 +121,7 @@ job1新attempt 0c1bf47d在准备导航失败：原Nav31701beb到5，没有Dock/�
 
 ## P8 Current
 
-in_progress：N诊断回合首批完成抓放/出站，但交付Nav120墙秒超时，整行395.769墙秒；减速已实际应用，原进度15cm/10s与末段5mm/s不匹配，原生连续六次Failed to make progress/恢复。源码与生成输入一致，owned/9110清理完成，原失败保留。下一候选O只扩展原载货参数事务，动态适配原PoseProgressChecker进度分辨率5mm/.05rad，原10s/120墙秒/360墙秒/物理评分保持；四组合12次仍未通过，其余三行零启动。F1实际策略入口已推送2957912并读回；occupied direct/via同场景对照仍pending，先核当前prepare真正生成持续XY检查参数。
+in_progress：O（bcefdb0）首批触原360墙秒上限，source150.42仅到臂回位，loaded六参数均not_applied；整行408.734墙秒。18个owned PID及9110清理完成，39源码/11生成文本一致；不是新导航参数效果验证。M的A/A通过/B失败、N及N诊断失败均保留，其余三组合仍零启动，四组合12次未完成。当前无FishBot物理仿真/浏览器QA；已与研究根/无人机owner串行协调，等明确交回窗口先做F1 occupied direct，两单完成清理即归还；via另约窗口。完整离线反馈集成后1678项通过（control948/mission209/autonomy61/frontend460），零skip/缺依赖；55项新事务/策略合同已纳入统一入口。
 
 最新根验证：完整反馈1621项通过（control891/mission209/autonomy61/frontend460，零skip/缺依赖）；133项P8/F1相关完整原生离线测试通过。随后雷达自定义topic/range统一接线与goal XY持续检查的6项composition测试通过；新goal参数尚待完整原生运行验证。前端桌面/390px实际配置草稿与下载验收保持，非运行时热换。知识updated(local)，已回写Wiki/ROS2 与 FishBot第19/20节及开发知识入口并读回，独立知识仓未提交发布。当前root继续校准与冻结面板；后文为逐轮历史，旧失败原件不覆盖。
 
@@ -268,3 +268,14 @@ M/B同UUID33aac1ec6f1f46148623aff6608980b1在120.028墙秒取消，任务302.168
 N诊断task29b7f4f7-3742-4974-a5af-4aed55aad82f，elapsed395.769墙秒；抓放/交接/出站已过，无physical_wait_failure，载货四参数原生ACK/读回/恢复完整。finalNav在原120墙秒超时；位置(-.22456,-1.90241)、yaw-.28542。原生日志六次Failed to make progress后恢复，未靠加时通过。
 
 源码1.3.13 PoseProgressChecker::check使用位移或角度推进；当前radius.15m/angle.2rad，末段min approach .005m/s无法在原10s内走15cm。O在loaded_controller加入progress_checker.required_movement_radius=.005、required_movement_angle=.05，仍用原native DOUBLE原子事务、实际baseline和恢复。官方base/derived各自保存动态callback句柄，两项真正更新内部值；不只ROS参数显示。movement_time_allowance不加入白名单也不改值；原碰撞、时龄、动力学、进度期限及120/360/4cm/.05rad/连续停稳评分不变。首次新增测试误假定composition不增原angle=.2，29过1旧假定失败；修正为只核半径/期限基线及已有angle。最终30项loaded+composition回归过；新案例证明六项一起ACK/恢复但不证明物理成功。
+
+
+### O 实际结果与资源交接
+首批taska0934334-2c5c-450b-8631-71c001f2b84e，原caller360墙秒与桥总任务期限命中；source150.42仅到机械臂回位，放货/托盘落稳确认145.48通过1.00源秒，loaded六参数/smoother均not_applied。故O不验证进度候选，保留failed/unscored部分链。结果elapsed408.734墙秒；清理独立quiet/hold/guard确认，18 owned PID核不存在、9110关闭，39源码/11生成文本一致。原保护unit快照仍全not-found，非活实例保护证明。
+
+同机三组SwiftShader GPU进程各约300–400% CPU，逐级父进程cwd确为muqiao-media-studio的render_patches.mjs；不属于FishBot本轮。没有停止或改全局调度，负载与低实时因子并发不升级为已证根因。已根据研究根对话人类“可以 和其他对话合作”的授权，向根与无人机owner发送范围明确的资源协调；无人机当前持有原生ground/取消窗口，明确terminal交还前不启动FishBot世界。所属F1计划已准备同一新manifest的direct/via两条命令。
+
+根完整反馈1623项（control893/mission209/autonomy61/frontend460）过、零skip/缺依赖；载货参数/工厂原入口/策略加载55项已接入check-feedback，集成重跑在途。知识updated(local)：第19节新增最低接近速度、进度分辨率与桥端连续样本经验，开发知识入口增加触发词，原页369行及入口48行已读回；独立知识库未提交发布。
+
+
+统一入口新增55项后完整反馈1678项通过（948/209/61/460），零跳过、缺依赖与导入错误。selected计划相对链接与两条bash示例语法检查通过。O与N诊断原loop timing独立回读：O mj_step75293次、累计207.872墙秒，N诊断145260次、211.212墙秒；阶段墙钟含调度/调用，不当CPU耗时或外部负载因果证明。原生相关离线回归最终复验在途。

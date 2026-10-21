@@ -1,7 +1,7 @@
 # F1 Progress
 
 ## Current
-首个完整切片完成：open-v1 两订单 A/B 原生 ROS/MuJoCo 独立物理评分 2/2，471.686 墙秒。追加 occupied-v1 为零运动几何拒绝；occupied-v2 实体障碍两单均原生成功，物理评分 1/2，B 最终误差 4.3478cm 超过原 4cm，保持失败。三个版本原件均保留。公开评测入口和订单/场景配置已实现；首批软件已由bb9141e推送origin/main并读回；公开入口可复用，完整策略加载仍pending。P8 四组合仍独立在执行，不能用 F1 默认 FishBot 成功替代。
+首个完整切片完成：open-v1 两订单 A/B 原生 ROS/MuJoCo 独立物理评分 2/2，471.686 墙秒。追加 occupied-v1 为零运动几何拒绝；occupied-v2 实体障碍两单均原生成功，物理评分 1/2，B 最终误差 4.3478cm 超过原 4cm，保持失败。三个版本原件均保留。公开评测入口和订单/场景配置已实现；首批软件已由bb9141e推送origin/main并读回；公开入口可复用；2957912已实际加载/调用本地策略，软件合同通过，原生策略对照仍pending。P8 四组合仍独立在执行，不能用 F1 默认 FishBot 成功替代。
 
 ## Done
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
@@ -52,3 +52,20 @@ F1实现与已完成结果作为bb9141e交付到既有origin/main并读回；829
 新增cooperation_factory_policy.py及--policy-config，实际加载内置/本地函数并调用一次，返回None或map{x,y,yaw}；原SceneGeometry点检、原native carrying Nav2与oracle继续执行。保存真实模块/__file__/函数/输入/返回/异常回执与私有派生manifest，原prepared不改，label仍不加载代码。只支持FishBot factory/no body egress_motion；J100在import前明确不支持，dry-run/report不执行目标函数。
 
 worker31项0.149s过；根独立31项0.164s过，含真实纯软件子进程导入并调用自定义函数，非空点→派生manifest→geometry/launch参数消费为mock合同而非物理成绩。root已审context深拷贝、原目标保留、异常不回退、复用既有owned进程回收。原生occupied direct/via对照pending，由root在P8 M清理后执行；不重复已通过open、不把策略调用当改善证明。例配置与使用见docs/FACTORY_DELIVERY.md。
+
+
+## 同一新prepare的direct/via窗口
+O已清理且当前无FishBot物理进程。研究根与无人机已确认串行交接：无人机原生ground/箱顶取消在先，明确terminal交回后先direct，完成/清理即归还，via另约窗口。一次run两订单沿用总1000墙秒/每单360墙秒，不要求不可分割长窗口；预估450–650墙秒仅计划值。root不停止他人渲染或修改全局算力。
+
+已从同一line-side-occupied配置新prepare到~/.cache/fishbot/factory-line-delivery-20261021/occupied-policy-20261021/scene/scene-manifest.json。只读核对FishBot/planar/transport、实体占用=true、A=(0,-2,0)/B=(.7,-2,0)，新YAML双stateful=false、原native .015m/.035rad不变。旧occupied-v2 prepared仍checker stateful=true、RPP未显式false，不能混用旧运行配置检验新候选。两次策略只改可选中转，复用这一份新prepared以及同一源码/固定订单/原裁判，分离输出和新UUID。
+
+```bash
+# 先等明确窗口；在FishBot根执行。两条分别占用一个窗口。
+FISHBOT_MUJOCO_DOMAIN_ID=141 XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus bash -c 'source tools/fishbot_mujoco_env.sh; exec /usr/bin/python3 -B tools/cooperation_factory.py run --manifest "$HOME/.cache/fishbot/factory-line-delivery-20261021/occupied-policy-20261021/scene/scene-manifest.json" --output "$HOME/.cache/fishbot/factory-line-delivery-20261021/occupied-policy-20261021/direct/run" --candidate direct-current --policy-config tools/config/factory_policies/line-side-direct.json --order order-a --order order-b'
+FISHBOT_MUJOCO_DOMAIN_ID=141 XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus bash -c 'source tools/fishbot_mujoco_env.sh; exec /usr/bin/python3 -B tools/cooperation_factory.py run --manifest "$HOME/.cache/fishbot/factory-line-delivery-20261021/occupied-policy-20261021/scene/scene-manifest.json" --output "$HOME/.cache/fishbot/factory-line-delivery-20261021/occupied-policy-20261021/via/run" --candidate lower-via-current --policy-config tools/config/factory_policies/line-side-lower-via.json --order order-a --order order-b'
+```
+
+窗口等待期间只做离线回归/文档；两条尚未执行，不称已有真实路线策略对照。若其间源码变化，先记录并重新协调同源对照，保留原失败。知识updated(local)，第19节及入口已补末段速度/进度分辨率和连续样本诊断，读回成功，未发布知识仓。
+
+
+统一check-feedback已纳入loaded limits和factory/policy三组55项，集成完整1678项通过（control948/mission209/autonomy61/frontend460），零skip/缺依赖。两条实际命令已通过bash -n，新prepared双stateful和原目标/容差读回有效；窗口尚未释放，未启动direct/via。
