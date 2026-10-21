@@ -9,7 +9,7 @@ const base = process.env.STATION_TEST_URL ?? 'http://127.0.0.1:5187';
 const source = process.env.DRONE_STATION_FILE ?? '/home/muqiao/dev/ros2/projects/drone/examples/ego-obstacle.json';
 const output = process.env.DRONE_QA_OUTPUT ?? path.join(__dirname, 'output/drone-ego-execution');
 fs.mkdirSync(output, { recursive: true });
-const result = { passed: false, checks: [], posts: [], planPosts: [], pageErrors: [] };
+const result = { passed: false, checks: [], posts: [], planPosts: [], pageErrors: [], sceneTraffic: [] };
 const save = () => fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(result, null, 2));
 const terminal = task => ['succeeded', 'failed', 'cancelled'].includes(task.status);
 const programMeaning = program => program.map(step => ({ action: step.action, target: step.target ?? '', seconds: step.seconds ?? 1 }));
@@ -52,6 +52,14 @@ const readTask = async (request, id) => {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1100 }, acceptDownloads: true });
   let activeId;
   page.on('pageerror', error => { result.pageErrors.push(error.message); save(); });
+  for (const event of ['request', 'response', 'requestfailed']) page.on(event, value => {
+    const request = event === 'response' ? value.request() : value;
+    if (!/\/api\/drone\/(?:scene-mode|preview)$/.test(new URL(request.url()).pathname)) return;
+    result.sceneTraffic.push({ event, at: new Date().toISOString(), method: request.method(), url: request.url(),
+      ...(event === 'response' ? { status: value.status() } : {}),
+      ...(event === 'requestfailed' ? { failure: request.failure()?.errorText } : {}) });
+    save();
+  });
   page.on('request', request => {
     if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/drone/plans') {
       result.planPosts.push({ url: request.url(), body: request.postDataJSON() });
@@ -97,9 +105,12 @@ const readTask = async (request, id) => {
     await expect(panel.getByLabel('工作站名称', { exact: true })).toHaveValue(example.name, { timeout: 60000 });
     assert.deepEqual(await exportDocument('reloaded-example.json'), imported);
     checked('ego-example-obstacle-size-and-base-xy-preserved-through-import-save-reload');
-    const planResponse = page.waitForResponse(value => value.url() === `${base}/api/drone/plans` && value.request().method() === 'POST');
-    await panel.getByRole('button', { name: 'EGO 起飞前预演', exact: true }).click();
-    const planned = await planResponse;
+    const planButton = panel.getByRole('button', { name: 'EGO 起飞前预演', exact: true });
+    await expect(planButton).toBeEnabled({ timeout: 90000 });
+    const [planned] = await Promise.all([
+      page.waitForResponse(value => value.url() === `${base}/api/drone/plans` && value.request().method() === 'POST'),
+      planButton.click(),
+    ]);
     assert(planned.ok(), await planned.text());
     result.plan = await planned.json();
     const planId = result.plan.id;
@@ -115,7 +126,7 @@ const readTask = async (request, id) => {
     assert.equal(result.plan.report.flight_control, false);
     assert(result.plan.report.points.length > 3);
     assert.equal(result.posts.length, 0, 'Planning must not dispatch flight');
-    await expect(panel.getByText('当前草稿预演有效，可以起飞。', { exact: true })).toBeVisible();
+    await expect(panel.getByRole('region', { name: 'EGO 起飞前预演', exact: true })).toContainText('当前草稿预演有效，可以起飞。');
     fs.writeFileSync(path.join(output, 'plan.json'), JSON.stringify(result.plan, null, 2));
     await page.screenshot({ path: path.join(output, 'ego-plan.png'), fullPage: true });
     checked('real-ego-scene-model-preflight-without-flight-control');

@@ -12,7 +12,7 @@ const output = process.env.DRONE_QA_OUTPUT ?? path.join(__dirname, 'output/drone
 const cancelOnly = process.env.DRONE_CANCEL_ONLY === '1';
 const terminal = new Set(['succeeded', 'failed', 'cancelled']);
 fs.mkdirSync(output, { recursive: true });
-const result = { passed: false, checks: [], tasks: [], posts: [], plans: [], planPosts: [], pageErrors: [], httpErrors: [], replayWrites: [], replayWebSockets: [], modelResponses: [] };
+const result = { passed: false, checks: [], tasks: [], posts: [], plans: [], planPosts: [], pageErrors: [], sceneTraffic: [], httpErrors: [], replayWrites: [], replayWebSockets: [], modelResponses: [] };
 const save = () => fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(result, null, 2));
 const checked = name => { result.checks.push(name); save(); console.log(name); };
 const greenPixels = bytes => {
@@ -33,6 +33,14 @@ const json = async response => {
 const readTask = async (request, id) => json(await request.get(taskUrl(id)));
 const observe = page => {
   page.on('pageerror', error => { result.pageErrors.push(error.message); save(); });
+  for (const event of ['request', 'response', 'requestfailed']) page.on(event, value => {
+    const request = event === 'response' ? value.request() : value;
+    if (!/\/api\/drone\/(?:scene-mode|preview)$/.test(new URL(request.url()).pathname)) return;
+    result.sceneTraffic.push({ event, at: new Date().toISOString(), method: request.method(), url: request.url(),
+      ...(event === 'response' ? { status: value.status() } : {}),
+      ...(event === 'requestfailed' ? { failure: request.failure()?.errorText } : {}) });
+    save();
+  });
   page.on('response', response => {
     if (response.status() >= 400) {
       result.httpErrors.push({ url: response.url(), status: response.status() });
@@ -75,9 +83,13 @@ const waitTask = async (request, id, predicate, message, timeout = 360000) => {
 const preparePlan = async (page, panel, station) => {
   if (station.flight?.planner !== 'ego') return undefined;
   const before = result.posts.length;
-  const response = page.waitForResponse(value => value.url() === `${base}/api/drone/plans` && value.request().method() === 'POST');
-  await panel.getByRole('button', { name: 'EGO 起飞前预演', exact: true }).click();
-  let plan = await json(await response);
+  const planButton = panel.getByRole('button', { name: 'EGO 起飞前预演', exact: true });
+  await expect(planButton).toBeEnabled({ timeout: 90000 });
+  const [response] = await Promise.all([
+    page.waitForResponse(value => value.url() === `${base}/api/drone/plans` && value.request().method() === 'POST'),
+    planButton.click(),
+  ]);
+  let plan = await json(response);
   const id = plan.id;
   await expect.poll(async () => {
     plan = await json(await page.request.get(`${base}/api/drone/plans/${id}`));
@@ -90,7 +102,7 @@ const preparePlan = async (page, panel, station) => {
   assert.equal(plan.report.flight_control, false);
   assert(plan.report.points.length > 3);
   assert.equal(result.posts.length, before, 'Scene-model planning must not dispatch any flight control');
-  await expect(panel.getByText('当前草稿预演有效，可以起飞。', { exact: true })).toBeVisible();
+  await expect(panel.getByRole('region', { name: 'EGO 起飞前预演', exact: true })).toContainText('当前草稿预演有效，可以起飞。');
   checked('real-ego-preflight-for-current-draft-without-flight-post');
   return id;
 };
