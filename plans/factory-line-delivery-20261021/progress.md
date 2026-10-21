@@ -1,7 +1,7 @@
 # F1 Progress
 
 ## Current
-首个open完整切片2/2保持，occupied-v2物理1/2保持。新策略加载2957912与1678统一反馈/147原生离线检查已通过。direct首run3f80df76-e520-4fd8-a65c-ad6671a0ffd5在readiness70.315墙秒超时，0 start/reset/cancel、0订单；真实direct函数已调用，但物理生产器仍固定读取world旁旧manifest，桥按原身份拒收。原result保留unknown/未评分，独立reconciled-cleanup已确认idle/idNone、18 owned无存活与9111关闭。窗口已归还无人机/研究根，目前仅显式manifest最小修复与离线回归，新direct重试需另获明确窗口，via未启动。
+首个open完整切片2/2保持，occupied-v2物理1/2保持。新策略加载2957912与1678统一反馈/147原生离线检查已通过。direct首run3f80df76-e520-4fd8-a65c-ad6671a0ffd5在readiness70.315墙秒超时，0 start/reset/cancel、0订单；真实direct函数已调用，但物理生产器仍固定读取world旁旧manifest，桥按原身份拒收。原result保留unknown/未评分，独立reconciled-cleanup已确认idle/idNone、18 owned无存活与9111关闭。窗口已归还。显式manifest最小修复e573eb6已推送并读回，78项相关回归及追加身份接纳单项通过；fixed新共享prepare已核对，当前测试/prepare/owned ROS全部退出。排队为无人机关键组件terminal→SO101两短回合→FishBot fixed direct新窗口；明确交回前不启动，via另约。
 
 ## Done
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
