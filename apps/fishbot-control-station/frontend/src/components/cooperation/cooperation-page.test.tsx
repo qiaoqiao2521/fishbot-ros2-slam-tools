@@ -49,6 +49,19 @@ function visibleText(node: ReactNode): string {
 }
 
 describe('cooperation page evidence rendering', () => {
+  it('keeps actual workflow-owned start and reset read-only without taking another owner cancel', () => {
+    const html = render({ ownedTaskId: null, state: { ...state,
+      scene_profile: { schema: 1, vehicle: 'jackal_j100', sensors: 'lidar3d', task: 'three_batch_transport' },
+      vehicle_profile: { id: 'jackal_j100', label: 'Clearpath Jackal J100' },
+      episode_id: 'workflow-episode', reset: { available: true, pending: false, reason: '可重置', last: null },
+    } })
+    expect(html).toContain('当前三批任务由 workflow 派发')
+    expect(html).toContain('网页不竞争重置')
+    expect(html).toContain('当前任务由原 workflow 发起')
+    expect(html).toContain('Clearpath Jackal J100')
+    expect(html.match(/disabled=""/g)).toHaveLength(3)
+  })
+
   it('renders the actual camera source, current stage, source SHA and physical cargo state', () => {
     const html = render()
     expect(html).toContain('/coop-api/frame.jpg?stamp=12.5')

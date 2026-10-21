@@ -60,3 +60,35 @@ C实际physics锁等待最大68.39ms，slow计数0；全桥仍有4个慢事件�
 C同桥连续完成A/A/B，任务请求、接纳目标、最后载货Nav UUID及独立真实终点一致，三份原K与新增目标评分均通过。第三货物实际净位移2.48919m、目标误差.022101m，证明并非仍送往默认A。源码执行前后逐文本一致，原前端仅换运行配置即读回B，无前端源码适配。
 
 因此，同模板新增批次和当前场景内可达目标已是输入层变化。首次实现仍需扩展workflow数量、start目标冻结与oracle目的地评分三处通用接口；不能把本轮称为零代码修改。不同工位/货物/底盘以及真实场地仍需独立适配，三次合成episode也不是三件同时存在的库存。
+
+## P8 接入边界
+
+现cooperation_scene/sim固定FishBot两轮关节、.13m圆、托盘偏移与站台高度。J100已在另一个ROS C++ MuJoCo3.12链路实际导航通过，但尚未与SO101的Python3.3.7共同世界组合。当前网页car标签也固定FishBot。原生3D扫描器插件同样属于3.12边界；跨栈需要核对API/资产适配，不能把现有.so注入3.3.7。
+
+3D适配选择复用当前3.3.7的原生mj_multiRay与sensor_msgs_py标准编码，不另建物理执行世界；共享原fishbot_lidar3d的VoxelLayer参数。官方3.12插件保留原入口和许可，不能声称它运行于3.3.7。AMCL仍取/scan，所以准确对照名为“2D”与“2D＋3D”，不称纯3D定位。官方API与Nav2 1.3.13 PointCloud源码已核对，3D输入还接原CollisionMonitor，而非只在页面画点云。
+
+J100四轮共享scene实测编译为24/22/10；旧qpos22/qvel20键名为兼容保留，但携带完整数组，由接收端按当前编译manifest尺寸验证。相同前13货物/机械臂、13:20车体索引保持；规划与评分不能截掉新车尾部关节。J100复用已有robot_localization EKF，仅轮式vx/vy、IMU roll/pitch/gyroZ，排除绝对yaw和车体真值。
+
+### P8 已取证的适配经验
+
+四轮滑移不是通过提高力矩即可消除。固定离线阶跃测到原转向约15%而直行正常；复用原生diff-drive effective track惯例，只给此仿真接触模型标定4.5，命令与编码器一致使用，真实轮距不改。该参数有速度/方向/载荷残差，不能外推实车。机制来源为[原生Jazzy控制器](https://raw.githubusercontent.com/ros-controls/ros2_controllers/jazzy/diff_drive_controller/src/diff_drive_controller.cpp)，本plant数值来自私有固定阶跃而非官方旧1.5参数。
+
+运行动力学与距离查询的算法选择需分开。[MuJoCo3.3.7官方Geom distance](https://mujoco.readthedocs.io/en/3.3.7/computation/index.html#codistance)说明旧MPR远距不准确；本地同状态确证distmax=.1将30.8mm几何分离误报.55mm。全切GJK又复现原SO101远隔47mm报0的问题，因此不为新车型推翻旧动力学选择。最终只把原checker查询cap设为原1mm阈值的两倍，仍检查所有原pair；.5mm/负.5mm/1.5mm/2.5mm独立重编译反例通过，输出2mm是截断，不是精确净距。旧失败和全GJK候选保留。
+
+二维规划余量不等于3D网格障碍语义。名义低侧19.2mm余量小于实测AMCL XY误差P95约26mm，两种雷达均可因原生碰撞预测拒绝。J100侧移40mm并反向移动托盘，保持原交接点后，该侧padding后余量42mm；整体3D扫掠最小余量未提高。此为实体安装配置适配，不关闭碰撞。悬臂85mm按刚性模型假设，不能当实物强度验收。
+
+三维观测需要整车与载荷自体模型。dev-e物理放货留盘、臂回位后，footprint内11个原生低点全部来自同一自由货物，超过CollisionMonitor原6点，车辆被拦停。原native载货Nav104失败和完整oracle=false保留。标准空间自体过滤属于传感器适配，不能移除货物物理geom、按taskstage编造失检或通过扩大minrange忽略车外障碍；原始首回波应留同源对照。该修复的实际载货验收仍待后续回合。
+
+传感器topic/真实订阅/实际栅格/控制器消费回执是不同证据。E已取证真实16×360/10Hz、原stamp配对、costmap与CM配置及同一时刻订阅、EKF输入；未独立证明逐帧唯一odom TF发布者，也未把观测转发当控制器消费ACK。ROI中的253为膨胀代价，不能写成254碰撞格或零代价。原生[CostmapTopicCollisionChecker](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_costmap_2d/src/costmap_topic_collision_checker.cpp)以254及以上拒绝。
+
+### P8 出站原语与载货限制
+
+地图前方目标不构成直线约束。正式A/D的RPP会先正转，触发工位邻近障碍预测；只增加staging目标仍不能消除该选择。最终J100复用已启用的DriveOnHeading，以车体相对位移退出，再接原Nav。保留真实body请求与nominal map参考的区别。F独立GetResult确认同Drive UUID status4/error0、35.22源秒；不能据此前置成功声明最终运输完成。
+
+RPP按实测current_w每周期夹限，不累计上一条命令。E的maxa=.2/20Hz固定输出.01rad/s，轮编码/真实角速约3.93e-6，且hold=false；恢复w=1可转，说明低速起转死区而非锁。J100候选改为maxa2、原地转向上限.1，StoppedGoalChecker保留原位姿门槛并核原.01速度条件。机制可对照[1.3.13官方RPP](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/src/regulated_pure_pursuit_controller.cpp)。
+
+瞬时失接触不等于滑出。B/F都是完整货物足迹仍在盘中央，独立同帧几何分别证实约9/32µm正gap。F精确重放能复现32.449µm；增托盘阻尼1.5/2仍失败，因此未改物理。降低实际命令前缀至四分之一后，有限4.2秒重放2100物理步没有失接触，但不能代替闭环导航或跨reset验证。最终候选只给载货阶段增加速度/加速度限制，通过同一原生服务读回并在清理恢复；原TTL、物理接触、完整足迹和任务时间门槛保持。所有旧失败保留。
+
+H第三批首次取消时，桥当前Clock537.12、缓存physics536.66，源龄.46s/接收龄.4626s，约.458s没有物理callback进入；独立observer仍以20ms收齐physics和Clock，最大接收gap约22ms。此前已完成的Clock专组不等于所有回调都及时。后续HTTP assembly .292/.358s与physics锁等待.300s是具体性能风险，但发生在首次取消后，不能倒置因果；首发执行器/GIL/未计时阻塞仍待核实。I只作同源码复现，不改时间门槛，也不把关闭额外探针当根因已修。
+
+I第三批已有直接曲率证据：同source725.18，原RPP碰撞预测arc三点XY反推κ=.203rad/m，实际cmd v=.02/w=.02447对应κ=1.223rad/m，约6倍；其他近配对亦有类似变化。arc默认quat未填写，不能拿其读航向；±20ms近配对不冒充同迭代ACK或唯一超时因果。只在下游夹限线速度会改变原几何控制器的曲率要求，载货期应优先通过RPP自身desired/min_regulated/min_approach/rotate四DOUBLE生成一致的低速轨迹，再保留smoother安全输出边界。官方[参数回调](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/src/parameter_handler.cpp)使用与compute共享的mutex并更新内部值，不只是ROS显示值。

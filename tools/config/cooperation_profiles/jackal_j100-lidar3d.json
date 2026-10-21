@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "vehicle": "jackal_j100",
+  "sensors": "lidar3d",
+  "task": "three_batch_transport"
+}

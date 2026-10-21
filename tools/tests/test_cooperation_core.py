@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 import uuid
 import numpy as np
-from cooperation_bridge import BridgeTiming
+from cooperation_bridge import BridgeTiming, normalize_egress_motion
 
 spec=importlib.util.spec_from_file_location('core',Path(__file__).parents[1]/'cooperation_core.py')
 core=importlib.util.module_from_spec(spec);spec.loader.exec_module(core)
@@ -182,6 +182,16 @@ class PhysicsAdmissionTests(unittest.TestCase):
             with self.subTest(change=change),self.assertRaises((ValueError,KeyError,TypeError)):
                 core.validate_physics(value,'a'*64,'b'*64)
 
+    def test_four_wheel_layout_is_admitted_only_against_the_expected_compiled_model(self):
+        raw=measurement()
+        for key in ('qpos22','qvel20','ctrl'):raw[key].extend([0.,0.])
+        with self.assertRaises(ValueError):core.validate_physics(raw,'a'*64,'b'*64)
+        self.assertIs(core.validate_physics(raw,'a'*64,'b'*64,(24,22,10)),raw)
+        for key in ('qpos22','qvel20','ctrl'):
+            changed=copy.deepcopy(raw);changed[key].pop()
+            with self.subTest(key=key),self.assertRaises(ValueError):
+                core.validate_physics(changed,'a'*64,'b'*64,(24,22,10))
+
 
 class ControlledFuture:
     def __init__(self,value=None,done=False):self.value=value;self.ready=done;self.callbacks=[]
@@ -230,6 +240,7 @@ class BridgeRaceTests(unittest.TestCase):
         self.namespace={**vars(core),**vars(perception),'copy':copy,'json':json,'math':math,'hashlib':hashlib,
             'SubscriptionProbeBase':SubscriptionProbeBase,'Clock':Clock,'TimeSource':TimeSource,
             'np':np,
+            'normalize_egress_motion':normalize_egress_motion,
             'time':NS(monotonic=lambda:self.clock,time=lambda:self.epoch+self.clock-100.,sleep=self.sleep),
             'threading':NS(Thread=Thread), 'String':lambda **kw:NS(**kw), 'ClearEntireCostmap':NS(Request=lambda:NS()),'manifest':{'station_offset':[0.,0.,0.],'dock_pose':[0.,0.,0.],
                 'staging_pose':[.7,0.,0.],'native_dock_pose':[0.,0.,math.pi],
@@ -241,13 +252,15 @@ class BridgeRaceTests(unittest.TestCase):
             'Bool':lambda **kwargs:NS(**kwargs),'JointState':lambda:NS(header=NS()),
             'Canceled':type('Canceled',(RuntimeError,),{}),'NavigateToPose':NS(Goal=lambda:NS()),
             'DockRobot':NS(Goal=lambda:NS()),
+            'DriveOnHeading':NS(Goal=lambda:NS(target=NS(),time_allowance=NS())),
             'PoseWithCovarianceStamped':lambda:NS(header=NS(),pose=NS(
                 pose=NS(position=NS(),orientation=NS()),covariance=[0.]*36)),
             'PoseStamped':lambda:NS(header=NS(),pose=NS(position=NS(),orientation=NS()))}
         exec(compile(ast.fix_missing_locations(extracted),'<current-cooperation-bridge>','exec'),self.namespace)
         self.bridge=self.namespace['BridgeProbe']();p=self.bridge
         p.episode_id=None;p.history=[];p.task_worker=None;p.reset_worker=None;p.reset_clearers=[];p.reset_records={};p.reset_acks={};p.reset_runtime={};p.last_reset_id=None
-        p.lock=threading.RLock();p.worker=threading.local();p.execution_token=('task-a',1);p.worker.token=p.execution_token
+        p.lock=threading.RLock();p.physics_cache_lock=threading.RLock()
+        p.worker=threading.local();p.execution_token=('task-a',1);p.worker.token=p.execution_token
         p.delivery_geometry_lock=threading.RLock();p.delivery_geometry=None;p.delivery_geometry_error=None
         p.task_epoch=1;p.dispatch_epoch=0;p.dispatches=[];p.cancel_event=threading.Event();p.abort_event=threading.Event()
         p.abort_reason=None;p.observation_error=None;p.last_ref=[0.]*6;p.raw=measurement();p.received=self.clock;p.wall_deadline=1000.
@@ -284,6 +297,10 @@ class BridgeRaceTests(unittest.TestCase):
             self.bridge.raw['stamp']+=seconds*getattr(self,'source_rate',1.)
             self.bridge.raw['sequence']+=1;self.bridge.received=self.clock
             self.bridge.raw['time_s']=self.bridge.raw['stamp']
+        pending=getattr(self.bridge,'pending_reset_physics',None)
+        if pending is not None:
+            pending['stamp']+=seconds;pending['time_s']=pending['stamp'];pending['sequence']+=1
+            self.bridge.observe(NS(data=json.dumps(pending)))
         if self.on_sleep:self.on_sleep()
 
     def goal(self):return {'x':0.,'y':0.,'yaw':0.}
@@ -400,7 +417,7 @@ class BridgeRaceTests(unittest.TestCase):
             def __enter__(unused):self.clock+=.13
             def __exit__(unused,*args):return False
         self.namespace['json']=NS(loads=slow_json)
-        self.namespace['validate_physics']=slow_validation;p.lock=SlowLock()
+        self.namespace['validate_physics']=slow_validation;p.physics_cache_lock=SlowLock()
         p.observe(NS(data=json.dumps(value)))
         timing=p.bridge_timing.snapshot()
         for stage,duration in (('physics_json',.11),('physics_validation',.12),('physics_lock_wait',.13)):
@@ -420,6 +437,94 @@ class BridgeRaceTests(unittest.TestCase):
         self.assertEqual(event['episode_id'],foreign)
         self.assertEqual(event['bridge_episode_id_at_entry'],p.episode_id)
         self.assertEqual(event['outcome'],'foreign_episode_ignored')
+
+    def test_slow_station_publish_keeps_control_lock_but_not_physics_cache_commit(self):
+        p=self.bridge;p.bridge_timing=BridgeTiming()
+        value=self.station_measurement()
+        p.station_last_seen=None
+        entered,release,committed=threading.Event(),threading.Event(),threading.Event()
+        errors=[];now=[10.]
+        p.get_clock=lambda:NS(now=lambda:NS(nanoseconds=round(now[0]*1e9)))
+        def slow_publish(message):
+            entered.set()
+            if not release.wait(2.):raise RuntimeError('test did not release station publisher')
+            p.dock_poses.append(message)
+        p.dock_pose_pub=NS(publish=slow_publish)
+        def station():
+            try:p.observe_station_pair(*self.station_messages(value))
+            except Exception as error:errors.append(error)
+        fresh_frame=copy.deepcopy(p.raw)
+        fresh_frame.update(sequence=fresh_frame['sequence']+1,stamp=10.32,time_s=10.32)
+        def receive():
+            try:p.observe(NS(data=json.dumps(fresh_frame)))
+            except Exception as error:errors.append(error)
+            finally:committed.set()
+        control=threading.Thread(target=station);control.start()
+        self.assertTrue(entered.wait(1.))
+        now[0]=10.32
+        callback=threading.Thread(target=receive);callback.start()
+        while_control_held=committed.wait(.5)
+        release.set();control.join(2.);callback.join(2.)
+        self.assertFalse(control.is_alive());self.assertFalse(callback.is_alive())
+        self.assertTrue(while_control_held,'validated physics waited behind station publication')
+        self.assertEqual(errors,[])
+        self.assertEqual(p.fresh()['stamp'],10.32)
+        self.assertFalse(p.abort_event.is_set());self.assertEqual(p.holds,[])
+        timing=p.bridge_timing.snapshot()
+        self.assertEqual(timing['last']['station_pose_publish']['source_stamp'],10.)
+        self.assertEqual(timing['last']['physics_cache_commit']['source_stamp'],10.32)
+
+    def test_fresh_snapshot_releases_cache_before_validation_clock_and_copy(self):
+        p=self.bridge;inside=[False];lock=threading.RLock()
+        class CacheLock:
+            def __enter__(unused):lock.acquire();inside[0]=True
+            def __exit__(unused,*args):inside[0]=False;lock.release()
+        p.physics_cache_lock=CacheLock()
+        validate=self.namespace['validate_physics'];deepcopy=copy.deepcopy;calls=[]
+        def checked_validate(*values):
+            self.assertFalse(inside[0]);calls.append('validate');return validate(*values)
+        def checked_copy(value):
+            self.assertFalse(inside[0]);calls.append('copy');return deepcopy(value)
+        def checked_clock():
+            self.assertFalse(inside[0]);calls.append('clock')
+            return NS(now=lambda:NS(nanoseconds=10_000_000_000))
+        self.namespace['validate_physics']=checked_validate
+        self.namespace['copy']=NS(deepcopy=checked_copy);p.get_clock=checked_clock
+        result=p.fresh()
+        self.assertEqual(calls,['validate','clock','copy']);self.assertEqual(result,p.raw)
+        self.assertIsNot(result,p.raw)
+
+    def test_fresh_preserves_original_source_and_receive_age_boundaries(self):
+        p=self.bridge;now=[10.];p.get_clock=lambda:NS(now=lambda:NS(nanoseconds=round(now[0]*1e9)))
+        for source_age in (-.1,0.,.25):
+            with self.subTest(source_age=source_age):
+                now[0]=10.+source_age;self.assertEqual(p.fresh()['stamp'],10.)
+        for source_age in (-.100001,.250001):
+            with self.subTest(source_age=source_age),self.assertRaisesRegex(RuntimeError,'时间失效'):
+                now[0]=10.+source_age;p.fresh()
+        now[0]=10.;p.received=self.clock-.5
+        self.assertEqual(p.fresh()['stamp'],10.)
+        p.received=self.clock-.500001
+        with self.assertRaisesRegex(RuntimeError,'反馈中断'):p.fresh()
+        self.assertFalse(p.abort_event.is_set())
+
+    def test_invalid_frame_clears_cache_before_abort_and_hold_outside_cache_lock(self):
+        p=self.bridge;published=[]
+        def hold_publish(message):
+            acquired=threading.Event()
+            def check_cache():
+                with p.physics_cache_lock:acquired.set()
+            reader=threading.Thread(target=check_cache);reader.start()
+            available=acquired.wait(.5);reader.join(1.)
+            self.assertTrue(available,'hold publication retained the physics cache lock')
+            published.append(message.data)
+        p.hold_pub=NS(publish=hold_publish)
+        value=copy.deepcopy(p.raw);value['stamp']=float('nan')
+        p.observe(NS(data=json.dumps(value)))
+        self.assertIsNone(p.raw);self.assertTrue(p.abort_event.is_set())
+        self.assertIn('共享物理反馈无效',p.abort_reason)
+        self.assertEqual(p.observation_error,p.abort_reason);self.assertEqual(published,[True])
+        with self.assertRaisesRegex(RuntimeError,'共享物理反馈无效'):p.fresh()
 
     def test_station_graph_query_slow_phase_is_bound_to_admitted_pair(self):
         p=self.bridge;p.bridge_timing=BridgeTiming();value=copy.deepcopy(self.station_measurement())
@@ -506,7 +611,8 @@ class BridgeRaceTests(unittest.TestCase):
                 'new_episode_id':episode,'reset_stamp':p.raw['stamp'] if episode else None,'message':'new round' if episode else 'busy'}
         p.observe_reset(NS(data=json.dumps(result)))
         if episode:
-            p.raw['episode_id']=episode;p.raw['source']['episode_id']=episode
+            p.pending_reset_physics=copy.deepcopy(p.raw)
+            p.pending_reset_physics['episode_id']=episode;p.pending_reset_physics['source']['episode_id']=episode
         return result
 
     def test_reset_rejects_running_unknown_and_live_native_action_without_mutation(self):
@@ -549,6 +655,47 @@ class BridgeRaceTests(unittest.TestCase):
         p.reset_record(body['request_id']);p.execute_reset(body['request_id'])
         self.assertEqual(p.reset_record(body['request_id'])['status'],'succeeded')
         self.assertEqual(len(p.reset_requests),1);self.assertEqual(len(p.clear_requests),1)
+
+    def test_reset_ack_clears_old_cache_and_rejects_old_frame_validated_before_switch(self):
+        p,body=self.reset_probe();old=copy.deepcopy(p.raw);p.reset_episode(body)
+        old['sequence']+=100
+        validated,release,finished=threading.Event(),threading.Event(),threading.Event()
+        errors=[];validate=self.namespace['validate_physics']
+        def pause_old(value,*args):
+            result=validate(value,*args)
+            if value['sequence']==old['sequence']:
+                validated.set()
+                if not release.wait(2.):raise RuntimeError('test did not release validated old frame')
+            return result
+        self.namespace['validate_physics']=pause_old
+        def old_callback():
+            try:p.observe(NS(data=json.dumps(old)))
+            except Exception as error:errors.append(error)
+            finally:finished.set()
+        callback=threading.Thread(target=old_callback);callback.start()
+        self.assertTrue(validated.wait(1.))
+        p.reset_pub=NS(publish=lambda value:self.reset_ack(p,body))
+        waits=[]
+        def wait_condition(condition,**unused):
+            waits.append(p.episode_id)
+            if len(waits)==2:
+                self.assertNotEqual(p.episode_id,body['episode_id'])
+                self.assertIsNone(p.raw);self.assertEqual(p.received,0.)
+                with self.assertRaisesRegex(RuntimeError,'反馈中断'):p.fresh()
+                release.set()
+                self.assertTrue(finished.wait(1.));callback.join(1.)
+                self.assertIsNone(p.raw,'old validated frame overwrote cache after reset ACK')
+                fresh=copy.deepcopy(p.pending_reset_physics)
+                fresh['stamp']+=.02;fresh['time_s']=fresh['stamp'];fresh['sequence']+=1
+                p.observe(NS(data=json.dumps(fresh)))
+            self.assertTrue(condition(p.raw))
+            return copy.deepcopy(p.raw)
+        p.wait_reset_condition=wait_condition
+        try:p.execute_reset(body['request_id'])
+        finally:release.set();callback.join(2.)
+        self.assertEqual(errors,[]);self.assertFalse(callback.is_alive())
+        self.assertEqual(p.reset_records[body['request_id']]['status'],'succeeded')
+        self.assertEqual(p.fresh()['episode_id'],p.episode_id)
 
     def test_reset_failed_plant_receipt_keeps_old_task_and_episode(self):
         p,body=self.reset_probe();old=p.episode_id;p.reset_episode(body)
@@ -616,6 +763,33 @@ class BridgeRaceTests(unittest.TestCase):
         p.nav.send_goal_async=lambda request:ControlledFuture(handle,True)
         p.navigate(self.goal())
         self.assertNotIn(False,p.holds)
+
+    def test_loaded_success_waits_for_native_smoother_stop_before_hold_but_failure_holds_immediately(self):
+        for loaded,success in ((True,True),(False,True),(True,False)):
+            with self.subTest(loaded=loaded,success=success):
+                self.setUp();p=self.bridge;handle=ControlledHandle();held=[]
+                if loaded:p.loaded_limits=NS(phase='applied')
+                def hold(message):
+                    held.append((message.data,p.raw['car']['speed']))
+                    p.raw['car_hold']=p.raw['car']['hold']=message.data
+                p.hold_pub=NS(publish=hold)
+                p.nav.send_goal_async=lambda request:ControlledFuture(handle,True)
+                def advance():
+                    if not handle.result_future.done():
+                        p.raw['car']['speed']=.05
+                        handle.result_future.resolve(NS(status=4 if success else 6))
+                    elif self.clock>=100.12:p.raw['car']['speed']=0.
+                self.on_sleep=advance
+                if success:p.navigate(self.goal(),carrying=True)
+                else:
+                    with self.assertRaisesRegex(RuntimeError,'状态6'):p.navigate(self.goal(),carrying=True)
+                after_release=held[next(i for i,item in enumerate(held)if item[0]is False)+1:]
+                first_hold=next(item for item in after_release if item[0]is True)
+                self.assertEqual(first_hold[1],0. if loaded and success else .05)
+                if loaded and success:
+                    evidence=p.dispatches[0]['stopped_before_hold']
+                    self.assertEqual(evidence['linear_speed'],0.)
+                    self.assertFalse(evidence['car_hold_before'])
 
     def test_stale_callback_cancels_only_its_handle_without_overwriting_new_task(self):
         p=self.bridge;old={'token':p.execution_token,'epoch':1,'received':False,'handle':None,'result':None,'cancel':None,'aborted':True,'error':None}
@@ -780,6 +954,23 @@ class BridgeRaceTests(unittest.TestCase):
         self.assertEqual(options['goal_pose'],{'x':.7,'y':-2.,'yaw':.3})
         self.assertTrue(options['carrying'])
 
+    def test_drive_egress_sends_body_target_and_exact_float32_speed_not_nominal_map_pose(self):
+        p=self.bridge;p.egress_client=object();calls=[]
+        p.dispatch_goal=lambda client,request,**options:calls.append((client,request,options))
+        motion=normalize_egress_motion({'type':'drive_on_heading','distance_m':.7,
+                                      'speed_m_s':.05,'time_allowance_s':45.})
+        p.drive_egress(motion)
+        client,request,options=calls[0]
+        self.assertIs(client,p.egress_client)
+        self.assertEqual((request.target.x,request.target.y,request.target.z),(.7,0.,0.))
+        self.assertEqual(request.speed,.05000000074505806)
+        self.assertEqual((request.time_allowance.sec,request.time_allowance.nanosec),(45,0))
+        self.assertEqual(options['label'],'DriveOnHeading')
+        self.assertTrue(options['carrying'])
+        self.assertNotIn('goal_pose',options)
+        self.assertEqual(options['goal_motion'],{'target':{'x':.7,'y':0.,'z':0.},
+            'speed':request.speed,'time_allowance':{'sec':45,'nanosec':0}})
+
     def test_native_terminal_and_continuous_car_arm_quiet_are_both_required(self):
         p=self.bridge;handle=ControlledHandle();dispatch={'token':p.execution_token,'received':True,'handle':handle,
             'result':handle.result_future,'cancel':None,'error':None,'aborted':True}
@@ -818,10 +1009,13 @@ class BridgeRaceTests(unittest.TestCase):
         p.raw['qvel6'][1]=p.raw['qvel20'][1]=.05
         with self.assertRaisesRegex(RuntimeError,'机械臂未保持回位停稳'):p.check(carrying=True)
 
-    def execution_handoff_probe(self, *, before_transfer=None, after_delivery=None, delivery_distance=1., delivery_pose=None):
+    def execution_handoff_probe(self, *, before_transfer=None, after_delivery=None, delivery_distance=1., delivery_pose=None,
+                                egress_pose=None, on_navigate=None, egress_motion=None, on_drive=None):
         """Exercise current execute ordering; controlled samples are not physical acceptance."""
         p=self.bridge;p.station_capture_ready=lambda:True;p.align_station_map=lambda:None
         if delivery_pose is not None:p.task['delivery_pose']=copy.deepcopy(delivery_pose)
+        if egress_pose is not None:p.task['egress_pose']=copy.deepcopy(egress_pose)
+        if egress_motion is not None:p.task['egress_motion']=copy.deepcopy(egress_motion)
         p.dock_at_station=lambda:p.check()
         class Planner:
             def __init__(self,*args,**kwargs):pass
@@ -844,10 +1038,12 @@ class BridgeRaceTests(unittest.TestCase):
         p.segment=segment;deliveries=[]
         def navigate(goal,**kwargs):
             deliveries.append(goal)
+            if on_navigate:on_navigate(goal,kwargs)
             p.raw['cargo']['position'][0]=p.raw['qpos22'][6]=.24+delivery_distance
             if after_delivery:after_delivery(p.raw)
             return p.raw
         p.navigate=navigate
+        p.drive_egress=lambda motion:on_drive(motion) if on_drive else p.raw
         def hold(message):
             p.holds.append(message.data);p.raw['car_hold']=p.raw['car']['hold']=message.data
         p.hold_pub=NS(publish=hold)
@@ -860,6 +1056,180 @@ class BridgeRaceTests(unittest.TestCase):
         self.assertEqual(deliveries,[selected])
         self.assertEqual(p.task['status'],'succeeded')
         self.assertEqual(p.execution_token,('task-a',1))
+
+    def test_start_freezes_optional_scene_egress_without_new_request_fields(self):
+        p=self.bridge;p.task.update(id=None,status='idle');p.execution_token=None
+        self.namespace['manifest']['egress_pose']=[.7,0,0]
+        body={'task_id':str(uuid.uuid4()),'issued_at':time.time()}
+        first=p.start(body)
+        self.namespace['manifest']['egress_pose'][0]=9
+        self.assertEqual(first['task']['egress_pose'],{'x':.7,'y':0.,'yaw':0.})
+        self.assertEqual(p.start(body)['task']['egress_pose'],first['task']['egress_pose'])
+        self.assertEqual(len(self.threads),1)
+
+    def test_loaded_egress_then_delivery_share_owner_and_pre_egress_displacement_baseline(self):
+        egress={'x':.7,'y':0.,'yaw':0.};delivery={'x':1.,'y':0.,'yaw':0.};options=[]
+        p,goals=self.execution_handoff_probe(egress_pose=egress,delivery_pose=delivery,
+            on_navigate=lambda goal,kwargs:options.append((kwargs,self.bridge.execution_token)))
+        self.assertEqual(goals,[egress,delivery])
+        self.assertEqual(options,[({'carrying':True},('task-a',1))]*2)
+        self.assertEqual(p.task['status'],'succeeded')
+        self.assertEqual(p.task['stage'],'delivery_stopped')
+        self.assertFalse(p.dock_guard_active)
+
+    def test_loaded_egress_failure_or_cancel_never_dispatches_delivery(self):
+        egress={'x':.7,'y':0.,'yaw':0.};delivery={'x':1.,'y':0.,'yaw':0.}
+        for canceled in (False,True):
+            with self.subTest(canceled=canceled):
+                self.setUp()
+                def stop(goal,kwargs):
+                    error=self.namespace['Canceled'] if canceled else RuntimeError
+                    raise error('egress stopped')
+                p,goals=self.execution_handoff_probe(egress_pose=egress,delivery_pose=delivery,on_navigate=stop)
+                self.assertEqual(goals,[egress])
+                self.assertEqual(p.task['status'],'canceled' if canceled else 'failed')
+                self.assertEqual(p.execution_token,('task-a',1))
+                self.assertNotIn('已到交付点，货物仍在托盘，车辆与货物已停稳。',
+                                 [event['message'] for event in p.events])
+
+    def test_drive_egress_replaces_map_egress_in_same_owner_and_failure_does_not_send_final(self):
+        motion={'type':'drive_on_heading','distance_m':.7,'speed_m_s':.05,'time_allowance_s':45.}
+        for fail in (False,True):
+            with self.subTest(fail=fail):
+                self.setUp();drives=[]
+                def drive(value):
+                    drives.append((value,self.bridge.execution_token))
+                    if fail:raise RuntimeError('native DriveOnHeading failed')
+                p,goals=self.execution_handoff_probe(egress_motion=motion,
+                    egress_pose={'x':.7,'y':0.,'yaw':0.},on_drive=drive)
+                self.assertEqual(drives,[(motion,('task-a',1))])
+                self.assertEqual(len(goals),0 if fail else 1)
+                self.assertEqual(p.task['status'],'failed' if fail else 'succeeded')
+
+    def test_loaded_parameters_apply_after_handoff_and_restore_after_native_quiet(self):
+        steps=[];test=self
+        class Limits:
+            phase='not_applied'
+            def apply(self,wait):
+                test.assertTrue(core.transport_handoff_ready(test.bridge.raw,[0.]*6))
+                steps.append('apply');self.phase='applied'
+            def restore(self,wait):
+                test.assertTrue(core.physical_quiet(test.bridge.raw))
+                test.assertTrue(test.bridge.raw['car_hold'])
+                steps.append('restore');self.phase='restored'
+            def snapshot(self):return {'phase':self.phase}
+        self.bridge.loaded_limits=Limits()
+        p,goals=self.execution_handoff_probe(egress_pose={'x':.7,'y':0.,'yaw':0.},
+            on_navigate=lambda goal,options:steps.append('navigate'))
+        self.assertEqual(steps,['apply','navigate','navigate','restore'])
+        self.assertEqual(p.task['status'],'succeeded')
+        self.assertEqual(p.task['loaded_velocity_smoother']['phase'],'restored')
+        self.assertEqual(p.cleanup_summary['loaded_velocity_smoother']['phase'],'restored')
+
+    def test_loaded_parameter_failure_cannot_dispatch_any_loaded_goal(self):
+        class Limits:
+            def apply(self,wait):raise RuntimeError('parameter ACK unknown')
+            def restore(self,wait):pass
+            def snapshot(self):return {'phase':'apply_unconfirmed'}
+        self.bridge.loaded_limits=Limits()
+        p,goals=self.execution_handoff_probe(egress_pose={'x':.7,'y':0.,'yaw':0.})
+        self.assertEqual(goals,[])
+        self.assertEqual(p.task['status'],'failed')
+        self.assertIn('parameter ACK unknown',p.task['stop_reason'])
+
+    def test_loaded_controller_applies_under_original_handoff_and_restores_both_adapters(self):
+        steps=[];test=self
+        class Limits:
+            def __init__(self,name):self.name=name;self.phase='not_applied'
+            def apply(self,wait):
+                test.assertTrue(core.transport_handoff_ready(test.bridge.raw,[0.]*6))
+                steps.append('apply '+self.name);self.phase='applied'
+            def restore(self,wait):
+                test.assertTrue(core.physical_quiet(test.bridge.raw))
+                test.assertTrue(test.bridge.raw['car_hold'])
+                steps.append('restore '+self.name);self.phase='restored'
+            def snapshot(self):return {'phase':self.phase}
+        self.bridge.loaded_limits=Limits('smoother')
+        self.bridge.loaded_controller=Limits('controller')
+        p,goals=self.execution_handoff_probe(
+            on_navigate=lambda goal,options:steps.append('navigate'))
+        self.assertEqual(steps,['apply smoother','apply controller','navigate',
+                                'restore controller','restore smoother'])
+        self.assertEqual(p.task['status'],'succeeded')
+        self.assertEqual(p.task['loaded_controller']['phase'],'restored')
+        self.assertEqual(p.cleanup_summary['loaded_controller']['phase'],'restored')
+        self.assertEqual(p.cleanup_summary['loaded_velocity_smoother']['phase'],'restored')
+
+    def test_loaded_controller_failure_stops_before_goal_and_still_restores_applied_smoother(self):
+        steps=[]
+        class Limits:
+            def __init__(self,name):self.name=name
+            def apply(self,wait):
+                steps.append('apply '+self.name)
+                if self.name=='controller':raise RuntimeError('RPP original ACK unknown')
+            def restore(self,wait):steps.append('restore '+self.name)
+            def snapshot(self):return {'name':self.name}
+        self.bridge.loaded_limits=Limits('smoother');self.bridge.loaded_controller=Limits('controller')
+        p,goals=self.execution_handoff_probe()
+        self.assertEqual(goals,[])
+        self.assertEqual(p.task['status'],'failed')
+        self.assertEqual(steps,['apply smoother','apply controller','restore controller','restore smoother'])
+
+    def test_loaded_controller_restore_unknown_does_not_skip_smoother_restore(self):
+        steps=[]
+        class Limits:
+            def __init__(self,name):self.name=name
+            def apply(self,wait):pass
+            def restore(self,wait):
+                steps.append(self.name)
+                if self.name=='controller':raise RuntimeError('RPP restore unknown')
+            def snapshot(self):return {'name':self.name}
+        self.bridge.loaded_limits=Limits('smoother');self.bridge.loaded_controller=Limits('controller')
+        p=self.bridge
+        self.assertFalse(p.cleanup_evidence(p.execution_token))
+        self.assertEqual(steps,['controller','smoother'])
+        self.assertEqual(p.cleanup_summary['state'],'unknown')
+        self.assertIn('RPP restore unknown',p.cleanup_summary['error'])
+
+    def test_new_task_renews_both_parameter_receipts_but_duplicate_start_does_not(self):
+        renewed=[]
+        class Limits:
+            def __init__(self,name):self.name=name
+            def new_task(self):
+                renewed.append(self.name)
+                return Limits(self.name)
+        p=self.bridge;p.task.update(id=None,status='idle');p.execution_token=None
+        old_smoother=Limits('smoother');old_controller=Limits('controller')
+        p.loaded_limits=old_smoother;p.loaded_controller=old_controller
+        body={'task_id':str(uuid.uuid4()),'issued_at':time.time()}
+        p.start(body);p.start(body)
+        self.assertEqual(renewed,['smoother','controller'])
+        self.assertIsNot(p.loaded_limits,old_smoother)
+        self.assertIsNot(p.loaded_controller,old_controller)
+        self.assertEqual(len(self.threads),1)
+
+    def test_parameter_restore_failure_keeps_task_and_cleanup_unknown(self):
+        class Limits:
+            def apply(self,wait):pass
+            def restore(self,wait):raise RuntimeError('original parameters unconfirmed')
+            def snapshot(self):return {'phase':'restore_unconfirmed'}
+        self.bridge.loaded_limits=Limits()
+        p,goals=self.execution_handoff_probe()
+        self.assertEqual(len(goals),1)
+        self.assertEqual(p.task['status'],'unknown')
+        self.assertEqual(p.cleanup_summary['state'],'unknown')
+        self.assertIn('original parameters unconfirmed',p.cleanup_summary['error'])
+
+    def test_parameter_wait_checks_hold_before_accepting_ack_and_has_bounded_deadline(self):
+        p=self.bridge;future=ControlledFuture(NS(),True)
+        p.raw['car_hold']=p.raw['car']['hold']=False
+        with self.assertRaisesRegex(RuntimeError,'hold'):
+            p.wait_loaded_parameter(future,p.execution_token,self.clock+1.)
+        p.raw['car_hold']=p.raw['car']['hold']=True
+        with self.assertRaisesRegex(RuntimeError,'不自动重发'):
+            p.wait_loaded_parameter(ControlledFuture(),p.execution_token,self.clock+.02)
+        self.assertEqual(p.execution_token,('task-a',1))
+        self.assertEqual(p.dispatches,[])
 
     def test_history_keeps_frozen_delivery_and_original_native_goal_metadata(self):
         p=self.bridge;p.task.update(status='succeeded',delivery_pose={'x':.7,'y':-2.,'yaw':0.})

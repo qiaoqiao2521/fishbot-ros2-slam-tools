@@ -15,6 +15,7 @@ import math
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
+from cooperation_profiles import normalize_scene_profile, vehicle_element, vehicle_profile
 
 ARM_JOINT_NAMES = ("shoulder_pan", "shoulder_lift", "elbow_flex",
                    "wrist_flex", "wrist_roll", "gripper")
@@ -72,13 +73,10 @@ def _translate_world(world, offset):
             child.set("pos", _numbers(a + b for a, b in zip(position, offset)))
 
 
-def _fishbot_element(path, spawn, spawn_yaw=0.):
-    root = ET.parse(path).getroot()
-    car = root.find("worldbody/body")
-    car.set("pos", _numbers((*spawn, .002)))
-    if spawn_yaw:
-        car.set('quat', _numbers((math.cos(spawn_yaw/2), 0., 0., math.sin(spawn_yaw/2))))
-    car.find(".//body[@name='laser_link']").set("pos", "-.065 0 .075")
+def _fishbot_element(path, spawn, spawn_yaw=0., scene_profile=None):
+    root, car, vehicle = vehicle_element(path, spawn, spawn_yaw, scene_profile)
+    if vehicle['id'] == 'fishbot':
+        car.find(".//body[@name='laser_link']").set("pos", "-.065 0 .075")
     # Bind the car's original global geom defaults explicitly. The SO101
     # global default must not change its wheel/floor friction or solver terms.
     for geom in car.iter("geom"):
@@ -88,7 +86,12 @@ def _fishbot_element(path, spawn, spawn_yaw=0.):
         geom.set("conaffinity", "3" if geom.get("contype", "1") != "0" else "0")
         geom.set("group", "0")
     tray = ET.SubElement(car.find("body[@name='base_link']"), "body",
-                         name="cargo_tray", pos=_numbers(TRAY_OFFSET))
+                         name="cargo_tray", pos=_numbers(vehicle['tray_offset_m']))
+    if vehicle['tray_mount'] is not None:
+        mount = vehicle['tray_mount']
+        ET.SubElement(tray, 'geom', name='tray_mount', type='box',
+            size=_numbers([x/2 for x in mount['size_m']]), pos=_numbers(mount['position_in_tray_m']),
+            mass=str(mount['mass_kg']), contype='1', conaffinity='3', group='0', rgba='.5 .55 .6 1')
     ET.SubElement(tray, "geom", name="place_floor", type="box", pos="0 0 .001",
                   size=".06 .06 .001", contype="1", conaffinity="3", group="0",
                   rgba=".20 .39 .58 1", friction="1 .005 .0001")
@@ -164,7 +167,7 @@ def frozen_car_geoms(common_model, car_pose, station):
     return geoms
 
 
-def car_footprint(common_model, radius=.13):
+def car_footprint(common_model, radius=.13, vehicle=None):
     """Enclose the existing circular outline and every compiled tray box corner."""
     import mujoco
     import numpy as np
@@ -181,6 +184,9 @@ def car_footprint(common_model, radius=.13):
     # relying on costmap padding to compensate for an undersized footprint.
     outer_angles = angles+np.pi/32
     tangent = radius/np.cos(np.pi/32)*np.column_stack((np.cos(outer_angles), np.sin(outer_angles)))
+    if vehicle and vehicle['id'] != 'fishbot':
+        original = np.asarray(vehicle['footprint_xy'])
+        tangent = original.copy()
     tray_corners = []
     tray_names = ['place_floor', *[f'place_wall_{axis}_{side}' for axis in ('x', 'y') for side in (-1, 1)]]
     signs = np.array([[x,y,z] for x in (-1,1) for y in (-1,1) for z in (-1,1)])
@@ -198,20 +204,26 @@ def car_footprint(common_model, radius=.13):
             'car_footprint_source_points_xy':points.tolist(),
             'car_footprint_tray_corners_xy':tray_corners,
             'car_footprint_tray_geometry_names':tray_names,
-            'car_footprint_method':'convex_hull_of_circle_tangent_envelope_and_compiled_tray_corners'}
+            'car_footprint_method':('convex_hull_of_source_vehicle_envelope_and_compiled_tray_corners'
+                                    if vehicle and vehicle['id'] != 'fishbot' else
+                                    'convex_hull_of_circle_tangent_envelope_and_compiled_tray_corners')}
 
 
 def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
                 spawn=(0., -2.), station=DEFAULT_STATION, spawn_yaw=0., camera=False, camera_light_scale=1.,
-                tag_lateral_offset=.03):
+                tag_lateral_offset=.03, scene_profile=None):
     import numpy as np
 
     so101_project, fishbot_project, output = map(lambda path: Path(path).resolve(),
                                                 (so101_project, fishbot_project, output))
     spawn, station = np.asarray(spawn, dtype=float), np.asarray(station, dtype=float)
+    scene_profile = normalize_scene_profile(scene_profile)
+    vehicle = vehicle_profile(scene_profile)
     if (spawn.shape != (2,) or station.shape != (3,) or
             not np.isfinite(np.r_[spawn, station, spawn_yaw]).all()):
         raise ValueError("Spawn xy and station xyz must be finite")
+    station = station.copy()
+    station[2] += vehicle['station_height_delta_m']
     output.mkdir(parents=True, exist_ok=True)
     modules = source_modules(so101_project)
     import mujoco
@@ -234,13 +246,16 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
         if geom.get("class") != "collision" and geom.get("contype", "0") != "0":
             geom.set("group", "0")
     _translate_world(common_root.find("worldbody"), station)
-    fish_root, car = _fishbot_element(fish_xml, spawn, spawn_yaw)
+    fish_root, car = _fishbot_element(fish_xml, spawn, spawn_yaw, scene_profile)
+    if fish_root.find('asset') is not None:
+        for element in fish_root.find('asset'):
+            common_root.find('asset').append(copy.deepcopy(element))
     common_root.find("worldbody").append(car)
     for element in fish_root.find("actuator"):
         common_root.find("actuator").append(copy.deepcopy(element))
     common_root.append(copy.deepcopy(fish_root.find("sensor")))
     _append_arena(common_root, arena_xml)
-    dock = (station[0] + .20, station[1] + .20, 0.)
+    dock = tuple(float(station[i]+vehicle['dock_offset_m'][i] if i < 2 else vehicle['dock_offset_m'][2]) for i in range(3))
     station_camera = None
     if camera:
         from cooperation_camera import add_camera_fixture
@@ -257,10 +272,11 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
     world_path = output / "world.xml"
     ET.ElementTree(common_root).write(world_path, encoding="utf-8", xml_declaration=True)
     model = mujoco.MjModel.from_xml_path(str(world_path))
-    if (model.nq, model.nv, model.nu) != (22, 20, 8):
+    wheel_names = vehicle['left_wheel_joints']+vehicle['right_wheel_joints']
+    wheel_count = len(wheel_names)
+    if (model.nq, model.nv, model.nu) != (20+wheel_count, 18+wheel_count, 6+wheel_count):
         raise RuntimeError(f"Unexpected arm/target/car layout: {model.nq}/{model.nv}/{model.nu}")
-    expected = (*ARM_JOINT_NAMES, "target_free", "base_free_joint",
-                "left_wheel_joint", "right_wheel_joint")
+    expected = (*ARM_JOINT_NAMES, "target_free", "base_free_joint", *wheel_names)
     if tuple(model.joint(index).name for index in range(model.njnt)) != expected:
         raise RuntimeError("Common scene must preserve arm, target, car joint order")
     arena = ET.parse(arena_xml).getroot()
@@ -294,30 +310,37 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
         raise RuntimeError(f"Common-scene arm home is obstructed: {checker.evaluate(home)}")
     source_files = [source, fish_xml, arena_xml, *[Path(module.__file__) for module in modules.values()],
                     so101_project / "experiments/colab-twin/grasp_workcell.py"]
+    source_files.extend(Path(path) for path in vehicle['source_files'] if Path(path) not in source_files)
     if station_camera is not None:
         source_files.append(Path(station_camera['tag_texture_file']))
+    initial = mujoco.MjData(model)
+    mujoco.mj_forward(model, initial)
+    floor = model.geom('place_floor').id
+    initial_tray_top = initial.geom_xpos[floor] + initial.geom_xmat[floor].reshape(3,3) @ np.array([0.,0.,model.geom_size[floor,2]])
     manifest = {"schema": "fishbot-so101-contact-cooperation-v1",
                 "world_xml": str(world_path), "rig_xml": str(rig_path),
                 "arm_contact_xml": str(contact_path), "so101_project": str(so101_project),
                 "fishbot_project": str(fishbot_project), "station_offset": station.tolist(),
+                "scene_profile": scene_profile, "vehicle_profile": vehicle,
+                "station_height_m": float(station[2]),
                 "display_cameras": {"overview": "cooperation_overview", "arm_detail": "overview"},
                 "spawn": spawn.tolist(), "dock_pose": list(dock),
-                "tray_offset": list(TRAY_OFFSET),
-                "initial_tray_floor_top_world_m": .002 + .092 + TRAY_OFFSET[2] + .002,
+                "tray_offset": list(vehicle['tray_offset_m']),
+                "initial_tray_floor_top_world_m": float(initial_tray_top[2]),
                 "arm_home_qpos6": home.tolist(), "initial_arm_q6": home.tolist(),
                 "arm_joint_names": list(ARM_JOINT_NAMES),
                 "actuator_names": [model.actuator(i).name for i in range(model.nu)],
                 "joints": [model.joint(i).name for i in range(model.njnt)],
                 "layout": {"arm_qpos": [0, 6], "target_qpos": [6, 13],
-                           "car_qpos": [13, 20], "wheel_qpos": [20, 22],
+                           "car_qpos": [13, 20], "wheel_qpos": [20, model.nq],
                            "arm_qvel": [0, 6], "target_qvel": [6, 12],
-                           "car_qvel": [12, 18], "wheel_qvel": [18, 20]},
+                           "car_qvel": [12, 18], "wheel_qvel": [18, model.nv]},
                 "nq": model.nq, "nv": model.nv, "nu": model.nu,
                 "source_sha256": {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in source_files},
                 "arm_collision_exclusions": checker.excluded_pairs,
                 "contact_assumptions": {"jaw_force_cap_nm": .15, "noslip_iterations": 10,
                                         "free_target_mass_kg": .01, "timestep_s": .002}}
-    manifest.update(car_footprint(model))
+    manifest.update(car_footprint(model, radius=vehicle['planning_radius_m'], vehicle=vehicle))
     if spawn_yaw:
         manifest['spawn_yaw'] = float(spawn_yaw)
     if station_camera is not None:

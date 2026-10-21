@@ -266,7 +266,7 @@ class EvidenceTail:
         self.native_statuses=OrderedDict()
 
     def remember_native(self,record):
-        if record.get('topic') not in ('dock_status','nav_status'):return
+        if record.get('topic') not in ('dock_status','nav_status','drive_on_heading_status'):return
         for item in record['payload']['status_list']:
             identity=(record['topic'],bytes(item['goal_info']['goal_id']['uuid']).hex())
             self.native_statuses.pop(identity,None)
@@ -357,7 +357,8 @@ def native_cleanup_known(state,native,task_id,episode_id):
         # A terminal from another goal cannot stand in for an evicted or
         # unobserved accepted UUID, even when the bridge task has failed.
         return all(isinstance(item,dict) and item.get('accepted') is True
-            and any(key[1]==item.get('uuid') for key in native) for item in handles)
+            and any(key[1]==item.get('uuid') and (item.get('label')!='DriveOnHeading'
+                    or key[0]=='drive_on_heading_status') for key in native) for item in handles)
     cleanup = state.get('cleanup', {})
     if (state.get('task',{}).get('status') == 'failed' and state.get('native_actions') == []
             and cleanup.get('state') == 'verified'

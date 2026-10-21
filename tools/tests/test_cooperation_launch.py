@@ -90,6 +90,15 @@ with tempfile.TemporaryDirectory() as directory:
  actions=module['start'](context)
  processes=[a for a in actions if isinstance(a,ExecuteProcess) and not isinstance(a,Node)]
  assert len(processes)==3
+ # Optional J100 fusion uses the existing upstream EKF, retaining the old nodes.
+ ekf=Path(directory)/'ekf.yaml';ekf.write_text('ekf_filter_node:\n  ros__parameters:\n    use_sim_time: true\n')
+ manifest['localization']={'enabled':True,'ekf_yaml':str(ekf)}
+ p.write_text(json.dumps(manifest))
+ actions=module['start'](context)
+ nodes=[a for a in actions if isinstance(a,Node)]
+ for node in nodes:node._perform_substitutions(context)
+ assert 'ekf_filter_node' in {node.node_name.rsplit('/',1)[-1] for node in nodes}
+ assert len(nodes)==4
 '''
         shell = 'source "$1/tools/fishbot_mujoco_env.sh" && exec "$2" -B -c "$3" "$1"'
         environment = dict(os.environ, FISHBOT_MUJOCO_DOMAIN_ID='114')

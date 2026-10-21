@@ -11,6 +11,8 @@ import {
   type CooperationFrameObservation, type CooperationSnapshot,
 } from '@/lib/cooperation'
 import { CooperationCanvasView, LiveCooperationCanvas } from './cooperation-canvas'
+import { CooperationSceneProfilePanel } from './cooperation-scene-profile'
+import { cooperationLiveProfile } from '@/lib/cooperation-scene-profile'
 import './cooperation.css'
 import './cooperation-workspace.css'
 
@@ -81,22 +83,26 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
   const ready = connected && !!state?.ready
   const physics = state?.physics
   const task = state?.task
+  const liveProfile = cooperationLiveProfile(state)
+  const workflowOwned = liveProfile.workflowOwned
   const dockOnly = task?.scope === 'dock'
   const stages = dockOnly ? COOPERATION_STAGES.slice(0, 2) : COOPERATION_STAGES
   const stageLabel = cooperationStageLabel(task?.stage, task?.scope)
-  const canStart = cooperationCanStart(snapshot, now)
+  const canStart = !workflowOwned && cooperationCanStart(snapshot, now)
   const canCancel = cooperationCanCancel(snapshot, now)
-  const canReset = cooperationCanReset(snapshot, now)
+  const canReset = !workflowOwned && cooperationCanReset(snapshot, now)
   const resetSupported = !!state?.reset && !!state.episode_id
   const events = [...new Map((state?.events ?? []).map((event) => [event.sequence, event])).values()]
     .sort((first, second) => first.sequence - second.sequence)
   const carStopped = !!physics && Math.abs(physics.car.linear_speed) < 0.01 && Math.abs(physics.car.angular_speed) < 0.03
   const stageRole = COOPERATION_STAGES.find((item) => item.key === task?.stage)?.role
   const armPhase = dockOnly ? '本回合未执行装货' : stageRole === 'arm' ? stageLabel : task?.status === 'succeeded' ? '机械臂已退出' : '等待机械臂阶段反馈'
-  const startReason = resetReceipt || state?.reset?.pending ? '正在核对场景重置，暂不能派发新任务。'
+  const startReason = workflowOwned ? '当前三批任务由 workflow 派发；网页只读取反馈，不重复开始。'
+    : resetReceipt || state?.reset?.pending ? '正在核对场景重置，暂不能派发新任务。'
     : receipt ? '正在核对原任务，暂不能重复派发。' : !connected ? '等待有效的协同服务状态。'
     : !state?.ready ? state?.reason : !canStart ? '当前任务尚未结束。' : '小车到固定工位装货，再驶向交付点。'
-  const resetReason = resetReceipt ? '只读取原重置请求，请勿重复重置。' : !connected ? '等待有效的协同服务状态。'
+  const resetReason = workflowOwned ? '三批任务由原 workflow 创建下一回合，网页不竞争重置。'
+    : resetReceipt ? '只读取原重置请求，请勿重复重置。' : !connected ? '等待有效的协同服务状态。'
     : state?.reset?.reason || '当前场景暂不能重置。'
   const resetCompleted = !resetReceipt && task?.status === 'idle' && state?.reset?.last?.status === 'succeeded'
     && state.reset.last.to_episode === state.episode_id
@@ -129,12 +135,12 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
     {sceneObjects.map((object) => <button type="button" key={object.id} data-coop-object={object.id}
       aria-pressed={selected === object.id} onClick={() => setSelected(object.id)}>
       <span className="cooperation-object-marker" aria-hidden="true">{object.id === 'car' ? <Truck size={18} /> : object.id === 'cargo' ? <Box size={18} /> : object.id === 'station' ? <MapPin size={18} /> : <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 21h13M7 21v-6l6-5-3-6 3-2 5 8-6 7v4M18 10l3 3-3 3" /><circle cx="13" cy="10" r="2" /></svg>}</span>
-      <span><strong>{object.name}</strong><small>{object.detail}</small></span>
+      <span><strong>{object.id === 'car' ? liveProfile.vehicleName : object.name}</strong><small>{object.detail}</small></span>
     </button>)}
     <p className="cooperation-object-help">选择对象查看属性。对象与工位只读，不发送移动指令。</p>
   </div>
   const properties = <div className="workspace-properties cooperation-workspace-properties">
-    <div className="cooperation-properties-heading"><strong>{sceneObjects.find((object) => object.id === selected)?.name}</strong>
+    <div className="cooperation-properties-heading"><strong>{selected === 'car' ? liveProfile.vehicleName : sceneObjects.find((object) => object.id === selected)?.name}</strong>
       <span>{connected ? '当前服务反馈' : '最近反馈 · 已过期'}</span></div>
     <section className="cooperation-telemetry" aria-label="实际物理反馈" data-current={connected}>
       <div hidden={selected !== 'car'} data-object-properties="car">
@@ -175,6 +181,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
     <footer className="cooperation-source"><span>仅用于仿真 · 物理真值与导航定位分别显示</span><span>场景来源 SHA：{state?.source?.scene_sha || '等待服务发布'}</span></footer>
   </div>
   const taskPanel = <div className="cooperation-workspace-task">
+        <CooperationSceneProfilePanel state={state} />
         <div className="cooperation-process">
           <h2>{dockOnly ? '停靠流程' : '装货运输流程'}</h2>
           <ol>{stages.map((stage, index) => <li key={stage.key} aria-current={stage.key === task?.stage || (dockOnly && task?.status === 'succeeded' && stage.key === 'dock_stopped') ? 'step' : undefined}>
@@ -197,10 +204,11 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
           </div>
           {task?.stop_reason && <p className="cooperation-stop-reason">停止原因：{task.stop_reason}</p>}
           <p className="cooperation-action-help">{startReason}</p>
-          {resetSupported && <p className="cooperation-action-help">重置只创建新的合成回合，并保留历史记录。重置完成后，请再点击“开始装货运输”。{!canReset && !resetCompleted ? ` ${resetReason}` : ''}</p>}
-          {resetCompleted && <p className="cooperation-action-help" role="status">{ready ? '新回合已就绪，请点击开始装货运输。' : '新回合已创建，等待共享物理世界与导航就绪。'}</p>}
+          {resetSupported && <p className="cooperation-action-help">{workflowOwned ? '三批回合由原 workflow 重置和继续派发，网页保留只读反馈。'
+            : <>重置只创建新的合成回合，并保留历史记录。重置完成后，请再点击“开始装货运输”。{!canReset && !resetCompleted ? ` ${resetReason}` : ''}</>}</p>}
+          {resetCompleted && <p className="cooperation-action-help" role="status">{ready ? workflowOwned ? '新回合已就绪，等待原 workflow 继续派发。' : '新回合已就绪，请点击开始装货运输。' : '新回合已创建，等待共享物理世界与导航就绪。'}</p>}
           {!resetSupported && task?.status === 'succeeded' && <p className="cooperation-action-help">当前协同服务不支持网页重置；需要启动新的合成回合。</p>}
-          {task?.status === 'running' && snapshot.ownedTaskId !== task.id && <p className="cooperation-action-help">当前任务由另一页面发起。这里只读取反馈。</p>}
+          {task?.status === 'running' && snapshot.ownedTaskId !== task.id && <p className="cooperation-action-help">{workflowOwned ? '当前任务由原 workflow 发起。这里只读取反馈。' : '当前任务由另一页面发起。这里只读取反馈。'}</p>}
           <CommandEvidencePanel evidence={projectCooperationEvidence(task ?? null, snapshot.receipt, { pending: !!pending, expectedTaskId: snapshot.ownedTaskId })} />
 
         </section>
@@ -208,7 +216,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
           <div className="cooperation-section-heading"><div><h2 id="cooperation-dialogue-heading">合作对话</h2><p>每条消息来自实际动作反馈。</p></div><span>{events.length} 条</span></div>
           {state && <EventContinuity events={state.events} episodeId={state.episode_id ?? null} taskId={state.task.id} />}
           {events.length ? <ol>{events.map((event) => <li key={event.sequence} className={`cooperation-event-${event.role}`}>
-            <div><strong>{{ car: 'FishBot', arm: 'SO101', system: '协同服务' }[event.role]}</strong><time>{event.time_s.toFixed(2)} s</time></div>
+            <div><strong>{{ car: liveProfile.vehicleName, arm: 'SO101', system: '协同服务' }[event.role]}</strong><time>{event.time_s.toFixed(2)} s</time></div>
             <p>{event.message}</p>
           </li>)}</ol> : <div className="cooperation-dialogue-empty"><p>尚未收到合作消息。</p><span>开始任务后，这里记录小车和机械臂的实际回应。</span></div>}
         </section>
@@ -221,7 +229,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
               <p>{entry.task.message}</p>
               {entry.task.stop_reason && <p>停止原因：{entry.task.stop_reason}</p>}
               <ol>{[...new Map(entry.events.map((event) => [event.sequence, event])).values()].sort((a, b) => a.sequence - b.sequence).map((event) => <li key={event.sequence}>
-                <div><strong>{{ car: 'FishBot', arm: 'SO101', system: '协同服务' }[event.role]}</strong><time>{event.time_s.toFixed(2)} s</time></div>
+                <div><strong>{{ car: liveProfile.vehicleName, arm: 'SO101', system: '协同服务' }[event.role]}</strong><time>{event.time_s.toFixed(2)} s</time></div>
                 <p>{event.message}</p>
               </li>)}</ol>
             </details>

@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "vehicle": "fishbot",
+  "sensors": "lidar3d",
+  "task": "three_batch_transport"
+}

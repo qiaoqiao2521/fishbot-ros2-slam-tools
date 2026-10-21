@@ -12,7 +12,7 @@ from urllib.error import HTTPError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cooperation_core import request_identity, reset_request_identity
-from cooperation_workflow import ContractError, LocalBridge, TransportUnknown, Workflow, main, read_json, run_workflow
+from cooperation_workflow import ContractError, LocalBridge, TransportUnknown, Workflow, main, read_json, run_workflow, scene_template_jobs
 
 
 def uid():
@@ -89,6 +89,88 @@ class Bridge:
         self.value.update(episode_id=uid(), ready=True, task={'id': None, 'status': 'idle'})
         self.value['reset'].update(available=True, pending=False)
         record.update(status='succeeded', new_episode_id=self.value['episode_id'])
+
+
+class SceneTemplateTest(unittest.TestCase):
+    def test_selected_three_batch_template_creates_fresh_ids_and_aab_targets(self):
+        profile={'schema':1,'vehicle':'jackal_j100','sensors':'lidar3d','task':'three_batch_transport'}
+        manifest={'scene_profile':profile,'delivery_pose':{'x':1.,'y':2.,'yaw':.3}}
+        batches,goals,selected=scene_template_jobs(manifest)
+        self.assertEqual(len(set(batches)),3)
+        self.assertEqual(selected,profile)
+        self.assertEqual([goals[b]['x'] for b in batches],[1.,1.,1.7])
+        goals[batches[0]]['x']=9
+        self.assertEqual(goals[batches[1]]['x'],1.)
+        self.assertTrue(set(batches).isdisjoint(scene_template_jobs(manifest)[0]))
+        self.assertEqual(len(scene_template_jobs({})[0]),1)
+
+    def test_from_scene_cli_checks_actual_profile_without_dispatching(self):
+        profile={'schema':1,'vehicle':'jackal_j100','sensors':'planar','task':'three_batch_transport'}
+        with tempfile.TemporaryDirectory() as directory:
+            folder=Path(directory);manifest=folder/'scene.json'
+            manifest.write_text(json.dumps({'scene_profile':profile}))
+            bridge=Bridge();bridge.value['scene_profile']=profile
+            ledger=folder/'workflow.json'
+            with patch('cooperation_workflow.LocalBridge',return_value=bridge),patch('sys.stdout',io.StringIO()):
+                result=main(['--ledger',str(ledger),'init','--from-scene',str(manifest)])
+            self.assertEqual(result,0)
+            self.assertEqual(len(read_json(ledger)['jobs']),3)
+            self.assertEqual(bridge.calls,[])
+            bridge.value['scene_profile']={**profile,'vehicle':'fishbot'}
+            other=folder/'other.json'
+            with patch('cooperation_workflow.LocalBridge',return_value=bridge),patch('sys.stdout',io.StringIO()):
+                result=main(['--ledger',str(other),'init','--from-scene',str(manifest)])
+            self.assertEqual(result,2);self.assertFalse(other.exists())
+            self.assertEqual(bridge.calls,[])
+
+    def test_nondefault_scene_template_dispatches_frozen_aab_after_reopen_and_reset(self):
+        profile={'schema':1,'vehicle':'jackal_j100','sensors':'lidar3d','task':'three_batch_transport'}
+        first={'x':1.25,'y':-1.75,'yaw':.4}
+        expected=[first,first,{**first,'x':1.95}]
+        with tempfile.TemporaryDirectory() as directory:
+            folder=Path(directory);manifest=folder/'scene.json';ledger=folder/'workflow.json'
+            manifest.write_text(json.dumps({'scene_profile':profile,'delivery_pose':first}))
+            bridge=Bridge();bridge.value['scene_profile']=profile
+            with patch('cooperation_workflow.LocalBridge',return_value=bridge),patch('sys.stdout',io.StringIO()):
+                self.assertEqual(main(['--ledger',str(ledger),'init','--from-scene',str(manifest)]),0)
+            batches=[job['batch_id'] for job in read_json(ledger)['jobs']]
+            # Subsequent edits cannot replace destinations frozen into the jobs.
+            manifest.write_text(json.dumps({'scene_profile':profile,'delivery_pose':{'x':99,'y':99,'yaw':0}}))
+            for index,batch in enumerate(batches):
+                with Workflow(ledger,bridge) as workflow:
+                    self.assertEqual(workflow.data['index'],index)
+                    workflow.event({'event_id':uid(),'machine_id':'laundry-machine-1',
+                                    'batch_id':batch,'version':index+1,'ready':True})
+                    workflow.dispatch()
+                    attempt=workflow.data['jobs'][index]['attempts'][-1]
+                    self.assertEqual(attempt['delivery_pose'],expected[index])
+                    original=attempt['task_id']
+                with Workflow(ledger,bridge) as workflow:
+                    before=len(bridge.calls)
+                    self.assertEqual(workflow.tick()['status'],'active')
+                    self.assertEqual(workflow.data['operation']['task_id'],original)
+                    self.assertEqual(len(bridge.calls),before)
+                    bridge.terminal()
+                    self.assertEqual(workflow.tick()['status'],'succeeded' if index==2 else 'waiting_reset')
+                    if index<2:
+                        workflow.reset()
+                if index<2:
+                    # Reopen while the original reset is pending; never resend it.
+                    with Workflow(ledger,bridge) as workflow:
+                        before=len(bridge.calls)
+                        workflow.tick()
+                        self.assertEqual(len(bridge.calls),before)
+                        bridge.acknowledge_reset()
+                        self.assertEqual(workflow.tick()['status'],'waiting_ready')
+            starts=[body for kind,body in bridge.calls if kind=='start']
+            self.assertEqual([body['delivery_pose'] for body in starts],expected)
+            self.assertEqual(len({body['task_id'] for body in starts}),3)
+            self.assertEqual(len({body['episode_id'] for body in starts}),3)
+            self.assertEqual([kind for kind,_ in bridge.calls],['start','reset','start','reset','start'])
+            final=read_json(ledger)
+            self.assertEqual(final['status'],'succeeded')
+            self.assertEqual([job['delivery_pose'] for job in final['jobs']],expected)
+            self.assertEqual([len(job['attempts']) for job in final['jobs']],[1,1,1])
 
 
 class WorkflowTest(unittest.TestCase):

@@ -31,5 +31,5 @@ case "$_coop_action" in
     export PYTHONPATH="$_coop_site:/usr/lib/python3/dist-packages:${PYTHONPATH:-}"
     exec "$_coop_python" -B "$_coop_root/tools/cooperation_oracle.py" "$@" ;;
   *)
-    echo 'Set FISHBOT_COOP_PYTHON; use prepare --so101-project PATH --output NEW_PATH [--perception-config JSON], then run manifest:=PATH output:=PATH; oracle --help observes/scores without controlling tasks.' ;;
+    echo 'Set FISHBOT_COOP_PYTHON; use prepare --so101-project PATH --output NEW_PATH [--scene-profile JSON] [--perception-config JSON], then run manifest:=PATH output:=PATH; oracle --help observes/scores without controlling tasks.' ;;
 esac

@@ -6,6 +6,7 @@ case "${1:-help}" in
     echo 'FishBot: ./fishbot.sh check | check-feedback | sim-suite [options] | sim-campaign [options] | stack-gate <command> | stack <command> | teleop <command> | save-map <name>'
     echo 'check checks layout; check-feedback runs offline behavioral regressions.'
     echo 'Simulation extensions: localization-recovery [options] | object-inspection <new-output-directory> | arena <command>'
+    echo 'Cooperation: cooperation {prepare|run|oracle} [options]; prepare accepts --scene-profile JSON.'
     echo 'Scene validation: scene-validation --output DIRECTORY [--cases clear detour blocked]'
     echo 'Hardware lab: hardware-report --real REPORT --base REPORT --suction REPORT [--transition REPORT] --output DIRECTORY (read-only)'
     echo 'Pressure physics: suction --output DIRECTORY [--render]'
@@ -25,6 +26,7 @@ case "${1:-help}" in
   object-inspection) shift; exec bash "$ROOT/tools/fishbot_object_inspection.sh" "$@" ;;
   stack-gate) shift; exec /usr/bin/python3 -B "$ROOT/tools/fishbot_stack_gate.py" "$@" ;;
   arena) shift; exec /usr/bin/python3 -B "$ROOT/tools/fishbot_arena.py" "$@" ;;
+  cooperation) shift; exec bash "$ROOT/tools/fishbot_cooperation.sh" "$@" ;;
   voice) shift; exec bash "$ROOT/tools/fishbot_voice.sh" "$@" ;;
   stack) shift; exec bash "$ROOT/tools/fishbot_stack.sh" "$@" ;;
   teleop) shift; exec bash "$ROOT/tools/fishbot.sh" "$@" ;;

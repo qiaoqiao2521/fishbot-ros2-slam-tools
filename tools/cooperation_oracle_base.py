@@ -316,7 +316,8 @@ def cancellation_score(records,samples,event,next_start):
     start=event['wall_time'];end=next_start or math.inf
     actions={}
     for name,status_topic,feedback_topic in (
-            ('NavigateToPose','nav_status','nav_feedback'),('DockRobot','dock_status','dock_feedback')):
+            ('NavigateToPose','nav_status','nav_feedback'),('DockRobot','dock_status','dock_feedback'),
+            ('DriveOnHeading','drive_on_heading_status','drive_on_heading_feedback')):
         before=[r for r in records if r['topic']==status_topic and r['received_wall_time']<=start]
         active_ids=set()
         if before:
@@ -334,7 +335,8 @@ def cancellation_score(records,samples,event,next_start):
     native_start_wall=None
     if len(matching)==1:
         name,identity=next(iter(matching))
-        status_topic='dock_status' if name=='DockRobot' else 'nav_status'
+        status_topic={'DockRobot':'dock_status','NavigateToPose':'nav_status',
+                      'DriveOnHeading':'drive_on_heading_status'}[name]
         starts=[r['received_wall_time'] for r in records
                 if r['topic']==status_topic and r['received_wall_time']<=start
                 and any(goal_id(s['goal_info']['goal_id']['uuid'])==identity and s['status'] in (1,2)
@@ -490,7 +492,7 @@ def observe(args):
     from tf2_msgs.msg import TFMessage
     from std_msgs.msg import String,Bool
     from action_msgs.msg import GoalStatusArray
-    from nav2_msgs.action import NavigateToPose,DockRobot
+    from nav2_msgs.action import NavigateToPose,DockRobot,DriveOnHeading
     from diagnostic_msgs.msg import DiagnosticArray
     from sensor_msgs.msg import Image,CameraInfo
     directory=args.output or BASE/f'run-{time.time_ns()}'
@@ -528,6 +530,8 @@ def observe(args):
             ('/docking_trajectory',Path,'docking_trajectory',reliable),
             ('/dock_robot/_action/status',GoalStatusArray,'dock_status',statusq),
             ('/dock_robot/_action/feedback',DockRobot.Impl.FeedbackMessage,'dock_feedback',reliable),
+            ('/drive_on_heading/_action/status',GoalStatusArray,'drive_on_heading_status',statusq),
+            ('/drive_on_heading/_action/feedback',DriveOnHeading.Impl.FeedbackMessage,'drive_on_heading_feedback',reliable),
             ('/detected_dock_pose',PoseStamped,'beacon',reliable),
             ('/cooperation/station_pose',PoseWithCovarianceStamped,'station_pose',observationq),
             ('/cooperation/station_detection',DiagnosticArray,'station_detection',observationq),

@@ -104,6 +104,64 @@ def write_map(output, stem, pixels, resolution, size, origin):
     return path, hashlib.sha256(pgm.read_bytes()).hexdigest()
 
 
+def composition_navigation(params, manifest, output):
+    """Bind existing native navigation components to the selected assets."""
+    import yaml
+    profile = manifest.get('scene_profile', {})
+    vehicle = manifest.get('vehicle_profile', {})
+    if profile or vehicle:
+        # A heading correction may move a skid-steer chassis after XY first
+        # entered tolerance. Require both coordinates at the final heading.
+        params['controller_server']['ros__parameters']['general_goal_checker']['stateful'] = False
+        params['controller_server']['ros__parameters']['FollowPath']['stateful'] = False
+    if vehicle.get('id') == 'jackal_j100':
+        source = Path(__file__).with_name('config')/'base_profiles/j100_ekf.yaml'
+        ekf = yaml.safe_load(source.read_text())
+        ekf['ekf_filter_node']['ros__parameters']['imu0'] = '/imu'
+        ekf_path = Path(output)/'cooperation-ekf.yaml'
+        ekf_path.write_text(yaml.safe_dump(ekf, sort_keys=False))
+        manifest['localization'] = {'enabled': True, 'ekf_yaml': str(ekf_path),
+            'wheel_odom_topic': '/wheel/odom', 'imu_topic': '/imu',
+            'implementation': 'robot_localization/ekf_node',
+            'absolute_yaw_or_truth_input': False}
+        radius = max(math.hypot(*point) for point in manifest['car_footprint_xy'])
+        for name in ('global_costmap','local_costmap'):
+            config = params[name][name]['ros__parameters']
+            config['robot_radius'] = radius
+            config['inflation_layer']['inflation_radius'] = radius + .17
+        follow = params['controller_server']['ros__parameters']['FollowPath']
+        navigation = vehicle.get('navigation', {})
+        follow['max_angular_accel'] = navigation.get('max_angular_accel', 10.)
+        if 'rotate_to_heading_angular_vel' in navigation:
+            follow['rotate_to_heading_angular_vel'] = navigation['rotate_to_heading_angular_vel']
+        if navigation.get('stopped_goal_checker'):
+            params['controller_server']['ros__parameters']['general_goal_checker'].update(
+                plugin='nav2_controller::StoppedGoalChecker',
+                trans_stopped_velocity=.01, rot_stopped_velocity=.01)
+        params['controller_server']['ros__parameters']['progress_checker']['required_movement_angle'] = .2
+    if profile.get('sensors') == 'lidar3d':
+        from cooperation_lidar import configuration as lidar_configuration
+        from fishbot_lidar3d import configure_costmaps
+        sensor = lidar_configuration(manifest)
+        ceiling = manifest['transport_height_envelope']['max_obstacle_height_m']
+        configure_costmaps(params, sensor['topic'], sensor['max_range_m'])
+        for name in ('global_costmap','local_costmap'):
+            config = params[name][name]['ros__parameters']
+            key = 'voxel_layer' if 'voxel_layer' in config['plugins'] else 'lidar3d_voxel_layer'
+            config[key]['lidar3d'].update(max_obstacle_height=ceiling,
+                obstacle_min_range=sensor['min_range_m'], raytrace_min_range=sensor['min_range_m'])
+        monitor = params['collision_monitor']['ros__parameters']
+        if 'lidar3d' not in monitor['observation_sources']:
+            monitor['observation_sources'].append('lidar3d')
+        monitor['lidar3d'] = {'type':'pointcloud','topic':sensor['topic'],
+            'min_height':.025,'max_height':ceiling,'min_range':sensor['min_range_m'],'enabled':True}
+        manifest['lidar3d_navigation'] = {'topic':sensor['topic'],
+            'min_range_m':sensor['min_range_m'], 'max_range_m':sensor['max_range_m'],
+            'costmaps':['global_costmap','local_costmap'], 'collision_monitor':True,
+            'localization_source':'/scan', 'implementation':'shared native mj_multiRay adapter',
+            'height_envelope':manifest['transport_height_envelope']}
+
+
 def prepare(args):
     perception_path = getattr(args, 'perception_config', None)
     perception_input = json.loads(Path(perception_path).read_text()) if perception_path else None
@@ -120,12 +178,19 @@ def prepare(args):
     import numpy as np
     import yaml
     from cooperation_scene import build_scene
+    profile_path = getattr(args, 'scene_profile', None)
+    scene_profile = json.loads(Path(profile_path).read_text()) if profile_path else None
     spawn=getattr(args,'spawn',(0.,-2.))
     spawn_yaw=getattr(args,'spawn_yaw',0.)
     manifest=build_scene(args.so101_project,args.fishbot_project,args.output,
                          spawn=spawn,spawn_yaw=spawn_yaw,camera=station_perception['mode']=='vision',
                          camera_light_scale=getattr(args,'camera_light_scale',1.),
-                         tag_lateral_offset=getattr(args,'tag_lateral_offset',.03))
+                         tag_lateral_offset=getattr(args,'tag_lateral_offset',.03),
+                         scene_profile=scene_profile)
+    factory_path = getattr(args, 'factory_config', None)
+    if factory_path:
+        from cooperation_factory_scene import apply_factory_scene
+        apply_factory_scene(manifest, json.loads(Path(factory_path).read_text()))
     model=mujoco.MjModel.from_xml_path(manifest['world_xml'])
     data=mujoco.MjData(model);mujoco.mj_forward(model,data)
     rectangles=[];slices=[]
@@ -233,6 +298,10 @@ def prepare(args):
         dock_collision_threshold=NATIVE_DOCKING_TARGET_PROJECTION_M,
         costmap_topic='/local_costmap/costmap_raw',
         footprint_topic='/local_costmap/published_footprint',projection_time=1.)
+    from cooperation_profiles import height_envelope
+    manifest['transport_height_envelope'] = height_envelope(model, data, manifest,
+        padding_m=float(params['local_costmap']['local_costmap']['ros__parameters'].get('footprint_padding', .01)))
+    composition_navigation(params, manifest, args.output)
     nav_path=args.output/'cooperation-nav2.yaml';nav_path.write_text(yaml.safe_dump(params,sort_keys=False))
     manifest.update(map_yaml=str(localization_path),localization_map_yaml=str(localization_path),
         collision_map_yaml=str(collision_path),nav2_yaml=str(nav_path),static_map_rectangles=rectangles,
@@ -256,6 +325,11 @@ def prepare(args):
         map_resolution_m=resolution,source_nav2_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
         generated_map_sha256=localization_hash,generated_collision_map_sha256=collision_hash,
         generated_nav2_sha256=hashlib.sha256(nav_path.read_bytes()).hexdigest())
+    if manifest.get('vehicle_profile', {}).get('transport_egress') == 'staging':
+        manifest['egress_pose'] = dict(zip(('x', 'y', 'yaw'), staging))
+        motion = manifest['vehicle_profile'].get('transport_egress_motion')
+        if motion is not None:
+            manifest['egress_motion'] = {**motion, 'distance_m': staging_distance}
     if station_perception['mode'] == 'ideal':
         manifest['ideal_station_perception'] = {
             'topic':'/cooperation/station_pose','detection_topic':'/cooperation/station_detection',
@@ -276,6 +350,10 @@ def main():
     parser.add_argument('--so101-project',type=Path,required=True)
     parser.add_argument('--fishbot-project',type=Path,default=Path(__file__).resolve().parents[1])
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--scene-profile',type=Path,
+                        help='Editable vehicle/sensors/task JSON; creates a new independent scene')
+    parser.add_argument('--factory-config',type=Path,
+                        help='Editable delivery stations, orders and physical channel occupancy')
     parser.add_argument('--perception-config',type=Path,
                         help='JSON station observation contract; ideal by default, no vision truth fallback')
     parser.add_argument('--spawn',type=float,nargs=2,default=(0.,-2.),metavar=('X','Y'))

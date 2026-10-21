@@ -35,6 +35,8 @@ export type CooperationState = {
   ready: boolean
   reason: string
   episode_id?: string
+  scene_profile?: unknown
+  vehicle_profile?: unknown
   reset?: { available: boolean; reason: string; pending: boolean;
     last: { request_id: string; status: CooperationResetStatus; from_episode: string; to_episode: string | null; message: string } | null }
   history?: CooperationHistory[]

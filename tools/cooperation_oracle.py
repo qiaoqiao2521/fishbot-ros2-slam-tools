@@ -14,6 +14,7 @@ import math
 from pathlib import Path
 import sys
 import os
+import struct
 import time
 
 BASE = Path(__file__).resolve().parent
@@ -23,6 +24,11 @@ spec.loader.exec_module(oracle)
 original_audit = oracle.driver_audit
 original_score = oracle.score
 options = None
+STATUS_KINDS = {'nav_status': 'nav', 'dock_status': 'dock',
+                'drive_on_heading_status': 'drive_on_heading'}
+FEEDBACK_KINDS = {'nav_feedback': 'nav', 'dock_feedback': 'dock',
+                  'drive_on_heading_feedback': 'drive_on_heading'}
+LABEL_KINDS = {'Nav2': 'nav', 'Nav2停靠': 'dock', 'DriveOnHeading': 'drive_on_heading'}
 
 
 def driver_audit():
@@ -89,10 +95,10 @@ def extra_checks(records, marker_path, expected, *, reset_receipt=None, allow_in
             in_window = start['wall_time'] <= r['received_wall_time'] <= (end or math.inf) + 1
             if not in_window:
                 continue
-            if r['topic'] in ('nav_feedback', 'dock_feedback'):
-                action_ids.add((r['topic'].split('_')[0], uuid_hex(r['payload']['goal_id']['uuid'])))
-            if r['topic'] in ('nav_status', 'dock_status'):
-                kind = r['topic'].split('_')[0]
+            if r['topic'] in FEEDBACK_KINDS:
+                action_ids.add((FEEDBACK_KINDS[r['topic']], uuid_hex(r['payload']['goal_id']['uuid'])))
+            if r['topic'] in STATUS_KINDS:
+                kind = STATUS_KINDS[r['topic']]
                 for s in r['payload']['status_list']:
                     key = (kind, uuid_hex(s['goal_info']['goal_id']['uuid']))
                     if s['status'] in (1, 2, 3):
@@ -115,7 +121,7 @@ def extra_checks(records, marker_path, expected, *, reset_receipt=None, allow_in
         for state in http:
             for action in state.get('native_actions',[]):
                 if action.get('accepted') is not True:continue
-                kind={'Nav2停靠':'dock','Nav2':'nav'}.get(action.get('label'))
+                kind=LABEL_KINDS.get(action.get('label'))
                 identifier=action.get('uuid')
                 if kind is None or not isinstance(identifier,str) or len(identifier)!=32:
                     handle_bad=True;continue
@@ -125,8 +131,9 @@ def extra_checks(records, marker_path, expected, *, reset_receipt=None, allow_in
         handles_bound=(not handle_bad and bool(handle_ids) and handle_ids==action_ids
                        and all(handle_terminal.get(key)==terminal.get(key) for key in action_ids))
         cancel_events=[e for e in events if e.get('kind')=='cancel_requested' and e.get('task_id')==start['task_id']]
-        cancel_bound=all(('dock',e.get('native_uuid')) in action_ids
-                         and handle_cancel_times.get(('dock',e.get('native_uuid')))==e.get('wall_time') for e in cancel_events)
+        cancel_bound=all(sum(key[1]==e.get('native_uuid')
+                             and handle_cancel_times.get(key)==e.get('wall_time') for key in action_ids)==1
+                         for e in cancel_events)
         if strict_handles:
             native = native and handles_bound and cancel_bound
         terminal_status = http[-1]['task'].get('status') if http else None
@@ -250,6 +257,39 @@ def delivery_checks(records, samples, audit, attempts, events):
             return None
         return {k: float(value[k]) for k in ('x', 'y', 'yaw')}
 
+    def motion(value):
+        keys = ('distance_m', 'speed_m_s', 'time_allowance_s')
+        if (not isinstance(value, dict) or value.get('type') != 'drive_on_heading'
+                or any(not finite(value.get(key)) or value[key] <= 0 for key in keys)):
+            return None
+        try:
+            speed = struct.unpack('<f', struct.pack('<f', value['speed_m_s']))[0]
+        except (OverflowError, struct.error):
+            return None
+        if not math.isfinite(speed) or speed <= 0 or round(value['time_allowance_s']*1e9) < 1:
+            return None
+        return {'type': 'drive_on_heading', 'distance_m': float(value['distance_m']),
+                'speed_m_s': speed, 'time_allowance_s': float(value['time_allowance_s'])}
+
+    def body_goal(value):
+        if value is None:
+            return None
+        sec, nanosec = divmod(round(value['time_allowance_s']*1e9), 1000000000)
+        return {'target': {'x': value['distance_m'], 'y': 0., 'z': 0.},
+                'speed': value['speed_m_s'], 'time_allowance': {'sec': sec, 'nanosec': nanosec}}
+
+    def observed_body_goal(value):
+        if not isinstance(value, dict) or set(value) != {'target', 'speed', 'time_allowance'}:
+            return None
+        point, duration = value['target'], value['time_allowance']
+        if (not isinstance(point, dict) or set(point) != {'x', 'y', 'z'}
+                or any(not finite(point[key]) for key in point) or not finite(value['speed'])
+                or not isinstance(duration, dict) or set(duration) != {'sec', 'nanosec'}
+                or any(type(duration[key]) is not int for key in duration)
+                or not 0 <= duration['nanosec'] < 1000000000 or duration['sec'] < 0):
+            return None
+        return value
+
     target_keys = ('expected_delivery_pose', 'delivery_pose', 'requested_delivery_pose')
     declared = any(e.get('kind') == 'full_started' and any(k in e for k in target_keys) for e in events)
     declared |= any(r['topic'] == 'http_state' and 'delivery_pose' in r['payload'].get('task', {}) for r in records)
@@ -282,40 +322,98 @@ def delivery_checks(records, samples, audit, attempts, events):
         for state in states:
             binding &= (state.get('episode_id') == episode
                         and pose(state.get('task', {}).get('delivery_pose')) == target and target is not None)
+        manifests = [r['payload'].get('source', {}).get('manifest', {}) for r in records
+                     if r['topic'] == 'physics' and episode_id(r['payload']) == episode]
+        declarations = [m['egress_pose'] for m in manifests if m.get('egress_pose') is not None]
+        egress_declared = bool(declarations)
+        def egress_pose(value):
+            return pose(dict(zip(('x', 'y', 'yaw'), value))
+                        if isinstance(value, (list, tuple)) and len(value) == 3 else value)
+        egress = egress_pose(declarations[0]) if declarations else None
+        binding &= all(egress_pose(value) == egress and egress is not None for value in declarations)
+        motion_declarations = [m['egress_motion'] for m in manifests if m.get('egress_motion') is not None]
+        motion_declared = bool(motion_declarations)
+        egress_motion = motion(motion_declarations[0]) if motion_declarations else None
+        binding &= all(motion(value) == egress_motion and egress_motion is not None
+                       for value in motion_declarations)
+        for state in states:
+            task_egress = state.get('task', {}).get('egress_pose')
+            binding &= (pose(task_egress) == egress if egress_declared else task_egress is None)
+            task_motion = state.get('task', {}).get('egress_motion')
+            binding &= (motion(task_motion) == egress_motion if motion_declared else task_motion is None)
+        expected_goals = [{'label': 'Nav2', 'goal_pose': target, 'goal_motion': None}]
+        if motion_declared:
+            expected_goals.insert(0, {'label': 'DriveOnHeading', 'goal_pose': None,
+                                      'goal_motion': body_goal(egress_motion)})
+        elif egress_declared:
+            expected_goals.insert(0, {'label': 'Nav2', 'goal_pose': egress, 'goal_motion': None})
         carried = {}
-        last_nav_is_delivery = False
+        last_nav = None
         goal_frozen = True
         for state in states:
             accepted = [a for a in state.get('native_actions', [])
-                        if a.get('label') == 'Nav2' and a.get('accepted') is True]
+                        if a.get('accepted') is True]
             if accepted:
-                last_nav_is_delivery = accepted[-1].get('carrying') is True
+                last_nav = accepted[-1]
+            snapshot_ids = []
             for action in accepted:
                 if action.get('carrying') is not True:
                     continue
                 identifier = action.get('uuid')
                 identifier_ok = (isinstance(identifier, str) and len(identifier) == 32
                                  and all(ch in '0123456789abcdef' for ch in identifier))
-                goal = pose(action.get('goal_pose'))
-                goal_frozen &= identifier_ok and goal == target and target is not None
+                goal = {'label': action.get('label'), 'goal_pose': pose(action.get('goal_pose')),
+                        'goal_motion': observed_body_goal(action.get('goal_motion'))}
+                goal_frozen &= identifier_ok
+                if goal['label'] == 'DriveOnHeading':
+                    goal_frozen &= action.get('goal_pose') is None and isinstance(goal['goal_motion'], dict)
+                else:
+                    goal_frozen &= goal['label'] == 'Nav2' and goal['goal_pose'] is not None
                 if identifier_ok:
+                    snapshot_ids.append(identifier)
                     if identifier in carried:
                         goal_frozen &= carried[identifier] == goal
                     carried[identifier] = goal
-        native_id = next(iter(carried)) if len(carried) == 1 else None
-        active = False
-        terminal = None
+            goal_frozen &= (len(snapshot_ids) == len(set(snapshot_ids))
+                            and snapshot_ids == list(carried)[:len(snapshot_ids)])
+        route_ids = list(carried)
+        goal_frozen &= (len(route_ids) == len(expected_goals)
+                        and list(carried.values()) == expected_goals
+                        and target is not None and (not motion_declared or egress_motion is not None))
+        native_id = route_ids[-1] if len(route_ids) == len(expected_goals) else None
+        last_nav_is_delivery = bool(native_id and last_nav and last_nav.get('carrying') is True
+                                    and last_nav.get('uuid') == native_id and last_nav.get('label') == 'Nav2')
+        observed = {identifier: {'active_wall_time': None, 'terminal_status': None,
+                                'success_wall_time': None} for identifier in route_ids}
         for record in sorted(records, key=lambda r: r.get('received_wall_time', 0.)):
             if not start <= record.get('received_wall_time', 0.) <= end + 1.:
                 continue
-            if record['topic'] == 'nav_feedback' and uuid_hex(record['payload']['goal_id']['uuid']) == native_id:
-                active = True
-            if record['topic'] == 'nav_status':
+            wall = record['received_wall_time']
+            if record['topic'] in FEEDBACK_KINDS:
+                identifier = uuid_hex(record['payload']['goal_id']['uuid'])
+                seen = observed.get(identifier)
+                if (seen is not None and FEEDBACK_KINDS[record['topic']] == LABEL_KINDS.get(carried[identifier]['label'])
+                        and seen['active_wall_time'] is None):
+                    seen['active_wall_time'] = wall
+            if record['topic'] in STATUS_KINDS:
                 for status in record['payload'].get('status_list', []):
-                    if uuid_hex(status['goal_info']['goal_id']['uuid']) == native_id:
-                        active |= status['status'] in (1, 2, 3)
-                        terminal = status['status']
-        native = bool(native_id and goal_frozen and last_nav_is_delivery and active and terminal == 4)
+                    identifier = uuid_hex(status['goal_info']['goal_id']['uuid'])
+                    seen = observed.get(identifier)
+                    if (seen is not None and STATUS_KINDS[record['topic']] == LABEL_KINDS.get(carried[identifier]['label'])):
+                        if status['status'] in (1, 2, 3) and seen['active_wall_time'] is None:
+                            seen['active_wall_time'] = wall
+                        seen['terminal_status'] = status['status']
+                        if status['status'] == 4 and seen['success_wall_time'] is None:
+                            seen['success_wall_time'] = wall
+        route_success = all(seen['active_wall_time'] is not None and seen['terminal_status'] == 4
+                            for seen in observed.values())
+        route_order = all(observed[earlier]['success_wall_time'] is not None
+                          and observed[later]['active_wall_time'] is not None
+                          and observed[earlier]['success_wall_time'] <= observed[later]['active_wall_time']
+                          for earlier, later in zip(route_ids, route_ids[1:]))
+        active = bool(native_id and observed[native_id]['active_wall_time'] is not None)
+        terminal = observed[native_id]['terminal_status'] if native_id else None
+        native = bool(native_id and goal_frozen and last_nav_is_delivery and route_success and route_order)
         gate = oracle.Gate(1.)
         placed = attempt.get('released_full_footprint_supported_and_relative_rest', {}).get('first_pass_stamp')
         previous = last = None
@@ -349,6 +447,12 @@ def delivery_checks(records, samples, audit, attempts, events):
         results.append({'task_id': task_id, 'episode_id': episode, 'required': True,
             'expected_delivery_pose': target, 'task_request_and_acceptance_match': bool(binding),
             'carrying_nav_uuid': native_id, 'carrying_nav_sent_goal_matches': bool(goal_frozen and native_id),
+            'expected_egress_pose': egress, 'egress_required': egress_declared or motion_declared,
+            'expected_egress_motion': egress_motion,
+            'egress_map_pose_role': 'nominal_staging_reference_not_native_body_goal' if motion_declared else 'native_map_goal',
+            'carrying_nav_route': [{'uuid': identifier, **carried[identifier], **observed[identifier]}
+                                   for identifier in route_ids],
+            'carrying_nav_route_order_confirmed': route_order,
             'last_nav_is_delivery': last_nav_is_delivery, 'native_uuid_active_observed': active,
             'native_uuid_terminal_status': terminal, 'native_uuid_success_independently_observed': native,
             'goal_request_evidence': 'bridge_pre_send_frozen_goal_and_accepted_handle_HTTP_snapshot',
@@ -389,7 +493,7 @@ def cleanup_checks(records, samples, events, task_id):
     received_age = end-last['wall_time'] if last else None
     native = {}
     for record in records:
-        if record['topic'] in ('dock_status','nav_status') and record['received_wall_time'] <= end:
+        if record['topic'] in STATUS_KINDS and record['received_wall_time'] <= end:
             for item in record['payload']['status_list']:
                 native[(record['topic'],uuid_hex(item['goal_info']['goal_id']['uuid']))] = item['status']
     terminal = bool(native) and all(status in (4,5,6) for status in native.values())

@@ -118,3 +118,115 @@ job1新attempt 0c1bf47d在准备导航失败：原Nav31701beb到5，没有Dock/�
 原前端桌面/390px分别读回A与B，任务目标与界面属性一致，零写请求、零页面错误、手机无横向溢出。证据位于同级ui/goal-a.json、goal-b.json及截图。实验owned进程全部退出、9106/5189关闭；原5188仍监听，保护实例状态一致。只读核对与清理记录已回读。
 
 可直接复用：输入作业数量、每批交付点、同ID查询/取消/恢复、既有停靠/抓放/载货导航、原前端与独立评分。仍需适配：不同工位/物体/底盘、同回合多货物库存、任意地图、视觉留出与真实硬件。本轮ideal观测三批成功不计为新RGB或sim-to-real验收。原固件脚本保留，未刷写。
+
+## P8 Current
+
+in_progress：车型/传感器/任务配置、实际四轮底盘/工位/托盘、2D+3D接线、原UUID出站/载货参数与网页配置草稿已实现。当前 J100+3D 多次完整运输有单批成功，但同一冻结候选的三批 A/A/B 尚未全部通过；其余三条最终矩阵尚未运行，不能称4组合12/12。K2在360墙秒内未完成最终朝向；最新只读证据显示小转向请求下轮速伺服稳态误差大，正独立做20例低速响应校准。原质量/摩擦/扭矩、碰撞/时效/评分不放宽。F1默认FishBot开放场景2/2已独立交付，不能代替P8。
+
+最新根验证：完整反馈1621项通过（control891/mission209/autonomy61/frontend460，零skip/缺依赖）；133项P8/F1相关完整原生离线测试通过。随后雷达自定义topic/range统一接线与goal XY持续检查的6项composition测试通过；新goal参数尚待完整原生运行验证。前端桌面/390px实际配置草稿与下载验收保持，非运行时热换。知识updated(local)，已回写Wiki/ROS2 与 FishBot第19/20节及开发知识入口并读回，独立知识仓未提交发布。当前root继续校准与冻结面板；后文为逐轮历史，旧失败原件不覆盖。
+
+配置/轮控/原生点云/前端初版已接。根86core、48workflow、3composition、7原雷达参数、12prepare及1launch通过；全sim在正确ROS＋planning环境38项通过，零skip。第一次系统Python缺diagnostic_msgs且2项skip，仅环境无效结果保留，不改实现绕过；重新使用既有ROS环境后全过。前端worker59项/构建/lint通过，实际浏览器待根验收。J100工位/真实托盘支承块仍在完整几何余量修正中，实际运输尚未开始。
+
+J100完整fixture修正后profiles8/8与旧scene7/7通过，保守扫掠余量19.84mm，真实18mm铝支承块0.486kg。开发dev-jackal-lidar3d-a在DBus环境查询前退出，零launch/start；父命令补既有XDG/DBUS环境后，dev-jackal-lidar3d-b实际准备Nav成功，但Dock在距目标约.257m处因原生预测碰撞905失败。无实体禁碰、无guard trip、源门槛无异常；原UUID明确终态6，原失败评分保留。129.89秒后独立quiet/cleanup通过并清理owned实例，原服务保持。
+
+只读回放原生最后10预测点：精确3D几何最小净距29.95mm，完整矩形静态地图占用格0，驱动轮正确且未接近限幅。正在区分动态点云的高度投影与坐标变换；不因失败关闭collision或放评分。dev-jackal-planar-a仅改传感器配置做对照，使用独立138/9108。最终四组合面板尚未开始。晚启3Dprobe因实例已结束无数据，记incomplete；UI首次严格label选择器不匹配、第二次读已关闭服务，均不能记浏览器通过。
+
+### P8 开发排障与候选冻结
+
+dev-jackal-planar-a在原120秒准备Nav回执期限内未进入15mm目标圈，按原UUID取消到status5，未进入Dock或抓放；最终所有owned进程及9108清理，旧结果保留false。独立trace在首个AMCL重置之前已看到命令.573rad/s、真值.0846、EKF.0846；不是IMU航向反向。原生独立14组阶跃复现直行正常、四轮擦滑转向仅约15%，扩大力矩上限不改变结果，不把问题归给网络或评分。
+
+候选保留官方质量、惯量、真实轮距.37559m、轮径.098m、四真实轮、摩擦.5和12Nm限制，复用滑移转向有效轮距惯例。固定离线30组面板选单一系数4.5；命令与编码器共用1.690155m有效轮距，真实几何另存。该MuJoCo3.3.7平地参数不是实车标定或在线真值反馈：空载纯旋转最大绝对误差.04702rad/s，曲线仍有约.066rad/s、.032m/s残差，满载同样保留。新原生正负转向回归通过；原FishBot系数1保持。全部候选参数与旧失败在私有skid-response-probe保存。
+
+三维失败离线同帧回放在原生预测足迹内只命中33–34.5cm高夹爪，二维扫描与静态栅格均为空；未保存原costmap帧，因果结论保持强候选。现从名义编译几何计算车体＋任意朝向货物上界，J100加原10mm padding为.30956659m，FishBot为.20306659m；不使用沉降后的较低高度。两costmap和CollisionMonitor共用该观测上界，原完整碰撞几何与物理评分保留。5个真实几何包络测试、3composition、12prepare通过，实际新运输仍待执行。
+
+AMCL原生initialpose查询包含接收端now()，桥等待旧观测TF不能保证消除20ms未来端点竞态。当前不改观测stamp、covariance或原15mm/.035rad目标门槛；该警告与粒子重置的厘米级偏移单列，不能据此伪称已修。后续开发单批先验证固定物理适配是否足以完成原门槛，再派发最终面板。
+
+私有runner观察37个实际源码文本，另独立记录生成manifest/XML/Nav2/EKF/地图YAML/BT及输入的起止文本；不引入hash执行锁。二进制mesh、PGM和原生库不在该文本观察范围。新增非默认A/A/B跨reset与账本reopen组合测试，全workflow49项通过。知识状态仍pending，owner=root，待实际复用结论后收尾。
+
+dev-jackal-lidar3d-c实际122.09墙秒，原Nav/Dock UUID均独立成功；位置误差约13.81mm、偏航.01367rad，连续.7源秒停稳，双指抓取/抬升保持通过。随后原carried-route几何查询发现base_collision与moving_jaw仅.5459mm，不满足原1mm查询余量，任务失败且未发载货Nav。完整oracle=false，故不计运输通过。source37及generated11文本起止一致、独立quiet/guard退出/全部owned和9107关闭、保护实例不变。正检查实际停靠姿态下的托盘/车壳/夹爪交接余量，不删碰撞、不改评分。
+
+实际浏览器ui-v2通过：J100/3D当前组合与FishBot/planar三批草稿独立，导出JSON内容正确，零写请求、零页面错误；390px实际切“任务与反馈”后可配置且无横向溢出。前一fixture未切手机tab而等待隐藏select，失败原件保留，未改产品以迁就测试。根CLI原缺cooperation分支已补薄转发，实际prepare --help可见--scene-profile；不增加执行owner。根既有反馈回归1594项全过，零skip/缺依赖；包含control864、mission209、autonomy61、frontend460。
+
+dev-c只读probe收到853点云元数据、800同stamp物理配对、832精确源时刻TF和真实local/global ROI。低bench/table保留lethal占用，上方夹爪ROI无lethal但有正常膨胀253，不能称全零代价或独立消费回执。probe整体false另有fixture缺陷：批量请求未初始化的EKF imu1导致整批参数空，结束时空图谱覆盖活跃订阅；旧结果保留，修私有采样器后需重新取证，不把false直接归给产品EKF或实际订阅缺失。
+
+### P8 距离查询、横向布局与自体回波
+
+修正dev-c几何解释：.5459mm是旧MPR查询返回值，严格compiled box/mesh分离平面实际至少30.8mm。相同query/model/data/pair的distmax=.04/.05返回30.8168mm，.1返回.5458mm、.2及1出现错误负距；GJK在此pair正常，却让旧FishBot/SO101的pick_floor/gripper远隔47mm也报0。全query切GJK的候选和两组旧场景失败已保留并撤销，未运行实际运输，不抬高18mm支架回避查询错误。
+
+最终局部修复只设原open/closed CollisionChecker公开distance_cap_m=2×原margin，即2mm/1mm；原MPR、payload查询20mm/.2mm及运行物理模型均保持。原actual完整149waypoints载货＋37states回位查询通过。独立重编译反例确认.5mm间隙拒绝、-.5mm交叠拒绝且有真实contact、1.5mm间隙通过、2.5mm返回饱和2mm通过。新真实compiled回归1项、旧scene7项、当时profiles9项通过。饱和值不称真实净距。18个有限停车姿态中接近18/18，完整运输查询仅5/18；其余13失败留存，不宣称全±.04m/.05rad交接可达。
+
+dev-d和planar-b都在原Nav成功后Dock905，未进入机械臂；分别88.32/96.19墙秒，source/generated起止一致、quiet/guard退出/owned清理/端口关闭、保护实例保持。D明确Collision detected，停靠窗口clock最大墙gap52.4ms，并非长时间卡死。C/D/planar-b的AMCL XY误差P95约26.4/25.9/26.9mm，大于原低侧19.2mm净距；重建pad足迹距原静态占用格边界约数毫米。二维同样拒绝，不把一切归给3D或未来TF警告。具体254格来自哪个输入层仍未独立确认。
+
+J100布局已作实体参数适配：dock Y=.32、tray Y=-.18、mount相对tray Y=.075；交接仍(.24,.14)，高度/18mm支承块/.486kg不变。完整hull自动增至6点，不缩几何。低侧保留原10mm Navpadding后净距42mm，实际原误差回放41.43mm；整体3D扫掠余量仍19.84mm，不误称所有精度提高。mount支持重叠100×35mm、悬臂85mm，刚性固定可做当前仿真，未验结构挠曲或紧固。最新profiles10项通过。
+
+dev-e实际270.44墙秒，新布局Nav/Dock通过，位置约10.67mm/偏航.00740rad；真实双指抬升、放货留盘与臂回位均通过后，载货Nav原UUID457f238c82a643e9940198b9410ea01a因104失败。完整oracle=false，原E不改通过；cleanup/source/端口/保护实例均通过。根随后显式cancel因原任务已终态被preflight拒绝，零新增POST，未重发任务。
+
+E的native独立回放在source159.98s找到完整footprint内11个低点，11/11均来自自由货物target_collision，车外障碍0；超过CollisionMonitor原6点。车辆未移动、货物真实留盘。正在现有3D适配器补标准空间自体包络过滤，保留原生首回波和raw点云对照；不按taskstage/接触状态隐藏cargo、不移除物理geom、不放minrange或评分。当前仅原sensor合同通过，不能提前称载货闭环完成。
+
+E运行后启动的修正只读probe整体通过：669帧metadata/physics原stamp配对、657精确stamp TF、真实16×360/10Hz，两costmap与CollisionMonitor实际参数和同一活跃时刻订阅、J100轮速/IMU输入及无truth/绝对yaw配置均通过。此前D probe又遇到启动期仅use_sim_time参数表和误加two_d_mode=True预期，均只修私有probe并保留旧false。原J100 six-DOF配置不改。未独立证明唯一odom TF逐帧发布者，亦不称控制器逐点消费回执。
+
+自体过滤实现冻结：仅按同帧base坐标的完整凸包和未膨胀车体/载货高度过滤实际首回波，不按任务阶段/货物身份/接触判断，不向后重射。raw与filtered保留原16×360布局及源stamp，新增独立raw发布。E同帧重放空车0点、载货11点移除，其他点逐值不变；边界外1mm和低障碍保留。最新lidar12、全sim38、横向fixture后的arm_geometry1均通过。正式矩阵按预声明四组合执行，先J100＋3D；源码38项与生成输入起止单列观察，尚无正式通过结论。
+
+正式matrix-final-a首个J100＋3D回合258.90墙秒，task ebe44854-134c-4138-867b-0a208538b91f/episode b3fb54a1-ea3f-47e6-946e-461176ab5441。Nav/Dock、实际抓放与臂回位通过，载货Nav f42e10c97e564bc2ac10c25b2c6b7a45终态6，最终未到交付点；oracle=false，不续发后两批。source38/generated11起止一致，独立quiet/guard关闭/全部owned退出/9110关闭，保护实例保持。原始失败保留。运行中ROS合同通过；raw/filtered实际逐点复核另存，外点不变。正在区分出站转向几何与地图投影，尚未增加新候选或放宽门槛。
+
+正式A同源取证：raw/filtered1015配对帧逐点符合空间mask；空车138帧移除0，载货729帧移除12–22，2675701个体外首回波全部保持。末姿态footprint内剩余0，预测正转+.2rad时有9个2D/36个3D approach_obstacle回波，不是cargo。实际costmap当帧仍缺失。离线完整455对检查actual交接姿态直行→staging141样本，扣平移采样半间距后3D下界29.98mm、padding后静态格间隙42.01mm，均正；这是声明路径几何证书，不是执行结果。
+
+最小出站候选已接：仅J100 profile声明transport_egress=staging，prepare生成egress_pose；同owner、原car_to_delivery阶段先载货导航出站，再执行冻结交付目标。原取消/hold/guard/360秒预算与物理评分保持。独立oracle要求两段不同UUID、目标顺序及原生成功；未声明场景继续exact1，拒绝未知额外段。141 core/oracle与13 prepare回归通过。新矩阵使用matrix-final-b，保留A及所有开发失败；四组合/12运输声明、每组合1400秒上限不变，尚未称候选通过。
+
+出站补丁后根既有反馈回归1601项全过：control871、mission209、autonomy61、frontend460；零skip/缺依赖。该检查为离线回归，不替代正式矩阵。matrix-final-b先启动J100＋3D，独占140/9110，其余实例与源码保持。
+
+B首批176.17墙秒，task a89a06e7-dde2-4fa1-907b-46dbc7c56b67；egress原UUID268c71dc7f3a437c8bfd87f1e416e14f在载货守卫触发后明确status5，未派发final delivery，完整评分false。source38/generated11/quiet/guard退出/全部owned清理/9110关闭/保护实例保持。不能把取消或新出站段开始叫运输成功。
+
+B精确触发source126.30：floor_contact=false为唯一cargo_retained失败项，中心与旋转完整足迹仍距边界至少33mm；126.28/126.32均有4个floor接触、约.124/.125N。原world/qpos/qvel独立mj_forward同pair0contact，严格顶点到floor正间隙8.958µm，确为微小离面而非遥测漏标或真实滑出。真实持续时长只有前后40ms采样夹界，不称精确20ms。现检查J100原max_accel[.5,0,2]对四轮载货起步激励；不放宽接触或物理评分门槛。
+
+J100平缓起步候选冻结：仅profile生成原生velocity_smoother max_accel[.1,0,.2]/max_decel[-.1,0,-.2]，最大速度、CM与hold不变。原短重放首个角命令造成每轮约6.9Nm请求；候选短脉冲1250物理步全接触，延长1s候选仍有5个500Hz短失接触，125个20ms相位均保持。仅近似原ctrl ZOH重放，缺精确DDS子采样/warmstart，不称native smoother或全任务已过。4composition测试通过；前端33定向与生产构建通过。新matrix-final-c启动，A/B原失败保持，评分和原任务预算不改。
+
+C首批82.19墙秒，Nav/Dock原生status4，但真实停靠yaw=.25534rad超原.05交接门槛，task 0e0fe5ce-f2d4-4eb1-9ec7-f2342759ce26因此在机械臂前失败；oracle=false。完整cleanup/source/generated/端口/保护实例保持。不能把原生Dock4当实际交接成功。全局低accel候选已撤销，不覆盖C原失败。
+
+后续改为vehicle_profile.loaded_velocity_smoother，仅loaded后hold/停稳时通过标准ROS参数服务应用并读回；原Nav/Dock继续原YAML参数，cleanup原动作终态/quiet后恢复。原生smoother1.3.13按wall timer，配置值不直接称源时间实际加速度。worker在142只做无机器人原生参数验证；正式组合尚未重启。新薄模块cooperation_loaded_limits.py将计入39项文本观察。知识状态pending(root)，尚未把候选当长期已验结论。
+
+载货阶段原生参数适配已冻结。156helper/core/oracle定向检查与实际142无运动服务验证通过；仅官方smoother active/get/set原子ACK/独立get恢复，零运动命令，原node/142均清理。根当前反馈回归1605项通过（control875、mission209、autonomy61、frontend460），零skip/缺依赖。manifest缺loaded字段旧路径无RPC。正式D开始，39项源/生成输入起止观察，仍保留原360/1400/5600秒预算。
+
+知识回写updated（本地）：Wiki/ROS2 与 FishBot第19节新增“换车型与雷达：配置、进出站和观测分别验收”，以及开发知识入口新增相应触发词。根已读回原文与锚点；保留该独立知识仓原有dirty/untracked修改，未声称远端发布。此条只记录已验证的几何/观测/原生服务机制，不写尚未完成的运输成绩。
+
+D首批178.20墙秒，task b14afb41-686c-43d1-8444-3dca48cab7c0；loaded参数原生独立GetParameters/GetState读回通过，cleanup已恢复实际原值。egress NavigateToPose UUID92d84fb415ee411f8bcca714ff1e9f3e仍选择原位正转至.16483rad，RPP collision/error104/status6，未到最终目标；oracle=false。source39/generated11/quiet/guard/owned/9110/保护实例均保持。D采集308对点云校验过，仅载货单epoch，缺空车/reset导致通用probe顶层false，不能称完整sensor面板过。
+
+改进出站约束：J100使用已安装且原YAML已启用的Nav2 DriveOnHeading，manifest.egress_motion记录body相对distance/speed/source时间allowance，nominal egress_pose不冒充原生map目标。实际步长来自staging_distance（ideal .7/vision .65），原碰撞检查保持。原owner派发、同UUID终态/取消、最终Nav目标/原K评分继续复用，observer/cleanup将核新原生状态话题。
+
+普通J100导航使用原生StoppedGoalChecker，保留原.015/.035位姿门槛，速度门槛对齐原物理.01；RPP角加速度.2匹配载货平滑预测。Dock仍原smoother参数，FishBot默认配置不改。成功路径等待原生零命令平滑停稳后才hold，失败/取消保持原即刻hold。4composition与13prepare定向回归已过；新的Drive合同/原生面板待worker冻结后执行。
+
+正式E首批158.74墙秒，Nav UUID4a6cface6562492090af8787a87304e3超原120秒明确取消，未进入Dock/机械臂/Drive；source39/generated11/quiet/guard/owned/9110/保护实例均保持。实际指令连续w=.01、hold=false，轮速与真yawrate约3.93e-6；恢复w=1后能转。官方RPP逐周期按当前odom而非上一条命令夹限，.2/20=.01且odom低于原.001阈值，导致静摩擦起转死区。该候选失败保留，不提高超时或放宽评分。E889对点云逐点一致，但只有空车单epoch、缺载货/reset，顶层probe仍false。
+
+E之后最小候选仅J100 navigation改为RPP max_angular_accel=2、rotate_to_heading_angular_vel=.1；启动单周期上限.1脱离已证实的.01死区，原地转速单独限.1。StoppedGoalChecker原pose与.01速度、Dock普通smoother、loaded-only.1/.2与清理均保持。4composition通过；实际起转/收敛与完整矩阵仍待验证，不称已经解决。
+
+F首批286.74墙秒：Nav/Dock成功，实际停车约10mm/.01784rad，真实抓放/留盘/臂回位过；Drive UUID724472acb864461daf181b8df3a4f4db独立GetResult status4/error0，35.22源秒。成功软停后最终载货Nav UUID335236b2a0a6444398860b6f48a417c8启动，随后cargo_retained触发并明确取消status5；完整oracle=false，不续发后两批。source39/generated11/quiet/guard/参数原值恢复/owned/9110/保护实例保持。当前核对最后一段接触间断，不能把Drive过或cargo位移>.5m算全运输完成。
+
+F失接触source238.10精确重放复现+32.449µm正gap；floor阻尼1.5/2仍离面，故不采用物理参数候选。同F235.88静稳快照、原accept/500Hz、实际cmd前缀与合成延长2s有限重放：1×/0.5×/0.25×在210个20ms样本失接触4/1/0，500Hz 19/7/0；header ZOH不是精确原执行相位，不称全任务通过。G最小候选保留原物理与评分，仅载货段max_accel[.025,0,.05]、max_decel[-.1,0,-.2]、max/min_velocity[±.03,0,±.08]；heading RPP起转保持2/.1。四参数native helper兼容原2字段，112联合与17helper过；142无机器人以角上限.05的4参数ACK/读回/恢复已过，实际G .08仍须现场读回。
+
+G执行前根既有反馈回归1612项通过（control882、mission209、autonomy61、frontend460），零skip/缺依赖。知识回写updated（本地）再次读回：Wiki/ROS2 与 FishBot第19节补正Drive body请求与map参考、RPP实测速度逐周期夹限，开发知识入口补低速起转死区。未发布独立知识仓、未覆盖其原有dirty/untracked内容。G首批原K与目的地完整评分过，终点误差22.22mm/.00430rad；已在原world真实reset进入第二批，整四组合面板仍in_progress。
+
+G整行646.13墙秒：job1完整K和目标通过；原world真实reset后job2在source537.02失接触，精确forward接触0、signedgap+1.228µm，仍在盘中央，完整评分false，第三批未派。两轮source39/generated11/quiet/guard/四参数恢复/owned/9110/保护实例保持。实际raw5311对跨2epoch/1reset全匹配，空载removed0、载货10–21、外部首回波保留；仍缺第三epoch，完整coverage=false。
+
+H候选只调J100参数：空车heading cap=.4、RPP maxa2；载货保留accel[.025,0,.05]/decel[-.1,0,-.2]，速度上限降到[.02,0,.05]及对应负值。已有阶段native cap使空车不必再受.1慢转限制，原360任务上限不改。G2重新静稳1s后，原/低速/两soft liner四组都未复现失接触，因此不声明因果修复、不采用liner；低速候选仅有降低滚俯和扩大负gap余量的证据，必须新原生面板。旧成功和失败保持原件。
+
+H整行596.89墙秒：job1/job2完整K与目的地过，原world两次reset成功；job3在Dock中因共享物理反馈时间失效取消，原Nav4/Dock5，未装货。完整行false，全部source39/generated11/quiet/guard/原参数恢复/owned/9110/保护实例保持。H实际5394对raw/filtered跨3epoch/2reset合同过，第三epoch只有空车，不能称三批载货覆盖。后续I保持H源码/输入模板与评分不变，作为同候选复现而非改进；不再启额外raw/native probe，H采集已有前两轮载货与两次reset实证。时序具体原因由transition只读核，未知不归因网络。
+
+H时序只读取证：首次Dock cancel前bridge物理callback约.458s未进入，缓存双龄期.46/.4626；独立observer生产流持续20ms。后续HTTP组装/锁等待.29–.47s有据，但不能证明首发。该性能风险仍pending，owner=root，最短入口H job3/readonly-freshness-review.json。I相同runtime39源码复现正在跑140/9110，私有matrix-final-i；未再启动额外采样器。
+
+I同H源码复现整行911.54墙秒：job1/job2完整过；job3原K、抓放留盘与出站均过，最终B的carrying Nav UUIDc8bb1e823a714534aa8f3030ae853621原120墙秒超时并明确取消5，未通过目标/朝向验收。终点约42.85mm/.53574rad；source39/generated11/quiet/guard/四参数原值恢复/owned/9110/保护实例保持。未把原K通过或近B当完整运输成功。
+
+下一候选改为载货期间通过原生RPP动态参数主动低速规划；官方1.3.13 smoother的absolute速度分别clamp在scale_eta前，scale_velocities bool也未在dynamic callback处理，不能通过flag显示值假称曲率保持。复用现原生参数状态机，新增固定白名单DOUBLE的LoadedRppLimits/vehicle_profile.loaded_controller，hold下apply/ACK/readback，原cleanup恢复；原控制器、动作和所有物理/时间门槛保持。transition负责helper/bridge/定向tests，root负责profile与文档，不运行新动作直到冻结。
+
+J首批97.78墙秒：task 76394d20-0a6f-4110-b80f-f0ab3df8d218在arm_grasp因物理反馈源龄失效失败；两组loaded参数均not_applied、无参数RPC，不能归为RPP候选失败。独立只读报告显示source74.98的station_pair约338ms，new physics75.28已进入回调却等待control锁，fresh抢先读取74.96/Clock75.30后失败。graph/parse/admission不足以解释全部338ms，未证明网络或单一publish根因。source39/generated11/quiet/guard关闭/owned退出/9110关闭/保护实例保持；候选暂停，先修已证实的缓存提交与大控制锁竞争，不改变原新鲜度阈值。
+
+2026-10-21 缓存最小修复冻结：高频physics提交使用独立短cache锁，不再等待感知/HTTP持有的大control锁；fresh保留control原子语义并在短cache snapshot后校验，reset统一control→cache切回合并清旧。原-.1/.25源龄、.5接收龄不变，无wait/restamp。真实线程与核心/loaded/oracle/acceptance共209项过。J已进入回调的提交竞争有直接修复；H未进入callback间隙仍未证明解决。K在原140/9110新目录启动；F1仅新增未加载模块/配置并行，所选39项运行源保持冻结，不计F1静态几何作K运输成绩。
+
+K整行721.66墙秒未通过：job1原K/目标/同UUID路由过，终点24.95mm/.01432rad、连续停稳2.60源秒；两参数组apply/readback及baseline恢复均收到。job1 physics锁等待最大.311ms，但仍记录source-age .28诊断，不称彻底消除时间异常。第二单caller360秒越界，原observer评分false；源码39/生成11保持，owned全部退出/9110关闭/原保护实例保持，实际任务终态与异常清理细节正由只读审查核对。第三单未执行，不把第一单通过外推整行。下一步先交付独立F1切片，P8时限/动力学整改保留，owner=root。
+
+K2精确复核：原桥task failed/协同任务超过总执行时间，在+360.034墙秒取消原finalNav(仅active80.094wall/54.34source，未超120)，原生5。末位置37.818mm尚在4cm内，但偏航.400904rad未达.05；cargo仍留盘，取消附近保留一条arm_home_quiet=false。前段至装货确认同源约123s，但第二单耗212.60墙秒、第一单169.27；源推进率约.595/.761，具体性能瓶颈未知。两组参数恢复/明确任务failed/native5/独立quiet.88source/owned退出均核实。另计时文件0字节：frames.close thread.join被KeyboardInterrupt打断，跳过dump，随后rclpy.shutdown already-called掩盖首因。只证明退出诊断丢失，不解释运行中RTF下降；拟局部修复，等待当前F1结束后写。
+
+保护记录边界补正：protected_instances_unchanged仅比较预声明六个systemd单位名；当前F1读回这些before均not-found/inactive，不能据其宣称旧107/114活进程持续保持。未向旧实例发送动作或stop，不补启不属于本轮的旧实例。
+
+2026-10-21 清理诊断修复实际读回：独立无动作idle-v2 2源秒/1000步正常退出，timing有效、finalization_errors=[]；F1 occupied-v2实际launch关闭时也保存2921字节timing，保留node.destroy_node的KeyboardInterrupt，不把它隐藏成clean。mj_step171244次、累计285.251s、max122.811ms，publish累计75.315s；嵌套stage是包含式墙时间不能相加当CPU总量。高频源门槛未更改。
+
+F1 occupied-v2终点发现SimpleGoalChecker早锁XY后在转向期间漂出原15mm，native4时真值43.447mm，随后hold仅再移动31.9µm。新增组合场景暂改goal checker stateful=false，不改15mm/.035rad；仍在核对RPP自身XY锁，不能提前称充分修复。自定义雷达topic/min/maxrange已共用configuration同步到发布/两个costmap/CollisionMonitor/manifest，根6项composition读回过。

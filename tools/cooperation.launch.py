@@ -63,6 +63,10 @@ def start(context):
             get_package_share_directory('nav2_bringup'),'launch','navigation_launch.py')),
             launch_arguments={'params_file':manifest['nav2_yaml'],'use_sim_time':'True',
                               'use_composition':'False','autostart':'True'}.items())])])]
+    if manifest.get('localization', {}).get('enabled'):
+        actions.insert(4, Node(package='robot_localization', executable='ekf_node', name='ekf_filter_node',
+            parameters=[manifest['localization']['ekf_yaml']],
+            remappings=[('/odometry/filtered','/odom')], output='screen', on_exit=Shutdown()))
     if manifest.get('station_perception', {}).get('mode') == 'vision':
         from cooperation_camera import system_vision_environment
         if 'station_camera' not in manifest:

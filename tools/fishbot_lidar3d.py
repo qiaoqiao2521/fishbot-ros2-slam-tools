@@ -73,6 +73,28 @@ def _point_source(topic: str, maximum: float) -> dict:
     }
 
 
+def configure_costmaps(nav2: dict, topic: str, maximum: float) -> dict:
+    """Share the existing standard PointCloud2 layers across simulator adapters."""
+    for name in ('local_costmap', 'global_costmap'):
+        params = nav2.setdefault(name, {}).setdefault(name, {}).setdefault('ros__parameters', {})
+        layers = params.setdefault('plugins', [])
+        key = 'voxel_layer' if 'voxel_layer' in layers else 'lidar3d_voxel_layer'
+        if key not in layers:
+            position = layers.index('inflation_layer') if 'inflation_layer' in layers else len(layers)
+            layers.insert(position, key)
+        layer = params.setdefault(key, {
+            'plugin': 'nav2_costmap_2d::VoxelLayer', 'enabled': True,
+            'publish_voxel_map': True, 'origin_z': 0.0, 'z_resolution': 0.05,
+            'z_voxels': 16, 'max_obstacle_height': 0.8, 'mark_threshold': 0,
+        })
+        sources = str(layer.get('observation_sources', '')).split()
+        if 'lidar3d' not in sources:
+            sources.append('lidar3d')
+        layer['observation_sources'] = ' '.join(sources)
+        layer['lidar3d'] = _point_source(topic, maximum)
+    return nav2
+
+
 def prepare(scene_path: str | Path, output_dir: str | Path, *,
             plugins_path: str | Path | None = None,
             nav2_path: str | Path | None = None,
@@ -153,23 +175,7 @@ def prepare(scene_path: str | Path, output_dir: str | Path, *,
     plugins_out.write_text(yaml.safe_dump(plugins, sort_keys=False))
 
     nav2 = _parameters(Path(nav2_path or PACKAGE / 'config/nav2.yaml'))
-    for name in ('local_costmap', 'global_costmap'):
-        params = nav2.setdefault(name, {}).setdefault(name, {}).setdefault('ros__parameters', {})
-        layers = params.setdefault('plugins', [])
-        key = 'voxel_layer' if 'voxel_layer' in layers else 'lidar3d_voxel_layer'
-        if key not in layers:
-            position = layers.index('inflation_layer') if 'inflation_layer' in layers else len(layers)
-            layers.insert(position, key)
-        layer = params.setdefault(key, {
-            'plugin': 'nav2_costmap_2d::VoxelLayer', 'enabled': True,
-            'publish_voxel_map': True, 'origin_z': 0.0, 'z_resolution': 0.05,
-            'z_voxels': 16, 'max_obstacle_height': 0.8, 'mark_threshold': 0,
-        })
-        sources = str(layer.get('observation_sources', '')).split()
-        if 'lidar3d' not in sources:
-            sources.append('lidar3d')
-        layer['observation_sources'] = ' '.join(sources)
-        layer['lidar3d'] = _point_source(topic, maximum)
+    configure_costmaps(nav2, topic, maximum)
     nav2_out = out / 'nav2_voxel.yaml'
     nav2_out.write_text(yaml.safe_dump(nav2, sort_keys=False))
     prefix = os.environ.get('FISHBOT_LIDAR3D_PREFIX')

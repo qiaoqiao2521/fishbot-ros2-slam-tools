@@ -115,6 +115,16 @@ class ArmPlanner:
             self.rig, gripper=.5, margin_m=.001)
         self.closed_checker = self.modules["collision_scene"].CollisionChecker(
             self.rig, gripper=.025, margin_m=.001)
+        # Reuse the source checker's local-distance API. Large distmax values
+        # make legacy MPR report false near-collisions for separated box/meshes.
+        # Twice the unchanged margin covers the full admission boundary.
+        for checker in (self.open_checker, self.closed_checker):
+            checker.distance_cap_m = 2*checker.margin_m
+        self.query_clearance = {"backend": "source_legacy_mpr",
+            "margin_m": self.closed_checker.margin_m,
+            "distance_cap_m": self.closed_checker.distance_cap_m,
+            "beyond_cap": "saturated_not_measured_clearance",
+            "plant_flags_changed": False}
         self.car_pose = self.np.asarray(car_pose, dtype=float).tolist()
 
     def _q6(self, q):
@@ -159,15 +169,17 @@ class ArmPlanner:
                     self._segment("lift", [down, lift], .015),
                     self._segment("hold", [lift, lift], .015, duration_s=0., dwell_s=1.5)]
         return {"segments": segments, "planning": planned, "direct_approach": direct,
-                "descent": descent, "ascent": ascent, "car_pose": self.car_pose}
+                "descent": descent, "ascent": ascent, "car_pose": self.car_pose,
+                "query_clearance": self.query_clearance.copy()}
 
     def prepare_transport(self, snapshot, *, car_pose=None):
         """Clone a refreshed actual grasp and reuse source plan_transport."""
         np, mj = self.np, self.mujoco
         qpos = np.asarray(snapshot["qpos"], dtype=float)
         qvel = np.asarray(snapshot["qvel"], dtype=float)
-        if qpos.shape != (22,) or qvel.shape != (20,) or not np.isfinite(np.r_[qpos, qvel]).all():
-            raise ValueError("Transport requires finite common-world qpos22/qvel20")
+        if (qpos.shape != (self.common.nq,) or qvel.shape != (self.common.nv,)
+                or not np.isfinite(np.r_[qpos, qvel]).all()):
+            raise ValueError("Transport snapshot must match the compiled common-world joint layout")
         # Actual car pose, including its settled height and roll/pitch, always
         # wins over the ideal dock when constructing collision query models.
         pose = qpos[13:20] if car_pose is None else car_pose
@@ -178,8 +190,8 @@ class ArmPlanner:
         execution.qvel[:] = qvel[:12]
         if "ctrl" in snapshot:
             ctrl = np.asarray(snapshot["ctrl"], dtype=float)
-            if ctrl.shape not in ((6,), (8,)) or not np.isfinite(ctrl).all():
-                raise ValueError("Snapshot control must contain six or eight finite commands")
+            if ctrl.shape not in ((6,), (self.common.nu,)) or not np.isfinite(ctrl).all():
+                raise ValueError("Snapshot control must contain arm-only or compiled-world finite commands")
             execution.ctrl[:] = ctrl[:6]
         if "time_s" in snapshot:
             execution.time = float(snapshot["time_s"])
@@ -191,6 +203,7 @@ class ArmPlanner:
         paths, report = self.modules["placement"].plan_transport(
             self.contact, self.rig, execution, self.closed_checker,
             solve_ik=grasp.solve_pinch_ik, pinch_point=grasp.PINCH_POINT)
+        report["arm_query_clearance"] = self.query_clearance.copy()
         segments = [self._segment("lower" if index == len(paths) - 1 else "transport", path, .015)
                     for index, path in enumerate(paths)]
         released = paths[-1][-1]

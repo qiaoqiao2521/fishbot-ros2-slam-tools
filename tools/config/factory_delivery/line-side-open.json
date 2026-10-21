@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "id": "f1-line-side-open",
+  "description": "Fixed SO101 pickup, two line-side delivery destinations, open south lane.",
+  "frame": "map",
+  "units": {"position": "m", "angle": "rad", "size": "full edge lengths"},
+  "destinations": [
+    {"id": "line_a", "name": "Line A delivery stop", "pose": {"x": 0.0, "y": -2.0, "yaw": 0.0}},
+    {"id": "line_b", "name": "Line B delivery stop", "pose": {"x": 0.7, "y": -2.0, "yaw": 0.0}}
+  ],
+  "orders": [
+    {"id": "order-a", "destination_id": "line_a"},
+    {"id": "order-b", "destination_id": "line_b"}
+  ],
+  "channel": {
+    "id": "south_delivery_lane",
+    "centerline_m": [[-1.1, -1.8], [0.0, -2.0], [0.7, -2.0]],
+    "occupied": false,
+    "obstacle": {"center_m": [0.35, -2.10, 0.25], "size_m": [0.12, 0.30, 0.50], "yaw_rad": 0.0}
+  },
+  "reference": {
+    "source": "https://pages.nist.gov/ARIAC_docs/en/main/pages/scenario.html",
+    "scope": "Order-driven pickup, placement onto AGV, transport to a named station, separate evaluation.",
+    "boundary": "Task semantics only; no ARIAC assets, AGV locks, kit inspection, assembly or scoring are copied."
+  }
+}

@@ -37,7 +37,7 @@ def quaternion(value, label):
     return values
 
 
-def validate_physics(raw, scene_sha, manifest_sha=None):
+def validate_physics(raw, scene_sha, manifest_sha=None, expected_layout=(22, 20, 8)):
     """Admit only complete finite measurements from this compiled scene."""
     if not isinstance(raw, dict) or raw.get('schema') != 1 or raw.get('finite') is not True:
         raise ValueError('共享物理反馈schema或finite标志无效')
@@ -55,7 +55,8 @@ def validate_physics(raw, scene_sha, manifest_sha=None):
     for key in ('stamp', 'wall_time'):
         if finite_number(raw[key], key) < 0:
             raise ValueError(f'{key}不可为负数')
-    finite_vector(raw['ctrl'], 8, 'ctrl')
+    nq, nv, nu = expected_layout
+    finite_vector(raw['ctrl'], nu, 'ctrl')
     if abs(finite_number(raw['time_s'], 'time_s')-raw['stamp']) > 1e-9:
         raise ValueError('规划快照时间与物理反馈不一致')
     for key in ('sequence', 'physics_steps'):
@@ -64,7 +65,7 @@ def validate_physics(raw, scene_sha, manifest_sha=None):
     if raw['physics_hz'] != 500:
         raise ValueError('共享场景物理频率不匹配')
     arrays = {key: finite_vector(raw[key], length, key) for key, length in
-              (('q6', 6), ('qvel6', 6), ('qpos22', 22), ('qvel20', 20), ('arm_reference_q6', 6))}
+              (('q6', 6), ('qvel6', 6), ('qpos22', nq), ('qvel20', nv), ('arm_reference_q6', 6))}
     if arrays['q6'] != arrays['qpos22'][:6] or arrays['qvel6'] != arrays['qvel20'][:6]:
         raise ValueError('机械臂状态与完整物理状态不一致')
     for key in ('car_hold', 'cargo_tray_floor_contact'):

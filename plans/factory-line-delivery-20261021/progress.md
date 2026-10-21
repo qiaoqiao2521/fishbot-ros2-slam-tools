@@ -1,0 +1,45 @@
+# F1 Progress
+
+## Current
+首个完整切片完成：open-v1 两订单 A/B 原生 ROS/MuJoCo 独立物理评分 2/2，471.686 墙秒。追加 occupied-v1 为零运动几何拒绝；occupied-v2 实体障碍两单均原生成功，物理评分 1/2，B 最终误差 4.3478cm 超过原 4cm，保持失败。三个版本原件均保留。公开评测入口和订单/场景配置已实现；最终回归与提交中。P8 四组合仍独立在执行，不能用 F1 默认 FishBot 成功替代。
+
+## Done
+- 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
+- 确认现有订单/目标、prepare 地图生成和原物理 oracle 可直接复用。
+- prepare 的可选 --factory-config 与 workflow 场景订单薄 hook 已接入；旧 workflow 49 项回归通过，尚未计厂区实际配送成绩。
+- 场景worker 10项含四个真实静态MuJoCo3.3.7构建通过（13.690s，临时目录清理、仅标准输出证据）。根公开prepare成功且manifest独立读回。
+- 评测入口经独立审查修复running任务误清理及跨360秒误通过，根独立19项合同回归过（0.011s）；不修改原评分。根另重跑10项场景/四静态构建过（16.954s），证据 ~/.cache/fishbot/factory-line-delivery-20261021/factory-scene-tests-root.log。
+
+## Remaining
+最终项目回归与提交推送；occupied-v2 的 B 物理未到位保留为后续策略开发失败样本，不算全场景通过。
+
+## First entry
+公开入口 tools/cooperation_factory.py 已冻结，完整命令见 docs/FACTORY_DELIVERY.md。根已生成 ~/.cache/fishbot/factory-line-delivery-20261021/open-v1/scene/scene-manifest.json，并独立dry-run确认两订单A/B、0 ROS/动作、输出未创建。实际命令：
+
+```bash
+FISHBOT_MUJOCO_DOMAIN_ID=141 XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus bash -c 'source tools/fishbot_mujoco_env.sh; exec /usr/bin/python3 -B tools/cooperation_factory.py run --manifest /home/muqiao/.cache/fishbot/factory-line-delivery-20261021/open-v1/scene/scene-manifest.json --output /home/muqiao/.cache/fishbot/factory-line-delivery-20261021/open-v1/run --candidate baseline'
+```
+
+`--order order-b --order order-a`改变订单排列；候选标签不加载代码。执行状态、原物理裁决与单单360/整轮1000预算分列。未执行和未评分均不计通过。
+
+## Knowledge closeout
+updated(local)：根已回写 Wiki/ROS2 与 FishBot.md 第19节车型/曲率/缓存/厂区配置经验，第20节同任务终态/预算/保护快照边界，并更新 Wiki/开发知识入口.md 的触发词；rg 读回已核对。知识库独立未提交，不宣称远端发布。
+
+## 首个原生结果与独立读回
+- 场景 f1-line-side-open，run 7daac585-8230-4c15-b4b3-36e8c7f4ef8e；结果 ~/.cache/fishbot/factory-line-delivery-20261021/open-v1/run/result.json，执行completed，任务裁决passed，overall=true。观测mode=ideal，车辆FishBot，planar。
+- A：task f70f62ae-7cd2-4076-92f8-2d7ee949b901，221.105墙秒，交接后货物XY位移1.789756m；末误差.0323364m/.0301715rad，连续停稳2.48源秒；载货Nav eaf5473fa88b4a56bd58f50bf8908ab1，原始status2→4。
+- B：task 34f7348a-ba63-4425-af3c-0a1dc51881f6，207.481墙秒，交接后货物XY位移2.473837m；末误差.0302101m/.0211736rad，连续停稳2.62源秒；载货Nav01946538961a4ae3a7e6af0b2900f6b3，原始status2→4。
+- 独立worker仅读磁盘再次核原K、双指抬升/释放落稳/臂回位/同自由货物运输与交付均过；累计车臂禁碰0。原reset回执/新episode/源stamp交叉吻合，无重发。10份选定源码起止一致；不是所有二进制/子进程import的完整冻结证明。
+- 保留缺口：A最大physics源间隙.260s，B.040s，记录器完整写出不等于源采样无孔洞。before六个旧systemd单位均not-found/inactive，after只有原result比较布尔而无原样快照；不能宣称旧107/114活进程持续保持运行。本轮只操作own launch，未补启旧实例。目标发送证据仍为桥冻结请求/accepted handle，独立原生status不冒充控制器消费回执。
+- 订单间reset车和同一个自由cargo；不声称连续无复位排程收益、多货物并行、目的地下货或PLC签收。
+
+## 实体占用变体
+- occupied-v1 run bf05918e-14a2-4efa-bc1a-2495f0f6dd1c：旧箱(-.45,-2.10,.25)、尺寸(.18,.30,.50)挡住声明的直线入站扫掠，margin=-.163494m；0 start/reset/cancel，未启动世界。仅说明这条入站证书失败，不说明全局不可达。
+- v2 将箱声明改为中心(.35,-2.10,.25)、完整尺寸(.12,.30,.50)，open/occupied 配置使用同一几何，仅 occupied 不同。四个 FishBot/J100×open/occupied 静态编译、原入站扫掠通过（19.84mm 总余量）；不算四组合运动验收。worker 11 项通过。
+- occupied-v2 run 630e7143-a33b-4b71-a357-d3c7102d7404，454.848墙秒；task状态两单succeeded，原物理 task_verdict failed、overall false。A task4c74591b-a9ff-40f1-8fff-25438ce8ca5b，189.607墙秒，末 .0319643m/.0232663rad、停稳2.48源秒，物理passed；B task0e7feb87-016a-4522-99a6-8f32a164e86d，216.670墙秒，末 .0434781m/.0289143rad、不满足4cm内连续停稳，物理failed。
+- 同一桥2start/1reset、原生载货Nav分别ed93dc3ae0a5479f8010e104d25183fd和d12ad4d4975d4c3a9cd7591cfb0c0994，均原UUID status4。原K均通过；原整体评分仍拒绝B，未放宽任何物理门槛。
+- 选定源码起止一致，任务/总预算均内，owned launch/observer/端口均关闭；保护before/after原样快照齐全且六个配置单位均not-found，historical_instances_were_running=false。这不是旧实例运行证明。独立原始来源：~/.cache/fishbot/factory-line-delivery-20261021/occupied-v2/run/。
+- open-v1到occupied-v2间仅补teardown诊断及保护快照元数据，不宣称严格同源码性能A/B。原失败不覆盖，未自动重发。
+
+## 最近回归与后续候选
+根完整反馈1621项及133项P8/F1相关原生离线检查通过，零skip。goal持续XY检查和雷达自定义配置接线随后6项局部检查通过。B失败只读取证：载货轨迹实际从箱下侧绕过，车/臂禁碰0；早期XY进入容差时朝向未达标，Nav4时真值43.447mm，hold后仅移动31.9µm。候选持续检查XY以免转向漂移后继续算到达，控制器内部锁定仍需核实，尚未记新原生通过。

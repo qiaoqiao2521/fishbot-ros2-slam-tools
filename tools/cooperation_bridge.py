@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import struct
 from pathlib import Path
 import threading
 import time
@@ -25,8 +26,23 @@ from cooperation_perception import (map_covariance, messages_to_observation,
 from cooperation_readiness import NativeReadiness
 from cooperation_sim import LoopTiming
 from cooperation_geometry_check import SceneGeometry
+from cooperation_loaded_limits import LoadedVelocityLimits, LoadedRppLimits
 from fishbot_runtime import (INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability,
                             DomainExecutionLock, ExecutionOwnerBusy)
+
+
+def normalize_egress_motion(value):
+    if not isinstance(value, dict) or value.get('type') != 'drive_on_heading':
+        raise ValueError('出站运动须为 drive_on_heading')
+    distance, speed, allowance = finite_vector(
+        [value.get(key) for key in ('distance_m', 'speed_m_s', 'time_allowance_s')], 3, '出站运动')
+    if min(distance, speed, allowance) <= 0:
+        raise ValueError('出站距离、速度和原生允许时间须为正数')
+    speed = struct.unpack('<f', struct.pack('<f', speed))[0]
+    if not math.isfinite(speed) or speed <= 0 or round(allowance*1e9) < 1:
+        raise ValueError('出站运动超出原生消息数值范围')
+    return {'type': 'drive_on_heading', 'distance_m': distance,
+            'speed_m_s': speed, 'time_allowance_s': allowance}
 
 
 class BridgeTiming(LoopTiming):
@@ -35,6 +51,7 @@ class BridgeTiming(LoopTiming):
               'physics_readiness', 'physics_lock_wait', 'physics_cache_commit',
               'station_detection', 'station_pair', 'station_lock_wait',
               'station_parse', 'station_admission', 'station_publisher_query',
+              'station_pose_publish', 'station_admission_publish',
               'http_lock_wait', 'http_assembly', 'clock_callback', 'clock_update')
 
     def __init__(self):
@@ -152,7 +169,7 @@ def run(args):
     from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
     from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
     from message_filters import Subscriber, TimeSynchronizer
-    from nav2_msgs.action import NavigateToPose, DockRobot
+    from nav2_msgs.action import NavigateToPose, DockRobot, DriveOnHeading
     from nav2_msgs.srv import ClearEntireCostmap
     from sensor_msgs.msg import JointState
     from rosgraph_msgs.msg import Clock
@@ -171,6 +188,9 @@ def run(args):
             self.clock_callbacks = MutuallyExclusiveCallbackGroup()
             super().__init__('fishbot_so101_cooperation', parameter_overrides=[rclpy.parameter.Parameter('use_sim_time', value=True)])
             self.lock = threading.RLock()
+            # Control may hold its lock while querying/publishing perception.
+            # Cache commits never acquire that lock; nested users take control first.
+            self.physics_cache_lock = threading.RLock()
             self.delivery_geometry_lock = threading.RLock()
             self.delivery_geometry = None
             self.delivery_geometry_error = None
@@ -192,6 +212,21 @@ def run(args):
             self.events = []
             self.known_ids = set()
             self.loaded = False
+            self.loaded_limits = None
+            self.loaded_controller = None
+            for attribute, field, adapter_type, node_name in (
+                    ('loaded_limits', 'loaded_velocity_smoother', LoadedVelocityLimits, '/velocity_smoother'),
+                    ('loaded_controller', 'loaded_controller', LoadedRppLimits, '/controller_server')):
+                desired = manifest.get('vehicle_profile', {}).get(field)
+                if desired is None:
+                    continue
+                from lifecycle_msgs.srv import GetState
+                from rclpy.parameter_client import AsyncParameterClient
+                parameter_client = AsyncParameterClient(self, node_name)
+                lifecycle_client = self.create_client(GetState, node_name+'/get_state')
+                setattr(self, attribute, adapter_type(desired, parameter_client,
+                    lambda client=lifecycle_client: client.call_async(GetState.Request()),
+                    lambda name, value: rclpy.parameter.Parameter(name, value=value)))
             self.episode_id = None
             self.task_worker = None
             self.reset_worker = None
@@ -204,6 +239,8 @@ def run(args):
             self.listener = TransformListener(self.buffer, self)
             self.nav = ActionClient(self, NavigateToPose, '/navigate_to_pose')
             self.docking = ActionClient(self, DockRobot, '/dock_robot')
+            self.egress_client = (ActionClient(self, DriveOnHeading, '/drive_on_heading')
+                                  if manifest.get('egress_motion') is not None else None)
             self.native_readiness = NativeReadiness(self)
             self.physics_callbacks = MutuallyExclusiveCallbackGroup()
             self.perception_callbacks = MutuallyExclusiveCallbackGroup()
@@ -351,10 +388,10 @@ def run(args):
             except (AttributeError, IndexError, KeyError, TypeError, ValueError):
                 return self.timing_context()
 
-        def timing_record(self, stage, start, context):
+        def timing_record(self, stage, start, context, *, end=None):
             timing = getattr(self, 'bridge_timing', None)
             if timing is not None:
-                timing.record(stage, start, time.monotonic(), context)
+                timing.record(stage, start, time.monotonic() if end is None else end, context)
 
         def timing_measure(self, stage, function, *values, context=None):
             started = time.monotonic()
@@ -381,53 +418,57 @@ def run(args):
                     context = bound
                 finally:
                     self.timing_record('physics_json', parsed_at, context)
-                value = self.timing_measure('physics_validation', validate_physics, value, scene_sha, manifest_sha, context=context)
+                value = self.timing_measure('physics_validation', validate_physics, value, scene_sha, manifest_sha,
+                    (manifest.get('nq',22), manifest.get('nv',20), manifest.get('nu',8)), context=context)
                 self.timing_measure('physics_readiness', self.native_readiness.update, context=context)
+                episode = value.get('episode_id')
+                if episode is not None and value['source'].get('episode_id') != episode:
+                    raise ValueError('物理回合来源不一致')
                 waiting_at = time.monotonic()
-                with self.lock:
-                    self.timing_record('physics_lock_wait', waiting_at, context)
+                with self.physics_cache_lock:
                     committed_at = time.monotonic()
-                    try:
-                        episode = value.get('episode_id')
-                        if episode is not None:
-                            if value['source'].get('episode_id') != episode:
-                                raise ValueError('物理回合来源不一致')
-                            if self.episode_id is None:
-                                self.episode_id = episode
-                            if episode != self.episode_id:
-                                context['outcome'] = 'foreign_episode_ignored'
-                                return
+                    if episode is not None and self.episode_id not in (None, episode):
+                        context['outcome'] = 'foreign_episode_ignored'
+                    else:
+                        if episode is not None and self.episode_id is None:
+                            self.episode_id = episode
                         self.raw, self.received = value, time.monotonic()
                         self.observation_error = None
                         context['outcome'] = 'cache_committed'
-                    finally:
-                        self.timing_record('physics_cache_commit', committed_at, context)
+                    committed_end = time.monotonic()
+                self.timing_record('physics_lock_wait', waiting_at, context, end=committed_at)
+                self.timing_record('physics_cache_commit', committed_at, context, end=committed_end)
             except (ValueError, KeyError, TypeError, IndexError) as error:
+                reason = f'共享物理反馈无效：{error}'
                 with self.lock:
-                    self.raw = None
-                    self.observation_error = f'共享物理反馈无效：{error}'
+                    with self.physics_cache_lock:
+                        self.raw = None
+                        self.observation_error = reason
                     if self.task['status'] in ACTIVE:
                         self.abort_event.set()
-                        self.abort_reason = self.observation_error
+                        self.abort_reason = reason
                         self.hold(True)
-                self.get_logger().warning(self.observation_error)
+                self.get_logger().warning(reason)
             finally:
                 self.timing_record('physics_callback', started, context)
 
         def fresh(self):
             with self.lock:
-                if self.raw is None or time.monotonic()-self.received > .5:
-                    raise RuntimeError(self.observation_error or '共享物理反馈中断')
-                validate_physics(self.raw, scene_sha, manifest_sha)
-                if self.episode_id is not None and self.raw.get('episode_id') != self.episode_id:
+                with self.physics_cache_lock:
+                    raw, received, episode, error = self.raw, self.received, self.episode_id, self.observation_error
+                if raw is None or time.monotonic()-received > .5:
+                    raise RuntimeError(error or '共享物理反馈中断')
+                validate_physics(raw, scene_sha, manifest_sha,
+                    (manifest.get('nq',22), manifest.get('nv',20), manifest.get('nu',8)))
+                if episode is not None and raw.get('episode_id') != episode:
                     raise RuntimeError('等待新回合的物理反馈')
                 now = self.get_clock().now().nanoseconds*1e-9
-                if not -.1 <= now-self.raw['stamp'] <= .25:
+                if not -.1 <= now-raw['stamp'] <= .25:
                     self.last_freshness_failure = {'wall_time':time.time(),'task_id':self.task.get('id'),
-                        'episode_id':self.episode_id,'clock_stamp':now,'physics_stamp':self.raw['stamp'],
-                        'source_age_s':now-self.raw['stamp'],'received_age_s':time.monotonic()-self.received}
+                        'episode_id':episode,'clock_stamp':now,'physics_stamp':raw['stamp'],
+                        'source_age_s':now-raw['stamp'],'received_age_s':time.monotonic()-received}
                     raise RuntimeError('共享物理反馈时间失效')
-                return copy.deepcopy(self.raw)
+                return copy.deepcopy(raw)
 
         def localized(self):
             transform = self.buffer.lookup_transform('map', 'base_footprint', Time())
@@ -631,7 +672,8 @@ def run(args):
                         'task_id': self.task.get('id'), 'native_consumption_ack': False}
             status.values = [KeyValue(key=key, value=json.dumps(value, allow_nan=False)) for key, value in metadata.items()]
             event.status = [status]
-            self.admission_pub.publish(event)
+            self.timing_measure('station_admission_publish', self.admission_pub.publish,
+                event, context=self.timing_context(values))
 
         def reject_station_observation(self, error, observation=None):
             # A late rejected packet cannot erase a newer accepted observation.
@@ -696,7 +738,8 @@ def run(args):
                         message = PoseStamped()
                         message.header = copy.deepcopy(pose.header)
                         message.pose = copy.deepcopy(pose.pose.pose)
-                        self.dock_pose_pub.publish(message)
+                        self.timing_measure('station_pose_publish', self.dock_pose_pub.publish,
+                            message, context=context)
                         self.beacon = (admitted, time.monotonic(), copy.deepcopy(pose.header.stamp))
                         self.station_counts['accepted'] += 1
                         self.station_counts['forwarded'] += 1
@@ -832,6 +875,44 @@ def run(args):
                 self.cleanup_summary.update(state='unknown', error=str(error), finished_wall_time=time.time())
                 raise
 
+        def wait_loaded_parameter(self, future, token, deadline, *, cleanup=False):
+            while True:
+                with self.lock:
+                    self.owner(token, allow_abort=cleanup)
+                raw = self.fresh() if cleanup else self.check(carrying=True)
+                if raw['car_hold'] is not True or not stopped(raw):
+                    raise RuntimeError('仅在原任务 hold 且停稳时切换载货参数')
+                if future.done():
+                    return
+                if time.monotonic() >= deadline:
+                    raise RuntimeError('载货参数服务回执未知，保留原请求且不自动重发')
+                time.sleep(.01)
+
+        def loaded_parameter_evidence(self):
+            with self.lock:
+                changed = False
+                for attribute, field in (('loaded_limits', 'loaded_velocity_smoother'),
+                                         ('loaded_controller', 'loaded_controller')):
+                    current = getattr(self, attribute, None)
+                    if current is not None:
+                        self.task[field] = current.snapshot()
+                        changed = True
+                if changed:
+                    self.persist()
+
+        def apply_loaded_parameters(self, token):
+            adapters = [current for attribute in ('loaded_limits', 'loaded_controller')
+                        if (current := getattr(self, attribute, None)) is not None]
+            if not adapters:
+                return
+            self.hold(True, token)
+            deadline = min(self.wall_deadline, time.monotonic()+3.)
+            try:
+                for current in adapters:
+                    current.apply(lambda future: self.wait_loaded_parameter(future, token, deadline))
+            finally:
+                self.loaded_parameter_evidence()
+
         def cleanup_evidence(self, token, timeout=6.):
             gate = ContinuousEvidence(.7)
             end = time.monotonic()+timeout
@@ -864,6 +945,23 @@ def run(args):
                         disabled_at = raw['stamp']
                         self.set_docking_guard(False,token,allow_abort=True)
                     if not enabled and not tripped and (disabled_at is None or raw['stamp'] > disabled_at):
+                        parameter_errors = []
+                        for attribute, field in (('loaded_controller', 'loaded_controller'),
+                                                 ('loaded_limits', 'loaded_velocity_smoother')):
+                            current = getattr(self, attribute, None)
+                            if current is None:
+                                continue
+                            try:
+                                current.restore(lambda future: self.wait_loaded_parameter(
+                                    future, token, end, cleanup=True))
+                            except Exception as error:
+                                parameter_errors.append(f'{field}: {error}')
+                            finally:
+                                self.loaded_parameter_evidence()
+                                self.cleanup_summary[field] = current.snapshot()
+                        if parameter_errors:
+                            self.cleanup_summary.update(state='unknown', error='; '.join(parameter_errors))
+                            return False
                         self.cleanup_summary.update(state='verified', guard_disabled=True, finished_wall_time=time.time())
                         return True
                 time.sleep(.01)
@@ -892,8 +990,21 @@ def run(args):
             return self.dispatch_goal(self.docking,request,label='Nav2停靠',timeout=60,
                 station_localization=True,docking_guard=True)
 
+        def drive_egress(self, motion):
+            request = DriveOnHeading.Goal()
+            request.target.x = motion['distance_m']
+            request.target.y = request.target.z = 0.
+            request.speed = motion['speed_m_s']
+            total_ns = round(motion['time_allowance_s']*1e9)
+            request.time_allowance.sec, request.time_allowance.nanosec = divmod(total_ns, 1000000000)
+            body_goal = {'target': {'x': request.target.x, 'y': request.target.y, 'z': request.target.z},
+                         'speed': request.speed, 'time_allowance': {
+                             'sec': request.time_allowance.sec, 'nanosec': request.time_allowance.nanosec}}
+            return self.dispatch_goal(self.egress_client, request, carrying=True,
+                label='DriveOnHeading', timeout=120, goal_motion=body_goal)
+
         def dispatch_goal(self,client,request,*,carrying=False,label,timeout,station_localization=False,
-                          allow_outside_station=False,docking_guard=False,goal_pose=None):
+                          allow_outside_station=False,docking_guard=False,goal_pose=None,goal_motion=None):
             token = self.owner()
             self.hold(True, token)
             try:
@@ -902,7 +1013,8 @@ def run(args):
                     self.dispatch_epoch += 1
                     dispatch = {'token': token, 'epoch': self.dispatch_epoch, 'label': label, 'request': None, 'handle': None,
                                 'result': None, 'cancel': None, 'received': False, 'aborted': False, 'error': None,
-                                'carrying': bool(carrying), 'goal_pose': copy.deepcopy(goal_pose)}
+                                'carrying': bool(carrying), 'goal_pose': copy.deepcopy(goal_pose),
+                                'goal_motion': copy.deepcopy(goal_motion)}
                     self.dispatches.append(dispatch)
                     sent = client.send_goal_async(request)
                     dispatch['request'] = sent
@@ -933,8 +1045,14 @@ def run(args):
                 result = self.wait_future(dispatch['result'], timeout, carrying=carrying,
                     station_localization=station_localization,allow_outside_station=allow_outside_station,
                     docking_guard=docking_guard)
-                self.hold(True, token)
                 native = getattr(result, 'result', None)
+                if (carrying and result.status == 4 and getattr(native,'success',True) is True
+                        and getattr(getattr(self, 'loaded_limits', None), 'phase', None) == 'applied'):
+                    raw = self.wait_condition(stopped, duration=.02, timeout=6., carrying=True)
+                    dispatch['stopped_before_hold'] = {'source_stamp': raw['stamp'],
+                        'linear_speed': raw['car']['speed'], 'angular_speed': raw['car']['yaw_rate'],
+                        'car_hold_before': raw['car_hold']}
+                self.hold(True, token)
                 if result.status != 4 or getattr(native,'success',True) is not True:
                     code = getattr(native, 'error_code', None)
                     message = getattr(native, 'error_msg', '')
@@ -1071,6 +1189,13 @@ def run(args):
                 self.loaded = True
                 raw = self.check(carrying=True)
                 start = raw['cargo']['position'][:2]
+                self.apply_loaded_parameters(token)
+                if self.task.get('egress_motion') is not None:
+                    self.event('car','delivery','收到交接确认，沿当前车体方向直行出站，再前往交付点。')
+                    self.drive_egress(copy.deepcopy(self.task['egress_motion']))
+                elif self.task.get('egress_pose') is not None:
+                    self.event('car','delivery','收到交接确认，先驶出工位，再前往交付点。')
+                    self.navigate(copy.deepcopy(self.task['egress_pose']),carrying=True)
                 self.event('car','delivery','收到交接确认，驶往交付点。')
                 self.navigate(copy.deepcopy(self.task.get('delivery_pose', self.stations()['delivery'])),carrying=True)
                 raw = self.wait_condition(lambda v: transport_handoff_ready(v, manifest['arm_home_qpos6']),
@@ -1276,7 +1401,10 @@ def run(args):
                         self.persist()
                     return
                 with self.lock:
-                    self.episode_id = ack['new_episode_id']
+                    with self.physics_cache_lock:
+                        self.episode_id = ack['new_episode_id']
+                        self.raw, self.received = None, 0.
+                        self.observation_error = None
                     self.execution_token = None
                     self.beacon = None
                     self.station_last_seen = None
@@ -1379,6 +1507,8 @@ def run(args):
                 result.append({'uuid': bytes(goal_id).hex() if goal_id is not None else None,
                     'label': item.get('label'), 'accepted': bool(handle and handle.accepted),
                     'carrying': bool(item.get('carrying', False)), 'goal_pose': copy.deepcopy(item.get('goal_pose')),
+                    'goal_motion': copy.deepcopy(item.get('goal_motion')),
+                    'stopped_before_hold': copy.deepcopy(item.get('stopped_before_hold')),
                     'status': status, 'result_known': known, 'terminal': dispatch_terminal(item),
                     'cancel_requested_wall_time': item.get('cancel_requested_wall_time')})
             return result
@@ -1494,6 +1624,8 @@ def run(args):
                     ready=False;nav_ready=False;reason=str(error)
                 frame=self.frame_state(raw)
                 result = {'mode':'mujoco','domain':args.domain,'ready':ready,'reason':reason,'task':copy.deepcopy(self.task),
+                    'scene_profile':copy.deepcopy(manifest.get('scene_profile')),
+                    'vehicle_profile':copy.deepcopy(manifest.get('vehicle_profile')),
                     'events':copy.deepcopy(self.events),'physics':physics,'frame':frame,
                     # Instance identity survives a reset/freshness gap. This is
                     # the XML hashed at startup, not a new physical observation.
@@ -1557,6 +1689,10 @@ def run(args):
                 task_id=request_identity(body, episode_id=self.episode_id)
                 scope = task_scope(body)
                 delivery = task_delivery_pose(body, manifest.get('delivery_pose'))
+                egress = (task_delivery_pose({}, manifest['egress_pose'])
+                          if scope == 'transport' and manifest.get('egress_pose') is not None else None)
+                motion = (normalize_egress_motion(manifest['egress_motion'])
+                          if scope == 'transport' and manifest.get('egress_motion') is not None else None)
                 existing = self.existing_start(task_id, scope, delivery)
                 if existing is not None:
                     return existing
@@ -1589,6 +1725,14 @@ def run(args):
                                         'quiet': False, 'hold': False, 'guard_disabled': False}
                 self.task={'id':task_id,'scope':scope,'status':'running','stage':'submitted','message':'任务已提交，等待原生执行','stop_reason':None,
                            'delivery_pose':copy.deepcopy(delivery), 'delivery_goal_preflight':copy.deepcopy(preflight)}
+                for attribute in ('loaded_limits', 'loaded_controller'):
+                    current = getattr(self, attribute, None)
+                    if current is not None:
+                        setattr(self, attribute, current.new_task())
+                if egress is not None:
+                    self.task['egress_pose'] = copy.deepcopy(egress)
+                if motion is not None:
+                    self.task['egress_motion'] = copy.deepcopy(motion)
                 self.events=[];self.persist()
                 self.task_worker = threading.Thread(target=self.execute,args=(self.execution_token,),daemon=True,name='cooperation-task')
                 self.task_worker.start()

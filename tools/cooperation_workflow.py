@@ -199,7 +199,7 @@ class Workflow:
         finally:
             os.close(descriptor)
 
-    def create(self, batches, machine='laundry-machine-1', delivery_poses=None):
+    def create(self, batches, machine='laundry-machine-1', delivery_poses=None, scene_profile=None):
         if self.data is not None:
             raise ContractError('ledger already exists; it cannot be reinitialized')
         if (not isinstance(batches, (list, tuple)) or not batches
@@ -214,6 +214,8 @@ class Workflow:
             raise ContractError('delivery-poses must map selected batch UUIDs to delivery_pose values')
         targets = {batch: delivery_pose(target) for batch, target in targets.items()}
         state = self.bridge.state()
+        if scene_profile is not None and state.get('scene_profile') != scene_profile:
+            raise ContractError('selected scene profile does not match the actual bridge instance')
         episode = identity(state.get('episode_id'))
         source, task = state.get('source'), state.get('task')
         scene = source.get('scene_sha') if isinstance(source, dict) else None
@@ -533,6 +535,20 @@ def run_workflow(path, bridge, *, timeout=900., poll=1., clock=time.monotonic,
         sleep(min(poll, max(0., timeout-(clock()-started))))
 
 
+def scene_template_jobs(manifest):
+    """Translate a prepared task choice into the existing batch/goal inputs."""
+    if manifest.get('factory_delivery') is not None:
+        from cooperation_factory_scene import factory_template_jobs
+        return factory_template_jobs(manifest)
+    from cooperation_profiles import normalize_scene_profile
+    profile = normalize_scene_profile(manifest.get('scene_profile'))
+    count = 3 if profile['task'] == 'three_batch_transport' else 1
+    batches = [str(uuid.uuid4()) for _ in range(count)]
+    target = task_delivery_pose({}, manifest.get('delivery_pose'))
+    goals = [target, target, {**target, 'x': target['x']+.7}] if count == 3 else [target]
+    return batches, {batch: copy.deepcopy(goal) for batch, goal in zip(batches, goals)}, profile
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--ledger', type=Path, required=True)
@@ -542,6 +558,7 @@ def main(argv=None):
     batches = init.add_mutually_exclusive_group(required=True)
     batches.add_argument('--batch', action='append', help='Legacy repeatable batch UUID')
     batches.add_argument('--batches', nargs='+', help='Nonempty ordered batch UUID list')
+    batches.add_argument('--from-scene', type=Path, help='Generate fresh batches for the prepared scene task template')
     init.add_argument('--delivery-poses', type=Path, help='JSON object mapping batch UUIDs to {x,y,yaw}')
     init.add_argument('--machine', default='laundry-machine-1')
     event = sub.add_parser('event')
@@ -559,8 +576,14 @@ def main(argv=None):
             return 0 if result['exit_reason'] == 'succeeded' else 3 if result['exit_reason'] == 'timeout' else 2
         with Workflow(args.ledger, LocalBridge(args.bridge)) as workflow:
             if args.command == 'init':
-                result = workflow.create(args.batches if args.batches is not None else args.batch,
-                                         args.machine, read_json(args.delivery_poses) if args.delivery_poses else None)
+                if args.from_scene:
+                    if args.delivery_poses:
+                        raise ContractError('--from-scene uses its task template; use explicit batches for custom goals')
+                    ids, goals, profile = scene_template_jobs(read_json(args.from_scene))
+                    result = workflow.create(ids, args.machine, goals, scene_profile=profile)
+                else:
+                    result = workflow.create(args.batches if args.batches is not None else args.batch,
+                                             args.machine, read_json(args.delivery_poses) if args.delivery_poses else None)
             elif args.command == 'event':
                 result = workflow.event(read_json(args.file))
             elif args.command in ('reset', 'recover'):

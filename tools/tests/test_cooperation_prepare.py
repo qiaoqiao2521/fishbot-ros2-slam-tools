@@ -30,6 +30,9 @@ from scipy.spatial import ConvexHull
 from cooperation_prepare import prepare,require_native_docking_version
 project=Path(sys.argv[1]);out=Path(sys.argv[2])
 m=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,output=out))
+j100_profile=out/'j100-profile.json';j100_profile.write_text(json.dumps({'vehicle':'jackal_j100'}))
+j100=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
+    output=out/'j100',scene_profile=j100_profile))
 declared={'mode':'perturbed','max_covariance':[.01,.01,.01],
           'noise_std':[.01,.02,.03],'bias':[.02,-.01,.01],
           'dropout_probability':.25,'seed':37,'occlusion_windows':[[2.,3.]]}
@@ -145,7 +148,11 @@ sample_distances=np.arange(.12,3.5,.001);points=origin[:2]+sample_distances[:,No
 indices=np.floor((points+4.2)/.02).astype(int)
 predicted={name:float(sample_distances[np.flatnonzero(image[indices[:,1],indices[:,0]]==0)[0]])
            for name,image in maps.items()}
-result={'height':m['localization_laser_height_m'],'different_maps':m['localization_map_yaml']!=m['collision_map_yaml'],
+result={'egress':{'legacy_absent':'egress_pose' not in m, 'pose':j100.get('egress_pose'),
+                  'staging':j100['staging_pose'],'dock':j100['dock_pose'],
+                  'motion':j100.get('egress_motion'),
+                  'legacy_motion_absent':'egress_motion' not in m},
+        'height':m['localization_laser_height_m'],'different_maps':m['localization_map_yaml']!=m['collision_map_yaml'],
         'map_alias':m['map_yaml']==m['localization_map_yaml'],'preserved':preserved,
         'map_topics':[params[name][name]['ros__parameters']['static_layer']['map_topic'] for name in ('global_costmap','local_costmap')],
         'collision_check':params['controller_server']['ros__parameters']['FollowPath']['use_collision_detection'],
@@ -191,6 +198,17 @@ print('RESULT_JSON:'+json.dumps(result))
     @classmethod
     def tearDownClass(cls):
         cls.temp.cleanup()
+
+    def test_j100_declares_straight_staging_egress_without_changing_legacy(self):
+        e = self.evidence['egress']
+        self.assertTrue(e['legacy_absent'])
+        self.assertEqual(e['pose'], dict(zip(('x', 'y', 'yaw'), e['staging'])))
+        self.assertAlmostEqual(e['pose']['x']-e['dock'][0], .7)
+        self.assertEqual(e['pose']['y'], e['dock'][1])
+        self.assertEqual(e['pose']['yaw'], e['dock'][2])
+        self.assertTrue(e['legacy_motion_absent'])
+        self.assertEqual(e['motion'], {'type':'drive_on_heading', 'distance_m':.7,
+                                     'speed_m_s':.02, 'time_allowance_s':45.})
 
     def test_localization_and_collision_maps_use_separate_native_topics(self):
         self.assertTrue(self.evidence['different_maps'])

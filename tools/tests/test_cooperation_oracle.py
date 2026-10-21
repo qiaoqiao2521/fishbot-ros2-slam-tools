@@ -155,6 +155,44 @@ def delivery_fixture():
     return records, samples, attempt, events
 
 
+def egress_delivery_fixture():
+    records,samples,attempt,events=delivery_fixture()
+    egress={'x':.3,'y':0.,'yaw':0.}
+    for row in records:
+        if row['topic']=='http_state':row['payload']['task']['egress_pose']=copy.deepcopy(egress)
+    action={'uuid':'02'*16,'label':'Nav2','accepted':True,'carrying':True,
+            'goal_pose':copy.deepcopy(egress),'status':4,'result_known':True}
+    records[-1]['payload']['native_actions'].insert(0,action)
+    records[1]['received_wall_time']=109.
+    middle=copy.deepcopy(records[-1]);middle['received_wall_time']=108.2
+    middle['payload']['native_actions']=[copy.deepcopy(action)]
+    records[:0]=[{'topic':'physics','received_wall_time':100.,'payload':{
+        'episode_id':'episode','source':{'episode_id':'episode','manifest':{'egress_pose':[.3,0.,0.]}}}}]
+    records[2:2]=[
+        {'topic':'nav_status','received_wall_time':105.,'payload':{'status_list':[
+            {'goal_info':{'goal_id':{'uuid':[2]*16}},'status':2}]}},
+        {'topic':'nav_status','received_wall_time':108.,'payload':{'status_list':[
+            {'goal_info':{'goal_id':{'uuid':[2]*16}},'status':4}]}},middle]
+    return records,samples,attempt,events
+
+
+def drive_egress_delivery_fixture():
+    records,samples,attempt,events=egress_delivery_fixture()
+    motion={'type':'drive_on_heading','distance_m':.7,'speed_m_s':.05000000074505806,'time_allowance_s':45.}
+    records[0]['payload']['source']['manifest']['egress_motion']={**motion,'speed_m_s':.05}
+    for row in records:
+        if row['topic']=='http_state':
+            row['payload']['task']['egress_motion']=copy.deepcopy(motion)
+            for action in row['payload']['native_actions']:
+                if action['uuid']=='02'*16:
+                    action.update(label='DriveOnHeading',goal_pose=None,goal_motion={
+                        'target':{'x':.7,'y':0.,'z':0.},'speed':motion['speed_m_s'],
+                        'time_allowance':{'sec':45,'nanosec':0}})
+        if row['topic']=='nav_status' and row['payload']['status_list'][0]['goal_info']['goal_id']['uuid']==[2]*16:
+            row['topic']='drive_on_heading_status'
+    return records,samples,attempt,events
+
+
 class TaskDeliveryTests(unittest.TestCase):
     def score(self, fixture):
         records, samples, attempt, events = fixture
@@ -171,6 +209,85 @@ class TaskDeliveryTests(unittest.TestCase):
         self.assertEqual(window['continuous_final_dwell_s'], 1.)
         self.assertFalse(window['goal_request_independently_observed'])
         self.assertFalse(window['native_goal_consumption_ack_claimed'])
+
+    def test_declared_egress_and_delivery_require_two_ordered_native_successes(self):
+        result=self.score(egress_delivery_fixture())
+        self.assertTrue(result['passed'])
+        window=result['attempts'][0]
+        self.assertTrue(window['egress_required'])
+        self.assertEqual(window['expected_egress_pose'],{'x':.3,'y':0.,'yaw':0.})
+        self.assertEqual(window['carrying_nav_uuid'],'03'*16)
+        self.assertEqual([leg['uuid']for leg in window['carrying_nav_route']],['02'*16,'03'*16])
+        self.assertTrue(window['carrying_nav_route_order_confirmed'])
+        self.assertEqual(window['position_tolerance_m'],.04)
+        self.assertEqual(window['yaw_tolerance_rad'],.05)
+        self.assertEqual(window['continuous_final_dwell_s'],1.)
+
+    def test_egress_cannot_hide_wrong_missing_extra_reused_or_out_of_order_actions(self):
+        for changed in ('no_declaration','wrong_goal','wrong_task_egress','wrong_uuid','aborted',
+                        'only_terminal','early_delivery','reverse','reused_uuid','extra','missing_delivery'):
+            with self.subTest(changed=changed):
+                fixture=egress_delivery_fixture();records=fixture[0]
+                if changed=='no_declaration':records.pop(0)
+                if changed=='wrong_goal':
+                    for row in records:
+                        for action in row['payload'].get('native_actions',[]):
+                            if action['uuid']=='02'*16:action['goal_pose']['x']=.4
+                if changed=='wrong_task_egress':records[-1]['payload']['task']['egress_pose']['x']=.4
+                for row in records:
+                    if row['topic']!='nav_status':continue
+                    for status in row['payload']['status_list']:
+                        identifier=status['goal_info']['goal_id']['uuid']
+                        if identifier==[2]*16:
+                            if changed=='wrong_uuid':status['goal_info']['goal_id']['uuid']=[4]*16
+                            if changed=='aborted' and status['status']==4:status['status']=6
+                            if changed=='only_terminal' and status['status']==2:status['status']=4
+                        if changed=='early_delivery' and identifier==[3]*16 and status['status']==2:
+                            row['received_wall_time']=107.
+                actions=records[-1]['payload']['native_actions']
+                if changed=='reverse':actions.reverse()
+                if changed=='reused_uuid':actions[-1]['uuid']='02'*16
+                if changed=='extra':actions.insert(1,{**copy.deepcopy(actions[0]),'uuid':'04'*16})
+                if changed=='missing_delivery':actions.pop()
+                self.assertFalse(self.score(fixture)['passed'])
+
+    def test_undeclared_legacy_route_still_allows_exactly_one_carrying_goal(self):
+        fixture=delivery_fixture()
+        fixture[0][-1]['payload']['native_actions'].insert(0,{
+            **copy.deepcopy(fixture[0][-1]['payload']['native_actions'][0]),'uuid':'02'*16})
+        self.assertFalse(self.score(fixture)['passed'])
+
+    def test_body_egress_uses_its_own_action_uuid_and_preserves_final_nav_uuid(self):
+        result=self.score(drive_egress_delivery_fixture())
+        self.assertTrue(result['passed'])
+        window=result['attempts'][0]
+        self.assertEqual(window['carrying_nav_uuid'],'03'*16)
+        first=window['carrying_nav_route'][0]
+        self.assertEqual(first['label'],'DriveOnHeading')
+        self.assertIsNone(first['goal_pose'])
+        self.assertEqual(first['goal_motion']['target'],{'x':.7,'y':0.,'z':0.})
+        self.assertEqual(window['egress_map_pose_role'],'nominal_staging_reference_not_native_body_goal')
+
+    def test_body_motion_cannot_borrow_map_goal_wrong_topic_or_inexact_native_payload(self):
+        for changed in ('nominal_map_goal','wrong_topic','wrong_target','lateral','speed_float64',
+                        'duration','boolean','extra_frame','missing_motion','wrong_task_motion'):
+            with self.subTest(changed=changed):
+                fixture=drive_egress_delivery_fixture();records=fixture[0]
+                for row in records:
+                    if changed=='wrong_topic' and row['topic']=='drive_on_heading_status':row['topic']='nav_status'
+                    if row['topic']!='http_state':continue
+                    if changed=='wrong_task_motion':row['payload']['task']['egress_motion']['distance_m']=.8
+                    for action in row['payload']['native_actions']:
+                        if action['uuid']!='02'*16:continue
+                        if changed=='nominal_map_goal':action['goal_pose']={'x':.3,'y':0.,'yaw':0.}
+                        if changed=='wrong_target':action['goal_motion']['target']['x']=.8
+                        if changed=='lateral':action['goal_motion']['target']['y']=.1
+                        if changed=='speed_float64':action['goal_motion']['speed']=.05
+                        if changed=='duration':action['goal_motion']['time_allowance']['sec']=46
+                        if changed=='boolean':action['goal_motion']['target']['y']=False
+                        if changed=='extra_frame':action['goal_motion']['frame_id']='map'
+                        if changed=='missing_motion':action.pop('goal_motion')
+                self.assertFalse(self.score(fixture)['passed'])
 
     def test_request_acceptance_and_frozen_goal_mismatch_cannot_pass(self):
         for changed in ('request', 'accepted', 'goal', 'episode', 'late_mutation', 'missing_http'):
@@ -349,6 +466,46 @@ class IdentityAndCancellationTests(unittest.TestCase):
         stopped = copy.deepcopy(samples)
         stopped[0]['car_speed'] = 0.
         self.assertFalse(base.cancellation_score(records, stopped, event, None)['passed'])
+
+        drive = copy.deepcopy(records)
+        for row in drive:
+            if row['topic'].startswith('nav_'):
+                row['topic'] = row['topic'].replace('nav_', 'drive_on_heading_', 1)
+        result = base.cancellation_score(drive, samples, event, None)
+        self.assertTrue(result['passed'])
+        self.assertEqual(result['matching_native_actions'], ['DriveOnHeading'])
+        # The original Drive UUID must terminate on its actual action topic.
+        wrong = copy.deepcopy(drive)
+        wrong[2]['topic'] = 'nav_status'
+        self.assertFalse(base.cancellation_score(wrong, samples, event, None)['passed'])
+
+    def test_drive_cancel_marker_binds_exact_accepted_uuid_and_cancel_time(self):
+        records = episode_records()
+        events = records[-1]['payload']['events']
+        events[0]['scope'] = 'transport'
+        cancel = {'kind': 'cancel_requested', 'task_id': 'task',
+                  'wall_time': 10.25, 'native_uuid': '02'*16}
+        events.insert(1, cancel)
+        for row in records:
+            if row['topic'] == 'nav_status':
+                row['topic'] = 'drive_on_heading_status'
+                if row['payload']['status_list'][0]['status'] == 4:
+                    row['payload']['status_list'][0]['status'] = 5
+            if row['topic'] == 'http_state':
+                row['payload']['task']['status'] = 'canceled'
+                row['payload']['native_actions'] = [
+                    {'uuid': '01'*16, 'label': 'Nav2停靠', 'accepted': True,
+                     'result_known': True, 'status': 4},
+                    {'uuid': '02'*16, 'label': 'DriveOnHeading', 'accepted': True,
+                     'result_known': True, 'status': 5, 'cancel_requested_wall_time': 10.25}]
+        result = oracle.extra_checks(records, Path('/nonexistent/no-marker-file'),
+            'episode', allow_initial_episode=True, expected_outcome='cancel')
+        self.assertTrue(result['windows'][0]['native_expected_outcome'])
+        self.assertTrue(result['windows'][0]['cancel_marker_uuid_and_actual_time_bound'])
+        cancel['wall_time'] = 10.26
+        wrong = oracle.extra_checks(records, Path('/nonexistent/no-marker-file'),
+            'episode', allow_initial_episode=True, expected_outcome='cancel')
+        self.assertFalse(wrong['windows'][0]['cancel_marker_uuid_and_actual_time_bound'])
 
 
 class PortableEntryTests(unittest.TestCase):

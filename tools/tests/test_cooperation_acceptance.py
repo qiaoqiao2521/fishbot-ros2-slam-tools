@@ -250,6 +250,21 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(tail.native(),{('dock_status','01'*16):2})
             self.assertFalse(acceptance.native_cleanup_known(failed,tail.native(),'t','e'))
 
+    def test_drive_on_heading_cleanup_requires_its_exact_status_topic_and_terminal_uuid(self):
+        with tempfile.TemporaryDirectory()as temp:
+            path=Path(temp)/'observer.jsonl';tail=acceptance.EvidenceTail(path)
+            def status(value):return {'topic':'drive_on_heading_status','payload':{'status_list':[
+                {'goal_info':{'goal_id':{'uuid':[7]*16}},'status':value}]}}
+            state={'episode_id':'e','task':{'id':'t','status':'failed'},'native_actions':[
+                {'uuid':'07'*16,'label':'DriveOnHeading','accepted':True,'status':5,'terminal':True,'result_known':True}]}
+            path.write_text(json.dumps(status(2))+'\n');tail.refresh()
+            self.assertFalse(acceptance.native_cleanup_known(state,tail.native(),'t','e'))
+            with path.open('a')as stream:stream.write(json.dumps(status(5))+'\n')
+            tail.refresh()
+            self.assertTrue(acceptance.native_cleanup_known(state,tail.native(),'t','e'))
+            self.assertFalse(acceptance.native_cleanup_known(state,{('nav_status','07'*16):5},'t','e'))
+            self.assertFalse(acceptance.native_cleanup_known(state,{('drive_on_heading_status','08'*16):5},'t','e'))
+
     def test_native_status_index_is_bounded_and_empty_status_list_is_not_terminal(self):
         with tempfile.TemporaryDirectory()as temp:
             path=Path(temp)/'observer.jsonl';tail=acceptance.EvidenceTail(path)

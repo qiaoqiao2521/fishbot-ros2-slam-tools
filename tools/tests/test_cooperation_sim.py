@@ -1,8 +1,10 @@
 """Control boundaries and independent sensor evidence for the shared world."""
 import importlib.util
 import ast
+import contextlib
 import copy
 import hashlib
+import io
 import json
 import math
 import signal
@@ -14,6 +16,7 @@ import threading
 import time
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 import uuid
 
 TOOLS = Path(__file__).resolve().parents[1]
@@ -301,6 +304,25 @@ class ReferencesTest(unittest.TestCase):
         self.assertAlmostEqual(odom.x, .032)
         self.assertEqual(odom.y, 0.)
 
+    def test_profile_wheel_geometry_changes_real_commands_and_encoder_scale(self):
+        commands = sim.WheelCommands(radius=.098, separation=.37559)
+        commands.set_hold(False)
+        commands.accept(.12, .2, 1.)
+        left, right = commands.velocities(1.)
+        self.assertAlmostEqual(left, (.12-.2*.37559/2)/.098)
+        self.assertAlmostEqual(right, (.12+.2*.37559/2)/.098)
+        odom = sim.EncoderOdometry(radius=.098, separation=.37559)
+        linear, angular = odom.update(left, right, 1.)
+        self.assertAlmostEqual(linear, .12)
+        self.assertAlmostEqual(angular, .2)
+        self.assertEqual(commands.velocities(1.6), (0., 0.))
+
+    def test_four_wheel_encoder_sides_use_both_independent_joint_readings(self):
+        physics = sim.Physics.__new__(sim.Physics)
+        physics.data = SimpleNamespace(qpos=[1., 3., 5., 9.])
+        physics.left_wheel_q, physics.right_wheel_q = [0, 1], [2, 3]
+        self.assertEqual(physics.wheel_encoder_positions(), (2., 7.))
+
     def test_encoder_transforms_axle_rotation_and_translation_to_foot(self):
         corrected = sim.EncoderOdometry(axle_offset=(-.02, 0.))
         old_point = sim.EncoderOdometry()
@@ -337,24 +359,33 @@ class ReferencesTest(unittest.TestCase):
         for index in range(100):
             timing.observe('publish', float(index), index+.2, float(index))
         value = timing.snapshot()
+        self.assertEqual(value['stages']['mj_step']['total_s'], 0.)
         self.assertEqual(value['stages']['scan']['count'], 1)
+        self.assertAlmostEqual(value['stages']['scan']['total_s'], .001)
         self.assertEqual(value['stages']['scan']['slow_count'], 0)
         self.assertEqual(value['stages']['spin_once']['slow_count'], 1)
         self.assertEqual(value['stages']['publish']['count'], 100)
+        self.assertAlmostEqual(value['stages']['publish']['total_s'], 20.)
         self.assertAlmostEqual(value['stages']['publish']['max_s'], .2)
         self.assertEqual(len(value['slow_tail']), 32)
         self.assertEqual(value['slow_events_evicted'], 69)
         self.assertEqual(value['slow_tail'][0]['source_stamp'], 68.)
         json.dumps(value, allow_nan=False)
         value['stages']['scan']['count'] = 999
+        value['stages']['scan']['total_s'] = 999.
         self.assertEqual(timing.snapshot()['stages']['scan']['count'], 1)
+        self.assertAlmostEqual(timing.snapshot()['stages']['scan']['total_s'], .001)
+        before = timing.snapshot()['stages']
         with self.assertRaises(ValueError):timing.observe('absent', 0., 1.)
         with self.assertRaises(ValueError):timing.observe('scan', 1., 0.)
         with self.assertRaises(ValueError):timing.observe('scan', math.nan, 1.)
+        self.assertEqual(timing.snapshot()['stages'], before)
         def failed_call():raise RuntimeError('preserve original operation failure')
-        with self.assertRaisesRegex(RuntimeError, 'original operation failure'):
-            timing.measure('record_flush', failed_call)
+        with patch.object(sim.time, 'monotonic', side_effect=(20., 20.0125)):
+            with self.assertRaisesRegex(RuntimeError, 'original operation failure'):
+                timing.measure('record_flush', failed_call)
         self.assertEqual(timing.snapshot()['stages']['record_flush']['count'], 1)
+        self.assertAlmostEqual(timing.snapshot()['stages']['record_flush']['total_s'], .0125)
 
     def test_docking_guard_uses_physical_plane_and_keeps_trip_until_disable(self):
         guard = sim.DockApproachGuard((10.,20.,math.pi/2))
@@ -394,6 +425,142 @@ class ReferencesTest(unittest.TestCase):
                                     capture_output=True, text=True, timeout=3.)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('isolated domain', result.stderr)
+
+
+class ExitFinalizationTests(unittest.TestCase):
+    """Execute the production finally block with local sinks, without ROS."""
+    def setUp(self):
+        tree = ast.parse((TOOLS/'cooperation_sim.py').read_text())
+        runtime = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'run_ros')
+        final = next(node for node in reversed(runtime.body) if isinstance(node, ast.Try) and node.finalbody)
+        wrapper = ast.parse('def shutdown_probe(operation):\n try:\n  operation()\n finally:\n  pass\n')
+        wrapper.body[0].body[0].finalbody = copy.deepcopy(final.finalbody)
+        self.code = compile(ast.fix_missing_locations(wrapper), '<current-simulation-finally>', 'exec')
+        self.stderr = io.StringIO()
+
+    def probe(self, errors=None, *, timing_enabled=True):
+        errors = errors or {}
+        events = []
+        def stage(name):
+            events.append(name)
+            if name in errors:
+                raise errors[name]
+        def resource(name):
+            return SimpleNamespace(close=lambda: stage(name+'.close'))
+        class Control:
+            def __setitem__(unused, key, value):
+                events.append(('wheel_ctrl', key, value))
+        class Writer(io.StringIO):
+            saved = None
+            def write(self, value):
+                if 'timing_record.write' in errors:
+                    raise errors['timing_record.write']
+                return super().write(value)
+            def flush(self):
+                stage('timing_record.flush')
+                return super().flush()
+            def close(self):
+                self.saved = self.getvalue()
+                super().close()
+                stage('timing_record.close')
+        writer = Writer() if timing_enabled else None
+        record = resource('record')
+        record.snapshot = lambda: {'kind': 'controlled_test', 'closed': True}
+        node = SimpleNamespace(camera=resource('camera'), lidar=resource('lidar'),
+                               destroy_node=lambda: stage('node.destroy_node'),
+                               runtime_observation={'rmw': 'controlled_test_not_ROS'})
+        scope = {'sys': sys, 'json': json,
+                 'physics': SimpleNamespace(wheels=SimpleNamespace(set_hold=lambda value: events.append(('hold', value))),
+                                            data=SimpleNamespace(ctrl=Control()), wheel_a='wheels'),
+                 'frames': resource('frames'), 'record': record, 'node': node,
+                 'timing_record': writer, 'timing': sim.LoopTiming(),
+                 # A context which is already stopped supports this idempotent API.
+                 # There deliberately is no shutdown() fallback in the fixture.
+                 'rclpy': SimpleNamespace(try_shutdown=lambda: stage('rclpy.try_shutdown'))}
+        exec(self.code, scope)
+        def invoke(operation=lambda: None):
+            with contextlib.redirect_stderr(self.stderr):
+                scope['shutdown_probe'](operation)
+        return invoke, writer, events
+
+    def assert_closed(self, writer, events):
+        self.assertEqual(events[:2], [('hold', True), ('wheel_ctrl', 'wheels', 0.)])
+        for stage in ('frames.close', 'camera.close', 'lidar.close', 'record.close',
+                      'node.destroy_node', 'rclpy.try_shutdown',
+                      'timing_record.flush', 'timing_record.close'):
+            self.assertEqual(events.count(stage), 1, stage)
+        self.assertTrue(writer.closed)
+
+    def test_close_error_or_second_interrupt_keeps_other_closes_and_timing(self):
+        for error in (RuntimeError('render close failed'), KeyboardInterrupt('second signal')):
+            with self.subTest(error=type(error).__name__):
+                invoke, writer, events = self.probe({'frames.close': error})
+                with self.assertRaises(type(error)) as caught:
+                    invoke()
+                self.assertIs(caught.exception, error)
+                self.assert_closed(writer, events)
+                value = json.loads(writer.saved)
+                self.assertEqual(value['rmw'], 'controlled_test_not_ROS')
+                self.assertEqual(value['finalization_errors'], [{'stage': 'frames.close',
+                    'type': type(error).__name__, 'message': str(error)}])
+
+    def test_multiple_close_and_teardown_errors_preserve_first_failure(self):
+        first = ValueError('first close')
+        errors = {'frames.close': first, 'lidar.close': RuntimeError('later close'),
+                  'node.destroy_node': KeyboardInterrupt('later signal')}
+        invoke, writer, events = self.probe(errors)
+        with self.assertRaises(ValueError) as caught:
+            invoke()
+        self.assertIs(caught.exception, first)
+        self.assert_closed(writer, events)
+        self.assertEqual([item['stage'] for item in json.loads(writer.saved)['finalization_errors']],
+                         list(errors))
+
+    def test_write_or_flush_failure_still_closes_writer_and_remains_error(self):
+        for stage in ('timing_record.write', 'timing_record.flush'):
+            with self.subTest(stage=stage):
+                error = OSError('diagnostic output failed')
+                invoke, writer, events = self.probe({stage: error})
+                with self.assertRaises(OSError) as caught:
+                    invoke()
+                self.assertIs(caught.exception, error)
+                self.assertTrue(writer.closed)
+                self.assertEqual(events.count('timing_record.close'), 1)
+                self.assertIn('rclpy.try_shutdown', events)
+                self.assertIn('timing_record.write_flush: OSError', self.stderr.getvalue())
+
+    def test_writer_close_failure_does_not_replace_earlier_close_failure(self):
+        first = RuntimeError('frame close failed')
+        invoke, writer, events = self.probe({'frames.close': first,
+                                            'timing_record.close': OSError('writer close failed')})
+        with self.assertRaises(RuntimeError) as caught:
+            invoke()
+        self.assertIs(caught.exception, first)
+        self.assert_closed(writer, events)
+        self.assertIn('timing_record.close: OSError', self.stderr.getvalue())
+
+    def test_cleanup_failure_does_not_replace_original_main_loop_error(self):
+        original = LookupError('physics operation failed')
+        invoke, writer, events = self.probe({'frames.close': KeyboardInterrupt('second signal')})
+        def operation():
+            raise original
+        with self.assertRaises(LookupError) as caught:
+            invoke(operation)
+        self.assertIs(caught.exception, original)
+        self.assert_closed(writer, events)
+        self.assertEqual(json.loads(writer.saved)['finalization_errors'][0]['type'], 'KeyboardInterrupt')
+
+    def test_already_stopped_ros_context_uses_idempotent_shutdown(self):
+        invoke, writer, events = self.probe()
+        invoke()
+        self.assert_closed(writer, events)
+        self.assertEqual(json.loads(writer.saved)['finalization_errors'], [])
+
+    def test_optional_timing_sink_does_not_prevent_resource_teardown(self):
+        invoke, writer, events = self.probe(timing_enabled=False)
+        invoke()
+        self.assertIsNone(writer)
+        self.assertEqual(events[-2:], ['node.destroy_node', 'rclpy.try_shutdown'])
 
 
 class SharedWorldTest(unittest.TestCase):

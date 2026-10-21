@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "vehicle": "jackal_j100",
+  "sensors": "planar",
+  "task": "three_batch_transport"
+}

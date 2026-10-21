@@ -149,3 +149,61 @@ python3 -B tools/cooperation_workflow.py \
 私有证据根目录为`~/.cache/fishbot/workflow-reuse-20261020/`：c/result.json、c/workflow.json、逐case score与c/root-closeout-readback.json。A的启动环境失败、B的预检锁阻塞失败和各自清理回执保留。慢几何查询已移出反馈锁，原时龄门槛未放宽。206项定向检查通过；原前端只改运行配置即显示A/B，桌面/390px零写请求、零页面错误。实验进程及9106/5189已关闭，原5188保持。
 
 这证明当前固定工位、刚性货物、ideal观测下的运输模板可通过输入增加批次与目标。它不证明不同物体/工位、多货物库存、新RGB留出或真实硬件。后续使用上面的新账本与目标映射入口；完整记录见[本轮进度](../plans/cooperation-workflow-20261014/progress.md)。
+
+## 车型、传感器与任务组合
+
+新场景由一个可编辑 JSON 选择车型、传感器和任务。沿用现有 MuJoCo 共同世界、Nav2 和 SO101 规划，不另建执行器。已有组合示例位于 [cooperation_profiles](../tools/config/cooperation_profiles/)；网页协同页也可下载同格式文件。
+
+```json
+{"schema":1,"vehicle":"jackal_j100","sensors":"lidar3d","task":"three_batch_transport"}
+```
+
+| 字段 | 当前选项 | 实际作用 |
+|---|---|---|
+| `vehicle` | `fishbot`、`jackal_j100` | 编译仿真底盘、轮控、里程计、完整足迹、托盘与工位交接位置 |
+| `sensors` | `planar`、`lidar3d` | 二维激光；或保留二维定位并增加16线原生三维射线、标准点云与避障输入 |
+| `task` | `transport`、`three_batch_transport` | 单批运输；或由原workflow执行三批A/A/B |
+
+三维点云来自当前 MuJoCo 版本的 `mj_multiRay`，不是商业雷达的已标定模型。点云进入两个原生 costmap 和 Collision Monitor；AMCL仍使用 `/scan`。高度上界从编译后的整车碰撞几何、托盘和任意朝向刚性货物包络计算，保留原足迹padding。该界限只适用于当前平地、单件刚性货物和已配置附件；坡面、车身大幅侧倾或堆叠货物需要重新建包络。
+
+J100 保留官方尺寸、惯量和真实轮距。转向使用当前 MuJoCo 3.3.7 平地模型离线标定的有效轮距系数4.5，命令与编码器使用同一值。它不是厂家或实车标定，也不使用在线真值反馈；方向、速度和载荷变化仍有残差。
+
+J100 继续使用原生 RPP，`max_angular_accel=2`、`rotate_to_heading_angular_vel=0.4`。原生 `StoppedGoalChecker` 保留原位姿门槛，并要求平移/转动速度分别不超过0.01m/s、0.01rad/s。控制器每周期从实测速度夹限，不能把过小的加速度参数当作能累积起转的命令。
+
+完成实际交接、回臂并hold停稳后，J100通过原生服务临时应用载货参数：`max_accel=[.025,0,.05]`、`max_decel=[-.1,0,-.2]`、`max_velocity=[.02,0,.05]`、`min_velocity=[-.02,0,-.05]`。应用和恢复均核原请求ACK及实际读回；清理时恢复任务开始前的原值。空车入站和Dock继续原平滑参数。参数值是命令限制，不是物理加速度保证；原物理评分保持。同时在原生RPP把载货期 `desired_linear_vel`、`regulated_linear_scaling_min_speed`、`min_approach_linear_velocity`设为0.02m/s，`rotate_to_heading_angular_vel`设为0.05rad/s；对应 `FollowPath.*` DOUBLE通过同一参数事务机制核active、应用、读回并恢复。低速曲线应由控制器按低速生成，不能只在下游分别裁线速度和角速度。
+
+J100出站复用原生 `DriveOnHeading`：沿当时车体方向以0.02m/s直行，ideal距离0.70m、vision距离0.65m，原生允许时间45源秒，再执行交付点导航。`egress_pose`仅为标称staging参考；实际请求是车体相对位移，不承诺精确抵达该世界坐标。出站与交付各核自己的UUID、顺序和原生终态。成功载货动作先等待平滑停稳，再hold；异常与取消仍立即hold。
+
+当前横向安装布局在原10mm Nav2 padding后，对指定低侧障碍的标称净距为42mm。该值不是定位精度，也不是全方向三维余量；声明接近扫掠的整体最小余量仍约19.84mm，其他停车误差姿态不保证全部交接可达。托盘按刚性固定悬臂建模：支承块18mm、0.486kg，支撑重叠100×35mm、外伸85mm。结构挠曲、紧固件和真实载荷强度尚未验证。
+
+导航点云 `/sensors/lidar3d/points` 只过滤当前完整凸包与未膨胀载货高度内的自体首回波。`/sensors/lidar3d/points_raw` 保留原始对照，元数据记录同源stamp/scene/episode/sequence及移除数量。该过滤不穿透被移除物体重新射线，不读取任务阶段、货物身份或接触状态；车外和包络外障碍继续保留。
+
+条件：已配置现有 `FISHBOT_COOP_PYTHON`，并选择尚不存在的输出目录。先生成独立场景：
+
+```bash
+tools/fishbot_cooperation.sh prepare \
+  --so101-project /home/muqiao/dev/ros2/projects/so101 \
+  --scene-profile tools/config/cooperation_profiles/jackal_j100-lidar3d.json \
+  --output "$HOME/.cache/fishbot/new-j100-scene"
+```
+
+确认独立域和端口空闲后，用现有 `run` 启动该manifest。例中的137/9107只表示一组实验配置，不保证当前空闲：
+
+```bash
+FISHBOT_COOP_DOMAIN=137 tools/fishbot_cooperation.sh run \
+  manifest:="$HOME/.cache/fishbot/new-j100-scene/scene-manifest.json" \
+  output:="$HOME/.cache/fishbot/new-j100-runtime" port:=9107
+```
+
+等待原桥ready后，由新manifest初始化新账本。三批模板会生成三个新batch UUID，目的地依次为manifest的A、A、A向世界X偏移0.7米的B；显式ready事件和查询/重置流程仍用本文原入口。
+
+```bash
+python3 -B tools/cooperation_workflow.py \
+  --bridge http://127.0.0.1:9107 \
+  --ledger "$HOME/.cache/fishbot/new-j100-workflow/workflow.json" \
+  init --from-scene "$HOME/.cache/fishbot/new-j100-scene/scene-manifest.json"
+```
+
+网页的“当前运行组合”来自实际manifest；配置草稿只导出新场景输入。选择草稿不会替换活动世界。实际运行三批模板时，原workflow负责派发和回合重置，网页不重复启动这两个动作。单批入口保留原有任务操作。
+
+组合实现和实际验收分开记录。最终四组合运输面板的状态、旧失败和剩余限制以[当前P8进度](../plans/cooperation-workflow-20261014/progress.md#p8-current)为准；不把导出配置、topic存在或网页状态视为完整运输通过。

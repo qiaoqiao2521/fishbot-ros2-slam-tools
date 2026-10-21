@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import random
 import shutil
+import sys
 import threading
 import time
 import uuid
@@ -110,16 +111,20 @@ def latest_sensor_qos():
 
 
 class LoopTiming:
-    """Bounded monotonic observations, with no control or timing decisions."""
+    """Bounded observations without control decisions.
+
+    Stage totals are inclusive wall time. Nested stages overlap; their totals
+    cannot be added into elapsed time or interpreted as CPU time.
+    """
     STAGES = ('spin_once', 'mj_step', 'publish', 'snapshot_refresh',
               'clock_publish', 'joint_publish', 'odom_publish', 'tf_publish',
               'truth_publish', 'cargo_publish', 'imu_publish', 'state_publish',
               'record_write', 'record_flush', 'scan', 'scan_publish',
-              'beacon_publish', 'frame_offer', 'camera_offer')
+              'beacon_publish', 'frame_offer', 'camera_offer', 'lidar_offer')
 
     def __init__(self, source_time=lambda: None):
         self.source_time = source_time
-        self.stats = {name: {'count': 0, 'max_s': 0., 'slow_count': 0} for name in self.STAGES}
+        self.stats = {name: {'count': 0, 'total_s': 0., 'max_s': 0., 'slow_count': 0} for name in self.STAGES}
         self.slow_tail = deque(maxlen=32)
         self.slow_count = 0
 
@@ -129,6 +134,7 @@ class LoopTiming:
         elapsed = end-start
         entry = self.stats[stage]
         entry['count'] += 1
+        entry['total_s'] += elapsed
         entry['max_s'] = max(entry['max_s'], elapsed)
         if elapsed >= .1:
             entry['slow_count'] += 1
@@ -324,7 +330,8 @@ def unique_arm_publisher(publishers, expected_name):
 
 class WheelCommands:
     """Steady-time watchdog remains active while arm references are held."""
-    def __init__(self):
+    def __init__(self, *, radius=WHEEL_RADIUS, separation=WHEEL_SEPARATION):
+        self.radius, self.separation = radius, separation
         self.hold = True
         self.last_received = None
         self.linear = self.angular = 0.
@@ -360,13 +367,15 @@ class WheelCommands:
     def velocities(self, now):
         if self.hold or self.last_received is None or not 0 <= now-self.last_received <= COMMAND_TIMEOUT:
             return 0., 0.
-        return ((self.linear-self.angular*WHEEL_SEPARATION/2)/WHEEL_RADIUS,
-                (self.linear+self.angular*WHEEL_SEPARATION/2)/WHEEL_RADIUS)
+        return ((self.linear-self.angular*self.separation/2)/self.radius,
+                (self.linear+self.angular*self.separation/2)/self.radius)
 
 
 class EncoderOdometry:
     """Integrate the wheel axle, then transform to the fixed foot origin."""
-    def __init__(self, left=0., right=0., *, axle_offset=(0., 0.)):
+    def __init__(self, left=0., right=0., *, axle_offset=(0., 0.),
+                 radius=WHEEL_RADIUS, separation=WHEEL_SEPARATION):
+        self.radius, self.separation = radius, separation
         self.left, self.right = left, right
         if len(axle_offset) != 2 or not all(math.isfinite(x) for x in axle_offset):
             raise ValueError('axle offset must be a finite planar vector')
@@ -377,10 +386,10 @@ class EncoderOdometry:
         self.lateral_velocity = 0.
 
     def update(self, left, right, dt):
-        dl, dr = (left-self.left)*WHEEL_RADIUS, (right-self.right)*WHEEL_RADIUS
+        dl, dr = (left-self.left)*self.radius, (right-self.right)*self.radius
         self.left, self.right = left, right
         distance = (dl+dr)/2
-        angle = (dr-dl)/WHEEL_SEPARATION
+        angle = (dr-dl)/self.separation
         self.axle_x += distance*math.cos(self.yaw+angle/2)
         self.axle_y += distance*math.sin(self.yaw+angle/2)
         self.yaw = math.atan2(math.sin(self.yaw+angle), math.cos(self.yaw+angle))
@@ -392,7 +401,7 @@ class EncoderOdometry:
         return (distance/dt+angular*b, angular) if dt > 0 else (0., 0.)
 
 
-def compiled_axle_offset(model):
+def compiled_axle_offset(model, left_joints=None, right_joints=None):
     """Read fixed encoder geometry in a separate reset-only kinematic data."""
     import mujoco
     import numpy as np
@@ -400,8 +409,9 @@ def compiled_axle_offset(model):
     mujoco.mj_kinematics(model, geometry)
     foot = model.body('base_footprint').id
     local = geometry.xmat[foot].reshape(3, 3).T
-    anchors = [local @ (geometry.xanchor[model.joint(name).id]-geometry.xpos[foot])
-               for name in WHEEL_JOINTS]
+    groups = (left_joints or WHEEL_JOINTS[:1], right_joints or WHEEL_JOINTS[1:])
+    anchors = [np.mean([local @ (geometry.xanchor[model.joint(name).id]-geometry.xpos[foot])
+                        for name in group], axis=0) for group in groups]
     if not np.isfinite(anchors).all() or any(abs(anchors[0][i]-anchors[1][i]) > 1e-9 for i in (0, 2)):
         raise ValueError('wheel anchors must form a finite lateral axle in the foot frame')
     return tuple(float(x) for x in (anchors[0]+anchors[1])/2)
@@ -471,16 +481,28 @@ class Physics:
         self.scene = Path(scene).resolve()
         self.model = mujoco.MjModel.from_xml_path(str(self.scene))
         self.data = mujoco.MjData(self.model)
+        self.identity = source_identity(self.scene)
+        profile = self.identity.get('manifest', {}).get('vehicle_profile', {})
+        self.left_wheel_names = tuple(profile.get('left_wheel_joints', WHEEL_JOINTS[:1]))
+        self.right_wheel_names = tuple(profile.get('right_wheel_joints', WHEEL_JOINTS[1:]))
+        self.wheel_joint_names = self.left_wheel_names + self.right_wheel_names
+        self.wheel_radius = float(profile.get('wheel_radius_m', WHEEL_RADIUS))
+        self.wheel_separation = float(profile.get('wheel_separation_m', WHEEL_SEPARATION))
+        self.track_multiplier = float(profile.get('drive', {}).get('effective_track_multiplier', 1.))
+        self.effective_wheel_separation = self.wheel_separation*self.track_multiplier
+        self.localization_enabled = profile.get('localization', {}).get('enabled', False) is True
         if abs(self.model.opt.timestep-.002) > 1e-12:
             raise ValueError('cooperation scene must use 500 Hz physics')
         self.arm_joint_ids = [self.model.joint(name).id for name in ARM_JOINTS]
         self.arm_q = [int(self.model.jnt_qposadr[i]) for i in self.arm_joint_ids]
         self.arm_v = [int(self.model.jnt_dofadr[i]) for i in self.arm_joint_ids]
         self.arm_a = [self.model.actuator(name).id for name in ARM_JOINTS]
-        self.wheel_joint_ids = [self.model.joint(name).id for name in WHEEL_JOINTS]
+        self.wheel_joint_ids = [self.model.joint(name).id for name in self.wheel_joint_names]
         self.wheel_q = [int(self.model.jnt_qposadr[i]) for i in self.wheel_joint_ids]
         self.wheel_v = [int(self.model.jnt_dofadr[i]) for i in self.wheel_joint_ids]
-        self.wheel_a = [self.model.actuator(name).id for name in WHEEL_JOINTS]
+        self.wheel_a = [self.model.actuator(name).id for name in self.wheel_joint_names]
+        split = len(self.left_wheel_names)
+        self.left_wheel_q, self.right_wheel_q = self.wheel_q[:split], self.wheel_q[split:]
         self.arm_limits = [tuple(self.model.jnt_range[i]) for i in self.arm_joint_ids]
         self.car_body = self.model.body('base_footprint').id
         car_free = self.model.joint('base_free_joint').id
@@ -510,7 +532,6 @@ class Physics:
         self.ray_groups = np.array([1, 1, 1, 1, 0, 0], dtype=np.uint8)
         angles = np.arange(360)*math.pi/180
         self.ray_directions = np.column_stack((np.cos(angles), np.sin(angles), np.zeros(360)))
-        self.identity = source_identity(self.scene)
         self.episode_id = str(uuid.uuid4())
         self.identity['episode_id'] = self.episode_id
         from cooperation_faults import FaultInjector, normalize_fault_config
@@ -531,10 +552,10 @@ class Physics:
         mujoco.mj_forward(self.model, self.data)
         self.initial_qpos = self.data.qpos.copy()
         self.initial_reference = self.reference
-        self.wheels = WheelCommands()
-        self.encoder_axle_offset = compiled_axle_offset(self.model)
-        self.odom = EncoderOdometry(*(float(self.data.qpos[i]) for i in self.wheel_q),
-                                    axle_offset=self.encoder_axle_offset[:2])
+        self.wheels = WheelCommands(radius=self.wheel_radius, separation=self.effective_wheel_separation)
+        self.encoder_axle_offset = compiled_axle_offset(self.model, self.left_wheel_names, self.right_wheel_names)
+        self.odom = EncoderOdometry(*self.wheel_encoder_positions(), axle_offset=self.encoder_axle_offset[:2],
+                                    radius=self.wheel_radius, separation=self.effective_wheel_separation)
         self.odom_linear = self.odom_angular = 0.
         self.total_forbidden_steps = self.total_forbidden_contacts = 0
         self.total_car_forbidden_steps = self.total_car_forbidden_contacts = 0
@@ -603,7 +624,7 @@ class Physics:
         self.docking_guard.set_enabled(False)
         # Wheel positions restart with the model. Rebase only the encoder's
         # wheel-reading baseline; preserve its independent integrated pose.
-        self.odom.left, self.odom.right = (float(self.data.qpos[i]) for i in self.wheel_q)
+        self.odom.left, self.odom.right = self.wheel_encoder_positions()
         self.odom.lateral_velocity = self.odom_linear = self.odom_angular = 0.
         self.total_forbidden_steps = self.total_forbidden_contacts = 0
         self.total_car_forbidden_steps = self.total_car_forbidden_contacts = 0
@@ -623,7 +644,8 @@ class Physics:
 
     def step(self):
         self.data.ctrl[self.arm_a] = self.reference
-        self.data.ctrl[self.wheel_a] = self.wheels.velocities(time.monotonic())
+        left, right = self.wheels.velocities(time.monotonic())
+        self.data.ctrl[self.wheel_a] = [left]*len(self.left_wheel_q) + [right]*len(self.right_wheel_q)
         for actuator in self.wheel_a:
             low, high = self.model.actuator_ctrlrange[actuator]
             self.data.ctrl[actuator] = max(low, min(high, self.data.ctrl[actuator]))
@@ -641,9 +663,14 @@ class Physics:
         if self.docking_guard.update(self.data.qpos[self.car_free_q:self.car_free_q+2]):
             self.data.ctrl[self.wheel_a] = 0.
         self.odom_linear, self.odom_angular = self.odom.update(
-            *(float(self.data.qpos[i]) for i in self.wheel_q), float(self.model.opt.timestep))
+            *self.wheel_encoder_positions(), float(self.model.opt.timestep))
         self.contacts = self.contact_state()
         self.observe_reset_quiet()
+
+    def wheel_encoder_positions(self):
+        """Two side readings average actual independent wheel hinge encoders."""
+        return tuple(sum(float(self.data.qpos[i]) for i in group)/len(group)
+                     for group in (self.left_wheel_q, self.right_wheel_q))
 
     def body_velocity(self, body):
         velocity = self.np.zeros(6)
@@ -748,7 +775,13 @@ class Physics:
                    'encoder_odometry_geometry': {'child_frame_id': 'base_footprint',
                        'axle_offset_in_foot': list(self.encoder_axle_offset),
                        'source': 'compiled reset wheel hinge anchors; runtime wheel encoders only',
-                       'wheel_radius_m': WHEEL_RADIUS, 'wheel_separation_m': WHEEL_SEPARATION},
+                       'wheel_radius_m': self.wheel_radius, 'wheel_separation_m': self.wheel_separation,
+                       'effective_track_multiplier': self.track_multiplier,
+                       'effective_wheel_separation_m': self.effective_wheel_separation,
+                       'left_wheel_joints': list(self.left_wheel_names),
+                       'right_wheel_joints': list(self.right_wheel_names),
+                       'odom_topic': '/wheel/odom' if self.localization_enabled else '/odom',
+                       'odom_tf_published_by_physics': not self.localization_enabled},
                    'arm_reference_q6': list(self.reference), 'arm_joint_names': list(ARM_JOINTS),
                    'car': {'position': self.data.xpos[self.car_body].tolist(),
                            'quaternion_wxyz': self.data.xquat[self.car_body].tolist(),
@@ -888,11 +921,12 @@ def run_ros(args):
     from diagnostic_msgs.msg import DiagnosticArray
     from nav_msgs.msg import Odometry
     from rosgraph_msgs.msg import Clock
-    from sensor_msgs.msg import Imu, JointState, LaserScan, Image, CameraInfo
+    from sensor_msgs.msg import Imu, JointState, LaserScan, Image, CameraInfo, PointCloud2
     from std_msgs.msg import Bool, String
     from action_msgs.msg import GoalStatusArray
     from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
     from cooperation_camera import CameraRenderer, frame_messages, IMAGE_TOPIC, INFO_TOPIC, METADATA_TOPIC, FAULT_TOPIC
+    from cooperation_lidar import CloudWorker, configuration as lidar_configuration
 
     physics = Physics(args.scene)
     timing = LoopTiming(lambda: float(physics.data.time))
@@ -926,9 +960,18 @@ def run_ros(args):
             self.scan_pub = self.create_publisher(LaserScan, '/scan', self.sensor_qos)
             self.imu_pub = self.create_publisher(Imu, '/imu', self.sensor_qos)
             self.joint_pub = self.create_publisher(JointState, '/joint_states', 10)
-            self.odom_pub = self.create_publisher(Odometry, '/odom', 10)
+            self.odom_pub = self.create_publisher(Odometry, '/wheel/odom' if physics.localization_enabled else '/odom', 10)
             self.truth_pub = self.create_publisher(Odometry, '/ground_truth/odom', 10)
             self.cargo_pub = self.create_publisher(PoseStamped, '/cooperation/cargo_pose', 10)
+            self.lidar = None
+            lidar_config = lidar_configuration(physics.identity['manifest'])
+            if lidar_config is not None:
+                self.points_pub = self.create_publisher(PointCloud2, lidar_config['topic'], self.latest_qos)
+                self.raw_points_pub = self.create_publisher(PointCloud2, lidar_config['raw_topic'], self.latest_qos)
+                self.points_metadata_pub = self.create_publisher(DiagnosticArray, lidar_config['metadata_topic'], self.latest_qos)
+                self.lidar = CloudWorker(physics, lidar_config,
+                    lambda points, metadata: (self.points_pub.publish(points), self.points_metadata_pub.publish(metadata)),
+                    publish_raw=self.raw_points_pub.publish)
             if physics.station_beacon.perception_config['mode'] != 'vision':
                 self.station_pose_pub = self.create_publisher(PoseWithCovarianceStamped, STATION_POSE_TOPIC, self.latest_qos)
                 self.station_detection_pub = self.create_publisher(DiagnosticArray, STATION_DETECTION_TOPIC, self.latest_qos)
@@ -1015,6 +1058,8 @@ def run_ros(args):
                 episode_id, reset_stamp = begin(request['episode_id'])
                 if self.camera:
                     self.camera.slot.fence(episode_id)
+                if self.lidar:
+                    self.lidar.slot.fence(episode_id)
                 reply = reset_result(request, episode_id=episode_id, reset_stamp=reset_stamp,
                                      message='new synthetic episode initialized; previous records retained')
                 self.last_rejected = None
@@ -1073,6 +1118,13 @@ def run_ros(args):
                 transform.transform.rotation.w = 1.
                 transforms.append(transform)
             self.static_tf.sendTransform(transforms)
+            if self.lidar:
+                c = self.lidar.config
+                transform = TransformStamped()
+                transform.header.frame_id, transform.child_frame_id = c['parent_body'], c['frame_id']
+                transform.transform.translation.x, transform.transform.translation.y, transform.transform.translation.z = c['mount_xyz']
+                transform.transform.rotation.w = 1.
+                self.static_tf.sendTransform([transform])
             camera_config = physics.identity['manifest'].get('station_camera')
             if camera_config:
                 transform = TransformStamped()
@@ -1094,7 +1146,7 @@ def run_ros(args):
             timing.measure('clock_publish', self.clock_pub.publish, clock)
             joint = JointState()
             joint.header.stamp = current_stamp
-            joint.name = list(ARM_JOINTS+WHEEL_JOINTS)
+            joint.name = list(ARM_JOINTS+physics.wheel_joint_names)
             joint.position = physics.data.qpos[physics.arm_q+physics.wheel_q].tolist()
             joint.velocity = physics.data.qvel[physics.arm_v+physics.wheel_v].tolist()
             timing.measure('joint_publish', self.joint_pub.publish, joint)
@@ -1114,7 +1166,8 @@ def run_ros(args):
             transform.child_frame_id = 'base_footprint'
             transform.transform.translation.x, transform.transform.translation.y = physics.odom.x, physics.odom.y
             transform.transform.rotation = odom.pose.pose.orientation
-            timing.measure('tf_publish', self.tf.sendTransform, transform)
+            if not physics.localization_enabled:
+                timing.measure('tf_publish', self.tf.sendTransform, transform)
             truth = Odometry()
             truth.header.stamp = current_stamp
             truth.header.frame_id, truth.child_frame_id = 'world', 'base_footprint'
@@ -1140,6 +1193,13 @@ def run_ros(args):
                     target.w, target.x, target.y, target.z = map(float, values)
                 else:
                     target.x, target.y, target.z = map(float, values)
+            if physics.localization_enabled:
+                # Ideal native IMU with explicit assumed covariance, matching
+                # the existing J100 EKF experiment rather than truth odometry.
+                for index in (0, 4, 8):
+                    imu.orientation_covariance[index] = 1e-6
+                    imu.angular_velocity_covariance[index] = 1e-6
+                    imu.linear_acceleration_covariance[index] = .01
             timing.measure('imu_publish', self.imu_pub.publish, imu)
             state = physics.state()
             state['last_rejected_reference'] = self.last_rejected
@@ -1147,6 +1207,8 @@ def run_ros(args):
             if getattr(self, 'camera', None):
                 state['camera_error'] = self.camera.error
                 state['camera_rendered_frames'] = self.camera.rendered
+            if getattr(self, 'lidar', None):
+                state['lidar3d'] = self.lidar.summary()
             if hasattr(physics, 'observation_faults'):
                 state['observation_faults'] = physics.observation_faults.status()
             state['loop_diagnostics'] = {**timing.snapshot(), **self.runtime_observation}
@@ -1181,6 +1243,8 @@ def run_ros(args):
                 scan.scan_time, scan.range_min, scan.range_max = .1, .12, 3.5
                 scan.ranges = timing.measure('scan', physics.scan)
                 timing.measure('scan_publish', self.scan_pub.publish, scan)
+                if getattr(self, 'lidar', None):
+                    timing.measure('lidar_offer', self.lidar.offer, state['sequence'])
             if frames:
                 timing.measure('frame_offer', frames.offer)
             if getattr(self, 'camera', None):
@@ -1213,22 +1277,44 @@ def run_ros(args):
     finally:
         physics.wheels.set_hold(True)
         physics.data.ctrl[physics.wheel_a] = 0.
+        original_error = sys.exc_info()[1]
+        finalization_errors = []
+
+        def finalize_stage(stage, function):
+            try:
+                function()
+            except (Exception, KeyboardInterrupt) as error:
+                # A second SIGINT may interrupt a thread join. Finish the other
+                # resources and diagnostics before preserving the first error.
+                finalization_errors.append((stage, error))
+
         try:
-            if frames:
-                frames.close()
-            if node.camera:
-                node.camera.close()
-            if record:
-                record.close()
-            if timing_record:
-                json.dump({**timing.snapshot(), **node.runtime_observation,
-                           'diagnostic_recording': record.snapshot() if record else {'kind': 'disabled', 'enabled': False}},
-                          timing_record, allow_nan=False)
+            for name, resource in (('frames', frames), ('camera', node.camera),
+                                   ('lidar', node.lidar), ('record', record)):
+                if resource is not None:
+                    finalize_stage(name+'.close', resource.close)
         finally:
-            if timing_record:
-                timing_record.close()
-            node.destroy_node()
-            rclpy.shutdown()
+            try:
+                finalize_stage('node.destroy_node', node.destroy_node)
+                finalize_stage('rclpy.try_shutdown', rclpy.try_shutdown)
+            finally:
+                if timing_record is not None:
+                    def write_timing():
+                        json.dump({**timing.snapshot(), **node.runtime_observation,
+                            'diagnostic_recording': record.snapshot() if record else {'kind': 'disabled', 'enabled': False},
+                            'finalization_errors': [{'stage': stage, 'type': type(error).__name__,
+                                                     'message': str(error)}
+                                                    for stage, error in finalization_errors]},
+                            timing_record, allow_nan=False)
+                        timing_record.flush()
+                    try:
+                        finalize_stage('timing_record.write_flush', write_timing)
+                    finally:
+                        finalize_stage('timing_record.close', timing_record.close)
+        for stage, error in finalization_errors:
+            print(f'cooperation finalization {stage}: {type(error).__name__}: {error}', file=sys.stderr)
+        if finalization_errors and original_error is None:
+            raise finalization_errors[0][1]
 
 
 def parser():
