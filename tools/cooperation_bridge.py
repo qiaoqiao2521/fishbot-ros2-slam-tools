@@ -596,13 +596,42 @@ def run(args):
 
         def wait_condition(self, condition, *, duration=.7, timeout=8., carrying=False, cancelable=True):
             gate = ContinuousEvidence(duration)
-            end = time.monotonic()+timeout
-            while time.monotonic()<end:
-                raw = self.check(carrying=carrying) if cancelable else self.fresh()
-                if gate.update(raw['stamp'], bool(condition(raw))):
-                    return raw
-                time.sleep(.01)
-            raise RuntimeError('未取得连续物理确认')
+            started = time.monotonic()
+            end = started+timeout
+            evidence = {'stage': self.task.get('stage'), 'required_source_duration_s': duration,
+                        'timeout_wall_s': timeout, 'max_source_gap_s': gate.max_gap,
+                        'unique_samples': 0, 'invalid_samples': 0, 'repeated_samples': 0,
+                        'maximum_observed_source_gap_s': 0., 'longest_source_duration_s': 0.,
+                        'outcome': 'interrupted'}
+            try:
+                while time.monotonic()<end:
+                    raw = self.check(carrying=carrying) if cancelable else self.fresh()
+                    stamp, valid = raw['stamp'], bool(condition(raw))
+                    if gate.last == stamp:
+                        evidence['repeated_samples'] += 1
+                    else:
+                        evidence['unique_samples'] += 1
+                        evidence['invalid_samples'] += not valid
+                        if gate.last is not None:
+                            evidence['maximum_observed_source_gap_s'] = max(
+                                evidence['maximum_observed_source_gap_s'], stamp-gate.last)
+                    passed = gate.update(stamp, valid)
+                    evidence['last_source_stamp'] = stamp
+                    if gate.started is not None:
+                        evidence['longest_source_duration_s'] = max(
+                            evidence['longest_source_duration_s'], stamp-gate.started)
+                    if passed:
+                        evidence['outcome'] = 'passed'
+                        return raw
+                    time.sleep(.01)
+                evidence['outcome'] = 'timed_out'
+                raise RuntimeError('未取得连续物理确认')
+            finally:
+                evidence['elapsed_wall_s'] = time.monotonic()-started
+                with self.lock:
+                    self.task['physical_wait'] = evidence
+                    if evidence['outcome'] != 'passed':
+                        self.task.setdefault('physical_wait_failure', evidence)
 
         def wait_future(self, future, timeout, *, carrying=False, station_localization=False,
                         allow_outside_station=False,docking_guard=False):

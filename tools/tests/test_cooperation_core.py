@@ -305,6 +305,34 @@ class BridgeRaceTests(unittest.TestCase):
 
     def goal(self):return {'x':0.,'y':0.,'yaw':0.}
 
+    def test_physical_wait_reports_valid_but_discontinuous_source_without_accepting_it(self):
+        p=self.bridge
+        p.check=lambda **unused:{'stamp':round((self.clock-100.)/.01)*.2}
+        with self.assertRaisesRegex(RuntimeError,'未取得连续物理确认'):
+            p.wait_condition(lambda raw:True,duration=.3,timeout=.08)
+        evidence=p.task['physical_wait']
+        self.assertEqual(evidence['outcome'],'timed_out')
+        self.assertEqual(evidence['invalid_samples'],0)
+        self.assertGreater(evidence['unique_samples'],1)
+        self.assertGreater(evidence['maximum_observed_source_gap_s'],evidence['max_source_gap_s'])
+        self.assertEqual(evidence['longest_source_duration_s'],0.)
+        p.check=lambda **unused:{'stamp':self.clock}
+        p.wait_condition(lambda raw:True,duration=.03,timeout=.1)
+        self.assertEqual(p.task['physical_wait']['outcome'],'passed')
+        self.assertEqual(p.task['physical_wait_failure'],evidence)
+
+    def test_physical_wait_records_continuous_success_and_propagates_source_failure(self):
+        p=self.bridge
+        p.wait_condition(lambda raw:True,duration=.03,timeout=.1)
+        self.assertEqual(p.task['physical_wait']['outcome'],'passed')
+        self.assertGreaterEqual(p.task['physical_wait']['longest_source_duration_s'],.03)
+        def unavailable(**unused):raise RuntimeError('source unavailable')
+        p.check=unavailable
+        with self.assertRaisesRegex(RuntimeError,'source unavailable'):
+            p.wait_condition(lambda raw:True,duration=.03,timeout=.1)
+        self.assertEqual(p.task['physical_wait']['outcome'],'interrupted')
+        self.assertEqual(p.task['physical_wait']['unique_samples'],0)
+
     def timed_physics(self):
         p=self.bridge;p.bridge_timing=BridgeTiming();p.episode_id=str(uuid.uuid4())
         value=copy.deepcopy(p.raw)
