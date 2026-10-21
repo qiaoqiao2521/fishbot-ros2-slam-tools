@@ -280,6 +280,11 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
       () => modelUrls.every(url => result.modelResponses.some(item => new URL(item.url).pathname === url)),
       { timeout: 30000, message: 'native 3D loads all recorded model assets after seeking a known pose' },
     ).toBe(true);
+    if (process.env.DRONE_REPLAY_TASK_ID && process.env.DRONE_REPLAY_OVERHEAD === '1') {
+      await scene.getByRole('button', { name: '3D', exact: true }).click();
+      await page.mouse.move(20, 20);
+      result.replayCamera = 'native-overhead';
+    }
     await seek(first, 'initial');
     await seek(airborne, 'airborne');
     await seek(last, 'finished');
@@ -344,7 +349,10 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
     let replayUrl;
     if (process.env.DRONE_REPLAY_TASK_ID) {
       first = updateTask(await readTask(page.request, process.env.DRONE_REPLAY_TASK_ID));
-      assert.equal(first.status, 'succeeded');
+      assert(terminal.has(first.status), 'Replay requires an existing terminal task');
+      assert(first.artifacts?.mcap, 'Replay requires an existing MCAP artifact');
+      result.scope = 'recording-replay-only';
+      result.originalFlightStatus = first.status;
       replayUrl = `${base}/?${new URLSearchParams({ ds: 'remote-file', 'ds.url': new URL(first.artifacts.mcap, base).href, layoutUrl: `${base}/layouts/drone-review.json` })}`;
     } else {
       await page.goto(`${base}/drone-station`);
