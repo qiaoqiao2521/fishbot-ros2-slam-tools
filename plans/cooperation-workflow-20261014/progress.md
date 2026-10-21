@@ -230,3 +230,12 @@ K2精确复核：原桥task failed/协同任务超过总执行时间，在+360.0
 2026-10-21 清理诊断修复实际读回：独立无动作idle-v2 2源秒/1000步正常退出，timing有效、finalization_errors=[]；F1 occupied-v2实际launch关闭时也保存2921字节timing，保留node.destroy_node的KeyboardInterrupt，不把它隐藏成clean。mj_step171244次、累计285.251s、max122.811ms，publish累计75.315s；嵌套stage是包含式墙时间不能相加当CPU总量。高频源门槛未更改。
 
 F1 occupied-v2终点发现SimpleGoalChecker早锁XY后在转向期间漂出原15mm，native4时真值43.447mm，随后hold仅再移动31.9µm。新增组合场景暂改goal checker stateful=false，不改15mm/.035rad；仍在核对RPP自身XY锁，不能提前称充分修复。自定义雷达topic/min/maxrange已共用configuration同步到发布/两个costmap/CollisionMonitor/manifest，根6项composition读回过。
+
+### L 候选：原生轮速跟踪、同步线速及持续XY检查
+20例原kv8低速面板确认v=.02/.03时小yaw请求±.01几乎未执行（真实约±4e-6rad/s），提高线速本身不解决。独立16例kv16/32对照采用当前K2落稳状态和原Physics/WheelCommands，8source s阶跃/4–8s稳定窗；kv32在v=.02,w±.01产生+.010608/-.008285，空载±.3产生+.278861/-.279808。只改原生执行器gain/bias，原4.5有效轮距、质量/摩擦/12Nm保持；六载货例50Hz谓词0失败，+.03保留1个500Hz底接触false。旧超出指定面板的6例和一次私有脚本中断也保留，未混作正式面板。
+
+根采用车型级原生servo kv32，并将RPP/下游/Drive载货线速同步.03，角上限.05和原加减速不变。goal checker及RPP成对stateful=false，防XY早锁；本机1.3.13实现已核实，不调整15mm/.035rad或物理4cm/.05rad/360s。完整136项离线检查135过/1失败：新增empty小转向测试错误套用loaded>.004精度边界，原signed .3转向仍过；根将新增回归限于防4e-6无响应（>.001），保留原失败日志，定向复验待回读。该新测试不能证明精确跟踪。旧30组kv8标定元数据已独立嵌套，不冒充kv32精度。
+
+原始开发证据：~/.cache/fishbot/profile-reuse-20261020/calibration-low-speed/{summary.json,controller-candidates-requested/summary.json,provenance.json}。首批软件checkpoint bb9141e已推origin/main并读回一致；L新增适配尚未提交，四组合最终运输仍待执行。当前owner=root，不启动实车/训练/云GPU。
+
+L冻结前定向回读：signed原回归独立1/1；修正后的skid+composition 8/8（14.511s）；生成prepare合同13/13（12.311s）。control-l的891项中890通过，唯一失败为未更新的出站速度旧期望.02，已由13项prepare完整复验覆盖，保留原fail报告，不伪称那次整组全绿。新源码差异检查通过。知识第19节与入口再补轮速伺服/双重XY锁定，已读回；仅本地知识回写。下一步由内部native_matrix_l按四组合串行执行，同一源码，不重跑F1 open来充数。

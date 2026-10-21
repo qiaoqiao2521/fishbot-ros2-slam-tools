@@ -51,12 +51,12 @@ class CompositionNavigationTest(unittest.TestCase):
         smoothing = self.params['velocity_smoother']['ros__parameters']
         loaded = manifest['vehicle_profile']['loaded_velocity_smoother']
         self.assertEqual(loaded['max_accel'], [.025,0.,.05])
-        self.assertEqual(loaded['max_velocity'], [.02,0.,.05])
-        self.assertEqual(loaded['min_velocity'], [-.02,0.,-.05])
+        self.assertEqual(loaded['max_velocity'], [.03,0.,.05])
+        self.assertEqual(loaded['min_velocity'], [-.03,0.,-.05])
         self.assertEqual(manifest['vehicle_profile']['loaded_controller'], {
-            'FollowPath.desired_linear_vel': .02,
-            'FollowPath.regulated_linear_scaling_min_speed': .02,
-            'FollowPath.min_approach_linear_velocity': .02,
+            'FollowPath.desired_linear_vel': .03,
+            'FollowPath.regulated_linear_scaling_min_speed': .03,
+            'FollowPath.min_approach_linear_velocity': .03,
             'FollowPath.rotate_to_heading_angular_vel': .05})
         self.assertEqual(loaded['max_decel'], [-.1,0.,-.2])
         self.assertEqual(smoothing, before['velocity_smoother']['ros__parameters'])

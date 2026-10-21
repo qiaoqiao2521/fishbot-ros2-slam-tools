@@ -166,13 +166,15 @@ python3 -B tools/cooperation_workflow.py \
 
 三维点云来自当前 MuJoCo 版本的 `mj_multiRay`，不是商业雷达的已标定模型。点云进入两个原生 costmap 和 Collision Monitor；AMCL仍使用 `/scan`。高度上界从编译后的整车碰撞几何、托盘和任意朝向刚性货物包络计算，保留原足迹padding。该界限只适用于当前平地、单件刚性货物和已配置附件；坡面、车身大幅侧倾或堆叠货物需要重新建包络。
 
-J100 保留官方尺寸、惯量和真实轮距。转向使用当前 MuJoCo 3.3.7 平地模型离线标定的有效轮距系数4.5，命令与编码器使用同一值。它不是厂家或实车标定，也不使用在线真值反馈；方向、速度和载荷变化仍有残差。
+J100 保留官方尺寸、惯量和真实轮距。转向使用当前 MuJoCo 3.3.7 平地模型离线标定的有效轮距系数4.5，命令与编码器使用同一值。它不是厂家或实车标定，也不使用在线真值反馈；方向、速度和载荷变化仍有残差。原生轮速伺服增益由8适配为32，原12Nm限幅、质量、摩擦和真实几何保持；低速开发面板改善小差速执行，仍不是精确逆动力学或完整运输证明。
 
-J100 继续使用原生 RPP，`max_angular_accel=2`、`rotate_to_heading_angular_vel=0.4`。原生 `StoppedGoalChecker` 保留原位姿门槛，并要求平移/转动速度分别不超过0.01m/s、0.01rad/s。控制器每周期从实测速度夹限，不能把过小的加速度参数当作能累积起转的命令。
+J100 继续使用原生 RPP，`max_angular_accel=2`、`rotate_to_heading_angular_vel=0.4`。原生 `StoppedGoalChecker` 保留原位姿门槛，并要求平移/转动速度分别不超过0.01m/s、0.01rad/s。组合场景把检查器与 `FollowPath.stateful` 同时设为false，避免转向漂出位置容差后仍沿用先前XY达标状态；实际末端收敛仍由原生面板核对。控制器每周期从实测速度夹限，不能把过小的加速度参数当作能累积起转的命令。
 
-完成实际交接、回臂并hold停稳后，J100通过原生服务临时应用载货参数：`max_accel=[.025,0,.05]`、`max_decel=[-.1,0,-.2]`、`max_velocity=[.02,0,.05]`、`min_velocity=[-.02,0,-.05]`。应用和恢复均核原请求ACK及实际读回；清理时恢复任务开始前的原值。空车入站和Dock继续原平滑参数。参数值是命令限制，不是物理加速度保证；原物理评分保持。同时在原生RPP把载货期 `desired_linear_vel`、`regulated_linear_scaling_min_speed`、`min_approach_linear_velocity`设为0.02m/s，`rotate_to_heading_angular_vel`设为0.05rad/s；对应 `FollowPath.*` DOUBLE通过同一参数事务机制核active、应用、读回并恢复。低速曲线应由控制器按低速生成，不能只在下游分别裁线速度和角速度。
+完成实际交接、回臂并hold停稳后，J100通过原生服务临时应用载货参数：`max_accel=[.025,0,.05]`、`max_decel=[-.1,0,-.2]`、`max_velocity=[.03,0,.05]`、`min_velocity=[-.03,0,-.05]`。应用和恢复均核原请求ACK及实际读回；清理时恢复任务开始前的原值。空车入站和Dock继续原平滑参数。参数值是命令限制，不是物理加速度保证；原物理评分保持。同时在原生RPP把载货期 `desired_linear_vel`、`regulated_linear_scaling_min_speed`、`min_approach_linear_velocity`设为0.03m/s，`rotate_to_heading_angular_vel`设为0.05rad/s；对应 `FollowPath.*` DOUBLE通过同一参数事务机制核active、应用、读回并恢复。低速曲线应由控制器按低速生成，不能只在下游分别裁线速度和角速度。
 
-J100出站复用原生 `DriveOnHeading`：沿当时车体方向以0.02m/s直行，ideal距离0.70m、vision距离0.65m，原生允许时间45源秒，再执行交付点导航。`egress_pose`仅为标称staging参考；实际请求是车体相对位移，不承诺精确抵达该世界坐标。出站与交付各核自己的UUID、顺序和原生终态。成功载货动作先等待平滑停稳，再hold；异常与取消仍立即hold。
+J100出站复用原生 `DriveOnHeading`：沿当时车体方向以0.03m/s直行，ideal距离0.70m、vision距离0.65m，原生允许时间45源秒，再执行交付点导航。`egress_pose`仅为标称staging参考；实际请求是车体相对位移，不承诺精确抵达该世界坐标。出站与交付各核自己的UUID、顺序和原生终态。成功载货动作先等待平滑停稳，再hold；异常与取消仍立即hold。
+
+上述参数是当前待运输验收候选。kv32的六个载货阶跃中原50Hz保持谓词无失败，但一次500Hz底接触间断已保留；不把离线面板记成整任务成功。
 
 当前横向安装布局在原10mm Nav2 padding后，对指定低侧障碍的标称净距为42mm。该值不是定位精度，也不是全方向三维余量；声明接近扫掠的整体最小余量仍约19.84mm，其他停车误差姿态不保证全部交接可达。托盘按刚性固定悬臂建模：支承块18mm、0.486kg，支撑重叠100×35mm、外伸85mm。结构挠曲、紧固件和真实载荷强度尚未验证。
 

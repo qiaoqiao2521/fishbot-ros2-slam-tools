@@ -12,6 +12,32 @@ from cooperation_sim import Physics
 
 
 class CompiledSkidDriveTest(unittest.TestCase):
+    def test_small_heading_corrections_actually_execute_with_native_velocity_servo(self):
+        root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder)
+            manifest = build_scene(root.parent/'so101', root, output,
+                                   scene_profile={'vehicle': 'jackal_j100'})
+            (output/'scene-manifest.json').write_text(json.dumps(manifest))
+            for sign in (1., -1.):
+                with self.subTest(sign=sign):
+                    plant = Physics(manifest['world_xml'])
+                    for _ in range(1000):
+                        plant.step()
+                    plant.wheels.set_hold(False)
+                    for _ in range(2000):
+                        plant.wheels.accept(.02, sign*.01, time.monotonic())
+                        plant.step()
+                    plant.refresh_snapshot()
+                    state = plant.state()
+                    # kv=8 produced about 4e-6 rad/s despite fresh targets.
+                    # Detect immobilization, not precise unloaded/loaded
+                    # tracking equivalence; transport retains its own score.
+                    response = sign*state['car']['velocity_world_angular_linear'][2]
+                    self.assertGreater(response, .001)
+                    self.assertLess(response, .02)
+                    self.assertEqual(state['car_forbidden_contact_total'], 0)
+
     def test_signed_turns_use_effective_track_without_changing_physical_geometry(self):
         root = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as folder:

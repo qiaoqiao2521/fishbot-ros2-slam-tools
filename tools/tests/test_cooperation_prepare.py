@@ -208,7 +208,7 @@ print('RESULT_JSON:'+json.dumps(result))
         self.assertEqual(e['pose']['yaw'], e['dock'][2])
         self.assertTrue(e['legacy_motion_absent'])
         self.assertEqual(e['motion'], {'type':'drive_on_heading', 'distance_m':.7,
-                                     'speed_m_s':.02, 'time_allowance_s':45.})
+                                      'speed_m_s':.03, 'time_allowance_s':45.})
 
     def test_localization_and_collision_maps_use_separate_native_topics(self):
         self.assertTrue(self.evidence['different_maps'])

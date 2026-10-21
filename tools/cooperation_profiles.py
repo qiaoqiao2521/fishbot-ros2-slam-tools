@@ -49,6 +49,10 @@ def vehicle_profile(selected=None):
     import yaml
     from fishbot_base_profile import DEFAULT_PROFILE, geometry
     source = yaml.safe_load(DEFAULT_PROFILE.read_text())
+    actuation = copy.deepcopy(source['simulation_assumptions'])
+    # Small differential targets were not tracked at kv=8. Tune the existing
+    # native velocity servo; retain contact materials and the force limit.
+    actuation['velocity_servo_kv'] = 32.
     drive, chassis = source['drivetrain'], source['chassis']
     base_z = drive['wheel_radius']-drive['wheel_vertical_offset']
     mount_height = .018
@@ -63,18 +67,34 @@ def vehicle_profile(selected=None):
     drive_calibration = {
         'type': 'four_wheel_skid_steer', 'effective_track_multiplier': 4.5,
         'physical_track_m': drive['track'], 'effective_track_m': drive['track']*4.5,
-        'calibration': {'method': 'offline_native_step_response_fixed_effective_track',
+        'calibration': {'method': 'offline_native_fixed_track_with_wheel_servo_gain',
             'simulator': 'MuJoCo 3.3.7', 'scope': 'shared_flat_floor_contact_plant_only',
             'online_truth_feedback': False, 'real_hardware_calibrated': False,
             'same_effective_track_required_for_commands_and_encoder_odometry': True,
-            'command_yaw_abs_rad_s': [.08, .3, .573, .67],
-            'command_linear_m_s': [-.15, 0., .15], 'cargo_mass_kg': .01,
-            'command_step_duration_s': 5., 'statistics_after_command_s': [2., 5.],
-            'wheel_sliding_friction': .5, 'wheel_velocity_servo_kv': 8.,
+            'command_yaw_abs_rad_s': [.01, .03, .05, .3],
+            'command_linear_m_s': [0., .02], 'cargo_mass_kg': .01,
+            'command_step_duration_s': 8., 'statistics_after_command_s': [4., 8.],
+            'wheel_sliding_friction': .5, 'wheel_velocity_servo_kv': actuation['velocity_servo_kv'],
             'wheel_torque_limit_nm': 12.,
-            'empty_pure_spin_max_abs_error_rad_s': .04702330142901712,
-            'empty_or_loaded_arc_max_abs_yaw_error_rad_s': .06594376177819167,
-            'empty_or_loaded_arc_max_abs_linear_error_m_s': .03135374140823912,
+            'effective_track_baseline': {
+                'wheel_velocity_servo_kv': 8.,
+                'command_yaw_abs_rad_s': [.08, .3, .573, .67],
+                'command_linear_m_s': [-.15, 0., .15],
+                'command_step_duration_s': 5., 'statistics_after_command_s': [2., 5.],
+                'empty_pure_spin_max_abs_error_rad_s': .04702330142901712,
+                'empty_or_loaded_arc_max_abs_yaw_error_rad_s': .06594376177819167,
+                'empty_or_loaded_arc_max_abs_linear_error_m_s': .03135374140823912},
+            'current_servo_development_panel': {
+                'method': 'native_fixed_track_wheel_servo_gain_comparison',
+                'gains_compared': [8., 16., 32.],
+                'loaded_linear_m_s': .02, 'loaded_yaw_abs_rad_s': [.01, .03, .05],
+                'empty_yaw_abs_rad_s': [.3], 'motion_source_s': 8.,
+                'stable_window_source_s': [4., 8.],
+                'true_yaw_at_signed_001_rad_s': [.010608, -.008285],
+                'true_empty_yaw_at_signed_03_rad_s': [.278861, -.279808],
+                'loaded_50hz_retention_failures': 0,
+                'loaded_500hz_floor_contact_gaps': 1,
+                'full_transport_qualification': False},
             'boundary': 'Residual skid is speed/load/direction dependent; this is not exact inverse dynamics.'},
         'sources': [
             {'url': 'https://raw.githubusercontent.com/jackal/jackal/foxy-devel/jackal_control/config/control.yaml',
@@ -100,13 +120,13 @@ def vehicle_profile(selected=None):
                            'stopped_goal_checker': True},
             'transport_egress': 'staging',
             'transport_egress_motion': {'type':'drive_on_heading',
-                'speed_m_s':.02, 'time_allowance_s':45.},
+                'speed_m_s':.03, 'time_allowance_s':45.},
             'loaded_velocity_smoother': {'max_accel': [.025, 0., .05],
-                'max_decel': [-.1, 0., -.2], 'max_velocity': [.02, 0., .05],
-                'min_velocity': [-.02, 0., -.05]},
-            'loaded_controller': {'FollowPath.desired_linear_vel': .02,
-                'FollowPath.regulated_linear_scaling_min_speed': .02,
-                'FollowPath.min_approach_linear_velocity': .02,
+                'max_decel': [-.1, 0., -.2], 'max_velocity': [.03, 0., .05],
+                'min_velocity': [-.03, 0., -.05]},
+            'loaded_controller': {'FollowPath.desired_linear_vel': .03,
+                'FollowPath.regulated_linear_scaling_min_speed': .03,
+                'FollowPath.min_approach_linear_velocity': .03,
                 'FollowPath.rotate_to_heading_angular_vel': .05},
             'installation': {'nominal_handover_xy_station_m': [.24, .14],
                              'handover_unchanged': True,
@@ -119,7 +139,7 @@ def vehicle_profile(selected=None):
             'source_files': [str(DEFAULT_PROFILE), str(ROOT/'tools/fishbot_base_profile.py'),
                 *[str(ROOT/'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/mjcf/jackal_j100'/name)
                   for name in ('j100_base.stl', 'outdoor.stl')]],
-            'simulation_assumptions': copy.deepcopy(source['simulation_assumptions'])}
+            'simulation_assumptions': actuation}
 
 
 def vehicle_element(path, spawn, spawn_yaw, selected=None):
@@ -142,7 +162,7 @@ def vehicle_element(path, spawn, spawn_yaw, selected=None):
         car = _robot(source)
         world = ET.SubElement(root, 'worldbody');world.append(car)
         actuators = ET.SubElement(root, 'actuator')
-        a = source['simulation_assumptions']
+        a = profile['simulation_assumptions']
         for name in WHEELS:
             joint = name+'_wheel_joint'
             ET.SubElement(actuators, 'velocity', name=joint, joint=joint,
