@@ -92,3 +92,6 @@ RPP按实测current_w每周期夹限，不累计上一条命令。E的maxa=.2/20
 H第三批首次取消时，桥当前Clock537.12、缓存physics536.66，源龄.46s/接收龄.4626s，约.458s没有物理callback进入；独立observer仍以20ms收齐physics和Clock，最大接收gap约22ms。此前已完成的Clock专组不等于所有回调都及时。后续HTTP assembly .292/.358s与physics锁等待.300s是具体性能风险，但发生在首次取消后，不能倒置因果；首发执行器/GIL/未计时阻塞仍待核实。I只作同源码复现，不改时间门槛，也不把关闭额外探针当根因已修。
 
 I第三批已有直接曲率证据：同source725.18，原RPP碰撞预测arc三点XY反推κ=.203rad/m，实际cmd v=.02/w=.02447对应κ=1.223rad/m，约6倍；其他近配对亦有类似变化。arc默认quat未填写，不能拿其读航向；±20ms近配对不冒充同迭代ACK或唯一超时因果。只在下游夹限线速度会改变原几何控制器的曲率要求，载货期应优先通过RPP自身desired/min_regulated/min_approach/rotate四DOUBLE生成一致的低速轨迹，再保留smoother安全输出边界。官方[参数回调](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/src/parameter_handler.cpp)使用与compute共享的mutex并更新内部值，不只是ROS显示值。
+
+
+M/B终点控制器收敛：近31.62mm时Nav2 1.3.13 calculateCurvature硬归零，15mm目标圈外需直行/路径转向，圈内改转目标yaw。最后14墙秒位置6次跨圈，车体实录小角速度约命令的72%，转向位移足以再次出圈。当前loaded最低接近速度.03等于巡航.03，使原生approach减速无效。N只降该下限至.005，不变控制器/目标/时限/评分，独立新面板待验收。来源：[RPP源码](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/src/regulated_pure_pursuit_controller.cpp)、[接近速度约束](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/include/nav2_regulated_pure_pursuit_controller/regulation_functions.hpp)及matrix-final-m/job3 observer；只有下游cmd，不冒充controller消费ACK。

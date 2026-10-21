@@ -126,7 +126,7 @@ def vehicle_profile(selected=None):
                 'min_velocity': [-.03, 0., -.05]},
             'loaded_controller': {'FollowPath.desired_linear_vel': .03,
                 'FollowPath.regulated_linear_scaling_min_speed': .03,
-                'FollowPath.min_approach_linear_velocity': .03,
+                'FollowPath.min_approach_linear_velocity': .005,
                 'FollowPath.rotate_to_heading_angular_vel': .05},
             'installation': {'nominal_handover_xy_station_m': [.24, .14],
                              'handover_unchanged': True,

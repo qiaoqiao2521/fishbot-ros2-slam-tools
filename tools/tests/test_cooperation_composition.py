@@ -56,7 +56,7 @@ class CompositionNavigationTest(unittest.TestCase):
         self.assertEqual(manifest['vehicle_profile']['loaded_controller'], {
             'FollowPath.desired_linear_vel': .03,
             'FollowPath.regulated_linear_scaling_min_speed': .03,
-            'FollowPath.min_approach_linear_velocity': .03,
+            'FollowPath.min_approach_linear_velocity': .005,
             'FollowPath.rotate_to_heading_angular_vel': .05})
         self.assertEqual(loaded['max_decel'], [-.1,0.,-.2])
         self.assertEqual(smoothing, before['velocity_smoother']['ros__parameters'])
