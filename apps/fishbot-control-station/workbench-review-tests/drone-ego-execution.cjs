@@ -86,6 +86,7 @@ const readTask = async (request, id) => {
     const document = JSON.parse(fs.readFileSync(source, 'utf8'));
     const example = document.station ?? document;
     await panel.locator('input[type=file]').setInputFiles(source);
+    await expect(panel.getByText('工作站已导入，可以继续编辑。', { exact: true })).toBeVisible({ timeout: 60000 });
     await expect(panel.getByLabel('工作站名称', { exact: true })).toHaveValue(example.name);
     await expect(panel.getByRole('combobox', { name: /^路径方式/ })).toContainText('EGO-Swarm 自动绕障');
     const obstacle = example.nodes.find(node => node.kind === 'obstacle' && node.enabled !== false);

@@ -415,6 +415,7 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
         const document = JSON.parse(fs.readFileSync(process.env.DRONE_STATION_FILE, 'utf8'));
         supplied = document.station ?? document;
         await panel.locator('input[type=file]').setInputFiles(process.env.DRONE_STATION_FILE);
+        await expect(panel.getByText('工作站已导入，可以继续编辑。', { exact: true })).toBeVisible({ timeout: 60000 });
         await expect(panel.getByLabel('工作站名称', { exact: true })).toHaveValue(supplied.name);
       }
       let original = await exportStation(page, panel, 'default-station.json');
