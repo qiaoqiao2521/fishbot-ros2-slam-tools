@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "entrypoint": {
+    "builtin": "declared_via"
+  },
+  "parameters": {
+    "egress_pose": {
+      "x": 0.0,
+      "y": -2.7,
+      "yaw": 0.0
+    }
+  }
+}

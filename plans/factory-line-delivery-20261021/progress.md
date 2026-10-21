@@ -1,7 +1,7 @@
 # F1 Progress
 
 ## Current
-首个完整切片完成：open-v1 两订单 A/B 原生 ROS/MuJoCo 独立物理评分 2/2，471.686 墙秒。追加 occupied-v1 为零运动几何拒绝；occupied-v2 实体障碍两单均原生成功，物理评分 1/2，B 最终误差 4.3478cm 超过原 4cm，保持失败。三个版本原件均保留。公开评测入口和订单/场景配置已实现；最终回归与提交中。P8 四组合仍独立在执行，不能用 F1 默认 FishBot 成功替代。
+首个完整切片完成：open-v1 两订单 A/B 原生 ROS/MuJoCo 独立物理评分 2/2，471.686 墙秒。追加 occupied-v1 为零运动几何拒绝；occupied-v2 实体障碍两单均原生成功，物理评分 1/2，B 最终误差 4.3478cm 超过原 4cm，保持失败。三个版本原件均保留。公开评测入口和订单/场景配置已实现；首批软件已由bb9141e推送origin/main并读回；公开入口可复用，完整策略加载仍pending。P8 四组合仍独立在执行，不能用 F1 默认 FishBot 成功替代。
 
 ## Done
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
@@ -11,7 +11,7 @@
 - 评测入口经独立审查修复running任务误清理及跨360秒误通过，根独立19项合同回归过（0.011s）；不修改原评分。根另重跑10项场景/四静态构建过（16.954s），证据 ~/.cache/fishbot/factory-line-delivery-20261021/factory-scene-tests-root.log。
 
 ## Remaining
-最终项目回归与提交推送；occupied-v2 的 B 物理未到位保留为后续策略开发失败样本，不算全场景通过。
+原open无需重复。后续真实策略入口按task_plan接续；occupied-v2 的 B 物理未到位保留为后续策略开发失败样本，不算全场景通过。
 
 ## First entry
 公开入口 tools/cooperation_factory.py 已冻结，完整命令见 docs/FACTORY_DELIVERY.md。根已生成 ~/.cache/fishbot/factory-line-delivery-20261021/open-v1/scene/scene-manifest.json，并独立dry-run确认两订单A/B、0 ROS/动作、输出未创建。实际命令：
@@ -45,3 +45,10 @@ updated(local)：根已回写 Wiki/ROS2 与 FishBot.md 第19节车型/曲率/缓
 根完整反馈1621项及133项P8/F1相关原生离线检查通过，零skip。goal持续XY检查和雷达自定义配置接线随后6项局部检查通过。B失败只读取证：载货轨迹实际从箱下侧绕过，车/臂禁碰0；早期XY进入容差时朝向未达标，Nav4时真值43.447mm，hold后仅移动31.9µm。候选持续检查XY以免转向漂移后继续算到达，控制器内部锁定仍需核实，尚未记新原生通过。
 
 下一真实策略入口已在task_plan指定，状态pending、owner=FishBot root。--candidate仍只作标签；不把源码观察当加载证明。优先路线/中转选择的同场景独立比较，订单全reset边界保持，不宣称连续排序收益。F0根已独立读回open两份原score；不重复open运行。
+
+F1实现与已完成结果作为bb9141e交付到既有origin/main并读回；82902c5补车型执行器候选及后续策略边界，未宣称占用变体或P8全通过。P8 L首行保持失败，在途运动实例已清理，源码由FishBot root统筹。
+
+## 路线策略加载软件交付
+新增cooperation_factory_policy.py及--policy-config，实际加载内置/本地函数并调用一次，返回None或map{x,y,yaw}；原SceneGeometry点检、原native carrying Nav2与oracle继续执行。保存真实模块/__file__/函数/输入/返回/异常回执与私有派生manifest，原prepared不改，label仍不加载代码。只支持FishBot factory/no body egress_motion；J100在import前明确不支持，dry-run/report不执行目标函数。
+
+worker31项0.149s过；根独立31项0.164s过，含真实纯软件子进程导入并调用自定义函数，非空点→派生manifest→geometry/launch参数消费为mock合同而非物理成绩。root已审context深拷贝、原目标保留、异常不回退、复用既有owned进程回收。原生occupied direct/via对照pending，由root在P8 M清理后执行；不重复已通过open、不把策略调用当改善证明。例配置与使用见docs/FACTORY_DELIVERY.md。

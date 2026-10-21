@@ -93,7 +93,8 @@ def loaded_code_reference():
     module_files = {module.__name__: str(Path(module.__file__).resolve()) for module in modules}
     runtime_files = [ROOT/'tools'/name for name in
                      ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_oracle.py',
-                      'cooperation_oracle_base.py', 'cooperation_core.py', 'cooperation_arm.py')]
+                      'cooperation_oracle_base.py', 'cooperation_core.py', 'cooperation_arm.py',
+                      'cooperation_factory_policy.py')]
     paths = [Path(path) for path in module_files.values()]+runtime_files
     result = {'module_files': module_files,
               'module_files_scope': 'Actually imported in the evaluation process',
@@ -141,6 +142,8 @@ def order_report(order, *, task_id, episode_id, terminal, score, score_file,
             'task_verdict': verdict, 'original_score_passed': None if score is None else score.get('passed'),
             'original_k_passed': None if score is None else score.get('original_k_oracle_passed'),
             'destination_bound': bound, 'carrying_nav_uuid': attempt.get('carrying_nav_uuid'),
+            'expected_egress_pose': attempt.get('expected_egress_pose'),
+            'egress_required': attempt.get('egress_required', False),
             'native_route': attempt.get('carrying_nav_route', []),
             'metrics': {'elapsed_wall_s': elapsed_wall_s,
                         'final_position_error_m': pose_error.get('position_m'),
@@ -337,7 +340,8 @@ def run(args, manifest, declaration):
     save(output/'protected-before.json', protected)
     launcher = ROOT/'tools/fishbot_cooperation.sh'
     ledger = output/'workflow.json'
-    launch = observer = monitor = geometry = None
+    launch = observer = monitor = geometry = policy_process = None
+    runtime_manifest = args.manifest.resolve()
     streams = []
     episode = task_id = current_folder = tail = current_order = None
     task_rejected = False
@@ -409,9 +413,30 @@ def run(args, manifest, declaration):
         return wait_until(dwell, 20, description='Independent cleanup source dwell incomplete')
 
     try:
+        if getattr(args, 'policy_config', None) is not None:
+            policy_receipt = output/'policy-receipt.json'
+            derived = output/'derived-manifest.json'
+            result['policy'] = {'execution_status': 'not_completed',
+                                'receipt_file': str(policy_receipt),
+                                'worker_timeout_wall_s': 30., 'candidate_label_loads_code': False}
+            policy_process = spawn([
+                str(args.planning_python), '-B', str(ROOT/'tools/cooperation_factory_policy.py'),
+                '--manifest', str(args.manifest.resolve()), '--config', str(args.policy_config.resolve()),
+                '--output-manifest', str(derived), '--receipt', str(policy_receipt),
+                '--declaration', str(output/'declaration.json')], 'policy')
+            policy_process.wait(timeout=30)
+            if policy_receipt.exists():
+                result['policy'].update(read_json(policy_receipt))
+            if policy_process.returncode != 0 or result['policy'].get('execution_status') != 'succeeded':
+                raise RuntimeError('Factory policy failed; no baseline fallback: '+
+                                   str(result['policy'].get('failure_reason', 'worker receipt unavailable')))
+            manifest = read_json(derived)
+            runtime_manifest = derived.resolve()
+            result.update(input_manifest=str(args.manifest.resolve()), manifest=str(runtime_manifest))
+            save(output/'manifest-used.json', manifest)
         geometry = spawn([str(args.planning_python), '-B',
                           str(ROOT/'tools/cooperation_geometry_check.py'),
-                          '--manifest', str(args.manifest.resolve()),
+                          '--manifest', str(runtime_manifest),
                           '--output', str(output/'geometry.json')], 'geometry')
         geometry.wait(timeout=60)
         geometry_report = read_json(output/'geometry.json') if (output/'geometry.json').exists() else {}
@@ -421,7 +446,7 @@ def run(args, manifest, declaration):
             'is_delivery_score': False}
         if geometry.returncode != 0 or geometry_report.get('passed') is not True:
             raise RuntimeError('Original scene geometry preflight failed; no world launched')
-        command = [str(launcher), 'run', 'manifest:='+str(args.manifest.resolve()),
+        command = [str(launcher), 'run', 'manifest:='+str(runtime_manifest),
                    'output:='+str(output/'runtime'), 'domain:='+str(args.domain),
                    'port:='+str(args.port), 'record_state:=false']
         result['execution']['launch_command'] = command
@@ -548,8 +573,11 @@ def run(args, manifest, declaration):
             except (OSError, RuntimeError, TimeoutError) as cleanup_error:
                 result['errors'].append('cleanup: '+str(cleanup_error))
     finally:
-        result['execution']['retained_non_motion_pids'] = (
-            stop_non_motion_child(geometry, 'geometry', result) if geometry is not None else [])
+        result['execution']['retained_non_motion_pids'] = []
+        for name, process in (('policy', policy_process), ('geometry', geometry)):
+            if process is not None:
+                result['execution']['retained_non_motion_pids'].extend(
+                    stop_non_motion_child(process, name, result))
         result['execution']['retained_launch_pid'] = (launch.pid if launch is not None
                                                      and launch.poll() is None else None)
         result['execution']['retained_observer_pid'] = (observer.pid if observer is not None
@@ -602,6 +630,8 @@ def main(argv=None):
     execute.add_argument('--domain', type=int, default=141)
     execute.add_argument('--port', type=int, default=9111)
     execute.add_argument('--candidate', default='baseline', help='Display label; does not load code')
+    execute.add_argument('--policy-config', type=Path,
+                         help='Explicit trusted local policy JSON; loads only during run')
     execute.add_argument('--order', action='append', help='Explicit permutation of all order IDs')
     execute.add_argument('--planning-python', type=Path,
                          default=Path.home()/'.cache/so101-colab/planning-venv/bin/python')
@@ -620,6 +650,10 @@ def main(argv=None):
                 raise ValueError('Choose an unprivileged TCP port')
             manifest = read_json(args.manifest)
             declaration = reference(manifest, candidate=args.candidate, order=args.order)
+            if args.policy_config is not None:
+                from cooperation_factory_policy import describe_config, require_supported
+                require_supported(manifest)
+                declaration['policy_request'] = describe_config(args.policy_config)
             if args.dry_run:
                 code = loaded_code_reference()
                 result = {'dry_run': True, 'ROS_initialized': False, 'actions_started': False,

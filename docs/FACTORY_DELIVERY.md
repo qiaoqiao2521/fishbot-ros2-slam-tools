@@ -59,6 +59,27 @@ python3 -B tools/cooperation_factory.py report \
 
 单订单沿用360墙秒上限，整轮验收预算1000墙秒。阻塞调用、评分和清理可有限超出；超预算不得记整体通过。未知或仍运行的任务不因评测异常被当作已清理，不自动重发；报告保留原ID、owned PID和具体缺口，由owner接续。
 
+## 实际路线策略入口
+
+`--candidate`继续只作显示标签，`candidate_label_loads_code=false`。新增`--policy-config`才实际加载和调用策略：`direct`返回None，`declared_via`返回配置中的一个map中转点。示例配置在`tools/config/factory_policies/line-side-direct.json`与`line-side-lower-via.json`。后者是本参考场景的(0,-2.7,0)，不代表任意场地的通用安全路线。
+
+```bash
+# 在上述实际评测命令中增加一个参数；仍用新的独立输出目录
+--policy-config tools/config/factory_policies/line-side-lower-via.json
+```
+
+本地策略可用以下JSON选择实际Python函数，module_path相对该配置文件解析。函数签名为`select_egress(context)`，返回None或`{x,y,yaw}`。context包含冻结订单、场景配置、原中转点与parameters；不提供运行真值作为控制输入。只接纳返回的中转点，原订单目标不由该返回值覆盖。
+
+```json
+{"schema":1,"entrypoint":{"module_path":"my_route.py","function":"select_egress"},"parameters":{}}
+```
+
+选择在launch前由原owned子进程助手执行一次，两订单共用该中转点。支持FishBot厂区场景；J100已有body-frame DriveOnHeading，当前接口明确不支持用map点替换它。未来支持J100时应在原直线出站之后接中转，不得只改参考坐标却声称路线已执行。
+
+`policy-receipt.json`保存实际模块/文件/函数、调用输入/配置/返回、阶段与异常、原SceneGeometry选点结果。原prepared manifest保持，运行使用私有`derived-manifest.json`；静态点检不证明整路可达。`native_route`和`expected_egress_pose`来自原oracle，实际试验要核对receipt返回值、派生manifest、原生中转目标与UUID，再看原物理评分。加载回执不是任务成功。
+
+未知错误、非法点、碰撞或子进程超时保留失败，不回退成baseline通过。dry-run只描述请求，不import或调用目标策略；report仅回读。31项纯软件合同检查通过，包括真实自定义模块调用；原生occupied的direct/via同场景对照仍pending，不能宣称路线更优或已通过。订单全reset边界不变。
+
 ## 实测边界
 
 开放通道首轮两订单均通过原物理评分。v2 占用通道的两次原生 Nav2 均成功，独立物理评分只有 A 通过；B 的最终位置误差 0.043478m，超过原 0.04m，保持失败。各轮任务均未超 360 墙秒，owned 实例已清理。详见所属进度与私有原始报告。
