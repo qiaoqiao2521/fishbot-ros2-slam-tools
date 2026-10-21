@@ -1,7 +1,7 @@
 # F1 Progress
 
 ## Current
-首个open完整切片2/2保持，occupied-v2物理1/2保持。新策略加载2957912与1678统一反馈/147原生离线检查已通过。direct首run3f80df76-e520-4fd8-a65c-ad6671a0ffd5在readiness70.315墙秒超时，0 start/reset/cancel、0订单；真实direct函数已调用，但物理生产器仍固定读取world旁旧manifest，桥按原身份拒收。原result保留unknown/未评分，独立reconciled-cleanup已确认idle/idNone、18 owned无存活与9111关闭。窗口已归还。显式manifest最小修复e573eb6已推送并读回，78项相关回归及追加身份接纳单项通过；fixed新共享prepare已核对，当前测试/prepare/owned ROS全部退出。排队为无人机关键组件terminal→SO101两短回合→FishBot fixed direct新窗口；明确交回前不启动，via另约。
+首个open完整切片2/2保持，occupied-v2物理1/2保持。新策略加载2957912与1678统一反馈/147原生离线检查已通过。direct首run3f80df76-e520-4fd8-a65c-ad6671a0ffd5在readiness70.315墙秒超时，0 start/reset/cancel、0订单；真实direct函数已调用，但物理生产器仍固定读取world旁旧manifest，桥按原身份拒收。原result保留unknown/未评分，独立reconciled-cleanup已确认idle/idNone、18 owned无存活与9111关闭。窗口已归还。显式manifest最小修复e573eb6已推送并读回，78项相关回归及追加身份接纳单项通过；fixed新共享prepare已核对，当前测试/prepare/owned ROS全部退出。等待研究根与无人机owner明确交回fixed direct新窗口；其余队列由研究根安排，当前不启动，via另约。
 
 ## Done
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
@@ -87,3 +87,7 @@ FISHBOT_MUJOCO_DOMAIN_ID=141 XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADD
 显式manifest两端接线修复通过78项相关回归，真实raw原身份不匹配仍拒绝，默认省略参数行为由原完整sim用例保持。新共享prepare输出改为~/.cache/fishbot/factory-line-delivery-20261021/occupied-policy-fixed-20261021/scene/scene-manifest.json；两轮输出分别为direct/run、via/run。原occupied-policy-20261021/direct/run为零订单unknown历史，不覆盖。两条命令只把前节三处父目录occupied-policy-20261021改为occupied-policy-fixed-20261021，其余目标、order-a/order-b、policy-config、141/9111与1000/360预算保持。
 
 root核实修复、读回新prepare后申请direct新窗口；明确交回前不启动。知识updated(local)：原第19节377行与开发知识入口48行已补派生配置生产器接线经验并读回，独立知识库仍未发布。P8 O仅参数应用前超时，不因本修复记导航通过。
+
+
+## 可恢复交接
+owner=FishBot root。最新研究根排程尚未给F1放行：SO101独立XY两短回合后，无人机还有native48正负与箱顶取消闭环；不能把SO结束当自动放行。当前没有FishBot ROS/MuJoCo/浏览器QA/测试/prepare在途，源码修复e573eb6及共享fixed输入已完成验证并保留。接续只在原对话收到明确窗口后，以本节fixed父目录、新direct/run执行一次；同次运行对账不重派。完成或失败后保留原oracle与原1000/360期限，owned清理，再同时通知研究根和无人机；via及P8另约。知识updated(local)与全部原失败状态保持。
