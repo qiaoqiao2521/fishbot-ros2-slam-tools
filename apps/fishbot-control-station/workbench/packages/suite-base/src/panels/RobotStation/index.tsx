@@ -789,7 +789,6 @@ function RobotStation({
     url.searchParams.delete("layoutUrl");
     window.history.replaceState(window.history.state, "", url);
     try {
-      await changeScene("draft");
       const submitted = await requestSimulation<DronePlanTask>(
         "/plans",
         controller.signal,
@@ -801,6 +800,9 @@ function RobotStation({
           throw new TaskRequestError("预演响应的 ID 不一致，请查询原预演。");
         }
         setPlanTask(submitted);
+        // Changing the player source can remount this panel. Submit the saved
+        // plan ID first so a remount queries that job rather than aborting it.
+        await changeScene("draft");
       }
     } catch (error) {
       if (!controller.signal.aborted) {
