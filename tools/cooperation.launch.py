@@ -31,7 +31,8 @@ def start(context):
     record_state=LaunchConfiguration('record_state',default='false').perform(context).lower()
     if record_state not in ('true','false'):
         raise RuntimeError('record_state must be true or false')
-    simulation=[python,str(root/'cooperation_sim.py'),'--scene',manifest['world_xml'],'--domain',domain,
+    simulation=[python,str(root/'cooperation_sim.py'),'--scene',manifest['world_xml'],
+        '--manifest',str(manifest_path),'--domain',domain,
         '--stamped-cmd-vel','--frame-dir',str(frames),'--frame-fps','2',
         '--timing-log',str(output/'loop-timing.json')]
     if record_state=='true':

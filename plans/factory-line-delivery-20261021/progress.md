@@ -1,7 +1,7 @@
 # F1 Progress
 
 ## Current
-首个完整切片完成：open-v1 两订单 A/B 原生 ROS/MuJoCo 独立物理评分 2/2，471.686 墙秒。追加 occupied-v1 为零运动几何拒绝；occupied-v2 实体障碍两单均原生成功，物理评分 1/2，B 最终误差 4.3478cm 超过原 4cm，保持失败。三个版本原件均保留。公开评测入口和订单/场景配置已实现；首批软件已由bb9141e推送origin/main并读回；公开入口可复用；2957912已实际加载/调用本地策略，软件合同通过，原生策略对照仍pending。P8 四组合仍独立在执行，不能用 F1 默认 FishBot 成功替代。
+首个open完整切片2/2保持，occupied-v2物理1/2保持。新策略加载2957912与1678统一反馈/147原生离线检查已通过。direct首run3f80df76-e520-4fd8-a65c-ad6671a0ffd5在readiness70.315墙秒超时，0 start/reset/cancel、0订单；真实direct函数已调用，但物理生产器仍固定读取world旁旧manifest，桥按原身份拒收。原result保留unknown/未评分，独立reconciled-cleanup已确认idle/idNone、18 owned无存活与9111关闭。窗口已归还无人机/研究根，目前仅显式manifest最小修复与离线回归，新direct重试需另获明确窗口，via未启动。
 
 ## Done
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
@@ -69,3 +69,21 @@ FISHBOT_MUJOCO_DOMAIN_ID=141 XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADD
 
 
 统一check-feedback已纳入loaded limits和factory/policy三组55项，集成完整1678项通过（control948/mission209/autonomy61/frontend460），零skip/缺依赖。两条实际命令已通过bash -n，新prepared双stateful和原目标/容差读回有效；窗口尚未释放，未启动direct/via。
+
+
+## direct窗口已启动（在途）
+无人机owner明确完成ground32/48 terminal和owned清理后交回，研究根再次确认。最后147项native相关离线回归过144.492s并退出；1678反馈保持。direct首次run已启动，141/9111，checkpoint78c3db1；无重复派发，不扩via。真实policy-receipt已经记录cooperation_factory_policy.py的direct函数实际被调用、返回None、derived manifest无egress，静态geometry通过；运输结果仍在途。结束/失败与清理后向无人机及研究根回告，来源三层不混计。
+
+
+## direct零订单启动失败与显式manifest修复
+原run3f80df76-e520-4fd8-a65c-ad6671a0ffd5：readiness70.315墙秒超时、0订单、0start/cancel/reset，实际策略函数direct调用成功/返回None、geometry过，原result执行unknown/任务unknown。launch将私有derived-manifest交给bridge，sim.source_identity仍固定读world.xml同目录scene-manifest.json，导致生产器manifest身份与bridge不符，原日志持续拒收。不是路线失败成绩，也不是只改标签。
+
+根先核API task idle/id=None与零mutation，复核保留launchPID2383948/PGID及derived参数，SIGINT仅owned组。18个owned身份均退出、9111关闭，另存原run/reconciled-cleanup.json，不改写原result为成功。原窗口已明确回告并归还无人机/研究根，不自行扩展via或继续重发。
+
+最小修复：sim新增可选--manifest，Physics/source_identity接收显式路径；launch把同一路径同时传给producer与bridge。未指定时仍读scene sibling，原物理/身份/时龄/评分不变，不新增hash执行锁或绕过校验。新增实际MuJoCo构造derived身份/原prepared不变检查与原launch命令接线回归2项通过7.224s；78项相关sim/launch/factory/policy完整回归过62.003s。随后补充真实raw按派生身份接纳、按旧身份拒绝的断言，单项过5.910s。新direct/via须使用修复后同源配置与独立新输出，旧direct/run原件保留。
+
+
+## 修复后窗口准备
+显式manifest两端接线修复通过78项相关回归，真实raw原身份不匹配仍拒绝，默认省略参数行为由原完整sim用例保持。新共享prepare输出改为~/.cache/fishbot/factory-line-delivery-20261021/occupied-policy-fixed-20261021/scene/scene-manifest.json；两轮输出分别为direct/run、via/run。原occupied-policy-20261021/direct/run为零订单unknown历史，不覆盖。两条命令只把前节三处父目录occupied-policy-20261021改为occupied-policy-fixed-20261021，其余目标、order-a/order-b、policy-config、141/9111与1000/360预算保持。
+
+root核实修复、读回新prepare后申请direct新窗口；明确交回前不启动。知识updated(local)：原第19节377行与开发知识入口48行已补派生配置生产器接线经验并读回，独立知识库仍未发布。P8 O仅参数应用前超时，不因本修复记导航通过。

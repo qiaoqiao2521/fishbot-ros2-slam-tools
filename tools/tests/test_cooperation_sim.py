@@ -582,6 +582,29 @@ class SharedWorldTest(unittest.TestCase):
     def physics(self):
         return sim.Physics(self.manifest['world_xml'])
 
+    def test_explicit_runtime_manifest_binds_physics_to_derived_policy_without_editing_prepared(self):
+        world = Path(self.manifest['world_xml'])
+        prepared = world.with_name('scene-manifest.json')
+        original = prepared.read_bytes()
+        derived = {**self.manifest, 'factory_policy': {'selected_egress_pose': None}}
+        with tempfile.TemporaryDirectory() as directory:
+            alternate = Path(directory)/'derived-manifest.json'
+            alternate.write_text(json.dumps(derived))
+            physics = sim.Physics(world, manifest=alternate)
+            self.assertEqual(physics.identity['manifest'],derived)
+            self.assertEqual(physics.identity['manifest_sha256'],
+                             hashlib.sha256(alternate.read_bytes()).hexdigest())
+            self.assertEqual(physics.identity['scene_sha256'],sim.source_identity(world)['scene_sha256'])
+            self.assertNotEqual(physics.identity['manifest_sha256'],sim.source_identity(world)['manifest_sha256'])
+            from cooperation_core import validate_physics
+            raw = physics.state()
+            validate_physics(raw,physics.identity['scene_sha256'],physics.identity['manifest_sha256'])
+            with self.assertRaisesRegex(ValueError,'manifest SHA不匹配'):
+                validate_physics(raw,physics.identity['scene_sha256'],sim.source_identity(world)['manifest_sha256'])
+            self.assertEqual(prepared.read_bytes(),original)
+            self.assertEqual(sim.parser().parse_args(['--scene',str(world),'--domain','141',
+                             '--manifest',str(alternate)]).manifest,alternate)
+
     def test_episode_reset_restores_model_preserves_clock_and_encoder_and_rejects_old_references(self):
         import numpy as np
         physics = self.physics()

@@ -461,27 +461,27 @@ def descendants(model, root):
     return found
 
 
-def source_identity(scene):
+def source_identity(scene, manifest=None):
     """Record compiled inputs without publishing machine-specific absolute paths."""
     scene = Path(scene).resolve()
     identity = {'scene_name': scene.name, 'scene_sha256': hashlib.sha256(scene.read_bytes()).hexdigest()}
-    manifest = scene.with_name('scene-manifest.json')
-    if manifest.is_file():
-        payload = manifest.read_bytes()
+    manifest_path = Path(manifest).resolve() if manifest is not None else scene.with_name('scene-manifest.json')
+    if manifest is not None or manifest_path.is_file():
+        payload = manifest_path.read_bytes()
         identity['manifest_sha256'] = hashlib.sha256(payload).hexdigest()
         identity['manifest'] = json.loads(payload)
     return identity
 
 
 class Physics:
-    def __init__(self, scene):
+    def __init__(self, scene, *, manifest=None):
         import mujoco
         import numpy as np
         self.mj, self.np = mujoco, np
         self.scene = Path(scene).resolve()
         self.model = mujoco.MjModel.from_xml_path(str(self.scene))
         self.data = mujoco.MjData(self.model)
-        self.identity = source_identity(self.scene)
+        self.identity = source_identity(self.scene, manifest)
         profile = self.identity.get('manifest', {}).get('vehicle_profile', {})
         self.left_wheel_names = tuple(profile.get('left_wheel_joints', WHEEL_JOINTS[:1]))
         self.right_wheel_names = tuple(profile.get('right_wheel_joints', WHEEL_JOINTS[1:]))
@@ -928,7 +928,8 @@ def run_ros(args):
     from cooperation_camera import CameraRenderer, frame_messages, IMAGE_TOPIC, INFO_TOPIC, METADATA_TOPIC, FAULT_TOPIC
     from cooperation_lidar import CloudWorker, configuration as lidar_configuration
 
-    physics = Physics(args.scene)
+    manifest = getattr(args, 'manifest', None)
+    physics = Physics(args.scene, manifest=manifest) if manifest is not None else Physics(args.scene)
     timing = LoopTiming(lambda: float(physics.data.time))
     frames = FrameWriter(physics, args.frame_dir, args.frame_fps, args.camera) if args.frame_dir else None
     record = None
@@ -1320,6 +1321,7 @@ def run_ros(args):
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument('--scene', required=True, type=Path)
+    result.add_argument('--manifest', type=Path, help='explicit runtime manifest; defaults to the scene sibling')
     result.add_argument('--domain', required=True, type=int)
     result.add_argument('--frame-dir', type=Path)
     result.add_argument('--frame-fps', type=float, default=3.)

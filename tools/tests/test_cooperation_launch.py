@@ -38,6 +38,8 @@ with tempfile.TemporaryDirectory() as directory:
   process=next(a for a in actions if isinstance(a,ExecuteProcess) and not isinstance(a,Node))
   return [perform_substitutions(context,part) for part in process.cmd]
  assert '--state-log' not in simulation_cmd(actions)
+ command=simulation_cmd(actions)
+ assert command[command.index('--manifest')+1]==str(p.resolve())
  context.launch_configurations['record_state']='true'
  configured=simulation_cmd(module['start'](context))
  assert configured[configured.index('--state-log-hz')+1]=='2'

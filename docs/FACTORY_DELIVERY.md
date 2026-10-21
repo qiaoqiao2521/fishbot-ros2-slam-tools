@@ -76,6 +76,8 @@ python3 -B tools/cooperation_factory.py report \
 
 选择在launch前由原owned子进程助手执行一次，两订单共用该中转点。支持FishBot厂区场景；J100已有body-frame DriveOnHeading，当前接口明确不支持用map点替换它。未来支持J100时应在原直线出站之后接中转，不得只改参考坐标却声称路线已执行。
 
+launch将同一显式manifest路径传给物理生产器和控制桥；独立sim省略--manifest时仍兼容world旁的scene-manifest.json。派生配置不会覆盖原prepared，也不绕过原身份校验。
+
 `policy-receipt.json`保存实际模块/文件/函数、调用输入/配置/返回、阶段与异常、原SceneGeometry选点结果。原prepared manifest保持，运行使用私有`derived-manifest.json`；静态点检不证明整路可达。`native_route`和`expected_egress_pose`来自原oracle，实际试验要核对receipt返回值、派生manifest、原生中转目标与UUID，再看原物理评分。加载回执不是任务成功。
 
 未知错误、非法点、碰撞或子进程超时保留失败，不回退成baseline通过。dry-run只描述请求，不import或调用目标策略；report仅回读。31项纯软件合同检查通过，包括真实自定义模块调用；原生occupied的direct/via同场景对照仍pending，不能宣称路线更优或已通过。订单全reset边界不变。
