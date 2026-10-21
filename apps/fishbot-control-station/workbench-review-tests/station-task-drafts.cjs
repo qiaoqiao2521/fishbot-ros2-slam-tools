@@ -65,7 +65,7 @@ const observe = (page, meshList) => {
     await copy.click();
     await expect(panel.getByLabel('工作站名称', { exact: true })).toHaveValue(source.name + ' 副本');
     await expect(panel.getByLabel('对象名称', { exact: true })).toHaveValue('放料坐标系');
-    await expect(panel.getByLabel('Z（m）', { exact: true })).toBeDisabled();
+    await expect(panel.getByLabel('Z（m）', { exact: true })).toBeEnabled();
     await expect(panel.getByRole('region', { name: '当前仿真任务' })).toHaveCount(0);
     await expect.poll(async () => (await scene()).mode, { timeout: 30000 }).toBe('draft');
     await expect.poll(async () => blueWalls((await scene()).scene).length, { timeout: 30000 }).toBe(5);
@@ -83,7 +83,7 @@ const observe = (page, meshList) => {
     }, { timeout: 30000 }).toBe(true);
     result.preview = { target: desired, blueWallsBefore: before, blueWallsAfter: blueWalls((await scene()).scene) };
     await expect.poll(() => new Set(result.meshes.filter(mesh => mesh.status === 200).map(mesh => mesh.name)).size, { timeout: 30000 }).toBe(13);
-    result.checks.push('copy-source-snapshot-or-draft', 'copy-selects-place-and-clears-old-results', 'place-z-remains-fixed', 'xy-moves-all-blue-tray-pieces-with-original-size', 'desktop-13-stl-loaded');
+    result.checks.push('copy-source-snapshot-or-draft', 'copy-selects-place-and-clears-old-results', 'place-base-height-is-editable', 'xy-moves-all-blue-tray-pieces-with-original-size', 'desktop-13-stl-loaded');
     await panel.getByRole('button', { name: '保存草稿', exact: true }).click();
     await panel.getByText('草稿与当前布局已保存，刷新页面可继续编辑。也可导出 JSON 备份。', { exact: true }).waitFor();
     const saved = await exported(page, panel, 'saved-copy.json');
@@ -122,7 +122,7 @@ const observe = (page, meshList) => {
     assert(bounds.y >= 0 && bounds.y + bounds.height <= 844);
     result.mobileCopyEnabled = await mobileCopy.isEnabled();
     assert(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    await mobile.screenshot({ path: path.join(output, 'mobile-copy.png'), fullPage: true });
+    await mobile.screenshot({ path: path.join(output, 'mobile-copy.png'), fullPage: false });
     const tasksAfter = (await (await page.request.get(base + '/api/so101/tasks')).json()).tasks;
     result.tasksAfter = tasksAfter.map(({ id, status }) => ({ id, status }));
     // Other browser acceptance may finish or create a task in the shared store.

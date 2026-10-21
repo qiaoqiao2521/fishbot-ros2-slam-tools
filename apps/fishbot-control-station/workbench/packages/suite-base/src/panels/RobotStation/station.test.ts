@@ -107,6 +107,25 @@ describe("RoboDK-style station editing", () => {
       copy.program.map(({ id: _id, ...step }) => step),
     );
   });
+  it("preserves a raised tray and relative release targets through task copying and JSON", () => {
+    const original = defaultStation();
+    const copy = copyStation(original);
+    copy.nodes.find((node) => node.id === "place")!.position = [0.22, 0.17, 0.01];
+    const restored = importStation(JSON.parse(exportStation(copy))).station;
+    expect(
+      worldPosition(restored.nodes.find((node) => node.id === "place")!, restored.nodes),
+    ).toEqual([0.22, 0.17, 0.01]);
+    expect(
+      worldPosition(restored.nodes.find((node) => node.id === "release")!, restored.nodes),
+    ).toEqual([0.22, 0.17, 0.04]);
+    expect(
+      worldPosition(restored.nodes.find((node) => node.id === "clear")!, restored.nodes),
+    ).toEqual([0.22, 0.17, 0.11]);
+    expect(restored.program.map(({ id: _id, ...step }) => step)).toEqual(
+      original.program.map(({ id: _id, ...step }) => step),
+    );
+    expect(original.nodes.find((node) => node.id === "place")!.position).toEqual([0.24, 0.14, 0]);
+  });
   it("keeps world coordinates when changing reference frames", () => {
     const station = defaultStation();
     const before = worldPosition(

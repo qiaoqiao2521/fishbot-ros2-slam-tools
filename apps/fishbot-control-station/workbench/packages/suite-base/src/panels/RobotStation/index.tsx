@@ -894,7 +894,7 @@ function RobotStation({
     setNotice(
       drone
         ? "已复制为独立草稿。修改航点 XYZ 或速度，再显式运行；原任务记录保持。"
-        : "已复制为独立草稿。修改放料坐标系 X/Y，再显式运行；原任务记录保持。",
+        : "已复制为独立草稿。修改放料坐标系 X/Y 或底座高度 Z，再显式运行；原任务记录保持。",
     );
     void changeScene("draft", next);
   };
@@ -1309,11 +1309,7 @@ function RobotStation({
                     type="number"
                     label={`${["X", "Y", "Z"][axis]}（m）`}
                     value={node.position[axis]}
-                    disabled={
-                      axis === 2 &&
-                      ((!drone && node.id === "place") ||
-                        (drone && node.kind === "robot"))
-                    }
+                    disabled={axis === 2 && drone && node.kind === "robot"}
                     slotProps={{ htmlInput: { step: drone ? 0.1 : 0.005 } }}
                     onChange={(event) => {
                       if (event.target.value === "") {
@@ -1447,8 +1443,7 @@ function RobotStation({
             )}
             {!drone && node.id === "place" && (
               <Typography variant="caption" color="text.secondary">
-                修改 X/Y
-                会同步移动蓝盘、释放点和脱离点。本轮保持盘高、盘尺寸和八步程序，执行范围由下方执行器说明。
+                X/Y 设置放料位置，Z 设置蓝盘底座高度。蓝盘、释放点和脱离点随坐标系平移；盘尺寸和八步程序保持。修改后需逐任务验证可达性与避碰。
               </Typography>
             )}
             {drone && node.kind === "robot" && (

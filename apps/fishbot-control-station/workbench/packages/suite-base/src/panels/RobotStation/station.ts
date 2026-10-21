@@ -181,8 +181,9 @@ export function defaultDroneStation(): Station {
   };
 }
 
-// Workcell XY from SO101 grasp_workcell.py. Heights are editable design values,
-// not a collision-checked trajectory. Frame axes are parallel to world in this editor.
+// Workcell XY from SO101 grasp_workcell.py. The place frame's Z raises the tray base
+// and its child targets; the executor validates each edited task's complete path.
+// Frame axes are parallel to world in this editor.
 export function defaultStation(): Station {
   return {
     name: "SO101 抓放工作站",
@@ -262,7 +263,7 @@ export function defaultStation(): Station {
       { id: "s8", action: "move", target: "clear", seconds: 1 },
     ],
     notes:
-      "程序草稿。接近高度、绕障、释放和回位需由执行器规划验证。坐标系仅支持平移，尚未定义工具 TCP。",
+      "程序草稿。放料坐标系 Z 为蓝盘底座高度，释放点和脱离点随其平移。接近、绕障、释放和回位需由执行器逐任务验证。坐标系仅支持平移，尚未定义工具 TCP。",
   };
 }
 
