@@ -95,3 +95,6 @@ I第三批已有直接曲率证据：同source725.18，原RPP碰撞预测arc三�
 
 
 M/B终点控制器收敛：近31.62mm时Nav2 1.3.13 calculateCurvature硬归零，15mm目标圈外需直行/路径转向，圈内改转目标yaw。最后14墙秒位置6次跨圈，车体实录小角速度约命令的72%，转向位移足以再次出圈。当前loaded最低接近速度.03等于巡航.03，使原生approach减速无效。N只降该下限至.005，不变控制器/目标/时限/评分，独立新面板待验收。来源：[RPP源码](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/src/regulated_pure_pursuit_controller.cpp)、[接近速度约束](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/include/nav2_regulated_pure_pursuit_controller/regulation_functions.hpp)及matrix-final-m/job3 observer；只有下游cmd，不冒充controller消费ACK。
+
+
+载货慢行需匹配原生进度分辨率：N诊断末段实测降速后，原radius=.15m/10s导致连续六次Failed to make progress并触发恢复，最终原120墙秒失败。O只在载货参数事务中将radius=.005m、angle=.05rad；期限不改。官方[PoseProgressChecker](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_controller/plugins/pose_progress_checker.cpp)与[SimpleProgressChecker](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_controller/plugins/simple_progress_checker.cpp)各自动态callback生效，base/derived头文件各自持有句柄。进度分辨率是控制器判断运动进展，不是最终物理精度评分；参数交易成功仍待原生任务验证。

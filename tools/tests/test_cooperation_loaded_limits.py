@@ -3,7 +3,7 @@ import copy
 from types import SimpleNamespace as NS
 import unittest
 
-from cooperation_loaded_limits import (LoadedVelocityLimits, LoadedRppLimits,
+from cooperation_loaded_limits import (LoadedVelocityLimits, LoadedRppLimits, PROGRESS_NAMES,
                                        NAMES, VELOCITY_NAMES, RPP_NAMES, limits, rpp_limits)
 
 
@@ -319,6 +319,25 @@ class LoadedRppLimitsTests(unittest.TestCase):
         for key in RPP_NAMES[1:]:self.assertEqual(self.client.actual[key], ORIGINAL_RPP[key])
         adapter.restore(wait)
         self.assertEqual(self.client.actual, ORIGINAL_RPP)
+
+    def test_loaded_progress_resolution_shares_ack_and_restores_actual_baseline(self):
+        original = {PROGRESS_NAMES[0]: .15, PROGRESS_NAMES[1]: .2,
+                    'progress_checker.movement_time_allowance': 10., **ORIGINAL_RPP}
+        desired = {**LOADED_RPP, PROGRESS_NAMES[0]: .005, PROGRESS_NAMES[1]: .05}
+        self.client.actual = copy.deepcopy(original)
+        adapter = LoadedRppLimits(desired, self.client, self.adapter.lifecycle_query,
+                                  self.adapter.parameter_factory)
+        adapter.apply(wait)
+        self.assertEqual({key:self.client.actual[key] for key in desired},desired)
+        self.assertEqual(self.client.actual['progress_checker.movement_time_allowance'],10.)
+        self.assertEqual(len(self.client.writes),1)
+        adapter.restore(wait)
+        self.assertEqual(self.client.actual,original)
+        self.assertEqual(len(self.client.writes),2)
+        for name in PROGRESS_NAMES:
+            for value in (True,0.,-.01,float('nan')):
+                with self.subTest(name=name,value=value),self.assertRaises(ValueError):
+                    rpp_limits({name:value})
 
     def test_scalar_rejects_array_response_without_claiming_apply(self):
         def wrong(names):return Future(NS(values=[NS(type=8,double_array_value=[.1])for _ in names]))

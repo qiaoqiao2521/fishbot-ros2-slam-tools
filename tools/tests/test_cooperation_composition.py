@@ -57,13 +57,19 @@ class CompositionNavigationTest(unittest.TestCase):
             'FollowPath.desired_linear_vel': .03,
             'FollowPath.regulated_linear_scaling_min_speed': .03,
             'FollowPath.min_approach_linear_velocity': .005,
-            'FollowPath.rotate_to_heading_angular_vel': .05})
+            'FollowPath.rotate_to_heading_angular_vel': .05,
+            'progress_checker.required_movement_radius': .005,
+            'progress_checker.required_movement_angle': .05})
         self.assertEqual(loaded['max_decel'], [-.1,0.,-.2])
         self.assertEqual(smoothing, before['velocity_smoother']['ros__parameters'])
         for key in ('max_velocity', 'min_velocity', 'smoothing_frequency', 'velocity_timeout'):
             self.assertEqual(smoothing[key], before['velocity_smoother']['ros__parameters'][key])
         self.assertEqual(self.params['collision_monitor'], before['collision_monitor'])
         controller = self.params['controller_server']['ros__parameters']
+        for name in ('required_movement_radius','movement_time_allowance'):
+            self.assertEqual(controller['progress_checker'][name],
+                             before['controller_server']['ros__parameters']['progress_checker'][name])
+        self.assertEqual(controller['progress_checker']['required_movement_angle'],.2)
         self.assertFalse(controller['FollowPath']['stateful'])
         goal = controller['general_goal_checker']
         self.assertEqual(goal['plugin'], 'nav2_controller::StoppedGoalChecker')

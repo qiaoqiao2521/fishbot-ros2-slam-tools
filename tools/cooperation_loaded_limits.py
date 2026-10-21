@@ -18,6 +18,9 @@ RPP_NAMES = ('FollowPath.desired_linear_vel',
              'FollowPath.regulated_linear_scaling_min_speed',
              'FollowPath.min_approach_linear_velocity',
              'FollowPath.rotate_to_heading_angular_vel')
+PROGRESS_NAMES = ('progress_checker.required_movement_radius',
+                  'progress_checker.required_movement_angle')
+CONTROLLER_NAMES = RPP_NAMES + PROGRESS_NAMES
 
 
 def limits(value):
@@ -47,14 +50,14 @@ def limits(value):
 
 
 def rpp_limits(value):
-    if not isinstance(value, dict) or not any(name in value for name in RPP_NAMES):
-        raise ValueError('载货 RPP 参数必须包含至少一个受支持的 FollowPath 速度参数')
-    extra = set(value)-set(RPP_NAMES)
+    if not isinstance(value, dict) or not any(name in value for name in CONTROLLER_NAMES):
+        raise ValueError('载货控制器参数必须包含至少一个受支持的速度或进度参数')
+    extra = set(value)-set(CONTROLLER_NAMES)
     if extra:
         warnings.warn(f'Ignoring loaded RPP metadata fields: {sorted(map(str, extra))}',
                       RuntimeWarning, stacklevel=2)
     result = {}
-    for name in RPP_NAMES:
+    for name in CONTROLLER_NAMES:
         if name not in value:
             continue
         scalar = value[name]

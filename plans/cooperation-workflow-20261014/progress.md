@@ -121,7 +121,7 @@ job1新attempt 0c1bf47d在准备导航失败：原Nav31701beb到5，没有Dock/�
 
 ## P8 Current
 
-in_progress：M的J100+3D为A通过/A通过/B末端朝向超时；N仅将最低接近速度.03降至.005，首批在抬升后连续确认失败，loaded参数尚未应用，未测到该候选导航效果。N 212.553墙秒，task850024a2-d107-4c17-927b-e6e7c02f6ae9；独立抬升与双指接触持续6.08源秒，但桥连续确认失败，因果未定。其余三组合零启动；四组合12次尚未通过。N 39源码/11生成文本起止一致，18个owned PID均已退出、9110关闭。下一步增加只记录不改判据的physical_wait诊断，再新目录复现。当前无FishBot物理仿真/浏览器QA在途；为同机其他研究让出短负载窗口，未停止外部进程。F1路线策略入口软件已提交2957912并推送读回，occupied direct/via物理对照仍pending。
+in_progress：N诊断回合首批完成抓放/出站，但交付Nav120墙秒超时，整行395.769墙秒；减速已实际应用，原进度15cm/10s与末段5mm/s不匹配，原生连续六次Failed to make progress/恢复。源码与生成输入一致，owned/9110清理完成，原失败保留。下一候选O只扩展原载货参数事务，动态适配原PoseProgressChecker进度分辨率5mm/.05rad，原10s/120墙秒/360墙秒/物理评分保持；四组合12次仍未通过，其余三行零启动。F1实际策略入口已推送2957912并读回；occupied direct/via同场景对照仍pending，先核当前prepare真正生成持续XY检查参数。
 
 最新根验证：完整反馈1621项通过（control891/mission209/autonomy61/frontend460，零skip/缺依赖）；133项P8/F1相关完整原生离线测试通过。随后雷达自定义topic/range统一接线与goal XY持续检查的6项composition测试通过；新goal参数尚待完整原生运行验证。前端桌面/390px实际配置草稿与下载验收保持，非运行时热换。知识updated(local)，已回写Wiki/ROS2 与 FishBot第19/20节及开发知识入口并读回，独立知识仓未提交发布。当前root继续校准与冻结面板；后文为逐轮历史，旧失败原件不覆盖。
 
@@ -262,3 +262,9 @@ M/B同UUID33aac1ec6f1f46148623aff6608980b1在120.028墙秒取消，任务302.168
 第一批212.553墙秒停止：原Dock通过，独立lift/two-tip证据88.50起连续6.08源秒，但桥在92.40报未取得连续物理确认，未进入transport。89–93源秒独立physics共200帧，源间隙20ms、接收墙间隙最大223ms，抬升高度.317047–.317308m、基线.276421m。不能以独立流通过反推桥端连续接纳通过，也不能先归因负载。loaded_controller/smoother均not_applied，N未验证到末端候选。原K及完整评分false；18个owned进程/端口清理核对完成。
 
 下一次仅增加wait_condition有界诊断：unique/invalid/repeated样本、实际最大源间隙、最长连续源时长及墙等待；保存首个失败不被后续清理成功覆盖，所有原条件/门槛/期限保持。107项core回归通过34.859s；随后新增首失败保留断言及两项定向复验通过.740s。当前无活动FishBot仿真实例，不中断任何外部在途任务。知识复用已覆盖，诊断结论未有新证据前no_reusable_delta。
+
+
+### O 载货进度分辨率匹配（待原生验收）
+N诊断task29b7f4f7-3742-4974-a5af-4aed55aad82f，elapsed395.769墙秒；抓放/交接/出站已过，无physical_wait_failure，载货四参数原生ACK/读回/恢复完整。finalNav在原120墙秒超时；位置(-.22456,-1.90241)、yaw-.28542。原生日志六次Failed to make progress后恢复，未靠加时通过。
+
+源码1.3.13 PoseProgressChecker::check使用位移或角度推进；当前radius.15m/angle.2rad，末段min approach .005m/s无法在原10s内走15cm。O在loaded_controller加入progress_checker.required_movement_radius=.005、required_movement_angle=.05，仍用原native DOUBLE原子事务、实际baseline和恢复。官方base/derived各自保存动态callback句柄，两项真正更新内部值；不只ROS参数显示。movement_time_allowance不加入白名单也不改值；原碰撞、时龄、动力学、进度期限及120/360/4cm/.05rad/连续停稳评分不变。首次新增测试误假定composition不增原angle=.2，29过1旧假定失败；修正为只核半径/期限基线及已有angle。最终30项loaded+composition回归过；新案例证明六项一起ACK/恢复但不证明物理成功。
