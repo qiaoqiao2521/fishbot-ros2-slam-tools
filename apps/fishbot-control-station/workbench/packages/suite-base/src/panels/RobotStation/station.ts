@@ -33,6 +33,7 @@ export type FlightAcceptance = {
   position_tolerance_m?: number;
   min_clearance_m?: number;
   min_cruise_speed_m_s?: number;
+  min_cruise_duration_s?: number;
 };
 export type Instruction = {
   id: string;
@@ -603,6 +604,7 @@ export function importStation(value: unknown): {
     "position_tolerance_m",
     "min_clearance_m",
     "min_cruise_speed_m_s",
+    "min_cruise_duration_s",
   ] as const) {
     const limit = acceptanceSource?.[key];
     if (limit == undefined) {

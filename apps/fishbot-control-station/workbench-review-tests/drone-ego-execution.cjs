@@ -12,6 +12,32 @@ fs.mkdirSync(output, { recursive: true });
 const result = { passed: false, checks: [], posts: [], planPosts: [], pageErrors: [] };
 const save = () => fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(result, null, 2));
 const terminal = task => ['succeeded', 'failed', 'cancelled'].includes(task.status);
+const programMeaning = program => program.map(step => ({ action: step.action, target: step.target ?? '', seconds: step.seconds ?? 1 }));
+const worldPosition = (station, id) => {
+  const node = station.nodes.find(item => item.id === id);
+  assert(node, `Missing node ${id}`);
+  const parent = node.parent === 'world' ? [0, 0, 0] : worldPosition(station, node.parent);
+  return node.position.map((value, index) => value + parent[index]);
+};
+const assertAcceptance = (task, station) => {
+  const limits = station.flight.acceptance ?? {};
+  assert.deepEqual(task.report.acceptance, limits);
+  if (limits.max_altitude_m != null) assert(Number.isFinite(task.report.maximum_altitude_m) && task.report.maximum_altitude_m <= limits.max_altitude_m);
+  if (limits.min_clearance_m != null && station.nodes.some(node => node.kind === 'obstacle' && node.enabled !== false)) {
+    assert(Number.isFinite(task.report.minimum_body_clearance_m) && task.report.minimum_body_clearance_m > limits.min_clearance_m);
+  }
+  if (limits.min_cruise_speed_m_s != null) assert(task.report.speed.cruise_above_minimum_longest_s >= (limits.min_cruise_duration_s ?? 1));
+  for (const [action, phase] of [['takeoff', 'taking_off'], ['waypoint', 'waypoint'], ['return_home', 'returning_home']]) {
+    const expected = station.program.filter(step => step.action === action);
+    const visits = task.report.visits.filter(visit => visit.phase === phase);
+    assert.equal(visits.length, expected.length, `${action} arrival count must match the imported program`);
+    visits.forEach((visit, index) => {
+      assert(visit.truth_error_m <= (limits.position_tolerance_m ?? .5)
+        && visit.truth_hold_s >= Math.max(1, action === 'return_home' ? 1 : expected[index].seconds ?? 1));
+      if (action !== 'return_home') assert.deepEqual(visit.target, worldPosition(station, expected[index].target));
+    });
+  }
+};
 const checked = name => { result.checks.push(name); save(); console.log(name); };
 const taskUrl = id => `${base}/api/drone/tasks/${id}`;
 const readTask = async (request, id) => {
@@ -49,7 +75,8 @@ const readTask = async (request, id) => {
     await expect(panel.getByRole('button', { name: '复制为新任务', exact: true })).toBeEnabled({ timeout: 90000 });
     const runtime = await (await page.request.get(`${base}/api/drone/runtime`)).json();
     assert(runtime.executor.planners.includes('ego'));
-    const example = JSON.parse(fs.readFileSync(source, 'utf8'));
+    const document = JSON.parse(fs.readFileSync(source, 'utf8'));
+    const example = document.station ?? document;
     await panel.locator('input[type=file]').setInputFiles(source);
     await expect(panel.getByLabel('工作站名称', { exact: true })).toHaveValue(example.name);
     await expect(panel.getByRole('combobox', { name: /^路径方式/ })).toContainText('EGO-Swarm 自动绕障');
@@ -63,7 +90,7 @@ const readTask = async (request, id) => {
     const imported = await exportDocument('imported-example.json');
     assert.deepEqual(imported.nodes, example.nodes);
     assert.deepEqual(imported.flight, example.flight);
-    assert.deepEqual(imported.program, example.program);
+    assert.deepEqual(programMeaning(imported.program), programMeaning(example.program));
     await panel.getByRole('button', { name: '保存草稿', exact: true }).click();
     await panel.getByText('草稿与当前布局已保存，刷新页面可继续编辑。也可导出 JSON 备份。', { exact: true }).waitFor();
     await page.reload();
@@ -126,23 +153,25 @@ const readTask = async (request, id) => {
     assert.equal(task.report.disarmed, true);
     assert.equal(task.telemetry.armed, false);
     assert.equal(task.telemetry.landed, 'ON_GROUND');
-    assert.equal(task.report.visits.filter(visit => visit.phase === 'waypoint').length, example.program.filter(step => step.action === 'waypoint').length);
-    assert(task.report.visits.some(visit => visit.phase === 'returning_home'));
-    assert(task.report.visits.every(visit => visit.truth_error_m <= (example.flight.acceptance?.position_tolerance_m ?? .5) && visit.truth_hold_s >= 1));
+    assertAcceptance(task, imported);
     assert.equal(task.report.speed.within_requested_limit, true);
     assert.equal(task.report.speed.requested_max_m_s, example.flight.speed_m_s);
     assert(task.report.speed.gazebo_peak_m_s <= example.flight.speed_m_s && task.report.speed.mavsdk_peak_m_s <= example.flight.speed_m_s);
     assert.deepEqual(task.station.nodes, imported.nodes);
     assert.deepEqual(task.station.flight, imported.flight);
+    assert.deepEqual(task.station.program, imported.program);
     const report = await page.request.get(new URL(task.artifacts.report, base).href);
     assert(report.ok());
-    fs.writeFileSync(path.join(output, 'report.json'), JSON.stringify(await report.json(), null, 2));
+    const savedReport = await report.json();
+    assert.equal(savedReport.task_id, task.id);
+    assert.equal(savedReport.status, task.status);
+    fs.writeFileSync(path.join(output, 'report.json'), JSON.stringify(savedReport, null, 2));
     const mcap = await page.request.get(new URL(task.artifacts.mcap, base).href, { headers: { Range: 'bytes=0-511' } });
     assert.equal(mcap.status(), 206);
     await expect(panel.getByRole('region', { name: '当前仿真任务' })).toContainText('执行完成', { timeout: 30000 });
     await expect(panel.getByRole('link', { name: '回看本次三维轨迹 ↗', exact: true })).toBeVisible();
     await page.screenshot({ path: path.join(output, 'ego-success.png'), fullPage: true });
-    checked('browser-ego-three-waypoints-planned-return-and-land-disarm-without-collision');
+    checked('browser-ego-requested-program-and-acceptance-land-disarm-without-collision');
     checked('independent-truth-and-mavsdk-speed-within-requested-limit');
     await page.reload();
     await expect(panel.getByText(`原任务 ID：${task.id}`, { exact: true })).toBeVisible({ timeout: 60000 });

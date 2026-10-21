@@ -306,6 +306,8 @@ describe("PX4 station data", () => {
 
   it("round-trips moving boxes and optional acceptance without sharing draft arrays", () => {
     const source = defaultDroneStation();
+    source.flight!.acceptance!.min_cruise_speed_m_s = 1.5;
+    source.flight!.acceptance!.min_cruise_duration_s = 2;
     source.nodes.push({
       id: "moving-box",
       name: "立柱",
@@ -326,8 +328,14 @@ describe("PX4 station data", () => {
     const copy = copyStation(imported);
     copy.nodes.at(-1)!.motion!.axis[1] = -1;
     copy.flight!.acceptance!.max_altitude_m = 4;
+    copy.flight!.acceptance!.min_cruise_duration_s = 3;
     expect(imported.nodes.at(-1)!.motion!.axis).toEqual([0, 1, 0]);
     expect(imported.flight!.acceptance!.max_altitude_m).toBe(2.2);
+    expect(imported.flight!.acceptance!.min_cruise_duration_s).toBe(2);
+    expect(
+      importStation(JSON.parse(exportStation(copy))).station.flight!
+        .acceptance!.min_cruise_duration_s,
+    ).toBe(3);
     const legacy = importStation({
       ...source,
       flight: { planner: "ego", speed_m_s: 1 },

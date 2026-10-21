@@ -9,6 +9,7 @@ const { McapIndexedReader } = upstream('@mcap/core');
 const { PNG } = upstream('pngjs');
 const base = process.env.STATION_TEST_URL ?? 'http://127.0.0.1:5187';
 const output = process.env.DRONE_QA_OUTPUT ?? path.join(__dirname, 'output/drone-execution');
+const cancelOnly = process.env.DRONE_CANCEL_ONLY === '1';
 const terminal = new Set(['succeeded', 'failed', 'cancelled']);
 fs.mkdirSync(output, { recursive: true });
 const result = { passed: false, checks: [], tasks: [], posts: [], plans: [], planPosts: [], pageErrors: [], httpErrors: [], replayWrites: [], replayWebSockets: [], modelResponses: [] };
@@ -99,6 +100,32 @@ const worldPosition = (station, id) => {
   const parent = node.parent === 'world' ? [0, 0, 0] : worldPosition(station, node.parent);
   return node.position.map((value, index) => value + parent[index]);
 };
+const programMeaning = program => program.map(step => ({ action: step.action, target: step.target ?? '', seconds: step.seconds ?? 1 }));
+const assertAcceptance = (task, station, complete = true) => {
+  const limits = station.flight?.acceptance ?? {};
+  const speed = station.flight?.speed_m_s ?? 1;
+  assert.deepEqual(task.report.acceptance ?? {}, limits);
+  assert.equal(task.report.collision_free, true);
+  assert.equal(task.report.speed.requested_max_m_s, speed);
+  assert.equal(task.report.speed.within_requested_limit, true);
+  for (const key of ['gazebo_peak_m_s', 'mavsdk_peak_m_s']) assert(Number.isFinite(task.report.speed[key]) && task.report.speed[key] <= speed);
+  if (limits.max_altitude_m != null) assert(Number.isFinite(task.report.maximum_altitude_m) && task.report.maximum_altitude_m <= limits.max_altitude_m);
+  if (limits.min_clearance_m != null && station.nodes.some(node => node.kind === 'obstacle' && node.enabled !== false)) {
+    assert(Number.isFinite(task.report.minimum_body_clearance_m) && task.report.minimum_body_clearance_m > limits.min_clearance_m);
+  }
+  if (complete && limits.min_cruise_speed_m_s != null) assert(task.report.speed.cruise_above_minimum_longest_s >= (limits.min_cruise_duration_s ?? 1));
+  for (const [action, phase] of [['takeoff', 'taking_off'], ['waypoint', 'waypoint'], ['return_home', 'returning_home']]) {
+    const expected = station.program.filter(step => step.action === action);
+    const visits = task.report.visits.filter(visit => visit.phase === phase);
+    if (complete) assert.equal(visits.length, expected.length, `${action} arrival count must match the imported program`);
+    visits.forEach((visit, index) => {
+      assert(expected[index], `Unexpected ${phase} visit`);
+      assert(visit.truth_error_m <= (limits.position_tolerance_m ?? .5));
+      assert(visit.truth_hold_s >= Math.max(1, action === 'return_home' ? 1 : expected[index].seconds ?? 1));
+      if (action !== 'return_home') assert.deepEqual(visit.target, worldPosition(station, expected[index].target));
+    });
+  }
+};
 const startFromUi = async (page, panel, station) => {
   const planId = await preparePlan(page, panel, station);
   const pending = page.waitForResponse(response => response.url() === `${base}/api/drone/tasks` && response.request().method() === 'POST', { timeout: 30000 });
@@ -186,7 +213,7 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
   const first = scenes[0], last = scenes.at(-1);
   const airborne = scenes.reduce((highest, frame) => (frame.trail.at(-1)?.z ?? 0) > (highest.trail.at(-1)?.z ?? 0) ? frame : highest);
   const requestedHeight = Math.max(...task.report.visits.map(visit => visit.target[2]));
-  assert(airborne.trail.at(-1).z >= requestedHeight - .5, 'Recording must contain the requested route height');
+  assert(airborne.trail.at(-1).z >= requestedHeight - (task.station.flight?.acceptance?.position_tolerance_m ?? .5), 'Recording must contain the requested route height');
   assert(last.trail.length > 20, 'Final recorded scene must contain the flown trajectory');
   const modelUrls = [...new Set(first.vehicle.models.map(model => model.url))];
   assert(modelUrls.every(url => url.startsWith('/api/drone/meshes/')), 'Recorded model paths must resolve at the replay origin');
@@ -311,9 +338,24 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
       await page.goto(`${base}/drone-station`);
       const panel = panelFor(page);
       await expect(panel.getByRole('button', { name: '复制为新任务', exact: true })).toBeEnabled({ timeout: 90000 });
-      if (process.env.DRONE_STATION_FILE) await panel.locator('input[type=file]').setInputFiles(process.env.DRONE_STATION_FILE);
+      let supplied;
+      if (process.env.DRONE_STATION_FILE) {
+        const document = JSON.parse(fs.readFileSync(process.env.DRONE_STATION_FILE, 'utf8'));
+        supplied = document.station ?? document;
+        await panel.locator('input[type=file]').setInputFiles(process.env.DRONE_STATION_FILE);
+        await expect(panel.getByLabel('工作站名称', { exact: true })).toHaveValue(supplied.name);
+      }
       let original = await exportStation(page, panel, 'default-station.json');
       assert.equal(original.platform, 'px4');
+      if (supplied) {
+        assert.deepEqual(original.nodes, supplied.nodes);
+        assert.deepEqual(original.flight, supplied.flight);
+        assert.deepEqual(programMeaning(original.program), programMeaning(supplied.program));
+      }
+      assert(!cancelOnly || !process.env.DRONE_COMPLETED_TASK_ID, 'Cancel-only requires a new explicitly started task');
+      const cancelWaitIndex = original.program.findIndex((step, index) => step.action === 'wait'
+        && original.program.slice(0, index).some(previous => previous.action === 'waypoint'));
+      assert(!cancelOnly || cancelWaitIndex >= 0, 'Cancel-only requires a wait step after a waypoint');
       if (process.env.DRONE_COMPLETED_TASK_ID) {
         first = updateTask(await readTask(page.request, process.env.DRONE_COMPLETED_TASK_ID));
         await selectHistory(page, panel, first);
@@ -330,10 +372,23 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
         checked('browser-start-and-refresh-original-id-without-repost');
       }
       const firstId = first.id;
+      if (cancelOnly) {
+        const preceding = original.program.slice(0, cancelWaitIndex).filter(step => step.action === 'waypoint');
+        const target = worldPosition(original, preceding.at(-1).target);
+        const atWindow = await waitTask(page.request, first.id, task => task.phase === 'waiting'
+          && task.report.visits.filter(visit => visit.phase === 'waypoint').length === preceding.length,
+        'flight reaches the imported cancellation wait window');
+        assert(Math.hypot(...atWindow.pose.position.map((value, i) => value - target[i])) <= (original.flight?.acceptance?.position_tolerance_m ?? .5));
+        result.cancelWindow = atWindow;
+        await page.screenshot({ path: path.join(output, 'cancel-window.png'), fullPage: true });
+        const cancellation = page.waitForResponse(response => response.url() === `${taskUrl(first.id)}/cancel` && response.request().method() === 'POST');
+        await panel.getByRole('button', { name: '停止并安全返回降落', exact: true }).click();
+        await json(await cancellation);
+      }
       first = await waitTask(page.request, first.id, task => terminal.has(task.status), 'first flight reaches terminal status');
       activeTask = undefined;
-      assert.equal(first.status, 'succeeded', first.message);
-      assert.equal(first.report.passed, true);
+      assert.equal(first.status, cancelOnly ? 'cancelled' : 'succeeded', first.message);
+      assert.equal(first.report.passed, !cancelOnly);
       assert.equal(first.report.planner, original.flight.planner);
       const waypoints = original.program.filter(step => step.action === 'waypoint');
       assert(waypoints.length > 0);
@@ -344,54 +399,73 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
       assert(Number.isFinite(first.report.speed.gazebo_peak_m_s) && first.report.speed.gazebo_peak_m_s <= speedLimit);
       assert(Number.isFinite(first.report.speed.mavsdk_peak_m_s) && first.report.speed.mavsdk_peak_m_s <= speedLimit);
       assertLanded(first);
-      for (const step of waypoints) {
-        const target = worldPosition(original, step.target);
-        const visit = first.report.visits.find(item => JSON.stringify(item.target) === JSON.stringify(target));
-        assert(visit, `Missing independent arrival: ${step.target}`);
-        assert(visit.truth_error_m <= (original.flight.acceptance?.position_tolerance_m ?? .5) && visit.truth_hold_s >= 1);
+      assertAcceptance(first, original, !cancelOnly);
+      if (cancelOnly) {
+        assert.equal(first.report.recovery.outcome, 'landed');
+        assert.equal(first.report.recovery.trigger, 'operator_cancel');
+        assert.equal(first.report.cancelled_before_takeoff, undefined);
+        const target = result.cancelWindow.pose.position;
+        const below = original.nodes.filter(node => node.kind === 'obstacle' && node.enabled !== false).filter(node => {
+          const center = worldPosition(original, node.id), size = node.size ?? [1, 1, 2];
+          return Math.abs(target[0] - center[0]) < size[0] / 2 && Math.abs(target[1] - center[1]) < size[1] / 2 && target[2] > center[2] + size[2] / 2;
+        });
+        if (below.length) {
+          assert(first.report.recovery.checks.some(check => check.kind === 'descent' && !check.safe), 'The blocked descent column must be rejected');
+          assert(first.report.recovery.traversed.length > 0, 'Cancellation above a box must actually retreat');
+          const landing = first.report.recovery.landing_column.at(-1);
+          for (const box of below) {
+            const center = worldPosition(original, box.id), size = box.size ?? [1, 1, 2];
+            assert(Math.abs(landing[0] - center[0]) > size[0] / 2 || Math.abs(landing[1] - center[1]) > size[1] / 2, 'The final landing column must leave the box footprint');
+          }
+        }
+        assert.equal(result.posts.filter(post => new URL(post.url).pathname === '/api/drone/tasks').length, 1);
+        assert.equal(result.posts.filter(post => post.url.endsWith('/cancel')).length, 1);
+        checked('cancel-at-requested-wait-window-validates-retreat-and-ground-disarm');
       }
       await artifactChecks(page.request, first);
-      await expect(panel.getByRole('region', { name: '当前仿真任务' })).toContainText('执行完成', { timeout: 30000 });
+      await expect(panel.getByRole('region', { name: '当前仿真任务' })).toContainText(cancelOnly ? '已取消' : '执行完成', { timeout: 30000 });
       const replayLink = panel.getByRole('link', { name: '回看本次三维轨迹 ↗', exact: true });
       await expect(replayLink).toBeVisible();
       await page.screenshot({ path: path.join(output, 'live-success.png'), fullPage: true });
       checked('requested-waypoints-and-independent-land-disarm-report');
       checked('terminal-task-exposes-report-and-range-readable-mcap');
 
-      await panel.getByRole('button', { name: '复制为新任务', exact: true }).click();
-      const changedNode = original.nodes.find(node => node.id === (waypoints[1] ?? waypoints[0]).target);
-      await panel.locator('[aria-label="工作站对象树"]').getByRole('button').filter({ hasText: changedNode.name }).click();
-      const changed = [changedNode.position[0] + .5, changedNode.position[1] + .5, changedNode.position[2]];
-      for (const [index, axis] of ['X', 'Y', 'Z'].entries()) await panel.getByLabel(`${axis}（m）`, { exact: true }).fill(String(changed[index]));
-      const copy = await exportStation(page, panel, 'copied-station.json');
-      assert.deepEqual(copy.nodes.find(node => node.id === changedNode.id).position, changed);
-      let second = await startFromUi(page, panel, copy);
-      activeTask = second.id;
-      assert.notEqual(second.id, firstId);
-      assert.deepEqual(second.station.nodes.find(node => node.id === changedNode.id).position, changed);
-      await waitTask(page.request, second.id, task => task.telemetry?.armed === true && task.telemetry.altitude_m > 1, 'copied flight becomes airborne');
-      const expectedPosts = process.env.DRONE_COMPLETED_TASK_ID ? 1 : 2;
-      await refreshActiveTask(page, panel, second, expectedPosts);
-      checked('airborne-refresh-restores-task-region-and-enabled-cancel-without-repost');
-      const cancellation = page.waitForResponse(response => response.url() === `${taskUrl(second.id)}/cancel` && response.request().method() === 'POST');
-      await panel.getByRole('button', { name: '停止并安全返回降落', exact: true }).click();
-      await json(await cancellation);
-      second = await waitTask(page.request, second.id, task => terminal.has(task.status), 'cancelled flight lands and disarms', 120000);
-      activeTask = undefined;
-      assert.equal(second.status, 'cancelled', second.message);
-      assertLanded(second);
-      assert.equal(second.report.cancelled_before_takeoff, undefined);
-      assert.equal(second.report.passed, false);
-      await artifactChecks(page.request, second);
-      await expect(panel.getByRole('region', { name: '当前仿真任务' })).toContainText('已取消', { timeout: 30000 });
-      await page.screenshot({ path: path.join(output, 'live-cancelled-on-ground.png'), fullPage: true });
-      const originalAgain = await readTask(page.request, firstId);
-      assert.equal(originalAgain.status, 'succeeded');
-      assert.deepEqual(originalAgain.station, original);
-      assert.equal(result.posts.filter(post => new URL(post.url).pathname === '/api/drone/tasks').length, expectedPosts);
-      assert.equal(result.posts.filter(post => post.url.endsWith('/cancel')).length, 1);
-      checked('copy-changed-target-has-new-id-with-original-task-preserved');
-      checked('airborne-cancel-completes-only-after-ground-and-disarmed');
+      if (!cancelOnly) {
+        await panel.getByRole('button', { name: '复制为新任务', exact: true }).click();
+        const changedNode = original.nodes.find(node => node.id === (waypoints[1] ?? waypoints[0]).target);
+        await panel.locator('[aria-label="工作站对象树"]').getByRole('button').filter({ hasText: changedNode.name }).click();
+        const changed = [changedNode.position[0] + .5, changedNode.position[1] + .5, changedNode.position[2]];
+        for (const [index, axis] of ['X', 'Y', 'Z'].entries()) await panel.getByLabel(`${axis}（m）`, { exact: true }).fill(String(changed[index]));
+        const copy = await exportStation(page, panel, 'copied-station.json');
+        assert.deepEqual(copy.nodes.find(node => node.id === changedNode.id).position, changed);
+        let second = await startFromUi(page, panel, copy);
+        activeTask = second.id;
+        assert.notEqual(second.id, firstId);
+        assert.deepEqual(second.station.nodes.find(node => node.id === changedNode.id).position, changed);
+        await waitTask(page.request, second.id, task => task.telemetry?.armed === true && task.telemetry.altitude_m > 1, 'copied flight becomes airborne');
+        const expectedPosts = process.env.DRONE_COMPLETED_TASK_ID ? 1 : 2;
+        await refreshActiveTask(page, panel, second, expectedPosts);
+        checked('airborne-refresh-restores-task-region-and-enabled-cancel-without-repost');
+        const cancellation = page.waitForResponse(response => response.url() === `${taskUrl(second.id)}/cancel` && response.request().method() === 'POST');
+        await panel.getByRole('button', { name: '停止并安全返回降落', exact: true }).click();
+        await json(await cancellation);
+        second = await waitTask(page.request, second.id, task => terminal.has(task.status), 'cancelled flight lands and disarms', 120000);
+        activeTask = undefined;
+        assert.equal(second.status, 'cancelled', second.message);
+        assertLanded(second);
+        assert.equal(second.report.cancelled_before_takeoff, undefined);
+        assert.equal(second.report.passed, false);
+        await artifactChecks(page.request, second);
+        await expect(panel.getByRole('region', { name: '当前仿真任务' })).toContainText('已取消', { timeout: 30000 });
+        await page.screenshot({ path: path.join(output, 'live-cancelled-on-ground.png'), fullPage: true });
+        const originalAgain = await readTask(page.request, firstId);
+        assert.equal(originalAgain.status, 'succeeded');
+        assert.deepEqual(originalAgain.station, original);
+        assert.equal(result.posts.filter(post => new URL(post.url).pathname === '/api/drone/tasks').length, expectedPosts);
+        assert.equal(result.posts.filter(post => post.url.endsWith('/cancel')).length, 1);
+        checked('copy-changed-target-has-new-id-with-original-task-preserved');
+        checked('airborne-cancel-completes-only-after-ground-and-disarmed');
+      }
       await selectHistory(page, panel, first);
       await expect(replayLink).toBeVisible();
       replayUrl = new URL(await replayLink.getAttribute('href'), base).href;

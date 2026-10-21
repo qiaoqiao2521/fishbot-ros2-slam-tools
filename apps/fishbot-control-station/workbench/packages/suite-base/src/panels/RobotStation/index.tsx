@@ -1545,7 +1545,7 @@ function RobotStation({
             </div>
             <Typography variant="subtitle2">飞行验收参数</Typography>
             <Typography variant="caption" color="text.secondary">
-              留空沿用执行器默认值。最低巡航速度只适用于有足够距离的巡航段，起降和转弯分开统计。
+              留空沿用执行器默认值。最低巡航速度只适用于有足够距离的巡航段；持续时长仅在填写最低巡航速度时参与验收。
             </Typography>
             <div className={classes.fields}>
               {(
@@ -1554,6 +1554,7 @@ function RobotStation({
                   ["position_tolerance_m", "到点误差上限（m）"],
                   ["min_clearance_m", "最小机体净空（m）"],
                   ["min_cruise_speed_m_s", "最低巡航速度（m/s）"],
+                  ["min_cruise_duration_s", "最低巡航持续时长（s）"],
                 ] as const
               ).map(([key, label]) => (
                 <TextField
