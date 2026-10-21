@@ -25,6 +25,7 @@ import {
 import { useLayoutManager } from "@lichtblick/suite-base/context/LayoutManagerContext";
 import { SaveConfig } from "@lichtblick/suite-base/types/panels";
 
+import { clearDroneEditor, setDroneEditor } from "./droneEditor";
 import {
   latestSimulationTask,
   requestSimulation,
@@ -34,7 +35,11 @@ import {
   TaskRequestError,
   taskStatusLabel,
 } from "./execution";
-import type { SimulationRuntime, SimulationTask } from "./execution";
+import type {
+  DronePlanTask,
+  SimulationRuntime,
+  SimulationTask,
+} from "./execution";
 import { previewStation, sceneModeLabel, selectScene } from "./live";
 import type { SceneMode } from "./live";
 import {
@@ -51,11 +56,17 @@ import {
   stationActions,
   stationKindLabel,
   stationPlatform,
+  transformObstacle,
   worldPosition,
 } from "./station";
 import type { Instruction, Kind, Station, StationNode, Vec3 } from "./station";
 
-type Config = { station?: Station; executionTaskId?: string };
+type Config = {
+  station?: Station;
+  executionTaskId?: string;
+  previewPlanId?: string;
+  previewPlanStation?: Station;
+};
 const selectedLayoutIdSelector = (state: LayoutState) =>
   state.selectedLayout?.id;
 const COLORS: Record<Kind, string> = {
@@ -259,6 +270,10 @@ function RobotStation({
   const { getCurrentLayoutState } = useCurrentLayoutActions();
   const layoutId = useCurrentLayoutSelector(selectedLayoutIdSelector);
   const [selected, setSelected] = useState(drone ? "takeoff" : "cube");
+  const [boxEditMode, setBoxEditMode] = useState<"translate" | "scale">(
+    "translate",
+  );
+  const editorOwner = useRef({});
   const [past, setPast] = useState<Station[]>([]);
   const [future, setFuture] = useState<Station[]>([]);
   const [notice, setNotice] = useState("");
@@ -267,6 +282,10 @@ function RobotStation({
   const [taskId, setTaskId] = useState(config.executionTaskId ?? "");
   const [task, setTask] = useState<SimulationTask>();
   const [taskHistory, setTaskHistory] = useState<SimulationTask[]>([]);
+  const [planTask, setPlanTask] = useState<DronePlanTask>();
+  const [planSubmitting, setPlanSubmitting] = useState(false);
+  const [planError, setPlanError] = useState("");
+  const planController = useRef<AbortController>();
   const [historyError, setHistoryError] = useState("");
   const [checkingTask, setCheckingTask] = useState(true);
   const [executionError, setExecutionError] = useState("");
@@ -283,6 +302,107 @@ function RobotStation({
   const cancellationController = useRef<AbortController>();
   const rejectedTaskId = useRef("");
   const fileInput = useRef<HTMLInputElement>(null);
+  const planCurrent =
+    config.previewPlanId != undefined &&
+    JSON.stringify(config.previewPlanStation) === JSON.stringify(station);
+  const planValid =
+    planCurrent &&
+    planTask != undefined &&
+    planTask.id === config.previewPlanId &&
+    planTask.status === "succeeded" &&
+    planTask.report?.valid === true &&
+    !planTask.report.flight_control;
+  const egoNeedsPreview = drone && station.flight?.planner === "ego";
+  const previewPlanId =
+    planCurrent &&
+    planTask != undefined &&
+    planTask.id === config.previewPlanId &&
+    !taskIsActive(planTask) &&
+    planTask.report?.flight_control === false
+      ? config.previewPlanId
+      : undefined;
+  useEffect(() => {
+    if (!drone || !config.previewPlanId || planSubmitting) {
+      return;
+    }
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const lookup = async () => {
+      try {
+        const current = await requestSimulation<DronePlanTask>(
+          `/plans/${encodeURIComponent(config.previewPlanId!)}`,
+          controller.signal,
+          undefined,
+          "px4",
+        );
+        if (!controller.signal.aborted) {
+          if (current.id !== config.previewPlanId) {
+            throw new TaskRequestError("预演查询返回的 ID 不一致，请查询原预演。");
+          }
+          setPlanTask(current);
+          setPlanError("");
+          if (taskIsActive(current)) {
+            timer = setTimeout(() => void lookup(), 1000);
+          }
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setPlanError(
+            `预演状态未确认：${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+    };
+    void lookup();
+    return () => {
+      controller.abort();
+      if (timer != undefined) {
+        clearTimeout(timer);
+      }
+    };
+  }, [drone, config.previewPlanId, planSubmitting, refresh]);
+  useEffect(() => {
+    if (!drone) {
+      return;
+    }
+    const owner = editorOwner.current;
+    setDroneEditor({
+      owner,
+      station,
+      selectedId: selected,
+      mode: boxEditMode,
+      setMode: setBoxEditMode,
+      enabled:
+        sceneSource?.mode === "draft" &&
+        !switchingScene &&
+        !submitting &&
+        !taskIsActive(task),
+      select: setSelected,
+      transform: (id, position, size) => {
+        const next = transformObstacle(station, id, position, size);
+        if (next === station) {
+          return;
+        }
+        setPast((history) => [...history, station]);
+        setFuture([]);
+        setNotice("三维变换已写入草稿，可撤销或保存。");
+        saveConfig({ station: next });
+      },
+    });
+    return () => {
+      clearDroneEditor(owner);
+    };
+  }, [
+    drone,
+    station,
+    selected,
+    boxEditMode,
+    sceneSource?.mode,
+    switchingScene,
+    submitting,
+    task,
+    saveConfig,
+  ]);
   useEffect(() => {
     const restoredId = config.executionTaskId ?? "";
     setTaskId(restoredId);
@@ -493,7 +613,7 @@ function RobotStation({
     }
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      void previewStation(station, controller.signal).then(
+      void previewStation(station, controller.signal, previewPlanId).then(
         () => {
           if (!controller.signal.aborted) {
             setSceneError("");
@@ -512,7 +632,7 @@ function RobotStation({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [station, sceneSource?.mode, switchingScene]);
+  }, [station, sceneSource?.mode, switchingScene, previewPlanId]);
   const changeScene = async (
     mode: "draft" | "task",
     draft = station,
@@ -555,10 +675,15 @@ function RobotStation({
       submissionController.current?.abort();
       cancellationController.current?.abort();
       sceneController.current?.abort();
+      planController.current?.abort();
     },
     [],
   );
   const startSimulation = async () => {
+    if (egoNeedsPreview && !planValid) {
+      setPlanError("请先对当前草稿完成有效的 EGO 预演。");
+      return;
+    }
     if (
       runtime?.ready !== true ||
       checkingTask ||
@@ -590,7 +715,11 @@ function RobotStation({
       const result = await requestSimulation<SimulationTask>(
         "/tasks",
         controller.signal,
-        { taskId: id, station },
+        {
+          taskId: id,
+          station,
+          ...(egoNeedsPreview ? { planId: config.previewPlanId } : {}),
+        },
         platform,
       );
       if (!controller.signal.aborted) {
@@ -634,6 +763,64 @@ function RobotStation({
       if (!controller.signal.aborted) {
         setSubmitting(false);
       }
+    }
+  };
+  const startPlan = async () => {
+    if (
+      planController.current ||
+      planSubmitting ||
+      taskIsActive(planTask) ||
+      taskIsActive(task)
+    ) {
+      return;
+    }
+    const id = crypto.randomUUID();
+    const controller = new AbortController();
+    planController.current = controller;
+    setPlanSubmitting(true);
+    setPlanError("");
+    setPlanTask({
+      id,
+      status: "pending",
+      message: "正在提交 EGO 场景模型预演",
+    });
+    saveConfig({ previewPlanId: id, previewPlanStation: station });
+    const url = new URL(window.location.href);
+    url.searchParams.delete("layoutUrl");
+    window.history.replaceState(window.history.state, "", url);
+    try {
+      await changeScene("draft");
+      const submitted = await requestSimulation<DronePlanTask>(
+        "/plans",
+        controller.signal,
+        { taskId: id, station },
+        "px4",
+      );
+      if (!controller.signal.aborted) {
+        if (submitted.id !== id) {
+          throw new TaskRequestError("预演响应的 ID 不一致，请查询原预演。");
+        }
+        setPlanTask(submitted);
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setPlanError(error instanceof Error ? error.message : String(error));
+        const rejected =
+          error instanceof TaskRequestError &&
+          [400, 422].includes(error.status ?? 0);
+        setPlanTask({
+          id,
+          status: rejected ? "failed" : "unknown",
+          message: rejected
+            ? "预演请求被拒绝，请修改草稿。"
+            : "预演提交状态未确认，请查询预演。",
+        });
+      }
+    } finally {
+      if (!controller.signal.aborted) {
+        setPlanSubmitting(false);
+      }
+      planController.current = undefined;
     }
   };
   const cancelSimulation = async (
@@ -1025,6 +1212,43 @@ function RobotStation({
             select={setSelected}
           />
         </div>
+        {drone && (
+          <div role="region" aria-label="三维障碍编辑">
+            <div className={classes.row}>
+              <Button
+                size="small"
+                variant={boxEditMode === "translate" ? "contained" : "outlined"}
+                aria-pressed={boxEditMode === "translate"}
+                disabled={taskIsActive(task) || submitting}
+                onClick={() => {
+                  setBoxEditMode("translate");
+                  if (sceneSource?.mode !== "draft") {
+                    void changeScene("draft");
+                  }
+                }}
+              >
+                三维移动障碍
+              </Button>
+              <Button
+                size="small"
+                variant={boxEditMode === "scale" ? "contained" : "outlined"}
+                aria-pressed={boxEditMode === "scale"}
+                disabled={taskIsActive(task) || submitting}
+                onClick={() => {
+                  setBoxEditMode("scale");
+                  if (sceneSource?.mode !== "draft") {
+                    void changeScene("draft");
+                  }
+                }}
+              >
+                三维缩放障碍
+              </Button>
+            </div>
+            <Typography variant="caption" color="text.secondary">
+              在三维场景点选障碍，拖动彩色轴调整位置或宽深高；松手写入草稿。
+            </Typography>
+          </div>
+        )}
         <div className={classes.row}>
           {(["target", "frame", "object", "obstacle"] as const)
             .filter((kind) => !drone || kind !== "object")
@@ -1108,27 +1332,118 @@ function RobotStation({
               </div>
             )}
             {drone && node.kind === "obstacle" && (
-              <div className={classes.fields}>
-                {([0, 1, 2] as const).map((axis) => (
-                  <TextField
-                    key={axis}
-                    size="small"
-                    type="number"
-                    label={`${["宽", "深", "高"][axis]}（m）`}
-                    value={(node.size ?? [1, 1, 2])[axis]}
-                    slotProps={{ htmlInput: { step: 0.1, min: 0.1 } }}
-                    onChange={(event) => {
-                      const value = Number(event.target.value);
-                      if (!Number.isFinite(value) || value <= 0) {
-                        return;
-                      }
-                      const size: Vec3 = [...(node.size ?? [1, 1, 2])];
-                      size[axis] = value;
-                      changeNode({ size });
-                    }}
-                  />
-                ))}
-              </div>
+              <>
+                <TextField
+                  select
+                  size="small"
+                  label="障碍启用状态"
+                  value={node.enabled === false ? "disabled" : "enabled"}
+                  onChange={(event) => {
+                    changeNode({ enabled: event.target.value === "enabled" });
+                  }}
+                >
+                  <MenuItem value="enabled">启用，参与预演和碰撞检查</MenuItem>
+                  <MenuItem value="disabled">停用，保留草稿配置</MenuItem>
+                </TextField>
+                <div className={classes.fields}>
+                  {([0, 1, 2] as const).map((axis) => (
+                    <TextField
+                      key={axis}
+                      size="small"
+                      type="number"
+                      label={`${["宽", "深", "高"][axis]}（m）`}
+                      value={(node.size ?? [1, 1, 2])[axis]}
+                      slotProps={{ htmlInput: { step: 0.1, min: 0.1 } }}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (!Number.isFinite(value) || value <= 0) {
+                          return;
+                        }
+                        const size: Vec3 = [...(node.size ?? [1, 1, 2])];
+                        size[axis] = value;
+                        changeNode({ size });
+                      }}
+                    />
+                  ))}
+                </div>
+                <TextField
+                  select
+                  size="small"
+                  label="障碍运动"
+                  value={node.motion ? "linear_ping_pong" : "static"}
+                  onChange={(event) => {
+                    changeNode({
+                      motion:
+                        event.target.value === "linear_ping_pong"
+                          ? {
+                              type: "linear_ping_pong",
+                              axis: [0, 1, 0],
+                              distance_m: 2,
+                              speed_m_s: 0.3,
+                            }
+                          : undefined,
+                    });
+                  }}
+                >
+                  <MenuItem value="static">静态 Box</MenuItem>
+                  <MenuItem value="linear_ping_pong">往返移动立柱</MenuItem>
+                </TextField>
+                {node.motion && (
+                  <>
+                    <div className={classes.fields}>
+                      {([0, 1, 2] as const).map((axis) => (
+                        <TextField
+                          key={axis}
+                          size="small"
+                          type="number"
+                          label={`运动方向 ${["X", "Y", "Z"][axis]}`}
+                          value={node.motion!.axis[axis]}
+                          slotProps={{ htmlInput: { step: 1 } }}
+                          onChange={(event) => {
+                            const value = Number(event.target.value);
+                            if (!Number.isFinite(value) || !node.motion) {
+                              return;
+                            }
+                            const direction: Vec3 = [...node.motion.axis];
+                            direction[axis] = value;
+                            changeNode({
+                              motion: { ...node.motion, axis: direction },
+                            });
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div className={classes.row}>
+                      {(["distance_m", "speed_m_s"] as const).map((key) => (
+                        <TextField
+                          key={key}
+                          size="small"
+                          type="number"
+                          label={
+                            key === "distance_m"
+                              ? "往返行程（m）"
+                              : "立柱速度（m/s）"
+                          }
+                          value={node.motion![key]}
+                          slotProps={{ htmlInput: { min: 0.05, step: 0.1 } }}
+                          onChange={(event) => {
+                            const value = Number(event.target.value);
+                            if (
+                              Number.isFinite(value) &&
+                              value > 0 &&
+                              node.motion
+                            ) {
+                              changeNode({
+                                motion: { ...node.motion, [key]: value },
+                              });
+                            }
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
             )}
             {!drone && node.id === "place" && (
               <Typography variant="caption" color="text.secondary">
@@ -1190,6 +1505,7 @@ function RobotStation({
                     commit({
                       ...station,
                       flight: {
+                        ...station.flight,
                         planner: station.flight?.planner ?? "waypoint",
                         speed_m_s: speed,
                       },
@@ -1206,6 +1522,7 @@ function RobotStation({
                   commit({
                     ...station,
                     flight: {
+                      ...station.flight,
                       speed_m_s: station.flight?.speed_m_s ?? 1,
                       planner:
                         event.target.value === "ego" ? "ego" : "waypoint",
@@ -1225,6 +1542,104 @@ function RobotStation({
                     : "EGO-Swarm（执行器未就绪）"}
                 </MenuItem>
               </TextField>
+            </div>
+            <Typography variant="subtitle2">飞行验收参数</Typography>
+            <Typography variant="caption" color="text.secondary">
+              留空沿用执行器默认值。最低巡航速度只适用于有足够距离的巡航段，起降和转弯分开统计。
+            </Typography>
+            <div className={classes.fields}>
+              {(
+                [
+                  ["max_altitude_m", "高度上限（m）"],
+                  ["position_tolerance_m", "到点误差上限（m）"],
+                  ["min_clearance_m", "最小机体净空（m）"],
+                  ["min_cruise_speed_m_s", "最低巡航速度（m/s）"],
+                ] as const
+              ).map(([key, label]) => (
+                <TextField
+                  key={key}
+                  size="small"
+                  type="number"
+                  label={label}
+                  value={station.flight?.acceptance?.[key] ?? ""}
+                  slotProps={{ htmlInput: { min: 0, step: 0.05 } }}
+                  onChange={(event) => {
+                    const value =
+                      event.target.value === ""
+                        ? undefined
+                        : Number(event.target.value);
+                    if (
+                      value != undefined &&
+                      (!Number.isFinite(value) || value < 0)
+                    ) {
+                      return;
+                    }
+                    const acceptance = { ...station.flight?.acceptance };
+                    if (value == undefined) {
+                      delete acceptance[key];
+                    } else {
+                      acceptance[key] = value;
+                    }
+                    commit({
+                      ...station,
+                      flight: {
+                        speed_m_s: station.flight?.speed_m_s ?? 1,
+                        planner: station.flight?.planner ?? "waypoint",
+                        ...station.flight,
+                        acceptance,
+                      },
+                    });
+                  }}
+                />
+              ))}
+            </div>
+            <Typography variant="subtitle2">深度感知故障注入</Typography>
+            <Typography variant="caption" color="text.secondary">
+              仅作用于仿真深度通道。丢帧 0.1 表示 10%；延迟保留原采集时间。
+            </Typography>
+            <div className={classes.fields}>
+              {(
+                [
+                  ["depth_drop_probability", "深度丢帧比例（0–1）", 0],
+                  ["depth_delay_ms", "深度延迟（ms）", 0],
+                  ["seed", "随机种子", 1],
+                ] as const
+              ).map(([key, label, fallback]) => (
+                <TextField
+                  key={key}
+                  size="small"
+                  type="number"
+                  label={label}
+                  value={station.flight?.sensors?.[key] ?? fallback}
+                  slotProps={{
+                    htmlInput: {
+                      min: 0,
+                      step: key === "depth_drop_probability" ? 0.01 : 1,
+                    },
+                  }}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (
+                      !Number.isFinite(value) ||
+                      value < 0 ||
+                      (key === "depth_drop_probability" && value > 1) ||
+                      (key === "seed" &&
+                        (!Number.isInteger(value) || value > 4294967295))
+                    ) {
+                      return;
+                    }
+                    commit({
+                      ...station,
+                      flight: {
+                        speed_m_s: station.flight?.speed_m_s ?? 1,
+                        planner: station.flight?.planner ?? "waypoint",
+                        ...station.flight,
+                        sensors: { ...station.flight?.sensors, [key]: value },
+                      },
+                    });
+                  }}
+                />
+              ))}
             </div>
             <Typography variant="caption" color="text.secondary">
               {station.flight?.planner === "ego"
@@ -1373,6 +1788,73 @@ function RobotStation({
         />
         <Divider />
         <Typography variant="subtitle1">规划与仿真</Typography>
+        {egoNeedsPreview && (
+          <div role="region" aria-label="EGO 起飞前预演">
+            <Button
+              variant="outlined"
+              disabled={
+                planSubmitting ||
+                taskIsActive(planTask) ||
+                taskIsActive(task) ||
+                runtime?.executor?.planners?.includes("ego") !== true
+              }
+              onClick={() => {
+                void startPlan();
+              }}
+            >
+              {planSubmitting || taskIsActive(planTask)
+                ? "EGO 正在计算预演…"
+                : "EGO 起飞前预演"}
+            </Button>
+            {config.previewPlanId && (
+              <Button
+                size="small"
+                onClick={() => {
+                  setRefresh((value) => value + 1);
+                }}
+              >
+                查询预演
+              </Button>
+            )}
+            <Typography variant="body2" color="text.secondary">
+              预演使用当前场景模型计算 EGO
+              空间曲线，黄色为规划轨迹，红色为净空不足段。
+              预演不派发飞行，也不代表真实深度已感知；编辑后需重新预演。
+            </Typography>
+            {config.previewPlanId && (
+              <Typography
+                variant="caption"
+                style={{ overflowWrap: "anywhere" }}
+              >
+                预演 ID：{config.previewPlanId}
+              </Typography>
+            )}
+            {config.previewPlanId && !planCurrent && (
+              <Alert severity="warning">草稿已修改，旧预演已过期。</Alert>
+            )}
+            {planCurrent && planTask && (
+              <Alert
+                severity={
+                  planValid
+                    ? "success"
+                    : planTask.status === "failed"
+                      ? "warning"
+                      : "info"
+                }
+              >
+                {planValid
+                  ? "当前草稿预演有效，可以起飞。"
+                  : (planTask.report?.reason ??
+                    planTask.message ??
+                    taskStatusLabel(planTask.status))}
+                {planTask.report?.min_clearance_m != undefined
+                  ? ` 最小净空：${planTask.report.min_clearance_m.toFixed(3)} m。`
+                  : ""}
+              </Alert>
+            )}
+            {planError && <Alert severity="warning">{planError}</Alert>}
+          </div>
+        )}
         <Alert severity={runtime?.ready === true ? "info" : "warning"}>
           {runtimeError
             ? `执行器暂不可用：${runtimeError}`
@@ -1393,7 +1875,8 @@ function RobotStation({
               runtime?.ready !== true ||
               checkingTask ||
               submitting ||
-              taskIsActive(task)
+              taskIsActive(task) ||
+              (egoNeedsPreview && !planValid)
             }
             onClick={() => {
               void startSimulation();
@@ -1410,7 +1893,11 @@ function RobotStation({
               void cancelSimulation();
             }}
           >
-            {cancelling ? "正在发送请求…" : drone ? "取消并降落" : "取消任务"}
+            {cancelling
+              ? "正在发送请求…"
+              : drone
+                ? "停止并安全返回降落"
+                : "取消任务"}
           </Button>
           {drone && (
             <Button

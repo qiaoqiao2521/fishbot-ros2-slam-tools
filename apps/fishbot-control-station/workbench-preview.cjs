@@ -8,10 +8,16 @@ const { createSo101Runtime } = require("./so101-runtime.cjs");
 const { createSo101Live } = require("./so101-live.cjs");
 const { createDroneRuntime } = require("./drone-runtime.cjs");
 const { createDroneLive } = require("./drone-live.cjs");
+const { createDronePlanning } = require("./drone-planning.cjs");
 
 const workbench = path.join(__dirname, "workbench");
 const serveHandler = createRequire(path.join(workbench, "web", "package.json"))("serve-handler");
-const build = path.join(workbench, "web", ".webpack");
+const build = process.env.WORKBENCH_BUILD_DIR
+  ? path.resolve(process.env.WORKBENCH_BUILD_DIR)
+  : path.join(workbench, "web", ".webpack");
+const layouts = process.env.WORKBENCH_LAYOUTS_DIR
+  ? path.resolve(process.env.WORKBENCH_LAYOUTS_DIR)
+  : path.join(workbench, "robot-layouts");
 const recordings = process.env.WORKBENCH_RECORDINGS_DIR;
 const port = Number(process.env.WORKBENCH_PORT ?? 5186);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) {
@@ -25,15 +31,18 @@ let live;
 const runtime = createSo101Runtime({onTaskCreated: id => live?.selectTask(id)});
 live = createSo101Live({runtime});
 let droneLive;
+const dronePlanning=createDronePlanning();
 const droneRuntime=createDroneRuntime({
   onTaskCreated:id=>droneLive?.selectTask(id),
   sceneOptions:()=>droneLive?.sceneOptions()??{},
+  validateSubmission:dronePlanning.validateFlight,
 });
-droneLive=createDroneLive({runtime:droneRuntime});
+droneLive=createDroneLive({runtime:droneRuntime,planning:dronePlanning});
 const server = http.createServer(async (request, response) => {
   if (await live.handle(request, response, serveHandler)) return;
   if (await runtime.handle(request, response, serveHandler)) return;
   if (await droneLive.handle(request, response, serveHandler)) return;
+  if (await dronePlanning.handle(request, response, serveHandler)) return;
   if (await droneRuntime.handle(request, response, serveHandler)) return;
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { Allow: "GET, HEAD" });
@@ -64,7 +73,7 @@ const server = http.createServer(async (request, response) => {
     publicPath = path.resolve(recordings);
     request.url = "/so101.mcap";
   } else if (["/layouts/so101-review.json", "/layouts/so101-mobile.json", "/layouts/so101-station.json", "/layouts/so101-station-mobile.json", "/layouts/drone-station.json", "/layouts/drone-station-mobile.json", "/layouts/drone-review.json"].includes(pathname)) {
-    publicPath = path.join(workbench, "robot-layouts");
+    publicPath = layouts;
     request.url = `/${path.basename(pathname)}`;
   } else if (pathname.startsWith("/records/") || pathname.startsWith("/layouts/")) {
     response.writeHead(404);

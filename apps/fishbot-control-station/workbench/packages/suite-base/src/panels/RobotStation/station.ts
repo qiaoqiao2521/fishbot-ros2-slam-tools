@@ -20,6 +20,19 @@ export type StationNode = {
   parent: string;
   position: Vec3;
   size?: Vec3;
+  enabled?: boolean;
+  motion?: {
+    type: "linear_ping_pong";
+    axis: Vec3;
+    distance_m: number;
+    speed_m_s: number;
+  };
+};
+export type FlightAcceptance = {
+  max_altitude_m?: number;
+  position_tolerance_m?: number;
+  min_clearance_m?: number;
+  min_cruise_speed_m_s?: number;
 };
 export type Instruction = {
   id: string;
@@ -37,7 +50,16 @@ export type Instruction = {
 };
 export type Station = {
   platform?: Platform;
-  flight?: { speed_m_s: number; planner: "waypoint" | "ego" };
+  flight?: {
+    speed_m_s: number;
+    planner: "waypoint" | "ego";
+    acceptance?: FlightAcceptance;
+    sensors?: {
+      depth_drop_probability?: number;
+      depth_delay_ms?: number;
+      seed?: number;
+    };
+  };
   name: string;
   nodes: StationNode[];
   program: Instruction[];
@@ -91,7 +113,15 @@ export function stationKindLabel(kind: Kind, platform: Platform): string {
 export function defaultDroneStation(): Station {
   return {
     platform: "px4",
-    flight: { speed_m_s: 1, planner: "waypoint" },
+    flight: {
+      speed_m_s: 2,
+      planner: "ego",
+      acceptance: {
+        max_altitude_m: 2.2,
+        position_tolerance_m: 0.3,
+        min_clearance_m: 0.25,
+      },
+    },
     name: "PX4 四旋翼巡航",
     nodes: [
       {
@@ -127,7 +157,7 @@ export function defaultDroneStation(): Station {
         name: "航点 2",
         kind: "target",
         parent: "home",
-        position: [3, 3, 3],
+        position: [3, 3, 2],
       },
       {
         id: "wp3",
@@ -146,7 +176,7 @@ export function defaultDroneStation(): Station {
       { id: "s6", action: "land", target: "", seconds: 1 },
     ],
     notes:
-      "本地 PX4 + Gazebo 四旋翼仿真。X 向东、Y 向北、Z 向上，单位米。航点模式尚不自动绕障；实际飞行状态和轨迹由仿真反馈。",
+      "本地 PX4 + Gazebo 四旋翼仿真。X 向东、Y 向北、Z 向上，单位米。先做 EGO 场景模型预演；正式飞行使用 Gazebo 理想定位和深度图。",
   };
 }
 
@@ -245,10 +275,25 @@ export function copyStation(station: Station): Station {
         ...node,
         position: [...node.position],
         ...(node.size ? { size: [...node.size] as Vec3 } : {}),
+        ...(node.motion
+          ? { motion: { ...node.motion, axis: [...node.motion.axis] as Vec3 } }
+          : {}),
       }),
     ),
     program: station.program.map((step) => ({ ...step })),
-    ...(station.flight ? { flight: { ...station.flight } } : {}),
+    ...(station.flight
+      ? {
+          flight: {
+            ...station.flight,
+            ...(station.flight.acceptance
+              ? { acceptance: { ...station.flight.acceptance } }
+              : {}),
+            ...(station.flight.sensors
+              ? { sensors: { ...station.flight.sensors } }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -290,6 +335,41 @@ export function descendants(
     }
   }
   return result;
+}
+
+/** Commit a native world-space handle without moving the obstacle's parent. */
+export function transformObstacle(
+  station: Station,
+  id: string,
+  position: Vec3,
+  size: Vec3,
+): Station {
+  const node = station.nodes.find((item) => item.id === id);
+  if (
+    stationPlatform(station) !== "px4" ||
+    node?.kind !== "obstacle" ||
+    node.enabled === false
+  ) {
+    return station;
+  }
+  const parent = station.nodes.find((item) => item.id === node.parent);
+  const offset: Vec3 = parent
+    ? worldPosition(parent, station.nodes)
+    : [0, 0, 0];
+  return {
+    ...station,
+    nodes: station.nodes.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            position: position.map((value, axis) =>
+              Number((value - offset[axis]!).toFixed(3)),
+            ) as Vec3,
+            size: size.map((value) => Number(value.toFixed(3))) as Vec3,
+          }
+        : item,
+    ),
+  };
 }
 
 export function reparent(
@@ -402,6 +482,25 @@ export function importStation(value: unknown): {
       Array.isArray(size) &&
       size.length === 3 &&
       size.every((x) => typeof x === "number" && Number.isFinite(x) && x > 0);
+    const motion = record(item.motion);
+    const axis = motion?.axis;
+    const distance = motion?.distance_m;
+    const motionSpeed = motion?.speed_m_s;
+    const validMotion =
+      motion?.type === "linear_ping_pong" &&
+      Array.isArray(axis) &&
+      axis.length === 3 &&
+      axis.every((x) => typeof x === "number" && Number.isFinite(x)) &&
+      axis.some((x) => x !== 0) &&
+      typeof distance === "number" &&
+      Number.isFinite(distance) &&
+      distance > 0 &&
+      typeof motionSpeed === "number" &&
+      Number.isFinite(motionSpeed) &&
+      motionSpeed > 0;
+    if (item.motion != undefined && !validMotion) {
+      warnings.push(`对象 ${i + 1} 往返运动参数无效，按静态障碍导入。`);
+    }
     if (
       platform === "px4" &&
       kind === "obstacle" &&
@@ -418,6 +517,21 @@ export function importStation(value: unknown): {
       position: validPosition ? (position as Vec3) : [0, 0, 0],
       ...(platform === "px4" && kind === "obstacle"
         ? { size: validSize ? ([...size] as Vec3) : ([1, 1, 2] as Vec3) }
+        : {}),
+      ...(platform === "px4" &&
+      kind === "obstacle" &&
+      typeof item.enabled === "boolean"
+        ? { enabled: item.enabled }
+        : {}),
+      ...(platform === "px4" && kind === "obstacle" && validMotion
+        ? {
+            motion: {
+              type: "linear_ping_pong" as const,
+              axis: [...axis] as Vec3,
+              distance_m: distance,
+              speed_m_s: motionSpeed,
+            },
+          }
         : {}),
     });
   }
@@ -458,6 +572,48 @@ export function importStation(value: unknown): {
     });
   }
   const flight = record(source.flight);
+  const sensorsSource = record(flight?.sensors);
+  const sensors: NonNullable<NonNullable<Station["flight"]>["sensors"]> = {};
+  for (const key of [
+    "depth_drop_probability",
+    "depth_delay_ms",
+    "seed",
+  ] as const) {
+    const parameter = sensorsSource?.[key];
+    if (parameter == undefined) {
+      continue;
+    }
+    const valid =
+      typeof parameter === "number" &&
+      Number.isFinite(parameter) &&
+      parameter >= 0 &&
+      (key !== "depth_drop_probability" || parameter <= 1) &&
+      (key !== "seed" ||
+        (Number.isInteger(parameter) && parameter <= 4294967295));
+    if (valid) {
+      sensors[key] = parameter;
+    } else {
+      warnings.push(`深度感知参数 ${key} 无效，沿用执行器默认值。`);
+    }
+  }
+  const acceptanceSource = record(flight?.acceptance);
+  const acceptance: FlightAcceptance = {};
+  for (const key of [
+    "max_altitude_m",
+    "position_tolerance_m",
+    "min_clearance_m",
+    "min_cruise_speed_m_s",
+  ] as const) {
+    const limit = acceptanceSource?.[key];
+    if (limit == undefined) {
+      continue;
+    }
+    if (typeof limit === "number" && Number.isFinite(limit) && limit >= 0) {
+      acceptance[key] = limit;
+    } else {
+      warnings.push(`飞行验收 ${key} 无效，未启用该项。`);
+    }
+  }
   const speed = flight?.speed_m_s;
   const validSpeed =
     typeof speed === "number" &&
@@ -477,6 +633,8 @@ export function importStation(value: unknown): {
               flight?.planner === "ego"
                 ? ("ego" as const)
                 : ("waypoint" as const),
+            ...(acceptanceSource ? { acceptance } : {}),
+            ...(sensorsSource ? { sensors } : {}),
           },
         }
       : {}),

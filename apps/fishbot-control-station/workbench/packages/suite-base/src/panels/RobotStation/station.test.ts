@@ -21,10 +21,43 @@ import {
   stationActions,
   stationKindLabel,
   stationPlatform,
+  transformObstacle,
   worldPosition,
 } from "./station";
 
 describe("RoboDK-style station editing", () => {
+  it("commits 3D obstacle handles in their parent's frame and preserves undo input", () => {
+    const station = defaultDroneStation();
+    station.nodes.find((node) => node.id === "home")!.position = [1, -1, 0];
+    station.nodes.push({
+      id: "box",
+      name: "Box",
+      kind: "obstacle",
+      parent: "home",
+      position: [1.5, 0, 1],
+      size: [1, 1, 2],
+      motion: {
+        type: "linear_ping_pong",
+        axis: [0, 1, 0],
+        distance_m: 2,
+        speed_m_s: 0.3,
+      },
+    });
+    const next = transformObstacle(station, "box", [4, 2, 1.5], [0.8, 1.2, 3]);
+    const box = next.nodes.find((node) => node.id === "box")!;
+    expect(box.position).toEqual([3, 3, 1.5]);
+    expect(worldPosition(box, next.nodes)).toEqual([4, 2, 1.5]);
+    expect(box.size).toEqual([0.8, 1.2, 3]);
+    expect(box.motion).toEqual(station.nodes.at(-1)!.motion);
+    expect(station.nodes.at(-1)!.position).toEqual([1.5, 0, 1]);
+    expect(station.nodes.at(-1)!.size).toEqual([1, 1, 2]);
+    const so101 = defaultStation();
+    expect(transformObstacle(so101, "box", [4, 2, 1.5], [1, 1, 1])).toBe(so101);
+    station.nodes.at(-1)!.enabled = false;
+    expect(transformObstacle(station, "box", [4, 2, 1.5], [1, 1, 1])).toBe(
+      station,
+    );
+  });
   it("copies a submitted station without sharing editable scene or program data", () => {
     const source = defaultStation();
     const copy = copyStation(source);
@@ -182,9 +215,17 @@ describe("PX4 station data", () => {
     expect(stationKindLabel("robot", "so101")).toBe("机械臂");
   });
 
-  it("provides three waypoints with altitude changes and a 2 m takeoff", () => {
+  it("provides a ceiling-limited EGO draft without a cruise minimum on short legs", () => {
     const station = defaultDroneStation();
-    expect(station.flight).toEqual({ speed_m_s: 1, planner: "waypoint" });
+    expect(station.flight).toEqual({
+      speed_m_s: 2,
+      planner: "ego",
+      acceptance: {
+        max_altitude_m: 2.2,
+        position_tolerance_m: 0.3,
+        min_clearance_m: 0.25,
+      },
+    });
     expect(
       station.nodes.find((node) => node.id === "takeoff")?.position[2],
     ).toBe(2);
@@ -197,7 +238,7 @@ describe("PX4 station data", () => {
         (step) =>
           station.nodes.find((node) => node.id === step.target)?.position[2],
       ),
-    ).toEqual([2, 3, 2]);
+    ).toEqual([2, 2, 2]);
     expect(programWarnings(station)).toEqual([]);
     expect(programWarnings(removeNode(station, "wp2"))).toHaveLength(1);
   });
@@ -207,9 +248,9 @@ describe("PX4 station data", () => {
     const copied = copyStation(original);
     copied.flight!.speed_m_s = 1.5;
     copied.nodes.find((node) => node.id === "wp2")!.position[2] = 4;
-    expect(original.flight!.speed_m_s).toBe(1);
+    expect(original.flight!.speed_m_s).toBe(2);
     expect(original.nodes.find((node) => node.id === "wp2")!.position[2]).toBe(
-      3,
+      2,
     );
     const restored = importStation(JSON.parse(exportStation(copied))).station;
     expect(restored.platform).toBe("px4");
@@ -261,6 +302,62 @@ describe("PX4 station data", () => {
     expect(
       importStation(JSON.parse(exportStation(copied))).station.nodes,
     ).toEqual(copied.nodes);
+  });
+
+  it("round-trips moving boxes and optional acceptance without sharing draft arrays", () => {
+    const source = defaultDroneStation();
+    source.nodes.push({
+      id: "moving-box",
+      name: "立柱",
+      kind: "obstacle",
+      parent: "world",
+      position: [4, 0, 1],
+      size: [0.4, 0.4, 2],
+      motion: {
+        type: "linear_ping_pong",
+        axis: [0, 1, 0],
+        distance_m: 2,
+        speed_m_s: 0.3,
+      },
+    });
+    const imported = importStation(JSON.parse(exportStation(source))).station;
+    expect(imported.nodes).toEqual(source.nodes);
+    expect(imported.flight).toEqual(source.flight);
+    const copy = copyStation(imported);
+    copy.nodes.at(-1)!.motion!.axis[1] = -1;
+    copy.flight!.acceptance!.max_altitude_m = 4;
+    expect(imported.nodes.at(-1)!.motion!.axis).toEqual([0, 1, 0]);
+    expect(imported.flight!.acceptance!.max_altitude_m).toBe(2.2);
+    const legacy = importStation({
+      ...source,
+      flight: { planner: "ego", speed_m_s: 1 },
+    }).station;
+    expect(legacy.flight!.acceptance).toBeUndefined();
+  });
+
+  it("preserves disabled roofs and explicit perception faults without truncating valid delays", () => {
+    const source = defaultDroneStation();
+    source.flight!.sensors = {
+      depth_drop_probability: 1,
+      depth_delay_ms: 5000,
+      seed: 4294967295,
+    };
+    source.nodes.push({
+      id: "roof",
+      name: "天花板",
+      kind: "obstacle",
+      parent: "world",
+      position: [0, 0, 3],
+      size: [8, 8, 0.2],
+      enabled: false,
+    });
+    const imported = importStation(JSON.parse(exportStation(source)));
+    expect(imported.warnings).toEqual([]);
+    expect(imported.station.nodes.at(-1)!.enabled).toBe(false);
+    expect(imported.station.flight!.sensors).toEqual(source.flight!.sensors);
+    const copied = copyStation(imported.station);
+    copied.flight!.sensors!.depth_delay_ms = 50;
+    expect(imported.station.flight!.sensors!.depth_delay_ms).toBe(5000);
   });
 
   it("repairs invalid optional drone obstacle dimensions without discarding the scene", () => {

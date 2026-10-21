@@ -131,6 +131,10 @@ export class CameraStateSettings extends SceneExtension implements ICameraHandle
     super.dispose();
   }
 
+  public setInteractionEnabled({ enabled }: { enabled: boolean }): void {
+    this.#controls.enabled = enabled;
+  }
+
   public override settingsNodes(): SettingsTreeEntry[] {
     return [this.#cameraSettingsNode(), this.#frameSettingsNode()];
   }

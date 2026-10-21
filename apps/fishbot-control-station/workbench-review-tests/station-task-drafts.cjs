@@ -6,7 +6,7 @@ const { createRequire } = require('node:module');
 const upstream = createRequire(path.join(__dirname, '../workbench/package.json'));
 const { chromium, expect } = upstream('@playwright/test');
 const base = process.env.STATION_TEST_URL ?? 'http://127.0.0.1:5187';
-const output = path.join(__dirname, 'output/station-task-drafts');
+const output = process.env.STATION_QA_OUTPUT ?? path.join(__dirname, 'output/station-task-drafts');
 fs.mkdirSync(output, { recursive: true });
 const result = { passed: false, checks: [], errors: [], requests: [], meshes: [], mobileMeshes: [] };
 const save = () => fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(result, null, 2));

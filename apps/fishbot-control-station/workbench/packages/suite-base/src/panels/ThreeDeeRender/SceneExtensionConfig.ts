@@ -26,6 +26,7 @@ import { VelodyneScans } from "@lichtblick/suite-base/panels/ThreeDeeRender/rend
 
 import { IRenderer } from "./IRenderer";
 import { SceneExtension } from "./SceneExtension";
+import { DroneBoxEditor } from "./renderables/DroneBoxEditor";
 import { MeasurementTool } from "./renderables/MeasurementTool";
 import { PublishClickTool } from "./renderables/PublishClickTool";
 import { InterfaceMode } from "./types";
@@ -61,6 +62,10 @@ export const DEFAULT_SCENE_EXTENSION_CONFIG: SceneExtensionConfig = {
     },
   },
   extensionsById: {
+    [DroneBoxEditor.extensionId]: {
+      init: (renderer: IRenderer) => new DroneBoxEditor(renderer),
+      supportedInterfaceModes: ["3d"],
+    },
     [PublishSettings.extensionId]: {
       init: (renderer: IRenderer) => new PublishSettings(renderer),
       supportedInterfaceModes: ["3d"],

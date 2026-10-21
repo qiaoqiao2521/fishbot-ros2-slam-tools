@@ -11,7 +11,7 @@ const base = process.env.STATION_TEST_URL ?? 'http://127.0.0.1:5187';
 const output = process.env.DRONE_QA_OUTPUT ?? path.join(__dirname, 'output/drone-execution');
 const terminal = new Set(['succeeded', 'failed', 'cancelled']);
 fs.mkdirSync(output, { recursive: true });
-const result = { passed: false, checks: [], tasks: [], posts: [], pageErrors: [], httpErrors: [], replayWrites: [], replayWebSockets: [], modelResponses: [] };
+const result = { passed: false, checks: [], tasks: [], posts: [], plans: [], planPosts: [], pageErrors: [], httpErrors: [], replayWrites: [], replayWebSockets: [], modelResponses: [] };
 const save = () => fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(result, null, 2));
 const checked = name => { result.checks.push(name); save(); console.log(name); };
 const greenPixels = bytes => {
@@ -39,6 +39,10 @@ const observe = page => {
     }
   });
   page.on('request', request => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/drone/plans') {
+      result.planPosts.push({ url: request.url(), body: request.postDataJSON() });
+      save();
+    }
     if (request.method() === 'POST' && /\/api\/(?:drone|so101)\/tasks(?:\/|$)/.test(new URL(request.url()).pathname)) {
       result.posts.push({ url: request.url(), body: request.postDataJSON() });
       save();
@@ -67,10 +71,41 @@ const waitTask = async (request, id, predicate, message, timeout = 360000) => {
   assert(predicate(state), `${message}: ${state.status}; ${state.message}; ${JSON.stringify(state.report?.errors)}`);
   return state;
 };
-const startFromUi = async (page, panel) => {
+const preparePlan = async (page, panel, station) => {
+  if (station.flight?.planner !== 'ego') return undefined;
+  const before = result.posts.length;
+  const response = page.waitForResponse(value => value.url() === `${base}/api/drone/plans` && value.request().method() === 'POST');
+  await panel.getByRole('button', { name: 'EGO 起飞前预演', exact: true }).click();
+  let plan = await json(await response);
+  const id = plan.id;
+  await expect.poll(async () => {
+    plan = await json(await page.request.get(`${base}/api/drone/plans/${id}`));
+    return terminal.has(plan.status);
+  }, { timeout: 240000, intervals: [1000] }).toBe(true);
+  result.plans.push(plan);
+  save();
+  assert.equal(plan.status, 'succeeded', plan.message);
+  assert.equal(plan.report.valid, true, plan.report.reason);
+  assert.equal(plan.report.flight_control, false);
+  assert(plan.report.points.length > 3);
+  assert.equal(result.posts.length, before, 'Scene-model planning must not dispatch any flight control');
+  await expect(panel.getByText('当前草稿预演有效，可以起飞。', { exact: true })).toBeVisible();
+  checked('real-ego-preflight-for-current-draft-without-flight-post');
+  return id;
+};
+const worldPosition = (station, id) => {
+  const node = station.nodes.find(item => item.id === id);
+  assert(node, `Missing node ${id}`);
+  const parent = node.parent === 'world' ? [0, 0, 0] : worldPosition(station, node.parent);
+  return node.position.map((value, index) => value + parent[index]);
+};
+const startFromUi = async (page, panel, station) => {
+  const planId = await preparePlan(page, panel, station);
   const pending = page.waitForResponse(response => response.url() === `${base}/api/drone/tasks` && response.request().method() === 'POST', { timeout: 30000 });
   await panel.getByRole('button', { name: '起飞并执行仿真', exact: true }).click();
-  const task = updateTask(await json(await pending));
+  const response = await pending;
+  assert.equal(response.request().postDataJSON().planId, planId);
+  const task = updateTask(await json(response));
   await expect(panel).toContainText(task.id);
   return task;
 };
@@ -84,11 +119,13 @@ const selectHistory = async (page, panel, task) => {
 const refreshActiveTask = async (page, panel, task, expectedPosts) => {
   result.refreshUrl = page.url();
   save();
+  const expectedPlanPosts = result.planPosts.length;
   await page.reload();
   await expect(panel.getByText(`原任务 ID：${task.id}`, { exact: true })).toBeVisible({ timeout: 60000 });
   await expect(panel.getByRole('region', { name: '当前仿真任务' })).toContainText(task.submittedAt);
-  await expect(panel.getByRole('button', { name: '取消并降落', exact: true })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: '停止并安全返回降落', exact: true })).toBeEnabled();
   assert.equal(result.posts.filter(post => new URL(post.url).pathname === '/api/drone/tasks').length, expectedPosts, 'Refresh must query the original ID without submitting');
+  assert.equal(result.planPosts.length, expectedPlanPosts, 'Refresh must not submit a second preflight plan');
   const scene = await json(await page.request.get(`${base}/api/drone/scene-mode`));
   assert.equal(scene.taskId, task.id);
 };
@@ -135,7 +172,9 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
     maximumGazeboTruthSpeed_m_s: task.report.speed?.gazebo_peak_m_s,
   };
   assert(speedSamples > 20);
-  assert(maximumTelemetrySpeed <= 1, `Recorded three-axis speed ${maximumTelemetrySpeed} exceeds 1 m/s`);
+  const speedLimit = task.report.speed?.requested_max_m_s ?? task.station.flight?.speed_m_s ?? 1;
+  result.speed.requestedMax_m_s = speedLimit;
+  assert(maximumTelemetrySpeed <= speedLimit, `Recorded three-axis speed ${maximumTelemetrySpeed} exceeds ${speedLimit} m/s`);
   const scenes = [];
   for await (const message of reader.readMessages({ topics: ['/drone/live/scene'], validateCrcs: true })) {
     const value = JSON.parse(Buffer.from(message.data).toString('utf8'));
@@ -146,7 +185,8 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
   assert(scenes.length > 20, 'Recording must include a real sequence of aircraft poses');
   const first = scenes[0], last = scenes.at(-1);
   const airborne = scenes.reduce((highest, frame) => (frame.trail.at(-1)?.z ?? 0) > (highest.trail.at(-1)?.z ?? 0) ? frame : highest);
-  assert(airborne.trail.at(-1).z > 2.5, 'Height-changing route must be present in recorded telemetry');
+  const requestedHeight = Math.max(...task.report.visits.map(visit => visit.target[2]));
+  assert(airborne.trail.at(-1).z >= requestedHeight - .5, 'Recording must contain the requested route height');
   assert(last.trail.length > 20, 'Final recorded scene must contain the flown trajectory');
   const modelUrls = [...new Set(first.vehicle.models.map(model => model.url))];
   assert(modelUrls.every(url => url.startsWith('/api/drone/meshes/')), 'Recorded model paths must resolve at the replay origin');
@@ -270,20 +310,18 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
     } else {
       await page.goto(`${base}/drone-station`);
       const panel = panelFor(page);
-      await expect(panel.getByRole('button', { name: '起飞并执行仿真', exact: true })).toBeEnabled({ timeout: 90000 });
-      const original = await exportStation(page, panel, 'default-station.json');
+      await expect(panel.getByRole('button', { name: '复制为新任务', exact: true })).toBeEnabled({ timeout: 90000 });
+      if (process.env.DRONE_STATION_FILE) await panel.locator('input[type=file]').setInputFiles(process.env.DRONE_STATION_FILE);
+      let original = await exportStation(page, panel, 'default-station.json');
       assert.equal(original.platform, 'px4');
-      assert.equal(original.flight.planner, 'waypoint');
-      assert.equal(original.flight.speed_m_s, 1);
-      const waypoints = original.program.filter(step => step.action === 'waypoint');
-      assert.equal(waypoints.length, 3);
-      assert(new Set(waypoints.map(step => original.nodes.find(node => node.id === step.target).position[2])).size > 1);
       if (process.env.DRONE_COMPLETED_TASK_ID) {
         first = updateTask(await readTask(page.request, process.env.DRONE_COMPLETED_TASK_ID));
         await selectHistory(page, panel, first);
+        original = first.station;
+        await panel.locator('input[type=file]').setInputFiles({ name: 'original-station.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(original)) });
         result.reusedCompletedTask = first.id;
       } else {
-        first = await startFromUi(page, panel);
+        first = await startFromUi(page, panel, original);
         activeTask = first.id;
         await waitTask(page.request, first.id, task => task.telemetry?.armed === true && task.telemetry.altitude_m > 1, 'first flight becomes airborne');
         await panel.getByRole('region', { name: '当前仿真任务' }).scrollIntoViewIfNeeded();
@@ -296,43 +334,47 @@ const replayRecording = async (browser, sourceRequest, task, replayUrl) => {
       activeTask = undefined;
       assert.equal(first.status, 'succeeded', first.message);
       assert.equal(first.report.passed, true);
-      assert.equal(first.report.planner, 'waypoint');
+      assert.equal(first.report.planner, original.flight.planner);
+      const waypoints = original.program.filter(step => step.action === 'waypoint');
+      assert(waypoints.length > 0);
+      const speedLimit = original.flight.speed_m_s;
       assert.equal(first.report.independent_source, 'Gazebo model pose');
-      assert.equal(first.report.speed.requested_max_m_s, 1);
+      assert.equal(first.report.speed.requested_max_m_s, speedLimit);
       assert.equal(first.report.speed.within_requested_limit, true);
-      assert(Number.isFinite(first.report.speed.gazebo_peak_m_s) && first.report.speed.gazebo_peak_m_s <= 1);
-      assert(Number.isFinite(first.report.speed.mavsdk_peak_m_s) && first.report.speed.mavsdk_peak_m_s <= 1);
+      assert(Number.isFinite(first.report.speed.gazebo_peak_m_s) && first.report.speed.gazebo_peak_m_s <= speedLimit);
+      assert(Number.isFinite(first.report.speed.mavsdk_peak_m_s) && first.report.speed.mavsdk_peak_m_s <= speedLimit);
       assertLanded(first);
       for (const step of waypoints) {
-        const target = original.nodes.find(node => node.id === step.target).position;
+        const target = worldPosition(original, step.target);
         const visit = first.report.visits.find(item => JSON.stringify(item.target) === JSON.stringify(target));
         assert(visit, `Missing independent arrival: ${step.target}`);
-        assert(visit.truth_error_m <= .5 && visit.truth_hold_s >= 1);
+        assert(visit.truth_error_m <= (original.flight.acceptance?.position_tolerance_m ?? .5) && visit.truth_hold_s >= 1);
       }
       await artifactChecks(page.request, first);
       await expect(panel.getByRole('region', { name: '当前仿真任务' })).toContainText('执行完成', { timeout: 30000 });
       const replayLink = panel.getByRole('link', { name: '回看本次三维轨迹 ↗', exact: true });
       await expect(replayLink).toBeVisible();
       await page.screenshot({ path: path.join(output, 'live-success.png'), fullPage: true });
-      checked('three-height-changing-waypoints-and-independent-land-disarm-report');
+      checked('requested-waypoints-and-independent-land-disarm-report');
       checked('terminal-task-exposes-report-and-range-readable-mcap');
 
       await panel.getByRole('button', { name: '复制为新任务', exact: true }).click();
-      await panel.locator('[aria-label="工作站对象树"]').getByRole('button', { name: /航点 2/ }).click();
-      const changed = [2.5, 3.5, 2.8];
+      const changedNode = original.nodes.find(node => node.id === (waypoints[1] ?? waypoints[0]).target);
+      await panel.locator('[aria-label="工作站对象树"]').getByRole('button').filter({ hasText: changedNode.name }).click();
+      const changed = [changedNode.position[0] + .5, changedNode.position[1] + .5, changedNode.position[2]];
       for (const [index, axis] of ['X', 'Y', 'Z'].entries()) await panel.getByLabel(`${axis}（m）`, { exact: true }).fill(String(changed[index]));
       const copy = await exportStation(page, panel, 'copied-station.json');
-      assert.deepEqual(copy.nodes.find(node => node.id === 'wp2').position, changed);
-      let second = await startFromUi(page, panel);
+      assert.deepEqual(copy.nodes.find(node => node.id === changedNode.id).position, changed);
+      let second = await startFromUi(page, panel, copy);
       activeTask = second.id;
       assert.notEqual(second.id, firstId);
-      assert.deepEqual(second.station.nodes.find(node => node.id === 'wp2').position, changed);
+      assert.deepEqual(second.station.nodes.find(node => node.id === changedNode.id).position, changed);
       await waitTask(page.request, second.id, task => task.telemetry?.armed === true && task.telemetry.altitude_m > 1, 'copied flight becomes airborne');
       const expectedPosts = process.env.DRONE_COMPLETED_TASK_ID ? 1 : 2;
       await refreshActiveTask(page, panel, second, expectedPosts);
       checked('airborne-refresh-restores-task-region-and-enabled-cancel-without-repost');
       const cancellation = page.waitForResponse(response => response.url() === `${taskUrl(second.id)}/cancel` && response.request().method() === 'POST');
-      await panel.getByRole('button', { name: '取消并降落', exact: true }).click();
+      await panel.getByRole('button', { name: '停止并安全返回降落', exact: true }).click();
       await json(await cancellation);
       second = await waitTask(page.request, second.id, task => terminal.has(task.status), 'cancelled flight lands and disarms', 120000);
       activeTask = undefined;

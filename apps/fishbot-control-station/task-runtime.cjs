@@ -29,6 +29,9 @@ async function bodyJSON(request) {
 }
 function createTaskRuntime(options) {
   const {sourceRoot, python, script, tasksRoot, apiPrefix, label} = options;
+  const collection = options.collection ?? 'tasks';
+  const collectionRoute = `/${collection}`;
+  const itemRoute = new RegExp(`^/${collection}/([^/]+)(?:/(cancel|return-home|artifacts/([a-z]+)(?:/([^/]+))?))?$`);
   const artifactKinds = options.artifactKinds ?? ['report','video'];
   fs.mkdirSync(tasksRoot, {recursive:true});
   const instanceId = randomUUID(); const children = new Map();
@@ -63,7 +66,7 @@ function createTaskRuntime(options) {
     const artifacts = {};
     for (const kind of artifactKinds) if (artifactPath(id,kind)) {
       const filename=options.artifactNames?.[kind];
-      artifacts[kind] = `${apiPrefix}/tasks/${id}/artifacts/${kind}${filename?`/${encodeURIComponent(filename)}`:''}`;
+      artifacts[kind] = `${apiPrefix}${collectionRoute}/${id}/artifacts/${kind}${filename?`/${encodeURIComponent(filename)}`:''}`;
     }
     // Worker filenames remain local; the browser receives same-origin artifact URLs.
     const { artifact_paths:_paths, artifacts:_artifacts, ...rest } = state;
@@ -77,16 +80,19 @@ function createTaskRuntime(options) {
       .flatMap(entry=>{ const value=task(entry.name); return value ? [value] : []; })
       .sort((a,b)=>b.submittedAt.localeCompare(a.submittedAt));
   }
-  function submit(id, station) {
+  function submit(id, station, context={}) {
     const dir = taskDir(id); if (!dir) return {code:400, value:{error:'任务 ID 格式无效。'}};
     const existing = task(id); if (existing) return {code:200, value:existing};
+    const invalid = options.validateSubmission?.(station, context);
+    if (invalid) return {code:400, value:{error:invalid}};
     const available = runtime(); if (!available.ready) return {code:503, value:{error:available.message}};
     if (!station || !Array.isArray(station.nodes) || !Array.isArray(station.program)) return {code:400, value:{error:'工作站需要 nodes 和 program 数组。'}};
     try { fs.mkdirSync(dir); } catch (error) {
       if (error.code === 'EEXIST') return {code:200, value:task(id) ?? {id,status:'pending',message:'同一任务正在创建，请查询原 ID。'}};
       throw error;
     }
-    writeJSON(path.join(dir,'request.json'), {id, submittedAt:new Date().toISOString(), station});
+    writeJSON(path.join(dir,'request.json'), {id, submittedAt:new Date().toISOString(), station,
+      ...(context.planId ? {planId:context.planId} : {})});
     writeJSON(path.join(dir,'status.json'), {status:'pending',phase:'starting',message:'等待执行器读取工作站。'});
     const log = fs.openSync(path.join(dir,'worker.log'),'a');
     const child = spawn(python, [script, '--station',path.join(dir,'request.json'),'--output-dir',dir,'--cancel-file',path.join(dir,'cancel.request'),...(options.workerArgs?.(dir) ?? [])], {
@@ -135,15 +141,15 @@ function createTaskRuntime(options) {
         send(response,403,{error:'请从本机工作台页面访问执行器。'}); return true;
       }
       if (route==='/runtime' && request.method==='GET') {send(response,200,runtime());return true;}
-      if (route==='/tasks' && request.method==='GET') {
+      if (route===collectionRoute && request.method==='GET') {
         const tasks=listTasks();
         for(const value of tasks) if(TERMINAL.has(value.status)) await options.ensureArtifacts?.(value.id,taskDir(value.id));
         send(response,200,{tasks:options.ensureArtifacts?listTasks():tasks});return true;
       }
-      if (route==='/tasks' && request.method==='POST') {
-        const body=await bodyJSON(request); const result=submit(body.taskId,body.station);send(response,result.code,result.value);return true;
+      if (route===collectionRoute && request.method==='POST') {
+        const body=await bodyJSON(request); const result=submit(body.taskId,body.station,body);send(response,result.code,result.value);return true;
       }
-      const match=/^\/tasks\/([^/]+)(?:\/(cancel|return-home|artifacts\/([a-z]+)(?:\/([^/]+))?))?$/.exec(route);
+      const match=itemRoute.exec(route);
       if (match && VALID_ID.test(match[1])) {
         const id=match[1];
         if (request.method==='GET' && !match[2]) {

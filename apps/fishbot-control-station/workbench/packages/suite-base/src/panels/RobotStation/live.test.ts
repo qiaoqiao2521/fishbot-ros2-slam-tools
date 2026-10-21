@@ -81,6 +81,18 @@ describe("SO101 native live scene source", () => {
     );
   });
 
+  it("selects a real completed plan for geometry display without submitting flight", async () => {
+    const station = defaultDroneStation();
+    await previewStation(station, new AbortController().signal, "plan-id");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/drone/preview",
+      expect.objectContaining({
+        body: JSON.stringify({ station, planId: "plan-id" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps task identity visible independently of terminal state", () => {
     expect(
       sceneModeLabel({

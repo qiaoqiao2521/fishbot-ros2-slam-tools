@@ -17,7 +17,7 @@ import {
   Tooltip,
   useTheme,
 } from "@mui/material";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { useLongPress } from "react-use";
 import tc from "tinycolor2";
@@ -32,6 +32,10 @@ import PublishGoalIcon from "@lichtblick/suite-base/components/PublishGoalIcon";
 import PublishPointIcon from "@lichtblick/suite-base/components/PublishPointIcon";
 import PublishPoseEstimateIcon from "@lichtblick/suite-base/components/PublishPoseEstimateIcon";
 import { usePanelMousePresence } from "@lichtblick/suite-base/hooks/usePanelMousePresence";
+import {
+  getDroneEditor,
+  subscribeDroneEditor,
+} from "@lichtblick/suite-base/panels/RobotStation/droneEditor";
 import { HUD } from "@lichtblick/suite-base/panels/ThreeDeeRender/HUD";
 import { customTypography } from "@lichtblick/theme";
 
@@ -179,6 +183,9 @@ export function RendererOverlay(props: Props): React.JSX.Element {
     clientY: 0,
   });
   const renderer = useRenderer();
+  const droneEditor = useSyncExternalStore(subscribeDroneEditor, getDroneEditor);
+  const editingDrone =
+    droneEditor?.enabled === true && renderer?.topicsByName?.has("/drone/live/scene") === true;
 
   const getHoverEntityId = useCallback((pickedRenderable: PickedRenderable): string => {
     const entityId = (pickedRenderable.renderable.userData as { entityId?: string }).entityId;
@@ -195,14 +202,45 @@ export function RendererOverlay(props: Props): React.JSX.Element {
   // Toggle object selection mode on/off in the renderer
   useEffect(() => {
     if (renderer) {
-      renderer.setPickingEnabled(interactionsTabType != undefined);
+      renderer.setPickingEnabled(interactionsTabType != undefined || editingDrone);
     }
-  }, [interactionsTabType, renderer]);
+  }, [interactionsTabType, renderer, editingDrone]);
 
   useRendererEvent(
     "renderablesClicked",
     useCallback(
       (selections, cursorCoords) => {
+        if (editingDrone) {
+          for (const selection of selections) {
+            const details = selection.renderable.details();
+            const metadata = details.metadata;
+            const nodeId = Array.isArray(metadata)
+              ? metadata.find(
+                  (item) =>
+                    item != undefined &&
+                    typeof item === "object" &&
+                    "key" in item &&
+                    item.key === "station_node_id",
+                )
+              : undefined;
+            const id =
+              nodeId != undefined && typeof nodeId === "object" && "value" in nodeId
+                ? nodeId.value
+                : selection.renderable.idFromMessage();
+            if (
+              typeof id === "string" &&
+              droneEditor.station.nodes.some(
+                (node) => node.id === id && node.kind === "obstacle" && node.enabled !== false,
+              )
+            ) {
+              droneEditor.select(id);
+              setSelectedRenderable(undefined);
+              setSelectedRenderables([]);
+              return;
+            }
+          }
+          return;
+        }
         const rect = props.canvas?.getBoundingClientRect();
         if (rect) {
           setClickedPosition({
@@ -213,7 +251,7 @@ export function RendererOverlay(props: Props): React.JSX.Element {
         setSelectedRenderables(selections);
         setSelectedRenderable(selections.length === 1 ? selections[0] : undefined);
       },
-      [props.canvas],
+      [props.canvas, editingDrone, droneEditor],
     ),
   );
 
@@ -332,8 +370,8 @@ export function RendererOverlay(props: Props): React.JSX.Element {
 
   // Inform the Renderer when a renderable is selected
   useEffect(() => {
-    renderer?.setSelectedRenderable(selectedRenderable);
-  }, [renderer, selectedRenderable]);
+    renderer?.setSelectedRenderable(editingDrone ? undefined : selectedRenderable);
+  }, [renderer, selectedRenderable, editingDrone]);
 
   const publickClickButtonRef = useRef<HTMLButtonElement>(ReactNull);
   const [publishMenuExpanded, setPublishMenuExpanded] = useState(false);
@@ -447,6 +485,32 @@ export function RendererOverlay(props: Props): React.JSX.Element {
     <>
       {props.interfaceMode === "image" && <PanelContextMenu getItems={getContextMenuItems} />}
       <div ref={mousePresenceRef} className={classes.root}>
+        {editingDrone && (
+          <Paper style={{ pointerEvents: "auto", display: "flex" }}>
+            <Button
+              size="small"
+              aria-label="拖动障碍位置"
+              aria-pressed={droneEditor.mode === "translate"}
+              variant={droneEditor.mode === "translate" ? "contained" : "text"}
+              onClick={() => {
+                droneEditor.setMode("translate");
+              }}
+            >
+              移动
+            </Button>
+            <Button
+              size="small"
+              aria-label="拖动障碍尺寸"
+              aria-pressed={droneEditor.mode === "scale"}
+              variant={droneEditor.mode === "scale" ? "contained" : "text"}
+              onClick={() => {
+                droneEditor.setMode("scale");
+              }}
+            >
+              尺寸
+            </Button>
+          </Paper>
+        )}
         {
           // Only show on hover for image panel
           (props.interfaceMode === "3d" || mousePresent) && (
@@ -511,7 +575,9 @@ export function RendererOverlay(props: Props): React.JSX.Element {
           selectObject={(selection) => {
             if (selection) {
               const renderable = (
-                selection.object as unknown as { interactionData: { renderable: Renderable } }
+                selection.object as unknown as {
+                  interactionData: { renderable: Renderable };
+                }
               ).interactionData.renderable;
               const instanceIndex = selection.instanceIndex;
               setSelectedRenderables([]);
@@ -521,7 +587,9 @@ export function RendererOverlay(props: Props): React.JSX.Element {
         />
       )}
       <HUD renderer={renderer} />
-      <HoverTooltip entities={hoveredEntities} position={hoverPosition} canvas={props.canvas} />
+      {!editingDrone && (
+        <HoverTooltip entities={hoveredEntities} position={hoverPosition} canvas={props.canvas} />
+      )}
       {stats}
       {resetViewButton}
     </>

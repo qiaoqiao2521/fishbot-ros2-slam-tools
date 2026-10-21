@@ -7,11 +7,17 @@
   "configById": {
     "RobotStation!dronestation": {
       "lichtblickPanelTitle": "PX4 场景与飞行程序",
+      "previewPlanId": "",
       "station": {
         "platform": "px4",
         "flight": {
-          "speed_m_s": 1,
-          "planner": "waypoint"
+          "speed_m_s": 2,
+          "planner": "ego",
+          "acceptance": {
+            "max_altitude_m": 2.2,
+            "position_tolerance_m": 0.3,
+            "min_clearance_m": 0.25
+          }
         },
         "name": "PX4 四旋翼巡航",
         "nodes": [
@@ -48,7 +54,7 @@
             "name": "航点 2",
             "kind": "target",
             "parent": "home",
-            "position": [3, 3, 3]
+            "position": [3, 3, 2]
           },
           {
             "id": "wp3",
@@ -96,7 +102,7 @@
             "seconds": 1
           }
         ],
-        "notes": "本地 PX4 + Gazebo 四旋翼仿真。X 向东、Y 向北、Z 向上，单位米。航点模式尚不自动绕障；实际飞行状态和轨迹由仿真反馈。"
+        "notes": "本地 PX4 + Gazebo 四旋翼仿真。X 向东、Y 向北、Z 向上，单位米。先做 EGO 场景模型预演；正式飞行使用 Gazebo 理想定位和深度图。"
       },
       "executionTaskId": ""
     },

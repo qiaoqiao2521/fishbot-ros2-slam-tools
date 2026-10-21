@@ -14,16 +14,18 @@ export type SceneMode = {
   phase?: string;
   status?: string;
   simulation_s?: number;
+  planId?: string;
 };
 
 export async function previewStation(
   station: Station,
   signal: AbortSignal,
+  planId?: string,
 ): Promise<SceneMode> {
   return await requestSimulation<SceneMode>(
     "/preview",
     signal,
-    { station },
+    { station, ...(planId ? { planId } : {}) },
     stationPlatform(station),
   );
 }

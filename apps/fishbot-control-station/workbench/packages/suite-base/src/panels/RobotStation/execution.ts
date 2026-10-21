@@ -26,6 +26,17 @@ export type SimulationRuntime = {
   executor?: { planners?: string[] };
 };
 
+export type DronePlanTask = Omit<SimulationTask, "report"> & {
+  report?: {
+    planner: string;
+    flight_control: boolean;
+    valid: boolean;
+    points?: [number, number, number][];
+    min_clearance_m?: number;
+    reason?: string;
+  };
+};
+
 export class TaskRequestError extends Error {
   public constructor(
     message: string,

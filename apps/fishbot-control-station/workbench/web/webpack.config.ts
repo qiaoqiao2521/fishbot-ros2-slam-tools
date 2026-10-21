@@ -16,7 +16,9 @@ import {
 import packageJson from "../package.json";
 
 const params: ConfigParams = {
-  outputPath: path.resolve(__dirname, ".webpack"),
+  outputPath: process.env.WORKBENCH_BUILD_DIR
+    ? path.resolve(process.env.WORKBENCH_BUILD_DIR)
+    : path.resolve(__dirname, ".webpack"),
   contextPath: path.resolve(__dirname, "src"),
   entrypoint: "./entrypoint.tsx",
   prodSourceMap: "source-map",

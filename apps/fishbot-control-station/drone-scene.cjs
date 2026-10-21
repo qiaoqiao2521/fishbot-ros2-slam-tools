@@ -31,15 +31,39 @@ function sceneFor(station={},sample={},options={}){
    spheres:[{pose:{position:p,orientation:identity},size:{x:.14,y:.14,z:.14},color:{r:.1,g:.55,b:1,a:1}}],
    texts:[{pose:{position:{...p,z:p.z+.2},orientation:identity},billboard:true,font_size:.18,scale_invariant:false,color:{r:.1,g:.2,b:.3,a:1},text:node.name??node.id}],
   }));
-  if(node.kind==='obstacle')entities.push(entity(`obstacle-${node.id}`,seconds,{
-   cubes:[{pose:{position:p,orientation:identity},size:xyz(node.size??[1,1,2]),color:{r:.85,g:.35,b:.12,a:1}}],
-  }));
+  if(node.kind==='obstacle'&&node.enabled!==false){
+   const observed=sample.obstacles?.find(obstacle=>obstacle.id===node.id);
+   // A moving body's command is not its observed pose. Until observed, omit it.
+   if(!options.preview&&node.motion&&!observed)continue;
+   entities.push(entity(`obstacle-${node.id}`,seconds,{
+    metadata:[{key:'station_node_id',value:node.id}],
+    cubes:[{pose:{position:observed?xyz(observed.position):p,orientation:identity},
+     size:xyz(observed?.size??node.size??[1,1,2]),color:{r:.85,g:.35,b:.12,a:1}}],
+   }));
+  }
  }
  const goalPath=(station.program??[]).flatMap(step=>{
   const node=nodes.find(n=>n.id===step.target);
   return node&&['takeoff','waypoint'].includes(step.action)?[position(node,nodes)]:[];
  });
  if(goalPath.length>1)entities.push(entity('planned-waypoints',seconds,{lines:[line(goalPath,{r:.15,g:.55,b:1,a:.6},.015)]}));
+ if(options.plan?.points?.length>1){
+  const plan=options.plan, unsafe=new Set(plan.unsafe_point_indices??[]);
+  const lines=[];
+  for(let i=1;i<plan.points.length;i++){
+   const invalid=unsafe.has(i-1)||unsafe.has(i);
+   lines.push(line([plan.points[i-1],plan.points[i]],invalid?{r:1,g:.12,b:.1,a:1}:{r:1,g:.78,b:.05,a:1},.04));
+  }
+  entities.push(entity('ego-offline-trajectory',seconds,{lines,metadata:[
+   {key:'planner',value:plan.planner??'EGO-Swarm'},{key:'flight_control',value:'false'},
+  ]}));
+ }
+  for(const column of options.plan?.px4_vertical_columns??[]){
+   entities.push(entity(`px4-preview-${column.phase}`,seconds,{
+    lines:[line([column.start,column.end],column.valid?{r:.55,g:.6,b:.65,a:.8}:{r:1,g:.12,b:.1,a:1},.025)],
+    metadata:[{key:'controller',value:'PX4 vertical column'},{key:'flight_control',value:'false'}],
+   }));
+  }
  if(sample.trajectory?.length>1)entities.push(entity('actual-trajectory',seconds,{lines:[line(sample.trajectory,{r:.1,g:.8,b:.4,a:1},.035)]}));
  let pose=sample.pose;
  if(options.preview)pose={position:position(nodes.find(n=>n.kind==='robot')??{position:[0,0,0]},nodes),orientation:identity};

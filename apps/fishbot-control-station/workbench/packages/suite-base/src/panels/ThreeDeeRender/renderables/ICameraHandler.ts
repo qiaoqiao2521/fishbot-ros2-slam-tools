@@ -24,6 +24,8 @@ export interface ICameraHandler extends SceneExtension {
    * Gets the state of the camera if interface mode supports it, otherwise undefined
    */
   getCameraState(): CameraState | undefined;
+  /** Temporarily suspend orbit gestures while a native edit handle is dragged. */
+  setInteractionEnabled?(options: { enabled: boolean }): void;
   /**
    * Used to update the aspect ratio of the camera when necessary
    * @param width - The width of the render canvas in CSS pixels
