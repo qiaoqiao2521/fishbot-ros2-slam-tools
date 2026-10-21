@@ -767,10 +767,10 @@ class BridgeRaceTests(unittest.TestCase):
     def test_loaded_success_waits_for_native_smoother_stop_before_hold_but_failure_holds_immediately(self):
         for loaded,success in ((True,True),(False,True),(True,False)):
             with self.subTest(loaded=loaded,success=success):
-                self.setUp();p=self.bridge;handle=ControlledHandle();held=[]
+                self.setUp();p=self.bridge;handle=ControlledHandle();held=[];stable_at=[]
                 if loaded:p.loaded_limits=NS(phase='applied')
                 def hold(message):
-                    held.append((message.data,p.raw['car']['speed']))
+                    held.append((message.data,p.raw['car']['speed'],p.raw['stamp']))
                     p.raw['car_hold']=p.raw['car']['hold']=message.data
                 p.hold_pub=NS(publish=hold)
                 p.nav.send_goal_async=lambda request:ControlledFuture(handle,True)
@@ -778,7 +778,11 @@ class BridgeRaceTests(unittest.TestCase):
                     if not handle.result_future.done():
                         p.raw['car']['speed']=.05
                         handle.result_future.resolve(NS(status=4 if success else 6))
-                    elif self.clock>=100.12:p.raw['car']['speed']=0.
+                    elif self.clock>=100.25:
+                        p.raw['car']['speed']=0.
+                        if not stable_at:stable_at.append(p.raw['stamp'])
+                    elif self.clock>=100.17:p.raw['car']['speed']=.013
+                    elif self.clock>=100.12:p.raw['car']['speed']=.008
                 self.on_sleep=advance
                 if success:p.navigate(self.goal(),carrying=True)
                 else:
@@ -790,6 +794,8 @@ class BridgeRaceTests(unittest.TestCase):
                     evidence=p.dispatches[0]['stopped_before_hold']
                     self.assertEqual(evidence['linear_speed'],0.)
                     self.assertFalse(evidence['car_hold_before'])
+                    self.assertGreaterEqual(first_hold[2]-stable_at[0],.7-1e-9)
+                    self.assertEqual(evidence['required_continuous_stop_source_s'],.7)
 
     def test_stale_callback_cancels_only_its_handle_without_overwriting_new_task(self):
         p=self.bridge;old={'token':p.execution_token,'epoch':1,'received':False,'handle':None,'result':None,'cancel':None,'aborted':True,'error':None}

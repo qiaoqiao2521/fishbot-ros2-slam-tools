@@ -1048,8 +1048,11 @@ def run(args):
                 native = getattr(result, 'result', None)
                 if (carrying and result.status == 4 and getattr(native,'success',True) is True
                         and getattr(getattr(self, 'loaded_limits', None), 'phase', None) == 'applied'):
-                    raw = self.wait_condition(stopped, duration=.02, timeout=6., carrying=True)
+                    # A brief threshold crossing can precede the smoother's
+                    # zero command. Do not hard-hold through its braking tail.
+                    raw = self.wait_condition(stopped, duration=.7, timeout=6., carrying=True)
                     dispatch['stopped_before_hold'] = {'source_stamp': raw['stamp'],
+                        'required_continuous_stop_source_s': .7,
                         'linear_speed': raw['car']['speed'], 'angular_speed': raw['car']['yaw_rate'],
                         'car_hold_before': raw['car_hold']}
                 self.hold(True, token)

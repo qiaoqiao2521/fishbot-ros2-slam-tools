@@ -121,7 +121,7 @@ job1新attempt 0c1bf47d在准备导航失败：原Nav31701beb到5，没有Dock/�
 
 ## P8 Current
 
-in_progress：车型/传感器/任务配置、实际四轮底盘/工位/托盘、2D+3D接线、原UUID出站/载货参数与网页配置草稿已实现。当前 J100+3D 多次完整运输有单批成功，但同一冻结候选的三批 A/A/B 尚未全部通过；其余三条最终矩阵尚未运行，不能称4组合12/12。K2在360墙秒内未完成最终朝向；最新只读证据显示小转向请求下轮速伺服稳态误差大，正独立做20例低速响应校准。原质量/摩擦/扭矩、碰撞/时效/评分不放宽。F1默认FishBot开放场景2/2已独立交付，不能代替P8。
+in_progress：车型/传感器/任务配置、实际四轮底盘/工位/托盘、2D+3D接线、原UUID出站/载货参数与网页配置草稿已实现。最新冻结候选L（82902c5）首行J100+3D首批在227.62墙秒失败：停靠/真实抓放/回臂/直线出站与原K通过，但出站结束附近货物保持判据失效，最终Nav未发。L整行false，其余三行未启动；旧K的360秒朝向失败与所有A–L原件保留。正在离线核对接触/足迹和刹停瞬态，不放宽原物理/时间/碰撞评分。F1开放场景2/2与占用1/2仍独立，不计P8完成。
 
 最新根验证：完整反馈1621项通过（control891/mission209/autonomy61/frontend460，零skip/缺依赖）；133项P8/F1相关完整原生离线测试通过。随后雷达自定义topic/range统一接线与goal XY持续检查的6项composition测试通过；新goal参数尚待完整原生运行验证。前端桌面/390px实际配置草稿与下载验收保持，非运行时热换。知识updated(local)，已回写Wiki/ROS2 与 FishBot第19/20节及开发知识入口并读回，独立知识仓未提交发布。当前root继续校准与冻结面板；后文为逐轮历史，旧失败原件不覆盖。
 
@@ -239,3 +239,14 @@ F1 occupied-v2终点发现SimpleGoalChecker早锁XY后在转向期间漂出原15
 原始开发证据：~/.cache/fishbot/profile-reuse-20261020/calibration-low-speed/{summary.json,controller-candidates-requested/summary.json,provenance.json}。首批软件checkpoint bb9141e已推origin/main并读回一致；L新增适配尚未提交，四组合最终运输仍待执行。当前owner=root，不启动实车/训练/云GPU。
 
 L冻结前定向回读：signed原回归独立1/1；修正后的skid+composition 8/8（14.511s）；生成prepare合同13/13（12.311s）。control-l的891项中890通过，唯一失败为未更新的出站速度旧期望.02，已由13项prepare完整复验覆盖，保留原fail报告，不伪称那次整组全绿。新源码差异检查通过。知识第19节与入口再补轮速伺服/双重XY锁定，已读回；仅本地知识回写。下一步由内部native_matrix_l按四组合串行执行，同一源码，不重跑F1 open来充数。
+
+L正式原生结果：227.62墙秒，task89f0797f-cc9d-484f-849d-4856ce79bdb0 / episode23cf306d-458a-479f-991a-f21b9eb8c0f4，原Nav/Dock/Drive终态均4，Drive UUIDa43734fcb29e4186b0ef14406728b1b6。原K全过、货物XY最大位移.7077469m；continuous_handoff在stamp161.72记录一次cargo_retained_full_footprint=false，桥time162.56终态failed/运输途中货物离开托盘支撑范围。目标距离仍.94657m、finalNav未发，不计A完成。原先“原K通过”不包含这条新增持续保持/交付评分，三层均保留。
+
+L由内部worker独立核清理：参数两组恢复读回baseline、原生终态/独立quiet/hold/guard退出verified，18个owned PID均不存在、9110关闭。39源码/11生成文本起止一致；六历史unit全not-found，仅证明配置快照一致。其余三行零launch/start。L原始：~/.cache/fishbot/profile-reuse-20261020/matrix-final-l/jackal_j100-lidar3d/。82902c5已推origin/main并读回一致，工作树仅计划状态更新。owner=root，下一步是限定一次原/低正常减速的离线对照，而非自动重跑整任务。
+
+### M 最小修复：完成减速尾段后保持
+L原流witness161.72仅底接触false：中心(-.010188,-.0000778,.010115)m与完整足迹均合格，边缘余量36.17/46.29mm，原qpos底间隙+.09924mm，161.74恢复4接触。161.70仍hold=false/v=.00749、4轮目标.255102rad/s（等效.025m/s）；161.72 hold=true/4轮目标0，车速反跳.013835。真实零cmd较hold晚约.19墙秒，支持提前hold截断减速，而非货物越界。
+
+同一161.62稳定快照，原记录命令墙钟映射producer时间的有限两例：hold中点161.710复现161.720一次50Hz retained失败/6个500Hz离底、maxgap+.09198mm；原stopped连续.7源秒后hold162.660，50/500Hz均零失接触、maxgap-.04241mm。质量/材料/12Nm/kv32/原减速保持；完整足迹余量均≥35.924mm。合成速度幅值不等于原原生帧，旧零消息13次仍按原时龄拒绝，不能称精确消费相位或完整任务通过。证据~/.cache/fishbot/profile-reuse-20261020/brake-response-l/summary.json。
+
+根只将成功载货dispatch的soft-stop源持续期.02改.7，记录required_continuous_stop_source_s；失败/取消仍立即hold，原stopped阈值/360墙秒/物理评分不变。原105项core回归通过（31.743s），新增低速短暂跨阈再反弹序列可拒提前hold。首个直接模块测试命令缺tools PYTHONPATH为导入失败、零用例，原件保留；正确既有ROS+tools环境105过。当前准备M四组合新目录；未自动复用L失败或重发原UUID。

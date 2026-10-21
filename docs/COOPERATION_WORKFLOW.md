@@ -172,7 +172,7 @@ J100 继续使用原生 RPP，`max_angular_accel=2`、`rotate_to_heading_angular
 
 完成实际交接、回臂并hold停稳后，J100通过原生服务临时应用载货参数：`max_accel=[.025,0,.05]`、`max_decel=[-.1,0,-.2]`、`max_velocity=[.03,0,.05]`、`min_velocity=[-.03,0,-.05]`。应用和恢复均核原请求ACK及实际读回；清理时恢复任务开始前的原值。空车入站和Dock继续原平滑参数。参数值是命令限制，不是物理加速度保证；原物理评分保持。同时在原生RPP把载货期 `desired_linear_vel`、`regulated_linear_scaling_min_speed`、`min_approach_linear_velocity`设为0.03m/s，`rotate_to_heading_angular_vel`设为0.05rad/s；对应 `FollowPath.*` DOUBLE通过同一参数事务机制核active、应用、读回并恢复。低速曲线应由控制器按低速生成，不能只在下游分别裁线速度和角速度。
 
-J100出站复用原生 `DriveOnHeading`：沿当时车体方向以0.03m/s直行，ideal距离0.70m、vision距离0.65m，原生允许时间45源秒，再执行交付点导航。`egress_pose`仅为标称staging参考；实际请求是车体相对位移，不承诺精确抵达该世界坐标。出站与交付各核自己的UUID、顺序和原生终态。成功载货动作先等待平滑停稳，再hold；异常与取消仍立即hold。
+J100出站复用原生 `DriveOnHeading`：沿当时车体方向以0.03m/s直行，ideal距离0.70m、vision距离0.65m，原生允许时间45源秒，再执行交付点导航。`egress_pose`仅为标称staging参考；实际请求是车体相对位移，不承诺精确抵达该世界坐标。出站与交付各核自己的UUID、顺序和原生终态。成功载货动作先连续0.7源秒满足原stopped判据再hold，让平滑器减速尾段完成；20ms短暂进入阈值不足以证明减速完成。异常与取消仍立即hold。
 
 上述参数是当前待运输验收候选。kv32的六个载货阶跃中原50Hz保持谓词无失败，但一次500Hz底接触间断已保留；不把离线面板记成整任务成功。
 
