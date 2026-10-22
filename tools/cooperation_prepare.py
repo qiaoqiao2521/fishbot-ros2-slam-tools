@@ -52,7 +52,7 @@ def navigation_behavior(project, output):
                  for source in (helper,default,validity)]
 
 
-def staging_navigation(params, behavior_path, output):
+def staging_navigation(params, behavior_path, output, *, transport_planner=None):
     """Isolate transit XY latches using existing native plugins and trees."""
     controller = params['controller_server']['ros__parameters']
     controller['StagingPath'] = copy.deepcopy(controller['FollowPath'])
@@ -67,6 +67,11 @@ def staging_navigation(params, behavior_path, output):
     for follow in main.iter('FollowPath'):
         follow.set('goal_checker_id','general_goal_checker')
     staging = copy.deepcopy(main)
+    if transport_planner is not None:
+        for compute in main.iter('ComputePathToPose'):
+            compute.set('planner_id',transport_planner)
+        for compute in staging.iter('ComputePathToPose'):
+            compute.set('planner_id','GridBased')
     for selector in staging.iter('ControllerSelector'):
         selector.set('default_controller','StagingPath')
     for follow in staging.iter('FollowPath'):
@@ -87,16 +92,21 @@ def navigation_planner(params, profile='navfn'):
         # Nav2 1.3.13 SmacPlannerHybrid, Apache-2.0. DUBIN is forward-only,
         # matching RPP allow_reversing=false. No approximate goal fallback.
         previous = planner['GridBased']
-        planner['GridBased'] = {
+        planner['HeadingAware'] = {
             'plugin': 'nav2_smac_planner::SmacPlannerHybrid',
             'tolerance': 0., 'allow_unknown': previous.get('allow_unknown', True),
             'motion_model_for_search': 'DUBIN', 'minimum_turning_radius': .20,
             'angle_quantization_bins': 72, 'lookup_table_size': 5.,
             'smooth_path': True,
         }
+        if 'HeadingAware' not in planner['planner_plugins']:
+            planner['planner_plugins'].append('HeadingAware')
     elif profile != 'navfn':
         raise ValueError('unknown native planner profile: '+str(profile))
-    return {'profile': profile, 'plugin': planner['GridBased']['plugin'],
+    chosen='HeadingAware' if profile=='smac-hybrid' else 'GridBased'
+    return {'profile': profile, 'plugin': planner[chosen]['plugin'],
+            'transport_planner': chosen if profile=='smac-hybrid' else None,
+            'staging_planner': 'GridBased',
             'role': 'global path generation; not controller or physical acceptance'}
 
 
@@ -352,7 +362,8 @@ def prepare(args):
         padding_m=float(params['local_costmap']['local_costmap']['ros__parameters'].get('footprint_padding', .01)))
     composition_navigation(params, manifest, args.output)
     planner_profile = navigation_planner(params,getattr(args,'navigation_planner','navfn'))
-    staging_behavior = staging_navigation(params,behavior_path,args.output)
+    staging_behavior = staging_navigation(params,behavior_path,args.output,
+        transport_planner=planner_profile.get('transport_planner'))
     nav_path=args.output/'cooperation-nav2.yaml';nav_path.write_text(yaml.safe_dump(params,sort_keys=False))
     manifest.update(map_yaml=str(localization_path),localization_map_yaml=str(localization_path),
         collision_map_yaml=str(collision_path),nav2_yaml=str(nav_path),static_map_rectangles=rectangles,

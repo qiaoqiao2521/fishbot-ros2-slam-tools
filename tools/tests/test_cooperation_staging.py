@@ -26,6 +26,7 @@ class StagingNavigationTests(unittest.TestCase):
         self.behavior = self.folder/'navigation.xml'
         self.behavior.write_text('<root><BehaviorTree><RecoveryNode number_of_retries="6">'
             '<ControllerSelector default_controller="FollowPath"/>'
+            '<ComputePathToPose planner_id="{selected_planner}"/>'
             '<FollowPath path="{path}" controller_id="{selected_controller}"/>'
             '<Wait wait_duration="5.0"/></RecoveryNode></BehaviorTree></root>')
 
@@ -41,15 +42,28 @@ class StagingNavigationTests(unittest.TestCase):
         result = navigation_planner(self.params, 'smac-hybrid')
         planner = self.params['planner_server']['ros__parameters']
         self.assertEqual(result['plugin'], 'nav2_smac_planner::SmacPlannerHybrid')
-        self.assertEqual(planner['GridBased']['motion_model_for_search'], 'DUBIN')
-        self.assertEqual(planner['GridBased']['tolerance'], 0.)
-        self.assertEqual(planner['GridBased']['allow_unknown'],
+        self.assertEqual(planner['HeadingAware']['motion_model_for_search'], 'DUBIN')
+        self.assertEqual(planner['HeadingAware']['tolerance'], 0.)
+        self.assertEqual(planner['HeadingAware']['allow_unknown'],
                          before['planner_server']['ros__parameters']['GridBased']['allow_unknown'])
-        self.assertEqual({key: value for key, value in planner.items() if key != 'GridBased'},
+        self.assertEqual(planner['GridBased'],before['planner_server']['ros__parameters']['GridBased'])
+        self.assertEqual(planner['planner_plugins'],['GridBased','HeadingAware'])
+        self.assertEqual({key: value for key, value in planner.items() if key not in ('HeadingAware','planner_plugins')},
                          {key: value for key, value in before['planner_server']['ros__parameters'].items()
-                          if key != 'GridBased'})
+                          if key != 'planner_plugins'})
         self.assertEqual({key: value for key, value in self.params.items() if key != 'planner_server'},
                          {key: value for key, value in before.items() if key != 'planner_server'})
+
+    def test_optional_planner_routes_only_transport_and_preserves_stage_navfn(self):
+        profile=navigation_planner(self.params,'smac-hybrid')
+        path=staging_navigation(self.params,self.behavior,self.folder,
+                                transport_planner=profile['transport_planner'])
+        self.assertEqual(ET.parse(self.behavior).find('.//ComputePathToPose').get('planner_id'),
+                         'HeadingAware')
+        self.assertEqual(ET.parse(path).find('.//ComputePathToPose').get('planner_id'),'GridBased')
+        before=copy.deepcopy(self.params)
+        navigation_planner(self.params,'smac-hybrid')
+        self.assertEqual(self.params,before)
 
     def test_unknown_planner_does_not_partially_mutate_configuration(self):
         before = copy.deepcopy(self.params)

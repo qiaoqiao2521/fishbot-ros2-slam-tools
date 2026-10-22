@@ -65,3 +65,5 @@ fixed首阶段在源18.5s以后命令v始终0，轮轴真值从(-.2118484,-1.971
 此轮源码selected_text起止一致、运行681墙秒内、两任务均360内；A完整物理通过，B最终位置1.85cm但yaw1.57329rad失败。原完整oracle的native_goal_consumption_ack_claimed=false保持；先前两阶段DDS证明只能覆盖对应探针，不能转写为这两订单每个控制循环的回执。路线策略direct确实调用并返回None，无中转；via仍未跑，不形成策略优劣结论。
 
 当前源planner为NavfnPlanner，配置没有显式use_final_approach_orientation；RPP use_rotate_to_heading=true、stateful=false。同版RPP源码先按carrot到达距离选择目标朝向，否则按carrot方向选择路径转向。RotationShim的末端分支也以XY位置检查为入口，暂不叠加另一层转向。已安装同版SmacPlannerHybrid，官方实现将起终点yaw加入搜索，并使用原完整costmap足迹；选择其作为可选路径候选，控制/评分不改。来源：https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/src/regulated_pure_pursuit_controller.cpp 及 nav2_smac_planner/src/smac_planner_hybrid.cpp。当前只完成候选接线，尚未有新原生结果。
+
+全Smac check2604eaa4-3aef-4bc3-bf20-6d115323673c：原两个Goal均4，stage XY.06730769m/yaw.05267926rad失败，default XY.03825184m/yaw.02458898rad通过；整体false、errors空不等于业务通过。原生planner参数匹配，运行前后不变；GID切换已观察，69.224墙秒且完整清理。日志曾无法规划短U形再由原BT spin恢复，不能称姿态规划全面更优。基于默认运输段通过、原完整任务入站已成功的证据，下一候选仅运输换Smac，入站保留NavFn；保留该试验原件与源码a076e86。

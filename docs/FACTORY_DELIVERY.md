@@ -117,7 +117,7 @@ cmake --build "$HOME/.cache/fishbot/build/cooperation-plan-witness" -j2
 
 ## 实测边界
 
-可选姿态规划候选：`tools/cooperation_prepare.py --navigation-planner smac-hybrid`使用已安装的Nav2 SmacPlannerHybrid；默认`navfn`沿用源配置。候选使用DUBIN前进搜索、.20m最小转弯半径、72方向格和原生平滑，近似目标容差0。此选项只改GridBased规划，不改RPP、检查器、足迹、碰撞、地图、速度或原评分。生成manifest记录实际planner配置；短探针前后用原生参数服务回读。候选尚待原生短试验，不作为默认部署或完整运输成功。
+可选姿态规划候选：`tools/cooperation_prepare.py --navigation-planner smac-hybrid`保留原入站GridBased/NavFn，增加运输HeadingAware/SmacPlannerHybrid；默认`navfn`沿用源配置。两阶段树的ComputePathToPose分别明确选择插件。候选使用DUBIN前进搜索、.20m最小转弯半径、72方向格和原生平滑，近似目标容差0。不改RPP、检查器、足迹、碰撞、地图、速度或原评分。生成manifest记录实际planner配置；短探针前后回读全部规划插件。此前全阶段Smac试验未整体通过，不能默认部署或称完整运输已修复。
 
 开放通道首轮两订单均通过原物理评分。v2 占用通道的两次原生 Nav2 均成功，独立物理评分只有 A 通过；B 的最终位置误差 0.043478m，超过原 0.04m，保持失败。各轮任务均未超 360 墙秒，owned 实例已清理。详见所属进度与私有原始报告。
 

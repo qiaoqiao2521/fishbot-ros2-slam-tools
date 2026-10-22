@@ -192,3 +192,7 @@ B最后30墙秒只读取证已保存`order-2/terminal-convergence-readback.json`
 新增可选navigation_planner配置与prepare参数，默认不改原源配置；smac-hybrid只替换GridBased，控制/碰撞/目标检查器不变。原短探针新增真实planner参数前后回读，避免只换标签。尚未启动新原生试验；下一入口为原fixed两段Goal和新私有candidate manifest。采用知识第19节的双XY锁风险/目标方向、双时钟和真值隔离经验；knowledge_status=already_covered，候选未验收不写为知识结论。
 
 19项配置/探针检查通过.172s，原13项真实场景prepare检查通过10.149s，零skip。新candidate输入`smac-hybrid-20261022/scene/scene-manifest.json`直接复用原staged世界、两地图、原BT与几何，只使用同一navigation_planner函数替换GridBased；全部非planner节点独立比较不变。fixed静态check9bbf592c-7806-485e-9982-645f96611358通过，目标仍(-.25,-2,0)/(-.5,-2,π/2)，未步进。新原生短试验准备在143/9113单独执行，默认60源秒/70墙秒每段，完整运输尚未启动。
+
+全Smac原生试验`smac-hybrid-20261022/fixed-a076e86-a`已结束，check2604eaa4-3aef-4bc3-bf20-6d115323673c、69.224墙秒，passed=false/errors=[]。原Goal均4，stage物理.06730769m/.05267926rad失败，default物理.03825184m/.02458898rad通过；真实planner参数匹配/前后不变、RPP GID切换已观察、原UUID/hold/quiet/见证/native上下文/launch/端口全清理。不修改该失败，不因两个Nav4当通过。
+
+下一软件候选保留原GridBased/NavFn及全部入站控制，只增加HeadingAware给运输树显式选择；短探针回读双planner。此更改不是原全Smac结果改判，新输入另建`smac-transport-20261022/scene/`。短入站旧失败不重定义评分，若新默认运输段通过且原入站软件未变，再用原完整任务验证实际Dock/交接与A/B；完整运输此前未启动。

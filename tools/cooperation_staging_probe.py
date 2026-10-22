@@ -476,9 +476,10 @@ def main(argv=None):
   expected={name:(c[name] if '.' not in name else c[name.split('.')[0]][name.split('.')[1]]) for name in names}
   actual=get_parameters('controller_server',names);report['controller_parameters']={'expected':expected,'actual':actual,'matches':expected==actual}
   planner_config=config['planner_server']['ros__parameters']
-  planner_names=['planner_plugins']+['GridBased.'+key for key in planner_config['GridBased']]
+  planner_names=['planner_plugins']+[plugin+'.'+key for plugin in planner_config['planner_plugins']
+    for key in planner_config[plugin]]
   planner_expected={key:(planner_config[key] if '.' not in key else
-    planner_config['GridBased'][key.split('.',1)[1]]) for key in planner_names}
+    planner_config[key.split('.',1)[0]][key.split('.',1)[1]]) for key in planner_names}
   planner_actual=get_parameters('planner_server',planner_names)
   report['planner_parameters']={'expected':planner_expected,'actual':planner_actual,
    'matches':planner_expected==planner_actual}
