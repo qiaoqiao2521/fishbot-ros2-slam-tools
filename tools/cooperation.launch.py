@@ -31,6 +31,11 @@ def start(context):
     record_state=LaunchConfiguration('record_state',default='false').perform(context).lower()
     if record_state not in ('true','false'):
         raise RuntimeError('record_state must be true or false')
+    publication_mode=LaunchConfiguration('publication_mode',default='source').perform(context)
+    if publication_mode not in ('source','asynchronous'):
+        raise RuntimeError('publication_mode must be source or asynchronous')
+    publication_env=({'RMW_FASTRTPS_PUBLICATION_MODE':'ASYNCHRONOUS'}
+                     if publication_mode=='asynchronous' else {})
     simulation=[python,str(root/'cooperation_sim.py'),'--scene',manifest['world_xml'],
         '--manifest',str(manifest_path),'--domain',domain,
         '--stamped-cmd-vel','--frame-dir',str(frames),'--frame-fps','2',
@@ -42,9 +47,10 @@ def start(context):
             '--state-log-backups',LaunchConfiguration('state_log_backups',default='3').perform(context)]
     actions=[SetEnvironmentVariable('ROS_DOMAIN_ID',domain),
         SetEnvironmentVariable('ROS_AUTOMATIC_DISCOVERY_RANGE','LOCALHOST'),SetEnvironmentVariable('ROS_LOCALHOST_ONLY','1'),
-        ExecuteProcess(cmd=simulation,output='screen',on_exit=Shutdown()),
+        ExecuteProcess(cmd=simulation,additional_env=publication_env,output='screen',on_exit=Shutdown()),
         ExecuteProcess(cmd=[python,str(root/'cooperation_bridge.py'),'--manifest',str(manifest_path),'--domain',domain,
-            '--port',port,'--frame-dir',str(frames),'--output',str(output/'tasks')],output='screen',on_exit=Shutdown()),
+            '--port',port,'--frame-dir',str(frames),'--output',str(output/'tasks')],
+            additional_env=publication_env,output='screen',on_exit=Shutdown()),
         Node(package='nav2_map_server',executable='map_server',name='cooperation_collision_map_server',
             parameters=[{'use_sim_time':True,'yaml_filename':manifest['collision_map_yaml'],
                          'topic_name':'cooperation_collision_map','frame_id':'map','autostart_node':True}],
@@ -83,6 +89,8 @@ def generate_launch_description():
     return LaunchDescription([DeclareLaunchArgument('manifest'),DeclareLaunchArgument('python'),
         DeclareLaunchArgument('output'),DeclareLaunchArgument('domain',default_value='114'),
         DeclareLaunchArgument('record_state',default_value='false',description='Enable bounded rolling diagnostics, not scoring evidence'),
+        DeclareLaunchArgument('publication_mode',default_value='source',
+            description='Optional Fast DDS asynchronous sending for the two Python processes only'),
         DeclareLaunchArgument('state_log_hz',default_value='2'),
         DeclareLaunchArgument('state_log_max_bytes',default_value='8388608'),
         DeclareLaunchArgument('state_log_backups',default_value='3'),

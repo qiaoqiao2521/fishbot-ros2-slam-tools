@@ -34,6 +34,17 @@ with tempfile.TemporaryDirectory() as directory:
  context.launch_configurations.update({'domain':'114','manifest':str(p),'python':sys.executable,
      'output':'/unused/output','port':'9086'})
  actions=module['start'](context)
+ def additional_env(process):
+  return {perform_substitutions(context,k):perform_substitutions(context,v)
+          for k,v in (process.additional_env or [])}
+ owned=[a for a in actions if isinstance(a,ExecuteProcess) and not isinstance(a,Node)]
+ assert len(owned)==2 and all(not additional_env(a) for a in owned)
+ context.launch_configurations['publication_mode']='asynchronous'
+ asynchronous=module['start'](context)
+ owned=[a for a in asynchronous if isinstance(a,ExecuteProcess) and not isinstance(a,Node)]
+ assert all(additional_env(a)=={'RMW_FASTRTPS_PUBLICATION_MODE':'ASYNCHRONOUS'} for a in owned)
+ assert all(not additional_env(a) for a in asynchronous if isinstance(a,Node))
+ context.launch_configurations['publication_mode']='source'
  def simulation_cmd(actions):
   process=next(a for a in actions if isinstance(a,ExecuteProcess) and not isinstance(a,Node))
   return [perform_substitutions(context,part) for part in process.cmd]

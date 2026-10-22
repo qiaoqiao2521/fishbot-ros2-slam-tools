@@ -210,8 +210,14 @@ Omni短运动`fixed-cbe3251-a`已结束，check3e782927-7a2f-4341-9f59-bcb16e962
 按task_plan只允许一次独立同源复现到`direct-repeat/run`，若再出现同类时效失败便停止完整重复，先取证；不称同源码复现为新改善。当前task21cdd2d8-446e-4a2b-86a5-e7e5e3432db7已完成入站Nav eb096c050f114a9aaecb4fea188f4871及Dock aa1804c925084877a41907c001b7a94e（均4），闭爪装货中，完整结果在途。knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节加入参考点/原生AMCL均值段落，开发知识入口同步触发词，已rg读回原385/入口52行且diff检查通过；只讲已复现均值，不写完整业务已修复。独立知识仓保留原dirty，未提交推送。
 # 回合切换修复接续（2026-10-22）
 
-当前：首单完整物理通过，第二单因状态/ACK竞态未派发；修复已完成软件回归，原A/B新版本原生验收待运行。原`direct-repeat/run/result.json`保持unknown，不拼接旧首单成2/2。下一输出`smac-transport-20261022/amcl-motion-omni-20261022/direct-reset-fixed/run`，141/9111，保持原120/360/1000期限与所有物理门槛。
+当前：重置竞态已修复并通过原生跨单，但完整评分仍1/2，B在精停靠因观测过期取消。已停止同配置完整重试；新增只作用两个Python进程的异步发布候选，73项局部合同与原生writer模式读回通过。下一输出`smac-transport-20261022/amcl-motion-omni-20261022/direct-async/run`，141/9111，保持同输入、原120/360/1000期限及所有物理门槛。旧`direct-repeat`仍unknown，旧`direct-reset-fixed`仍failed。
 
 复现run4da35c3e-84b2-4f0c-b933-205cabb0fb02，237.506墙秒：首单task21cdd2d8-446e-4a2b-86a5-e7e5e3432db7通过原K/完整物理，XY2.439cm/yaw.02658rad、停稳2.58源秒；1start/1reset/0cancel，B未执行。reset原编号f8bb2c00-8be4-4517-9aed-2949e931a6e1已成功，新idle回合独立quiet.74源秒、原历史/所有Nav终态确认，确切owned PID432025、进程组和9111已清理；补充回读单列，不覆盖原runner清理失败。
 
 新增竞态回归先失败，再以成功ACK后重读state的最小修复通过72项调度/厂区测试（.396s，零skip）；原记录离线重放3GET/0POST推进waiting_ready/index1。源码尚待本轮冻结；不得把软件测试当完整业务通过。既有知识写回updated(local)保持，新竞态经验暂为pending，owner=本对话FishBot root，原生结果后串行决定是否回写原第20节。
+
+修复源码1790ccc的新原生run9ecd328c-002d-447a-86c3-f6cbc31b0d13，227.661墙秒，执行completed/任务failed/overallfalse。2start/1reset/0APIcancel，A taskb5f3bdd6-9604-43a7-82ee-028f067081c8原K及完整物理通过，165.638墙秒、XY.02500741m/yaw.00922804rad、连续静止2.52源秒；载货Nav ff7026deb7734821b53677eb44606118原4。原reset bb9eaf55-0437-44e4-93a9-acf63fd5eca4成功，B已派发，证明跨单衔接。B task9f90958d-f0a4-4634-ba10-d69cff5004c5，30.827墙秒，在Dock cb53cfeaa27c4a9da8e325d3666e5282阶段因工位相对观测过期取消5，入站Nav47b211257f974518b092b3b75a86fc73原4；源龄.34/接收龄.33279，不记B运输成绩。两份原source/recording完整性通过，owned进程/observer/端口全清理，源码起止不变。
+
+新证据`publication-stall-readback.json`：桥位姿publish用时.323778秒，期间独立physics收到17帧（9694–9710）、源间隔.02秒、接收最大.02116秒、缺序0；cache锁max12.43µs、physics callbackmax45.57ms。只定位桥发布/调度路径，底层等待原因未唯一隔离。官方rmw_fastrtps异步发送复用候选通过原生writer get_qos读回，私有诊断0消息/0动作；新增--publication-mode仅作用sim/bridge，原Nav2、QoS、阈值保持。73项调度/启动/厂区合同通过.909秒，下一完整运行仅测试新配置，不是原配置第三次重试。
+
+knowledge_status=updated(local)：重置两次GET竞态已写原Wiki/ROS2 与 FishBot第20节，原393行读回；开发知识入口54行已补触发词，两个文件diff检查通过。保留知识仓原dirty，未提交推送。异步发布尚为候选，不将未验收的效果写成知识结论。

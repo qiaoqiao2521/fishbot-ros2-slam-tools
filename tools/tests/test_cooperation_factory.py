@@ -282,7 +282,8 @@ class BoundaryTests(unittest.TestCase):
                   patch.object(LocalBridge, 'request', side_effect=AssertionError('HTTP invoked')),
                   contextlib.redirect_stdout(stream)):
                 rc = factory.main(['run', '--manifest', str(path), '--output', str(output),
-                                   '--candidate', 'new-algorithm-label', '--dry-run'])
+                                   '--candidate', 'new-algorithm-label',
+                                   '--publication-mode', 'asynchronous', '--dry-run'])
             self.assertEqual(rc, 0)
             self.assertFalse(output.exists())
             value = json.loads(stream.getvalue())
@@ -290,6 +291,9 @@ class BoundaryTests(unittest.TestCase):
             self.assertFalse(value['actions_started'])
             self.assertEqual(value['loaded_code']['git_head'], 'actual-head')
             self.assertFalse(value['declaration']['candidate_label_loads_code'])
+            self.assertEqual(value['declaration']['publication_mode']['requested'], 'asynchronous')
+            self.assertEqual(value['declaration']['publication_mode']['process_scope'],
+                             ['cooperation_sim', 'cooperation_bridge'])
 
 
 if __name__ == '__main__':

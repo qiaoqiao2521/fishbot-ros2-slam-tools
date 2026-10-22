@@ -131,6 +131,12 @@ open-v1 与 occupied-v2 之间补充了 teardown 诊断及保护单位快照，�
 
 B末30墙秒的862个原物理样本全程hold=false、禁碰0，XY误差1.31–2.23cm、偏航1.30–1.79rad；601条命令线速度全0、角速度±.8rad/s并换向21次。HTTP所记map位姿跨15mm圈20次，它不是逐周期控制器分支回执；只将末端收敛列为已定位环节，不独占因果。原完整任务oracle的`native_goal_consumption_ack_claimed=false`保持，本节前面的DDS消费证据来自独立两段探针，不移花接木为这轮每个动作的消费ACK。via尚未执行，需先解决末端收敛，再冻结新同源对照。
 
+## 发布阻塞配置实验
+
+`run --publication-mode asynchronous`只为共同世界和任务桥两个Python子进程设置Fast DDS异步发布；默认`source`沿用原环境。Nav2和独立观察器不随此开关改变；源时间戳、QoS、时效阈值、速度与物理评分保持原值。直接启动同一launch时对应`publication_mode:=asynchronous`。
+
+该配置复用[官方异步发送线程](https://github.com/ros2/rmw_fastrtps/tree/jazzy#change-publication-mode)，不新增转发节点。配置写入factory声明和实际启动命令；自定义XML可能覆盖该环境设置，需核原生配置。原生writer模式读回只证明设置生效，发布耗时和完整运输成绩仍以独立运行记录为准。同步模式下的旧时效失败保留。
+
 ## 来源
 
 借用 [ARIAC 官方任务场景](https://pages.nist.gov/ARIAC_docs/en/main/pages/scenario.html)的订单、运输车、命名工位与独立评价语义。没有复制其资产、AGV锁定机制或评分。当前小场景不是完整工业尺度或真机验收。

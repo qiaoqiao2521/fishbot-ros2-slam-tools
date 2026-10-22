@@ -449,6 +449,7 @@ def run(args, manifest, declaration):
         command = [str(launcher), 'run', 'manifest:='+str(runtime_manifest),
                    'output:='+str(output/'runtime'), 'domain:='+str(args.domain),
                    'port:='+str(args.port), 'record_state:=false']
+        command.append('publication_mode:='+getattr(args, 'publication_mode', 'source'))
         result['execution']['launch_command'] = command
         launch = spawn(command, 'launch')
         monitor = ReadOnlyMonitor()
@@ -630,6 +631,8 @@ def main(argv=None):
     execute.add_argument('--domain', type=int, default=141)
     execute.add_argument('--port', type=int, default=9111)
     execute.add_argument('--candidate', default='baseline', help='Display label; does not load code')
+    execute.add_argument('--publication-mode', choices=('source', 'asynchronous'), default='source',
+                         help='Fast DDS publication candidate for simulator and task bridge only')
     execute.add_argument('--policy-config', type=Path,
                          help='Explicit trusted local policy JSON; loads only during run')
     execute.add_argument('--order', action='append', help='Explicit permutation of all order IDs')
@@ -650,6 +653,11 @@ def main(argv=None):
                 raise ValueError('Choose an unprivileged TCP port')
             manifest = read_json(args.manifest)
             declaration = reference(manifest, candidate=args.candidate, order=args.order)
+            declaration['publication_mode'] = {
+                'requested': args.publication_mode,
+                'process_scope': ['cooperation_sim', 'cooperation_bridge'],
+                'changes_qos_or_freshness_thresholds': False,
+            }
             if args.policy_config is not None:
                 from cooperation_factory_policy import describe_config, require_supported
                 require_supported(manifest)
