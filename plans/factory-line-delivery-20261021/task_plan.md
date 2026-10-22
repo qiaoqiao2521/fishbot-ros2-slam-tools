@@ -26,3 +26,11 @@ F0 根对话只维护研究目录总计划；本 owner 维护 FishBot 的本三�
 
 ## 入站阶段XY状态最小候选（仅软件）
 fixed direct原入站120秒失败：15mm圈30源秒跨110次、v=0/w反转，尚未到路线选择阶段。优先复用原Nav2 1.3.13 FollowPath.controller_id/goal_checker_id及NavigateToPose.behavior_tree；不新增控制器实现/调度器/动作owner。为入站复制同一RPP及目标检查器配置，只有stateful=true；载货交付保留原FollowPath/目标检查器的false。各阶段显式树选择插件，原XY/yaw容差、速度、碰撞、进度期限、120/360与原oracle保持。新manifest提供staging树，旧manifest无字段时保持默认行为；实际请求路径单列，不冒充控制器消费回执。根只做纯软件配置/XML/请求路由检查，原13项prepare/native检查及新场景/完整运输须等明确窗口；不复用旧fixed prepared冒充新候选。
+
+## 2026-10-22 探针接续
+
+本轮完成离线准备：公开入口`tools/cooperation_staging_probe.py`默认预检；两个目标沿西侧各平移0.25m，作为控制流程fixture，与原配送评分分开。原图软代价不作硬碰撞边界，原运动/碰撞/到达门槛保持。复用`NavigationDiagnostics`，补每阶段超时保存、非零命令计数、AMCL/TF与有界物理记录；不再以旧空数组声称Stage2无消费。
+
+静态扫掠发现并修复分离旋转箱体的距离假负值：只在世界AABB严格分离时使用保守正下界，重叠仍查原生距离，不改变物理模型。15项相关回归和277姿态静态预检已通过，旧失败保留。
+
+下一原生窗口只运行此两阶段探针，确认两原UUID、实际控制、物理误差及清理。新fixture未运行；原occupied配送/direct/via仍待原场景独立验收。当前重实例资源保持交给SO101，不自动启动ROS/MuJoCo或运输。入口与明确命令见[厂区配送说明](../../docs/FACTORY_DELIVERY.md#阶段控制探针)。

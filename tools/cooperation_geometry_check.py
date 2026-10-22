@@ -12,6 +12,27 @@ import math
 from pathlib import Path
 
 
+def pair_clearance(model, data, a, b, cutoff=.20):
+    """Conservative lower bound for disjoint box AABBs, native query otherwise.
+
+    A positive-margin legacy box query can report a negative distance for
+    clearly separated rotated boxes. World AABB separation proves clearance
+    without shrinking either compiled box or changing the physics options.
+    """
+    import mujoco
+    import numpy as np
+    if (model.geom_type[a] == mujoco.mjtGeom.mjGEOM_BOX and
+            model.geom_type[b] == mujoco.mjtGeom.mjGEOM_BOX):
+        extents = [np.abs(data.geom_xmat[i].reshape(3, 3)) @ model.geom_size[i]
+                   for i in (a, b)]
+        gap = np.maximum(np.abs(data.geom_xpos[a]-data.geom_xpos[b])-
+                         extents[0]-extents[1], 0.)
+        lower_bound = float(np.linalg.norm(gap))
+        if lower_bound > 0:
+            return min(cutoff, lower_bound)
+    return float(mujoco.mj_geomDistance(model, data, a, b, cutoff, None))
+
+
 class SceneGeometry:
     """Independent query data; never changes the running physics instance."""
     def __init__(self, manifest):
@@ -52,7 +73,7 @@ class SceneGeometry:
         mujoco.mj_forward(model, data)
         minimum, witness = .20, None
         for a, b in self.pairs:
-            distance = float(mujoco.mj_geomDistance(model, data, a, b, .20, None))
+            distance = pair_clearance(model, data, a, b)
             if distance < minimum:
                 minimum, witness = distance, {'car_geom': model.geom(a).name,
                     'external_geom': model.geom(b).name, 'distance_m': distance}
@@ -75,6 +96,7 @@ class SceneGeometry:
         return {'passed': reason is None, 'scope': 'static_delivery_goal_original_geometry_and_scene_bounds',
                 'delivery_pose': goal, 'minimum_sampled_clearance_m': minimum,
                 'collision_pair_count': len(self.pairs), 'witness': witness,
+                'distance_policy': 'disjoint_box_aabb_lower_bound_else_native',
                 'scene_bounds': bounds, 'reason': reason, 'robot_geometry_shrunk': False,
                 'path_validated': False, 'arrival_validated': False}
 
@@ -115,7 +137,7 @@ def check(manifest_path):
             mujoco.mj_forward(model, data)
             count += 1
             for a, b in pairs:
-                distance = float(mujoco.mj_geomDistance(model, data, a, b, .20, None))
+                distance = pair_clearance(model, data, a, b)
                 if distance < minimum:
                     minimum = distance
                     witness = {'pose':[x,y,yaw], 'car_geom':model.geom(a).name,
@@ -128,6 +150,7 @@ def check(manifest_path):
             'spacing_bound_m':maximum_spacing_bound, 'geometry_margin_m':certified,
             'certified_margin_m':certified,
             'sample_count':count, 'collision_pair_count':len(pairs), 'witness':witness,
+            'distance_policy':'disjoint_box_aabb_lower_bound_else_native',
             'excluded_expected_contacts':['arena_floor_planes','target_collision cargo'],
             'spawn':spawn, 'waypoint_branches':paths, 'robot_geometry_shrunk':False,
             'manifest_sha256':hashlib.sha256(path.read_bytes()).hexdigest(),

@@ -40,6 +40,14 @@ fixed direct末段真实cmd线速度0而角速度正负交替，map 15mm圈30源
 
 同一e日志的17条旧时戳车体命令拒绝分布在两个静止Goal结束及清理周围，没有造成样本离开`car_hold`。它记录的是该旧命令被物理侧拒绝，不证明新鲜命令可被接纳，也不覆盖运动中的命令时效、导航或交付验收。
 
-2026-10-22 0.25m两阶段运动探针补充：RPP的`/received_global_plan`发布端在DDS发现中确有两个原生`controller_server` endpoint；rclpy普通消息回调未暴露`publisher_gid`，所以该字段只能作诊断，不能把“两阶段消息GID不相交”设为通过条件。Stage1收到364份计划、365条控制命令且原Goal4，已经证明Staging树进入控制循环；Stage1物理终点误差0.0940874m仍失败。Stage2从该偏差状态进入RPP碰撞重试与恢复，原Goal5。实体碰撞几何的局部净距与Nav2含0.3m inflation的collision map不是同一判据；目前只能确认二者判据差异，缺少RPP局部扫掠/costmap逐点代价证据，不能独占根因或换成开阔场景冒充原厂区路径通过。
+2026-10-22 0.25m两阶段运动探针补充：RPP的`/received_global_plan`发布端在DDS发现中确有两个原生`controller_server` endpoint；rclpy普通消息回调未暴露`publisher_gid`，所以该字段只能作诊断，不能把“两阶段消息GID不相交”设为通过条件。Stage1收到364份计划、365条控制命令且原Goal4，证明该请求窗口出现了控制计算；具体RPP实例的独立发布者归属仍缺失。Stage1物理终点误差0.0940874m仍失败。Stage2从该偏差状态进入RPP碰撞重试与恢复，原Goal5；旧探针超时后未复制该阶段消息，空数组不能证明没有计算。实体碰撞几何、软膨胀代价与RPP预测足迹是不同判据；缺少实际局部轨迹/costmap逐点代价证据，不能独占根因或换成开阔场景冒充原厂区路径通过。
 
 探针RCL上下文退出后，清理阶段的hold由真实physics源确认；这与launch/端口回收分开验收。阶段探针本身不改控制器、收敛或安全门槛。下一软件单位宜先只读提取Stage2的计划、局部costmap、RPP候选carrot/碰撞采样，并检查是否由终点收敛与inflation共同造成；任何修复须在新prepare、原场景和原评分下独立验收。
+
+### 本轮撤回的解释与已验证缺陷
+
+同版[InflationLayer](https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_costmap_2d/include/nav2_costmap_2d/inflation_layer.hpp)提供分级代价；[RPP CollisionChecker](https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_regulated_pure_pursuit_controller/src/collision_checker.cpp)按预测足迹及致命代价判断。不能从“目标中心距占用0.29m，膨胀半径0.3m”推断硬碰撞，也不能据此断言0.044m/s由膨胀层导致；[接近目标减速](https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_regulated_pure_pursuit_controller/include/nav2_regulated_pure_pursuit_controller/regulation_functions.hpp)等机制同样影响速度。本次明确撤回此前这两条因果解释，原运动失败不改判。
+
+旧探针在`get_result`成功返回之后才复制阶段消息。Stage2超时会跳过复制，故原result中的消息数量未知；不能再写“未产生计划/控制命令”。新增`record_phase_wait`在finally保存，测试实际触发其TimeoutError分支，核对已保存消息、原计数与未知终态。source/wall预算分开，缺GID保持unknown；每帧删除重复manifest，保留episode身份与单份完整来源。
+
+静态新fixture的首轮预检失败定位到MuJoCo3.3.7旧箱体查询：车姿态(0,-2,2.2938613026)，托盘中心(.0185194,-1.9303076,.162)，障碍中心(.35,-2.1,.25)，两世界AABB沿X分离，`mj_geomDistance(...,.2)`却返回-.506279389m。独立双箱最小模型复现其矛盾。公共几何查询现对严格分离的box-box返回保守AABB下界，AABB重叠仍调用原生查询；真实重叠负例和原声明路线的开放/占用检查通过。不改变nativeccd、接触、几何尺寸或原物理评分，不将该静态查询缺陷倒推为旧RPP失败根因。

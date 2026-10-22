@@ -10,6 +10,41 @@ PYTHON = Path.home()/'.cache/so101-colab/planning-venv/bin/python'
 
 
 class GeometryTests(unittest.TestCase):
+    def test_separated_rotated_box_uses_conservative_bound_and_keeps_overlap_rejected(self):
+        code = r'''
+import json,math,sys
+from unittest.mock import patch
+sys.path.insert(0,sys.argv[1]+'/tools')
+import mujoco
+from cooperation_geometry_check import pair_clearance
+yaw=2.2938613026211185
+xml=f"""
+<mujoco><option><flag nativeccd="disable"/></option><worldbody>
+<geom name="tray" type="box" pos=".01851943867418969 -1.930307601625479 .162"
+ size=".06 .06 .001" quat="{math.cos(yaw/2)} 0 0 {math.sin(yaw/2)}"/>
+<geom name="obstacle" type="box" pos=".35 -2.1 .25" size=".06 .15 .25"/>
+</worldbody></mujoco>
+"""
+m=mujoco.MjModel.from_xml_string(xml);d=mujoco.MjData(m);mujoco.mj_forward(m,d)
+a=m.geom('tray').id;b=m.geom('obstacle').id
+raw=float(mujoco.mj_geomDistance(m,d,a,b,.2,None))
+with patch.object(mujoco,'mj_geomDistance',side_effect=AssertionError('disjoint boxes need no native query')):
+ separated=pair_clearance(m,d,a,b)
+ capped=pair_clearance(m,d,a,b,.01)
+m.geom_pos[b]=m.geom_pos[a];mujoco.mj_forward(m,d)
+overlap=pair_clearance(m,d,a,b)
+print(json.dumps({'raw':raw,'separated':separated,'capped':capped,'overlap':overlap,
+ 'version':mujoco.__version__}))
+'''
+        run = subprocess.run([str(PYTHON), '-B', '-c', code, str(PROJECT)],
+                             capture_output=True, text=True, timeout=30)
+        self.assertEqual(run.returncode, 0, run.stdout+run.stderr)
+        result = json.loads(run.stdout)
+        self.assertGreater(result['separated'], .18)
+        self.assertLess(result['separated'], .20)
+        self.assertAlmostEqual(result['capped'], .01)
+        self.assertLessEqual(result['overlap'], 0.)
+
     def test_original_collision_model_certifies_clear_path_and_rejects_occupied_spawn(self):
         code = r'''
 import json,sys

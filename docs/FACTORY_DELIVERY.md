@@ -82,6 +82,24 @@ launch将同一显式manifest路径传给物理生产器和控制桥；独立sim
 
 未知错误、非法点、碰撞或子进程超时保留失败，不回退成baseline通过。dry-run只描述请求，不import或调用目标策略；report仅回读。31项纯软件合同检查通过，包括真实自定义模块调用；原生occupied的direct/via同场景对照仍pending，不能宣称路线更优或已通过。订单全reset边界不变。
 
+## 阶段控制探针
+
+`tools/cooperation_staging_probe.py` 已从私有探针整理成项目入口，默认只做静态预检。用当前 staged manifest 时，起点(0,-2,0)，两段目标为(-.25,-2,0)和(-.50,-2,π/2)。每段都有25cm平移，避免同点Goal在控制计算之前直接返回。这个fixture只验证控制流程，不能替代原厂区订单或direct/via对照。
+
+```bash
+env PYTHONPATH="/usr/lib/python3/dist-packages:${PYTHONPATH:-}" \
+  "$HOME/.cache/so101-colab/planning-venv/bin/python" -B \
+  tools/cooperation_staging_probe.py \
+  --manifest "$HOME/.cache/fishbot/factory-line-delivery-20261021/occupied-policy-staged-20261021/scene/scene-manifest.json" \
+  --output "$HOME/.cache/fishbot/staging-probe/preflight" --preflight-only
+```
+
+预检使用完整原始碰撞体，检查声明的“原地转向→直线→目标转向”扫掠，并扣除空间采样间距。箱体世界AABB明确分离时使用保守距离下界，重叠时继续原生几何查询；不改物理碰撞选项。源图到目标的距离只用于选择低干扰fixture，不能将膨胀区内的软代价解释为碰撞。实际Nav2路径、定位和停车仍须另验。
+
+取得原生资源窗口后，先加载`/opt/ros/jazzy/setup.bash`。在上述命令中选择新输出目录，将`--preflight-only`替换为`--run-native`，并增加`--domain 143 --port 9113`。只运行一个实例和两个顺序Goal；默认每段60源秒、70墙秒，最终误差仍要求≤0.04m/0.05rad及连续0.7源秒停稳。当前只完成离线预检，未执行这个新fixture。
+
+报告逐阶段保存原UUID/终态、AMCL、物理姿态、计划和非零命令计数。复用已有`NavigationDiagnostics`有界保存`/plan`、`/received_global_plan`、`/lookahead_point`、`/local_costmap/costmap`，另留必要TF；源戳与接收时刻分列。超时在取消前先保存证据，缺少发布端GID时保留unknown，不把请求树路径或两个endpoint解释成具体RPP实例的消费回执。原UUID取消、fresh hold、连续静止及owned实例清理分别记录。每帧只留episode身份，完整manifest每轮保存一次。
+
 ## 实测边界
 
 开放通道首轮两订单均通过原物理评分。v2 占用通道的两次原生 Nav2 均成功，独立物理评分只有 A 通过；B 的最终位置误差 0.043478m，超过原 0.04m，保持失败。各轮任务均未超 360 墙秒，owned 实例已清理。详见所属进度与私有原始报告。

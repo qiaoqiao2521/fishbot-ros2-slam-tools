@@ -1,7 +1,9 @@
 # F1 Progress
 
 ## Current
-in_progress：修复后fixed direct窗口已结束且归还，未追加via/重试。身份接线实际接纳且1次start成立；A task437abb20-ffbf-4dd6-a749-71f0d1cb709a入站Nav原120墙秒超时、原UUID终态5，未Dock/抓放/载货；原score false，B未执行。报告器对合法null终点误差调用.get，导致原result未落盘/调用进程134；原run_id不可恢复，不伪造。独立cleanup/原native终态核对后仅SIGINT owned组，reconciled-cleanup确认无存活/9111关闭。已最小修复null指标并22项回归过；只读reconciled-result保留失败与缺口。最后30源秒地图跨15mm目标圈110次，cmd v=0、w交替，入站末端收敛待修；目前仅源码/证据审查，无FishBot实例，下一窗口另约。 阶段XY最小软件候选已接并局部检查通过：同RPP/检查器复制两配置，只有入站stateful=true；显式staging=True且非载货才选树，其他及旧/null字段保留默认。新prepare/多插件实际加载、原13项和完整运输pending，旧fixed输入未改，无FishBot实例。
+2026-10-22 in_progress：本轮离线探针与几何查询修复完成，最终15项相关检查通过。新两段fixture沿西侧各平移0.25m，277姿态静态扫掠的保守余量0.128831m；未初始化ROS、未步进物理、未运行新Goal。原motion-d仍failed：Stage1控制循环有证据但物理停车9.41cm超限；Stage2原UUID取消5，其消息因旧异常路径未保存，数量未知。具体RPP实例归属及原occupied完整配送仍未验收。
+
+当前重实例资源保持交给SO101；只在后续明确窗口使用公开探针的`--run-native`运行两段。原direct/via/P8不自动启动。入口见docs/FACTORY_DELIVERY.md“阶段控制探针”；原固定direct失败与e/d各轮完整历史保留在下文。
 
 ## Done
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
@@ -132,10 +134,23 @@ knowledge_status=pending（仅新阶段候选）：双RPP实例/阶段树目前�
 限定静止窗口已结束并归还：`d`仅因未加载ROS环境而在rclpy导入前失败，零launch/端口。补正环境后`e`在domain143/9113一次启动，源码e4527a0，manifest staged与probe起止副本同hash。控制器双RPP、双GoalChecker六参数实际读回一致且运行前后不变，planner/controller/bt三节点active；请求行为树为staged XML，AMCL无运动更新产生新源戳7.6/8.5。staging/默认两个独立UUID均status4、result error0，两个follow_path子目标各自status4，439个独立物理样本全程car_hold，源0.82–10.02s。owned launch、9113、native上下文均已清理，未跑运输/13项/via/P8，窗口已归还。原探针`passed=false`，但后续只读原launch日志确认不是QoS不兼容：两Goal均以当前AMCL位姿发出，controller_server在`Reached the goal!`后直接结束，未到达先于`computeVelocityCommands`的调用点，因此RPP没有计算控制量，也未发布`/received_global_plan`；它是静止同点fixture无法证明阶段消费的预期结果。发布端默认Reliable/Volatile、KeepLast10，探针sensor-data为BestEffort/Volatile、KeepLast5，常见RMW本可建立匹配；原结果未保存端点QoS诊断，原“QoS不兼容”因果已撤回，改QoS仅保留为待验证的诊断假设。`e`还在原有限`d`授权明确“不自动e”后多执行了一次，属于流程偏差，失败保留且未自动续跑。原launch共有17条`Rejected car reference: stamped car command is stale or in the future`，其中首Goal结束到次Goal开始之间7条，其余在次Goal结束和清理阶段；这些旧时戳命令被拒未破坏观测到的hold，但本轮不能外推为运动中命令时效通过。原始结果`~/.cache/fishbot/factory-line-delivery-20261021/staging-native-load-e4527a0-e/run/`保留；私人探针后续改动仅py_compile通过，无新原生结果。
 
 ## 0.25m运动探针：首阶段有控制消费，第二段安全层拒绝
-源码`baeee9c`、独占domain143/9113的`staging-native-motion-baeee9c-20261022-d`只做0.25m两阶段探针，未启动运输任务。私有探针把PublisherInfo的两发布端与消息回调GID分开：端点实际发现两个原生`controller_server`发布端，回调包装层`publisher_gid=None`只记`unavailable`，不再用不可观察的GID互斥否证阶段消费；每阶段以计划消息、控制命令、原Goal UUID/终态和物理位移分别判据。探针仍因阶段失败而`passed=false`，错误为等待第二Goal终态超时；原始214781290字节结果、launch日志和源码起止副本保留。
+源码`baeee9c`、独占domain143/9113的`staging-native-motion-baeee9c-20261022-d`只做0.25m两阶段探针，未启动运输任务。私有探针把PublisherInfo的两发布端与消息回调GID分开：端点实际发现两个原生`controller_server`发布端，回调包装层`publisher_gid=None`只记`unavailable`，不再用不可观察的GID互斥否证阶段消费；每阶段以计划消息、控制命令、原Goal UUID/终态和物理位移分别判据。探针仍因阶段失败而`passed=false`，错误为等待第二Goal终态超时；原始214781290字节结果、launch日志和启动时源码副本保留；未保存收尾源码副本，不宣称探针源码起止一致。
 
-Staging Goal UUID`b397308cebdb4f529642c6dc7e2ffb97`原状态2→4，result error0；收到364份`/received_global_plan`和365条`/cmd_vel_nav`，真值位移0.174915m，但终点`(-.0469720,-2.1684766,+1.6038226)`相对`(0,-2.25,+π/2)`为XY0.0940874m/yaw0.0330263rad，超过原0.04m/0.05rad验收，不能计阶段到达。第二Goal UUID`a8d75a9bc5aa4b789570ce6b2a83364a`从该偏差位姿发起，原状态2→3→5；RPP反复报collision ahead并patience exceeded，原树清除costmap后的重试和spin/backup恢复同样被碰撞拒绝，未产生计划或控制命令。controller参数运行前一致，planner/controller/bt三节点active；探针等待终态超时后取消该原Goal。
+Staging Goal UUID`b397308cebdb4f529642c6dc7e2ffb97`原状态2→4，result error0；收到364份`/received_global_plan`和365条`/cmd_vel_nav`，真值位移0.174915m，但终点`(-.0469720,-2.1684766,+1.6038226)`相对`(0,-2.25,+π/2)`为XY0.0940874m/yaw0.0330263rad，超过原0.04m/0.05rad验收，不能计阶段到达。第二Goal UUID`a8d75a9bc5aa4b789570ce6b2a83364a`从该偏差位姿发起，原状态2→3→5；RPP反复报collision ahead并patience exceeded，原树清除costmap后的重试和spin/backup恢复同样被碰撞拒绝；阶段消息在异常后未复制，数量未知，撤回“未产生计划/控制命令”。controller参数运行前一致，planner/controller/bt三节点active；探针等待终态超时后取消该原Goal。
 
-只读分层解释：实体占用箱中心(.35,-2.10,.25)、完整尺寸(.12,.30,.50)，原完整碰撞几何静态预检在该局部仍为可走；Nav2 collision地图另含0.3m inflation，地图本身最近占用像元距起终点约0.29m。该差异可解释安全层为何比静态几何更早拒绝，但本轮未抓RPP所用局部轨迹与costmap逐点代价，不能把costmap inflation独占为因果，也不把第二段失败归为RPP阶段切换失效。Stage1没有达到原评分，整个fixture不可替换原配送或换路线记通过。
+只读分层解释：实体占用箱中心(.35,-2.10,.25)、完整尺寸(.12,.30,.50)，原完整碰撞几何静态预检在该局部仍为可走；Nav2运行costmap配置0.3m inflation，源图最近占用像元中心距起终点约0.29m。这只能定位软代价区域；本轮未抓RPP所用局部轨迹与costmap逐点代价，不能从进入膨胀半径推导碰撞，也不把第二段失败归为RPP阶段切换失效。Stage1没有达到原评分，整个fixture不可替换原配送或换路线记通过。
 
-收尾独立读回`owned_launch_stopped=true`、`owned_port_closed=true`、`retained_launch_pid=null`、`native_terminal_known=true`、探针RCL上下文关闭；最终hold发布后被真实物理源观察，源戳91.46s、速度与角速度均约1e-17。该独立hold字段在原失败前未写回，保留缺口。资源owner消息明确本轮后交回SO101，因此未新启ROS/MuJoCo、未另换开阔fixture、未执行via/完整direct/P8；当前无本组owned进程或9113监听。
+收尾独立读回`owned_launch_stopped=true`、`owned_port_closed=true`、`retained_launch_pid=null`、`native_terminal_known=true`、探针RCL上下文关闭；最终hold发布后被真实物理源观察，源戳91.46s、速度与角速度均约1e-17。顶层final_hold_restored在原失败主路径未写出，以cleanup_hold.observed为已观察字段，保留该字段缺口。资源owner消息明确本轮后交回SO101，因此未新启ROS/MuJoCo、未另换开阔fixture、未执行via/完整direct/P8；当前无本组owned进程或9113监听。
+
+
+## 离线探针交付与真实扫掠复核
+
+新增`tools/cooperation_staging_probe.py`，默认仅预检；显式`--run-native`才初始化ROS。复用原SceneGeometry、原owned launch/收尾和NavigationDiagnostics，不另建控制器或运输owner。修复嵌套costmap配置读取与相对地图图片路径，按源图negate/origin yaw和栅格半对角线给fixture余量；它只挑低干扰目标，不重定义硬碰撞。两个目标(-.25,-2,0)/(-.50,-2,+π/2)，每段25cm；源60s/墙70s分列，原到达4cm/.05rad、连续.7源秒停稳保持。
+
+旧探针的Stage2空数组源于result超时跳过复制；新record_phase_wait在finally保留计划、命令、原计数、AMCL/TF和四个导航话题。有界样本与总计数分开，manifest每轮一份，每帧留episode身份，防止重复场景膨胀日志；接触异常总计数独立于有界尾部，不能因截断样本遗忘早期碰撞。请求发送前声明UUID，未回accepted不能被空集合算为已知终态；取消后hold、新源戳、quiet和进程/端口分别取证。原生分支尚待实际运行，软件测试不冒充其验收。
+
+新fixture首轮静态check44ebe331-5342-44d5-9617-b45f3739d34d为false，来源`~/.cache/fishbot/factory-line-delivery-20261021/staging-probe-offline-20261022-v1/`。定位到分离旋转box-box的原生距离假负值，最小模型复现；公共pair_clearance只对严格分离AABB用保守下界，重叠保留原生查询。新v2 checkd5a2da81-cbee-46aa-a240-6bb7cc2dfd07为preflight_passed=true、passed=false（未运行）、ros_initialized=false、277姿态、physics_steps=0，扣5mm采样界后最小余量.1288312419m。目标到占用单元面积的距离下界分别.525950/.775921m，预检5342字节。原v1保留，原运动失败不改写。
+
+首轮相关14项检查通过23.308s；补充有界尾部不能隐藏早期接触/缺失接触字段的负例后，最终15项检查通过8.184s，包括原真实场景的开放扫掠/占用拒绝、独立双箱几何正负例、阶段树合同、默认零ROS入口、超时实存、双时钟边界和重复manifest回归；零skip。没有运行完整反馈套件、任何新ROS/MuJoCo动作或完整运输。新入口使用说明与测试命令已写入FACTORY_DELIVERY.md。
+
+Knowledge：already_covered，沿用原Wiki/ROS2 与 FishBot第18节软代价与禁区分层、第19/20节真值/原ID/物理评分、第17节去重记录；本轮只纠正项目记录。新增MuJoCo3.3.7旋转箱体静态距离边界为pending，owner=研究根Codex，最短入口为本节双箱负例与pair_clearance审阅，再串行回写原第19节，避免并发写共享知识页。
