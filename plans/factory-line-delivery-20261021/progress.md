@@ -210,7 +210,11 @@ Omni短运动`fixed-cbe3251-a`已结束，check3e782927-7a2f-4341-9f59-bcb16e962
 按task_plan只允许一次独立同源复现到`direct-repeat/run`，若再出现同类时效失败便停止完整重复，先取证；不称同源码复现为新改善。当前task21cdd2d8-446e-4a2b-86a5-e7e5e3432db7已完成入站Nav eb096c050f114a9aaecb4fea188f4871及Dock aa1804c925084877a41907c001b7a94e（均4），闭爪装货中，完整结果在途。knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节加入参考点/原生AMCL均值段落，开发知识入口同步触发词，已rg读回原385/入口52行且diff检查通过；只讲已复现均值，不写完整业务已修复。独立知识仓保留原dirty，未提交推送。
 # 回合切换修复接续（2026-10-22）
 
-当前：重置竞态已修复并通过原生跨单，但完整评分仍1/2，B在精停靠因观测过期取消。已停止同配置完整重试；新增只作用两个Python进程的异步发布候选，73项局部合同与原生writer模式读回通过。下一输出`smac-transport-20261022/amcl-motion-omni-20261022/direct-async/run`，141/9111，保持同输入、原120/360/1000期限及所有物理门槛。旧`direct-repeat`仍unknown，旧`direct-reset-fixed`仍failed。
+当前：重置竞态已修复并通过原生跨单。异步发布候选原生仍1/2，B在交接时遭宿主真实休眠（已核系统日志）；位姿发布max7.30ms。停止无原因重复。下一独立同源复现用systemd-inhibit在验收父进程期间临时阻止sleep，结束释放，输出`smac-transport-20261022/amcl-motion-omni-20261022/direct-async-awake/run`，141/9111。保持同输入、原120/360/1000期限及全部门槛；旧unknown和failed不改。
+
+异步run5a9e2528-eee6-46ae-a0cb-2fb735efbd06，353701c，328.617单调墙秒，执行completed/物理1/2/overallfalse；A task73420a4e-1bfd-4c00-978e-52a0cc793e18，165.848秒、2.444cm/.01697rad、静止2.44源秒通过。reset d50fbf69-bcea-4371-9e75-a668af3df8b5成功；B task999e60ee-82a7-4dee-b062-bfe02a6b50fa，121.529秒，在arm_transport因共享物理反馈中断失败；入站820f5ed7ba8f40178c9153f9d3c7731c与Dock fd217807509c43aa98bf8f5700bc4d21原4，未载货导航。2start/1reset/0APIcancel；原source/recording完整性过、原生终态/hold/quiet/guard-off、owned进程与9111均清理，源码起止不变。
+
+`source-pause-readback.json`测得源262.26→262.28、seq+1，接收单调间隙1.47256秒、墙钟间隙6478.011秒。systemd-suspend.service原日志确认19:36:30进入休眠至21:24:28恢复，不将它误记为单一publish或MuJoCo算法耗时。下一运行明确临时阻止休眠、不是修改评分或算法后再碰运气；旧失败保留。73项局部检查不新增次数，源代码不再修改。
 
 复现run4da35c3e-84b2-4f0c-b933-205cabb0fb02，237.506墙秒：首单task21cdd2d8-446e-4a2b-86a5-e7e5e3432db7通过原K/完整物理，XY2.439cm/yaw.02658rad、停稳2.58源秒；1start/1reset/0cancel，B未执行。reset原编号f8bb2c00-8be4-4517-9aed-2949e931a6e1已成功，新idle回合独立quiet.74源秒、原历史/所有Nav终态确认，确切owned PID432025、进程组和9111已清理；补充回读单列，不覆盖原runner清理失败。
 

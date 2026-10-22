@@ -71,3 +71,5 @@ Omni短试验默认运输段通过1.345cm/.00421rad，临时入站点仍5.678cm�
 1790ccc完整试验已实际跨单，A过、B在Dock时效失败；停止原配置重试。阻塞发生于桥publish .324秒，期间原生产器及独立观察器连续收到17个.02秒新源帧。当前回调组已分离，不重复增加线程或放宽时效。
 
 先复用官方RMW_FASTRTPS_PUBLICATION_MODE=ASYNCHRONOUS，仅对本轮sim/bridge两个Python子进程设置；原Nav2与observer继承源配置，所有QoS、源时间戳、物理门槛与动作owner保持。启动参数source为原默认，asynchronous显式选择，factory声明和实际launch命令留痕。原生writer模式零运动读回与73项相关检查已通过，冻结源码后在同一输入/目标/预算跑一次`direct-async/run`。失败仍保留，不把配置生效当发布时效或完整物理通过；若仍超时，返回阻塞证据，不循环完整运行。
+
+异步原生已结束，原评分1/2，不重复碰运气。已回源确认本次B中断是宿主真实休眠：systemd-suspend.service从19:36:30到21:24:28，物理与桥查询同时停顿，源时间仅推进.02秒。下一独立复现采用系统现有systemd-inhibit，仅随验收父进程阻止sleep、结束释放；不改全局电源、网络、ROS时间阈值或评分。复用同源码/同输入，独立输出`direct-async-awake/run`，141/9111；标为宿主不休眠条件下的复现，不宣称新增算法改善。保留休眠失败及系统日志，结果与inhibitor释放单列。

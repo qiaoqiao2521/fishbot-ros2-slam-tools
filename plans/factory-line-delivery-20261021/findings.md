@@ -73,6 +73,8 @@ fixed首阶段在源18.5s以后命令v始终0，轮轴真值从(-.2118484,-1.971
 原生AMCL 1.3.13均值复现发现可确定的模型不匹配：实际foot在轮轴前2cm，转向会有每步<1cm的侧向圆弧；DifferentialMotionModel在此分支rot1=0，半圈100步的期望位移(-.04,0)被预测为(.0006283,.0399951)，误差.0570111m。直接调用已安装lib的OmniMotionModel得几何期望（误差1.72e-19）；偏置0及25cm直线对照均正确。这不是“忽略轮轴的里程计”旧猜测：原EncoderOdometry已正确转换，问题在下游提议模型如何解释该参考点的增量。它证明均值合同缺陷，仍不独占运行中的全部误差或证明整滤波已修复。
 # 2026-10-22 回合切换竞态
 
+异步试验run5a9e2528-eee6-46ae-a0cb-2fb735efbd06（353701c）原生1/2：A2.444cm/.01697rad通过，B在arm_transport共享物理中断，未派发载货Nav。源读回显示seq连续、源步.02秒，但接收单调间隔1.47256秒、墙钟间隔6478.011秒；差值6476.539秒。systemd-suspend.service原日志确认19:36:30.288进入suspend、21:24:28.679恢复。该失败不能归为异步发布残留阻塞；桥station_pose_publish最大7.30ms，而两个独立进程的MuJoCo步与publisher query在相同窗口一起停顿约1.42单调秒。原结果保持失败，source-pause-readback与系统日志独列。它也不证明异步发布已彻底消除所有调度抖动。
+
 后续1790ccc原生完整run9ecd328c已通过重置并派发B，纠正竞态有效；A原物理通过，B在Dock因工位观测过期失败，整体仍1/2。源龄.34秒时桥publish耗时.323778秒，独立physics同窗17帧9694–9710连续，最大接收间隔.02116秒。该证据缩小到桥发布/调度路径，不证明源停顿，也未唯一定位具体DDS锁或内核原因。失败、原ID及全部清理均保留。
 
 现有桥已经有独立physics/perception/clock组和4线程；增加线程不能直接排除rclpy底层publish调用阻塞。Jazzy rclpy7.1.12源码的publish直接调用rcl_publish，未在该绑定释放GIL；rmw_fastrtps8.4.4默认同步发送。优先复用官方异步模式，将发送工作交给DDS原有线程，而不增加自制转发器、修改可靠性或放宽时效。来源：[rclpy Jazzy publisher](https://github.com/ros2/rclpy/blob/jazzy/rclpy/src/rclpy/publisher.cpp)、[rmw_fastrtps Jazzy publication mode](https://github.com/ros2/rmw_fastrtps/tree/jazzy#change-publication-mode)。这是机制支持的候选，不是已证明的业务改善。
