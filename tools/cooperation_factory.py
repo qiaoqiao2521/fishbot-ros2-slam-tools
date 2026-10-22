@@ -28,6 +28,7 @@ from cooperation_acceptance import (
     stop_non_motion_child, stop_owned_launch, wait_until,
 )
 from cooperation_workflow import LocalBridge, Workflow, read_json
+from cooperation_delivery_route import DELIVERY_ROUTE_WALL_S
 
 ROOT = Path(__file__).resolve().parents[1]
 TASK_TIMEOUT_S = 360.
@@ -60,9 +61,10 @@ class MarkedBridge(LocalBridge):
 
 def reference(manifest, *, candidate, order=None):
     """Resolve scene business data; candidate is a display label, not a loader."""
-    from cooperation_factory_scene import factory_template_jobs
+    from cooperation_factory_scene import factory_template_jobs, normalize_factory_config
     batches, targets, profile = factory_template_jobs(manifest)
-    factory = manifest['factory_delivery']
+    factory = normalize_factory_config(manifest['factory_delivery'])
+    destinations = {station['id']: station for station in factory['destinations']}
     orders = copy.deepcopy(factory['orders'])
     if len(orders) != 2 or len(batches) != len(orders):
         raise ValueError('F1 requires exactly two declared orders')
@@ -74,10 +76,14 @@ def reference(manifest, *, candidate, order=None):
     resolved = []
     for name in selected:
         item, batch = by_id[name]
-        resolved.append({**item, 'batch_id': batch, 'delivery_pose': targets[batch]})
+        resolved.append({**item, 'batch_id': batch, 'delivery_pose': targets[batch],
+                         'delivery_approach_poses': copy.deepcopy(
+                             destinations[item['destination_id']].get('approach_poses', []))})
     return {'scene_id': factory['id'], 'candidate_label': candidate,
             'scene_profile': profile, 'orders': resolved,
             'task_timeout_wall_s': TASK_TIMEOUT_S,
+            'delivery_route_budget_wall_s': DELIVERY_ROUTE_WALL_S,
+            'delivery_route_budget_boundary': 'after_required_egress_through_final_nav_stop_and_hold',
             'total_timeout_wall_s': TOTAL_TIMEOUT_S,
             'budget_semantics': 'Acceptance limits; safe cleanup and scoring may extend execution',
             'candidate_label_loads_code': False}
@@ -94,7 +100,7 @@ def loaded_code_reference():
     runtime_files = [ROOT/'tools'/name for name in
                      ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_oracle.py',
                       'cooperation_oracle_base.py', 'cooperation_core.py', 'cooperation_arm.py',
-                      'cooperation_factory_policy.py')]
+                      'cooperation_factory_policy.py', 'cooperation_delivery_route.py')]
     paths = [Path(path) for path in module_files.values()]+runtime_files
     result = {'module_files': module_files,
               'module_files_scope': 'Actually imported in the evaluation process',
@@ -125,7 +131,8 @@ def order_report(order, *, task_id, episode_id, terminal, score, score_file,
                 if item.get('task_id') == task_id and item.get('episode_id') == episode_id]
     attempt = attempts[0] if len(attempts) == 1 else {}
     bound = (len(attempts) == 1 and
-             attempt.get('expected_delivery_pose') == order['delivery_pose'])
+             attempt.get('expected_delivery_pose') == order['delivery_pose'] and
+             attempt.get('expected_delivery_approach_poses', []) == order.get('delivery_approach_poses', []))
     verdict = 'unknown' if score is None else 'passed' if (
         score.get('passed') is True and score.get('original_k_oracle_passed') is True
         and delivery.get('required') is True and delivery.get('passed') is True
@@ -145,6 +152,7 @@ def order_report(order, *, task_id, episode_id, terminal, score, score_file,
             'expected_egress_pose': attempt.get('expected_egress_pose'),
             'egress_required': attempt.get('egress_required', False),
             'native_route': attempt.get('carrying_nav_route', []),
+            'delivery_route_budget': attempt.get('delivery_route_budget'),
             'metrics': {'elapsed_wall_s': elapsed_wall_s,
                         'final_position_error_m': pose_error.get('position_m'),
                         'final_yaw_error_rad': pose_error.get('yaw_rad'),
@@ -392,7 +400,9 @@ def run(args, manifest, declaration):
             task_id = body['task_id']
             marker('full_started', scope='transport',
                    expected_delivery_pose=current_order['delivery_pose'],
-                   requested_delivery_pose=body.get('delivery_pose'))
+                   requested_delivery_pose=body.get('delivery_pose'),
+                   expected_delivery_approach_poses=current_order.get('delivery_approach_poses', []),
+                   requested_delivery_approach_poses=body.get('delivery_approach_poses', []))
 
     bridge = MarkedBridge('http://127.0.0.1:'+str(args.port), before_post)
 
@@ -458,7 +468,8 @@ def run(args, manifest, declaration):
         declared = declaration['orders']
         workflow('create', [item['batch_id'] for item in declared], 'factory-pickup',
                  {item['batch_id']: item['delivery_pose'] for item in declared},
-                 scene_profile=declaration['scene_profile'])
+                 scene_profile=declaration['scene_profile'],
+                 delivery_approach_poses={item['batch_id']: item['delivery_approach_poses'] for item in declared})
         reset_receipt = None
         for index, order in enumerate(declared):
             current_order = order

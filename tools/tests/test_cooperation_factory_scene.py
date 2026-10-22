@@ -12,7 +12,7 @@ import uuid
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT/'tools'))
 from cooperation_factory_scene import (factory_template_jobs, normalize_factory_config,
-                                       apply_factory_scene, OCCUPANCY_GEOM)
+                                       apply_factory_scene, OCCUPANCY_GEOM, factory_template_approaches)
 
 CONFIG = PROJECT/'tools/config/factory_delivery'
 RUNTIME = Path(os.environ.get('FISHBOT_SO101_PYTHON',
@@ -51,6 +51,18 @@ class FactoryDeliveryContractTests(unittest.TestCase):
         normalized = normalize_factory_config(config)
         self.assertEqual(config, before)
         self.assertEqual(normalized['operator_notes'], config['operator_notes'])
+
+    def test_station_approach_keeps_final_pose_and_validates_yaw(self):
+        config=self.config();original=copy.deepcopy(config['destinations'][1]['pose'])
+        config['destinations'][1]['approach_poses']=[{'x':.5,'y':-1.68,'yaw':.1}]
+        actual=normalize_factory_config(config)
+        self.assertEqual(actual['destinations'][1]['pose'],original)
+        self.assertEqual(actual['destinations'][1]['approach_poses'],[{'x':.5,'y':-1.68,'yaw':.1}])
+        scene={'factory_delivery':config};batches,_,_=factory_template_jobs(scene)
+        self.assertEqual(factory_template_approaches(scene,batches),
+                         {batches[1]:[{'x':.5,'y':-1.68,'yaw':.1}]})
+        config['destinations'][1]['approach_poses'][0]['yaw']=float('nan')
+        with self.assertRaisesRegex(ValueError,'line_b'):normalize_factory_config(config)
 
     def test_invalid_destination_and_order_are_local_config_errors(self):
         for mutate in (

@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from cooperation_core import Rejected, task_delivery_pose
+from cooperation_core import Rejected, task_delivery_pose, task_delivery_approaches
 from fishbot_simulation_suite import write_json
 
 
@@ -55,6 +55,13 @@ def delivery_pose(value):
     """Canonical request values; preserve yaw so task identity stays explicit."""
     try:
         return task_delivery_pose({'delivery_pose': value})
+    except Rejected as error:
+        raise ContractError(str(error)) from error
+
+
+def delivery_approaches(value):
+    try:
+        return task_delivery_approaches({'delivery_approach_poses': value})
     except Rejected as error:
         raise ContractError(str(error)) from error
 
@@ -154,16 +161,23 @@ class Workflow:
             ids.add(job['batch_id'])
             jobs.add(job['job_id'])
             target = delivery_pose(job['delivery_pose']) if 'delivery_pose' in job else None
+            approaches = (delivery_approaches(job['delivery_approach_poses'])
+                          if 'delivery_approach_poses' in job else None)
             for attempt in job['attempts']:
                 identity(attempt['task_id'])
                 identity(attempt['episode_id'])
                 if (attempt['task_id'] in tasks or attempt['dispatch']['body']['task_id'] != attempt['task_id']
                         or attempt['dispatch']['body']['episode_id'] != attempt['episode_id']
                         or set(attempt['dispatch']['body']) != ({'task_id', 'episode_id', 'issued_at'}
-                            | ({'delivery_pose'} if target is not None else set()))
+                            | ({'delivery_pose'} if target is not None else set())
+                            | ({'delivery_approach_poses'} if approaches is not None else set()))
                         or ('delivery_pose' in attempt) != (target is not None)
                         or (target is not None and (delivery_pose(attempt['delivery_pose']) != target
                             or delivery_pose(attempt['dispatch']['body']['delivery_pose']) != target))
+                        or ('delivery_approach_poses' in attempt) != (approaches is not None)
+                        or (approaches is not None and (
+                            delivery_approaches(attempt['delivery_approach_poses']) != approaches
+                            or delivery_approaches(attempt['dispatch']['body']['delivery_approach_poses']) != approaches))
                         or attempt['status'] not in TERMINAL | {'unknown', 'running', 'canceling', 'rejected'}):
                     raise ContractError('conflicting task identity in ledger')
                 tasks.add(attempt['task_id'])
@@ -199,7 +213,8 @@ class Workflow:
         finally:
             os.close(descriptor)
 
-    def create(self, batches, machine='laundry-machine-1', delivery_poses=None, scene_profile=None):
+    def create(self, batches, machine='laundry-machine-1', delivery_poses=None, scene_profile=None,
+               delivery_approach_poses=None):
         if self.data is not None:
             raise ContractError('ledger already exists; it cannot be reinitialized')
         if (not isinstance(batches, (list, tuple)) or not batches
@@ -213,6 +228,10 @@ class Workflow:
         if not isinstance(targets, dict) or set(targets) - set(batches):
             raise ContractError('delivery-poses must map selected batch UUIDs to delivery_pose values')
         targets = {batch: delivery_pose(target) for batch, target in targets.items()}
+        approaches = {} if delivery_approach_poses is None else delivery_approach_poses
+        if not isinstance(approaches, dict) or set(approaches)-set(batches):
+            raise ContractError('delivery-approach-poses must map selected batch UUIDs to ordered poses')
+        approaches = {batch: delivery_approaches(poses) for batch, poses in approaches.items()}
         state = self.bridge.state()
         if scene_profile is not None and state.get('scene_profile') != scene_profile:
             raise ContractError('selected scene profile does not match the actual bridge instance')
@@ -232,7 +251,9 @@ class Workflow:
                      'machines': {machine: {'capacity': 1, 'occupant': None, 'version': 0, 'event': None}},
                      'jobs': [{'job_id': str(uuid.uuid4()), 'batch_id': batch, 'machine_id': machine,
                                'status': 'waiting', 'attempts': [],
-                               **({'delivery_pose': copy.deepcopy(targets[batch])} if batch in targets else {})}
+                               **({'delivery_pose': copy.deepcopy(targets[batch])} if batch in targets else {}),
+                               **({'delivery_approach_poses': copy.deepcopy(approaches[batch])}
+                                  if batch in approaches else {})}
                               for batch in batches]}
         self._save()
         return self.snapshot()
@@ -273,6 +294,9 @@ class Workflow:
         if ('delivery_pose' in attempt
                 and delivery_pose(task.get('delivery_pose')) != attempt['delivery_pose']):
             raise ContractError('original task ID has a different delivery_pose')
+        if ('delivery_approach_poses' in attempt
+                and delivery_approaches(task.get('delivery_approach_poses')) != attempt['delivery_approach_poses']):
+            raise ContractError('original task ID has different delivery_approach_poses')
         if task.get('status') not in TERMINAL | {'running', 'canceling', 'unknown'}:
             raise ContractError('original task has no usable state')
         return copy.deepcopy(task)
@@ -346,6 +370,10 @@ class Workflow:
             target = delivery_pose(job['delivery_pose'])
             record['body']['delivery_pose'] = copy.deepcopy(target)
             attempt['delivery_pose'] = copy.deepcopy(target)
+        if 'delivery_approach_poses' in job:
+            approaches = delivery_approaches(job['delivery_approach_poses'])
+            record['body']['delivery_approach_poses'] = copy.deepcopy(approaches)
+            attempt['delivery_approach_poses'] = copy.deepcopy(approaches)
         job['attempts'].append(attempt)
         job['status'] = 'active'
         machine['occupant'] = job['job_id']
@@ -563,6 +591,8 @@ def main(argv=None):
     batches.add_argument('--batches', nargs='+', help='Nonempty ordered batch UUID list')
     batches.add_argument('--from-scene', type=Path, help='Generate fresh batches for the prepared scene task template')
     init.add_argument('--delivery-poses', type=Path, help='JSON object mapping batch UUIDs to {x,y,yaw}')
+    init.add_argument('--delivery-approach-poses', type=Path,
+                      help='JSON object mapping batch UUIDs to ordered approach pose lists')
     init.add_argument('--machine', default='laundry-machine-1')
     event = sub.add_parser('event')
     event.add_argument('--file', type=Path, required=True)
@@ -580,13 +610,17 @@ def main(argv=None):
         with Workflow(args.ledger, LocalBridge(args.bridge)) as workflow:
             if args.command == 'init':
                 if args.from_scene:
-                    if args.delivery_poses:
+                    if args.delivery_poses or args.delivery_approach_poses:
                         raise ContractError('--from-scene uses its task template; use explicit batches for custom goals')
-                    ids, goals, profile = scene_template_jobs(read_json(args.from_scene))
-                    result = workflow.create(ids, args.machine, goals, scene_profile=profile)
+                    from cooperation_factory_scene import factory_template_approaches
+                    scene = read_json(args.from_scene)
+                    ids, goals, profile = scene_template_jobs(scene)
+                    result = workflow.create(ids, args.machine, goals, scene_profile=profile,
+                        delivery_approach_poses=factory_template_approaches(scene, ids))
                 else:
                     result = workflow.create(args.batches if args.batches is not None else args.batch,
-                                             args.machine, read_json(args.delivery_poses) if args.delivery_poses else None)
+                                             args.machine, read_json(args.delivery_poses) if args.delivery_poses else None,
+                        delivery_approach_poses=read_json(args.delivery_approach_poses) if args.delivery_approach_poses else None)
             elif args.command == 'event':
                 result = workflow.event(read_json(args.file))
             elif args.command in ('reset', 'recover'):

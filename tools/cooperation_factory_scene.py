@@ -15,7 +15,8 @@ from pathlib import Path
 import uuid
 import xml.etree.ElementTree as ET
 
-from cooperation_core import Rejected, task_delivery_pose
+from cooperation_core import Rejected, task_delivery_pose, task_delivery_approaches
+from cooperation_delivery_route import DELIVERY_ROUTE_WALL_S
 from cooperation_profiles import normalize_scene_profile
 
 
@@ -50,6 +51,9 @@ def normalize_factory_config(value):
         ids.add(station['id'])
         try:
             station['pose'] = task_delivery_pose({'delivery_pose': station.get('pose')})
+            if 'approach_poses' in station:
+                station['approach_poses'] = task_delivery_approaches(
+                    {'delivery_approach_poses': station['approach_poses']})
         except Rejected as error:
             raise ValueError(f"destination {station['id']}: {error}") from error
     orders = result.get('orders')
@@ -101,6 +105,8 @@ def apply_factory_scene(manifest, config):
     factory['execution'] = {
         'implementation': 'existing cooperation_workflow.Workflow and cooperation_bridge',
         'per_task_wall_timeout_s': 360,
+        'delivery_route_wall_timeout_s': DELIVERY_ROUTE_WALL_S,
+        'delivery_route_budget_boundary': 'after_required_egress_through_final_nav_stop_and_hold',
         'order_count': len(factory['orders']),
         'delivery_semantics': 'original handover, retained cargo, target arrival and quiet cleanup',
         'not_implemented': ['destination unloading', 'factory equipment automation', 'ARIAC scoring']}
@@ -141,6 +147,19 @@ def factory_template_jobs(manifest):
     goals = {batch: copy.deepcopy(destinations[order['destination_id']])
              for batch, order in zip(batches, factory['orders'])}
     return batches, goals, normalize_scene_profile(manifest.get('scene_profile'))
+
+
+def factory_template_approaches(manifest, batches):
+    """Use the same generated batch IDs, without dropping station approach data."""
+    if 'factory_delivery' not in manifest:
+        return {}
+    factory = normalize_factory_config(manifest['factory_delivery'])
+    stations = {station['id']: station for station in factory['destinations']}
+    if len(batches) != len(factory['orders']):
+        raise ValueError('Factory batches must match declared orders')
+    return {batch: copy.deepcopy(stations[order['destination_id']]['approach_poses'])
+            for batch, order in zip(batches, factory['orders'])
+            if 'approach_poses' in stations[order['destination_id']]}
 
 
 def main(argv=None):

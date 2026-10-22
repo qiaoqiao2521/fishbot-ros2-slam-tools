@@ -58,6 +58,8 @@ class Bridge:
             self.value['task'] = {'id': body['task_id'], 'status': 'running'}
             if 'delivery_pose' in body:
                 self.value['task']['delivery_pose'] = copy.deepcopy(body['delivery_pose'])
+            if 'delivery_approach_poses' in body:
+                self.value['task']['delivery_approach_poses'] = copy.deepcopy(body['delivery_approach_poses'])
             self.value['ready'] = False
             self.value['reset']['available'] = False
             receipt = {'task_id': body['task_id'], 'task': self.value['task']}
@@ -92,6 +94,21 @@ class Bridge:
 
 
 class SceneTemplateTest(unittest.TestCase):
+    def test_factory_from_scene_cli_preserves_station_approach_without_posting(self):
+        from cooperation_factory_scene import factory_template_jobs
+        source=json.loads((Path(__file__).parents[1]/'config/factory_delivery/line-side-j100-approach-candidate.json').read_text())
+        with tempfile.TemporaryDirectory() as directory:
+            folder=Path(directory);manifest=folder/'scene.json';ledger=folder/'workflow.json'
+            manifest.write_text(json.dumps({'factory_delivery':source}))
+            bridge=Bridge();bridge.value['scene_profile']=factory_template_jobs({'factory_delivery':source})[2]
+            with patch('cooperation_workflow.LocalBridge',return_value=bridge),patch('sys.stdout',io.StringIO()):
+                self.assertEqual(main(['--ledger',str(ledger),'init','--from-scene',str(manifest)]),0)
+            jobs=read_json(ledger)['jobs']
+            self.assertNotIn('delivery_approach_poses',jobs[0])
+            self.assertEqual(jobs[1]['delivery_approach_poses'],source['destinations'][1]['approach_poses'])
+            self.assertEqual(jobs[1]['delivery_pose'],source['destinations'][1]['pose'])
+            self.assertEqual(bridge.calls,[])
+
     def test_selected_three_batch_template_creates_fresh_ids_and_aab_targets(self):
         profile={'schema':1,'vehicle':'jackal_j100','sensors':'lidar3d','task':'three_batch_transport'}
         manifest={'scene_profile':profile,'delivery_pose':{'x':1.,'y':2.,'yaw':.3}}
@@ -206,6 +223,27 @@ class WorkflowTest(unittest.TestCase):
         with self.open() as workflow:
             workflow.create(self.batches, delivery_poses=mapping)
         return mapping
+
+    def test_station_approach_is_durable_and_reconciled_without_reposting(self):
+        self.path=self.path.parent/'approach.json'
+        poses=[{'x':.5,'y':-1.68,'yaw':.1}]
+        with self.open() as workflow:
+            workflow.create(self.batches,delivery_approach_poses={self.batches[0]:poses})
+            self.ready(workflow)
+            workflow.dispatch()
+        poses[0]['yaw']=9.
+        with self.open() as workflow:
+            attempt=workflow.data['jobs'][0]['attempts'][0]
+            self.assertEqual(attempt['delivery_approach_poses'],[{'x':.5,'y':-1.68,'yaw':.1}])
+            self.assertEqual(attempt['dispatch']['body']['delivery_approach_poses'],attempt['delivery_approach_poses'])
+            posts=len(self.bridge.calls)
+            self.assertEqual(workflow.tick()['status'],'active')
+            self.assertEqual(len(self.bridge.calls),posts)
+            self.bridge.value['task']['delivery_approach_poses'][0]['yaw']=.2
+            result=workflow.tick()
+            self.assertEqual(result['status'],'unknown')
+            self.assertIn('delivery_approach_poses',result['reason'])
+            self.assertEqual(len(self.bridge.calls),posts)
 
     def test_three_jobs_preserve_optional_destinations_across_resets_and_restart(self):
         target = {'x':1.25, 'y':-1.75, 'yaw':.4}

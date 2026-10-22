@@ -171,6 +171,9 @@ def request_identity(body, *, cancel=False, now=None, episode_id=None):
     if not cancel and isinstance(body, dict) and 'delivery_pose' in body:
         expected.add('delivery_pose')
         task_delivery_pose(body)
+    if not cancel and isinstance(body, dict) and 'delivery_approach_poses' in body:
+        expected.add('delivery_approach_poses')
+        task_delivery_approaches(body)
     if not isinstance(body, dict) or set(body) != expected:
         raise Rejected('请求须包含 task_id 和 issued_at')
     if episode_id is not None and body['episode_id'] != episode_id:
@@ -210,6 +213,20 @@ def task_delivery_pose(body, default=None):
         return {key: float(finite_number(value[key], f'交付点{key}')) for key in ('x', 'y', 'yaw')}
     except ValueError as error:
         raise Rejected(str(error)) from error
+
+
+def task_delivery_approaches(body):
+    """Optional ordered map poses before the unchanged final delivery pose."""
+    values = body.get('delivery_approach_poses', [])
+    if not isinstance(values, list):
+        raise Rejected('配送站进场姿态须为有序列表，每项包含 x、y、yaw')
+    result = []
+    for index, value in enumerate(values):
+        try:
+            result.append(task_delivery_pose({'delivery_pose': value}))
+        except Rejected as error:
+            raise Rejected(f'配送站进场点{index+1}：{error}') from error
+    return result
 
 
 def reset_request_identity(body, now=None):

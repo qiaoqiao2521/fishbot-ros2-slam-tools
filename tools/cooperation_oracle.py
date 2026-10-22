@@ -322,6 +322,14 @@ def delivery_checks(records, samples, audit, attempts, events):
         for state in states:
             binding &= (state.get('episode_id') == episode
                         and pose(state.get('task', {}).get('delivery_pose')) == target and target is not None)
+        approach_values = event.get('expected_delivery_approach_poses',
+            states[0].get('task', {}).get('delivery_approach_poses', []) if states else [])
+        approaches = [pose(value) for value in approach_values] if isinstance(approach_values, list) else None
+        binding &= approaches is not None and all(value is not None for value in approaches)
+        if 'requested_delivery_approach_poses' in event:
+            binding &= event['requested_delivery_approach_poses'] == approaches
+        for state in states:
+            binding &= state.get('task', {}).get('delivery_approach_poses', []) == approaches
         manifests = [r['payload'].get('source', {}).get('manifest', {}) for r in records
                      if r['topic'] == 'physics' and episode_id(r['payload']) == episode]
         declarations = [m['egress_pose'] for m in manifests if m.get('egress_pose') is not None]
@@ -341,7 +349,8 @@ def delivery_checks(records, samples, audit, attempts, events):
             binding &= (pose(task_egress) == egress if egress_declared else task_egress is None)
             task_motion = state.get('task', {}).get('egress_motion')
             binding &= (motion(task_motion) == egress_motion if motion_declared else task_motion is None)
-        expected_goals = [{'label': 'Nav2', 'goal_pose': target, 'goal_motion': None}]
+        expected_goals = [{'label': 'Nav2', 'goal_pose': goal, 'goal_motion': None}
+                          for goal in (approaches or [])+[target]]
         if motion_declared:
             expected_goals.insert(0, {'label': 'DriveOnHeading', 'goal_pose': None,
                                       'goal_motion': body_goal(egress_motion)})
@@ -414,6 +423,28 @@ def delivery_checks(records, samples, audit, attempts, events):
         active = bool(native_id and observed[native_id]['active_wall_time'] is not None)
         terminal = observed[native_id]['terminal_status'] if native_id else None
         native = bool(native_id and goal_frozen and last_nav_is_delivery and route_success and route_order)
+        # Old captures retain the old score. New factory requests declare the
+        # route and require a complete shared-budget receipt, not N x 120 s.
+        budget_required = ('expected_delivery_approach_poses' in event or
+                           any(state.get('task', {}).get('delivery_route') is not None for state in states))
+        budgets = [state['task']['delivery_route'] for state in states
+                   if isinstance(state.get('task', {}).get('delivery_route'), dict)]
+        receipt = budgets[-1] if budgets else {}
+        elapsed = receipt.get('elapsed_wall_s')
+        route_native = route_ids[1:] if egress_declared or motion_declared else route_ids
+        active_times = [observed[identifier]['active_wall_time'] for identifier in route_native]
+        final_success = observed[native_id]['success_wall_time'] if native_id else None
+        independent_span = (final_success-min(active_times) if final_success is not None
+                            and active_times and all(value is not None for value in active_times) else None)
+        budget_passed = (not budget_required or bool(
+            receipt.get('budget_wall_s') == 120. and receipt.get('clock') == 'monotonic_wall'
+            and receipt.get('boundary') == 'after_required_egress_through_final_nav_stop_and_hold'
+            and receipt.get('status') == 'succeeded' and finite(elapsed) and 0 <= elapsed <= 120.
+            and receipt.get('goals') == (approaches or [])+[target]
+            and receipt.get('completed_legs') == len((approaches or [])+[target])
+            and finite(receipt.get('started_wall_time')) and finite(receipt.get('finished_wall_time'))
+            and start <= receipt['started_wall_time'] <= receipt['finished_wall_time'] <= end
+            and independent_span is not None and 0 <= independent_span <= 120.))
         gate = oracle.Gate(1.)
         placed = attempt.get('released_full_footprint_supported_and_relative_rest', {}).get('first_pass_stamp')
         previous = last = None
@@ -446,6 +477,10 @@ def delivery_checks(records, samples, audit, attempts, events):
         settled = bool(last and last_valid and gate.started is not None and last['stamp'] - gate.started >= 1.)
         results.append({'task_id': task_id, 'episode_id': episode, 'required': True,
             'expected_delivery_pose': target, 'task_request_and_acceptance_match': bool(binding),
+            'expected_delivery_approach_poses': approaches,
+            'delivery_route_budget': {'required': budget_required, 'passed': budget_passed,
+                                      'receipt': receipt, 'independent_native_span_wall_s': independent_span,
+                                      'bridge_forwarding_is_not_consumption_ack': True},
             'carrying_nav_uuid': native_id, 'carrying_nav_sent_goal_matches': bool(goal_frozen and native_id),
             'expected_egress_pose': egress, 'egress_required': egress_declared or motion_declared,
             'expected_egress_motion': egress_motion,
@@ -461,7 +496,7 @@ def delivery_checks(records, samples, audit, attempts, events):
             'final_true_pose_error': errors, 'final_true_pose_and_cargo_stop': gate.result(),
             'position_tolerance_m': .04, 'yaw_tolerance_rad': .05, 'continuous_final_dwell_s': 1.,
             'threshold_basis': 'original_physical_dock_pose_tolerances_and_original_final_rest_dwell',
-            'passed': bool(binding and native and settled)})
+            'passed': bool(binding and native and settled and budget_passed)})
     return {'required': bool(declared), 'attempts': results,
             'passed': (bool(results) and all(r['passed'] for r in results)) if declared else True,
             'original_K_checks_remain_required': True, 'controller_helpers_imported': False}

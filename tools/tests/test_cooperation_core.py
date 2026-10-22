@@ -13,6 +13,7 @@ from unittest.mock import patch
 import uuid
 import numpy as np
 from cooperation_bridge import BridgeTiming, normalize_egress_motion
+from cooperation_delivery_route import DELIVERY_ROUTE_WALL_S
 
 spec=importlib.util.spec_from_file_location('core',Path(__file__).parents[1]/'cooperation_core.py')
 core=importlib.util.module_from_spec(spec);spec.loader.exec_module(core)
@@ -68,6 +69,17 @@ class CooperationEvidenceTests(unittest.TestCase):
                 core.request_identity(dict(body, delivery_pose=value), now=10)
         with self.assertRaises(core.Rejected):
             core.request_identity(body, cancel=True, now=10)
+
+    def test_approaches_are_optional_ordered_and_cannot_leak_into_cancel(self):
+        body={'task_id':str(uuid.uuid4()),'issued_at':10,
+              'delivery_approach_poses':[{'x':.5,'y':-1.68,'yaw':2*math.pi}]}
+        self.assertEqual(core.request_identity(body,now=10),body['task_id'])
+        self.assertEqual(core.task_delivery_approaches(body),body['delivery_approach_poses'])
+        self.assertEqual(core.task_delivery_approaches({}),[])
+        for invalid in (None,{},[{'x':0.,'y':0.}], [{'x':True,'y':0.,'yaw':0.}]):
+            with self.subTest(invalid=invalid),self.assertRaises(core.Rejected):
+                core.request_identity(dict(body,delivery_approach_poses=invalid),now=10)
+        with self.assertRaises(core.Rejected):core.request_identity(body,cancel=True,now=10)
 
     def test_settled_cargo_requires_support_released_tips_and_full_extent(self):
         raw={'cargo':{'position_relative_tray':[0,0,.01],'quaternion_wxyz':[1,0,0,0],'velocity_relative_tray':[0,0,0]},
@@ -241,6 +253,7 @@ class BridgeRaceTests(unittest.TestCase):
             'SubscriptionProbeBase':SubscriptionProbeBase,'Clock':Clock,'TimeSource':TimeSource,
             'np':np,
             'normalize_egress_motion':normalize_egress_motion,
+            'DELIVERY_ROUTE_WALL_S':DELIVERY_ROUTE_WALL_S,
             'time':NS(monotonic=lambda:self.clock,time=lambda:self.epoch+self.clock-100.,sleep=self.sleep),
             'threading':NS(Thread=Thread), 'String':lambda **kw:NS(**kw), 'ClearEntireCostmap':NS(Request=lambda:NS()),'manifest':{'station_offset':[0.,0.,0.],'dock_pose':[0.,0.,0.],
                 'staging_pose':[.7,0.,0.],'native_dock_pose':[0.,0.,math.pi],
@@ -910,6 +923,73 @@ class BridgeRaceTests(unittest.TestCase):
         self.assertEqual(len(self.threads),0)
         self.assertIsNone(p.execution_token)
 
+    def test_approach_is_frozen_validated_and_idempotency_cannot_change_it(self):
+        p=self.bridge;p.task.update(id=None,status='idle');p.execution_token=None
+        approach={'x':.5,'y':-1.68,'yaw':.2};checked=[]
+        p.validate_delivery_goal=lambda goal:checked.append(copy.deepcopy(goal)) or {'passed':True}
+        body={'task_id':str(uuid.uuid4()),'issued_at':time.time(),
+              'delivery_approach_poses':[approach]}
+        first=p.start(body)
+        approach['yaw']=9.
+        self.assertEqual(checked,[{'x':.5,'y':-1.68,'yaw':.2}])
+        self.assertEqual(first['task']['delivery_approach_poses'],checked)
+        same=dict(body,delivery_approach_poses=copy.deepcopy(checked))
+        self.assertEqual(p.start(same)['task_id'],body['task_id'])
+        with self.assertRaisesRegex(core.Rejected,'另一进场路线'):p.start(body)
+        self.assertEqual(len(self.threads),1)
+
+    def test_multiple_delivery_goals_share_deadline_and_stop_after_budget_exhaustion(self):
+        p=self.bridge;p.task['delivery_approach_poses']=[{'x':.5,'y':-1.68,'yaw':0.}]
+        calls=[]
+        def navigate(goal,**options):
+            calls.append((copy.deepcopy(goal),options))
+            self.clock+=50.
+        p.navigate=navigate
+        p.delivery_route()
+        self.assertEqual([entry[1]['deadline'] for entry in calls],[220.,220.])
+        self.assertEqual([entry[1]['route_leg_index'] for entry in calls],[0,1])
+        self.assertEqual(p.task['delivery_route']['elapsed_wall_s'],100.)
+        self.assertEqual(p.task['delivery_route']['completed_legs'],2)
+        calls.clear();self.clock=100.
+        def exhausted(goal,**options):calls.append(goal);self.clock+=121.
+        p.navigate=exhausted
+        with self.assertRaisesRegex(RuntimeError,'120秒预算'):p.delivery_route()
+        self.assertEqual(len(calls),1)
+        self.assertFalse(p.task['delivery_route']['within_budget'])
+        self.assertEqual(p.task['delivery_route']['status'],'failed')
+
+    def test_expired_route_does_not_send_native_goal(self):
+        p=self.bridge
+        with self.assertRaisesRegex(RuntimeError,'120秒预算'):
+            p.navigate(self.goal(),carrying=True,deadline=self.clock)
+        self.assertEqual(p.dispatches,[])
+
+    def test_shared_deadline_includes_goal_acceptance_and_cancels_original_handle(self):
+        p=self.bridge;handle=ControlledHandle();sent=ControlledFuture()
+        p.nav.send_goal_async=lambda request:sent
+        accepted=[]
+        def later():
+            if not sent.done() and self.clock>=100.4:
+                accepted.append(self.clock);sent.resolve(handle)
+        self.on_sleep=later
+        with self.assertRaisesRegex(RuntimeError,'回执超时'):
+            p.navigate(self.goal(),carrying=True,deadline=101.,route_leg_index=0)
+        self.assertEqual(len(p.dispatches),1)
+        self.assertEqual(handle.cancels,1)
+        self.assertIs(p.dispatches[0]['result'],handle.result_future)
+        self.assertLess(self.clock,101.1)
+        self.assertTrue(p.abort_event.is_set())
+        self.assertTrue(accepted)
+
+    def test_delivery_route_live_budget_uses_monotonic_clock(self):
+        p=self.bridge;p.task['delivery_approach_poses']=[self.goal()];snapshots=[]
+        def navigate(goal,**options):
+            self.sleep(.2)
+            snapshots.append(p.state()['task']['delivery_route'])
+        p.navigate=navigate;p.delivery_route()
+        self.assertGreater(snapshots[1]['elapsed_wall_s'],snapshots[0]['elapsed_wall_s'])
+        self.assertAlmostEqual(snapshots[0]['remaining_wall_s'],119.8)
+
     def test_legacy_default_request_does_not_add_a_new_geometry_admission_gate(self):
         p=self.bridge;p.task.update(id=None,status='idle');p.execution_token=None
         def unexpected(goal):raise AssertionError('legacy default route must keep its original admission')
@@ -1061,12 +1141,14 @@ class BridgeRaceTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'机械臂未保持回位停稳'):p.check(carrying=True)
 
     def execution_handoff_probe(self, *, before_transfer=None, after_delivery=None, delivery_distance=1., delivery_pose=None,
-                                egress_pose=None, on_navigate=None, egress_motion=None, on_drive=None):
+                                egress_pose=None, on_navigate=None, egress_motion=None, on_drive=None,
+                                delivery_approach_poses=None):
         """Exercise current execute ordering; controlled samples are not physical acceptance."""
         p=self.bridge;p.station_capture_ready=lambda:True;p.align_station_map=lambda:None
         if delivery_pose is not None:p.task['delivery_pose']=copy.deepcopy(delivery_pose)
         if egress_pose is not None:p.task['egress_pose']=copy.deepcopy(egress_pose)
         if egress_motion is not None:p.task['egress_motion']=copy.deepcopy(egress_motion)
+        if delivery_approach_poses is not None:p.task['delivery_approach_poses']=copy.deepcopy(delivery_approach_poses)
         p.dock_at_station=lambda:p.check()
         class Planner:
             def __init__(self,*args,**kwargs):pass
@@ -1123,7 +1205,9 @@ class BridgeRaceTests(unittest.TestCase):
         p,goals=self.execution_handoff_probe(egress_pose=egress,delivery_pose=delivery,
             on_navigate=lambda goal,kwargs:options.append((kwargs,self.bridge.execution_token)))
         self.assertEqual(goals,[egress,delivery])
-        self.assertEqual(options,[({'carrying':True},('task-a',1))]*2)
+        self.assertEqual(options[0],({'carrying':True},('task-a',1)))
+        self.assertEqual(options[1][1],('task-a',1))
+        self.assertEqual(options[1][0]['route_leg_index'],0)
         self.assertEqual(p.task['status'],'succeeded')
         self.assertEqual(p.task['stage'],'delivery_stopped')
         self.assertFalse(p.dock_guard_active)

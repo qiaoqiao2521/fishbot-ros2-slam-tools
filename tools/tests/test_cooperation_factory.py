@@ -37,6 +37,14 @@ def successful_score(order):
 
 
 class ReferenceTests(unittest.TestCase):
+    def test_station_approach_reaches_order_without_rebinding_final_destination(self):
+        source=manifest();station=source['factory_delivery']['destinations'][1]
+        station['approach_poses']=[{'x':.8,'y':-2.5,'yaw':1.}]
+        result=factory.reference(source,candidate='approach',order=['order-b','order-a'])
+        self.assertEqual(result['orders'][0]['delivery_pose'],station['pose'])
+        self.assertEqual(result['orders'][0]['delivery_approach_poses'],station['approach_poses'])
+        self.assertEqual(result['orders'][1]['delivery_approach_poses'],[])
+
     def test_original_factory_jobs_get_fresh_batches_and_distinct_targets(self):
         first = factory.reference(manifest(), candidate='baseline')
         second = factory.reference(manifest(), candidate='baseline')
@@ -86,6 +94,11 @@ class ScoreTests(unittest.TestCase):
         self.assertEqual(value['metrics']['final_position_error_m'], .02)
         self.assertEqual(value['metrics']['final_yaw_error_rad'], .03)
         self.assertEqual(value['metrics']['continuous_final_stop_source_s'], 1.1)
+
+    def test_score_for_another_approach_is_not_the_same_order(self):
+        self.order['delivery_approach_poses']=[{'x':.8,'y':-2.5,'yaw':1.}]
+        self.assertFalse(self.report()['destination_bound'])
+        self.assertEqual(self.report()['task_verdict'],'failed')
 
     def test_http_or_terminal_success_does_not_replace_physical_score(self):
         for field in ('passed', 'original_k_oracle_passed'):

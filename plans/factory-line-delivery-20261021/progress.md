@@ -1,7 +1,9 @@
 # F1 Progress
 
 ## Current
-2026-10-23 本轮 J100＋3D 雷达验证已结束，组合未通过；父FishBot/planar同轮B→A物理2/2保持。新硬件已真实发布点云/IMU/wheel odom、接入原生两costmap/CM，完成入站、Dock、SO101抓放及出站；第二完整尝试的原K和连续交接/运输通过，但B载货Nav原120秒超时、交付false，A未执行。两个完整B尝试与短探针失败均保留，不拼接为两单成功。当前源码63ca9c4的140项相关检查通过；未通过的曲率/接近参数改动已存私有patch并从默认源码撤回。全部owned实例、9111和sleep inhibitor已清理。最短接续是显式建模配送站进场姿态与路径时间预算，再验证同轮B→A。
+2026-10-23 配送站进场与共享路线预算已实现：可选有序map姿态沿原Workflow持久化，原J100 body-frame出站后各进场点和最终点共用120墙秒，原360/1000与评分保持。当前原生只规划15组/25请求，5组整路完整几何通过，但这些采样路径预算均不足；新运输与新路线实际运动未启动、不计验收。两实例5583物理样本全hold、零任务/运动Goal，owned/9111已清理。原J100两次完整失败、A未执行和父FishBot2/2均保留；后续须先找到可验收路线。软件最终回归见下方本轮条目。
+
+2026-10-23 本轮 J100＋3D 雷达验证已结束，组合未通过；父FishBot/planar同轮B→A物理2/2保持。新硬件已真实发布点云/IMU/wheel odom、接入原生两costmap/CM，完成入站、Dock、SO101抓放及出站；第二完整尝试的原K和连续交接/运输通过，但B载货Nav原120秒超时、交付false，A未执行。两个完整B尝试与短探针失败均保留，不拼接为两单成功。当前源码63ca9c4的140项相关检查通过；未通过的曲率/接近参数改动已存私有patch并从默认源码撤回。全部owned实例、9111和sleep inhibitor已清理。其后已补进场姿态与路径预算，当前仍需合格路线后验证同轮B→A。
 
 2026-10-22 本轮F1 direct基线完成：实体占用场景同轮B→A原独立完整物理2/2，run5e1f02eb-d912-452d-9c76-0acc42d9b029、源码b158b65。B3.259cm/.02692rad、A2.531cm/.01719rad；原抓放/交接/留盘/运输/清理与120/360/1000预算保持。109项相关检查和两份原ROS记录独立回算通过。有效配置为Omni参考点模型＋运输Smac半径.10m＋两Python进程异步发布；默认值保持。旧失败保留，当前没有运行中的owned实例。
 
@@ -276,3 +278,16 @@ knowledge_status=updated(local)：重置两次GET竞态已写原Wiki/ROS2 与 Fi
 - 未通过候选已完整保存 `~/.cache/fishbot/factory-line-delivery-20261021/j100-lidar3d-20261022/unqualified-curvature-approach-candidate.patch`（5610字节），相关输入/原生结果同目录，默认源码回到63ca9c4。保留曾通过42项局部软件检查的记录，但最终有效代码回归为140项，不合并计数。
 - `final-cleanup-readback.json`独立核对14份owned报告，零匹配存活PID，当前9111关闭；零派发startup原unknown由单列补充cleanup读回，不覆盖原result。临时防休眠已释放，配置的旧systemd快照均not-found，不称旧107/114当时在运行。
 - knowledge_status=updated(local)：原 `Wiki/ROS2 与 FishBot.md` 第19节补路径线／角速时间下界、活动Reeds重配的bond证据与hold QoS；原开发知识入口补触发词，已读回。独立知识仓原dirty保留、未提交发布。owner=本对话root。
+
+## 配送站进场与共享预算交付（2026-10-23）
+
+- 实现 `destinations[].approach_poses` → 原 Workflow → `delivery_approach_poses` → 原 Bridge 顺序 Nav2 Goal。进场、最终交付与原 task ID 共同保存，重连核对原请求；同 ID 改进场会拒绝。保留旧请求/ledger 与历史评分兼容，`--from-scene` 和显式批次 CLI 均接入。
+- 原J100 body-frame出站先完成；之后进场与最终段共享120单调墙秒，Goal接纳/规划/运动、原生成功、两次原`.7`源秒停稳与hold确认均计入，不逐段重置。原360/1000与45秒出站允许时间保持。截止后取消当前原UUID，不派发后段；超时、连续支撑/几何/清理和unknown规则未放宽。
+- 状态提供当前段、进场/交付类型、已用/剩余预算；factory报告/oracle绑定完整原生路线、进场列表和共享预算。独立ROS UUID活动/成功及最终真值/同货物/连续支撑/停稳仍分别检查，桥元数据不冒充消费ACK。
+- 软件验证：`./fishbot.sh check-feedback` control989、mission209、autonomy61、frontend460，共1719项通过，0skip、0缺依赖。补充from-scene实际CLI/进场提取/预算5项通过（包含重复覆盖，不与1719叠加）。覆盖接纳等待也占预算、超时取消原handle、多段不重置、预算耗尽不派下一段、changed/missing approach/receipt/240秒伪预算不能通过及历史默认兼容。
+- 新候选公开prepare真实构建成功：24qpos/22qvel/10ctrl、J100/lidar3d/transport、原Reeds .60、原最终B/A与body-frame出站；`scene/scene-manifest.json`读回后，原factory `--dry-run --order order-b --order order-a`正确输出B进场/A空列表/共用120/360/1000，0ROS初始化/0动作/0ledger。该scene尚未运动，不称运输验收。
+- 真实原生只规划两实例合计15组/25请求：第一实例1337、第二4246物理帧全hold，0任务start/0Navigate/0Dock。5组完整路径几何通过，未找到预算合格候选；原direct采样下界128.690秒，含双停稳/加减速余量142.090秒。示例B进场(.9,-2.4,1.1)下界141.189秒、估算155.989秒。其他几何通过候选下界140.342–176.523秒；lethal/206与几何不合格路径均保留。此下界仅针对按所采样路径朝向跟踪、源/墙速率1的假设，不是对所有路线的不可行性证明。
+- 原始估算只含一次`.7`源秒余量，现以同一保存路径离线补全pre/post-hold双停稳至1.4秒；单列`time-budget-recalculation.json`，原result未改，不计新仿真或改进成绩。规划、实体扫掠与时间估算通过也不代替实际RPP/完整运输。
+- 取证根：`~/.cache/fishbot/factory-line-delivery-20261021/j100-delivery-approach-20261023/`；`native-route-preflight`、`native-route-preflight-south`、`time-budget-recalculation.json`、`final-cleanup.json`。最终独立进程starttime对账零owned存活、9111关闭；FishBot临时sleep inhibitor已释放，其他系统inhibitor未动。无新完整运输，原J100失败与父FishBot2/2保持。
+- knowledge_status=already_covered：沿用原Wiki/ROS2 与 FishBot第19/20节的双时钟、原ID、完整几何、线/角速预算和真值隔离；本轮新增的是项目合同与有限候选证据，不重复写知识页。独立知识仓原dirty保持。owner=本对话root。
+- 最短接续：在原实体/最终姿态/速度/120秒内先找一条几何与预算均合理的进场路线，再运行原UUID真实跟踪和停稳，最后同轮B→A完整oracle。当前具名JSON明确为未通过候选，不能直接作为默认可交付路线。

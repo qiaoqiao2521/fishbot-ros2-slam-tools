@@ -198,6 +198,48 @@ class TaskDeliveryTests(unittest.TestCase):
         records, samples, attempt, events = fixture
         return oracle.delivery_checks(records, samples, audit(), [attempt], events)
 
+    def approach_fixture(self):
+        fixture=drive_egress_delivery_fixture();records,samples,attempt,events=fixture
+        approach={'x':.5,'y':.1,'yaw':.2}
+        target=copy.deepcopy(events[0]['expected_delivery_pose'])
+        events[0].update(expected_delivery_approach_poses=[approach],
+                         requested_delivery_approach_poses=[copy.deepcopy(approach)])
+        action={'uuid':'04'*16,'label':'Nav2','accepted':True,'carrying':True,
+                'goal_pose':copy.deepcopy(approach),'goal_motion':None,'status':4,'result_known':True}
+        for row in records:
+            if row['topic']=='http_state':row['payload']['task']['delivery_approach_poses']=[copy.deepcopy(approach)]
+        records[-1]['payload']['native_actions'].insert(1,action)
+        records[-1]['payload']['task']['delivery_route']={
+            'budget_wall_s':120.,'clock':'monotonic_wall',
+            'boundary':'after_required_egress_through_final_nav_stop_and_hold',
+            'started_wall_time':108.,'finished_wall_time':112.5,'elapsed_wall_s':4.5,
+            'status':'succeeded','goals':[approach,target],'completed_legs':2}
+        for status,wall in ((2,108.3),(4,108.8)):
+            records.append({'topic':'nav_status','received_wall_time':wall,'payload':{'status_list':[
+                {'goal_info':{'goal_id':{'uuid':[4]*16}},'status':status}]}})
+        # Keep the final accepted-action snapshot last in observation order.
+        records.sort(key=lambda r:r['received_wall_time'])
+        return fixture
+
+    def test_approach_requires_body_egress_then_approach_then_final_and_shared_budget(self):
+        result=self.score(self.approach_fixture());self.assertTrue(result['passed'])
+        value=result['attempts'][0]
+        self.assertEqual([v['uuid'] for v in value['carrying_nav_route']],['02'*16,'04'*16,'03'*16])
+        self.assertEqual(value['carrying_nav_uuid'],'03'*16)
+        self.assertTrue(value['delivery_route_budget']['passed'])
+
+    def test_wrong_approach_missing_action_and_reset_per_leg_budget_cannot_pass(self):
+        for kind in ('changed_approach','missing_action','missing_receipt','over_budget','per_leg_budget'):
+            fixture=self.approach_fixture();rows=fixture[0]
+            last=next(row for row in rows if row['topic']=='http_state' and
+                      row['payload']['task'].get('delivery_route'))
+            if kind=='changed_approach':last['payload']['task']['delivery_approach_poses'][0]['yaw']=.3
+            if kind=='missing_action':last['payload']['native_actions'].pop(1)
+            if kind=='missing_receipt':last['payload']['task'].pop('delivery_route')
+            if kind=='over_budget':last['payload']['task']['delivery_route']['elapsed_wall_s']=120.01
+            if kind=='per_leg_budget':last['payload']['task']['delivery_route']['budget_wall_s']=240.
+            with self.subTest(kind=kind):self.assertFalse(self.score(fixture)['passed'])
+
     def test_same_task_goal_uuid_and_independent_final_pose_are_all_required(self):
         result = self.score(delivery_fixture())
         self.assertTrue(result['required'])

@@ -17,7 +17,7 @@ from urllib.parse import parse_qs
 from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, arm_home_quiet, car_pose,
                               cargo_retained, dispatch_terminal, finite_vector,
                               physical_quiet, quaternion, request_identity,
-                              task_scope, task_delivery_pose,
+                              task_scope, task_delivery_pose, task_delivery_approaches,
                               reset_request_identity,
                               settled_cargo, stopped, tip_forces, transport_handoff_ready, validate_physics)
 from cooperation_core import station_robot_pose, within_station_capture
@@ -27,6 +27,7 @@ from cooperation_readiness import NativeReadiness
 from cooperation_sim import LoopTiming
 from cooperation_geometry_check import SceneGeometry
 from cooperation_loaded_limits import LoadedVelocityLimits, LoadedRppLimits
+from cooperation_delivery_route import DELIVERY_ROUTE_WALL_S
 from fishbot_runtime import (INSTANCE_HEADER, RUNTIME_CHANGED, RuntimeIdentity, capability,
                             DomainExecutionLock, ExecutionOwnerBusy)
 
@@ -997,7 +998,8 @@ def run(args):
             self.cleanup_summary.update(state='unknown', finished_wall_time=time.time())
             return False
 
-        def navigate(self, goal, *, carrying=False, station_localization=False, staging=False):
+        def navigate(self, goal, *, carrying=False, station_localization=False, staging=False,
+                     deadline=None, route_leg_index=None):
             request = NavigateToPose.Goal()
             request.pose = PoseStamped()
             request.pose.header.frame_id = 'map'
@@ -1007,7 +1009,49 @@ def run(args):
             request.behavior_tree = (manifest.get('staging_navigation_behavior_tree') or '') if staging and not carrying else ''
             return self.dispatch_goal(self.nav,request,carrying=carrying,label='Nav2',timeout=120,
                 station_localization=station_localization,allow_outside_station=station_localization,
-                goal_pose=copy.deepcopy(goal),goal_behavior_tree=request.behavior_tree)
+                goal_pose=copy.deepcopy(goal),goal_behavior_tree=request.behavior_tree,
+                deadline=deadline,route_leg_index=route_leg_index)
+
+        def delivery_route(self):
+            """Keep one navigation deadline after, never instead of, required egress."""
+            token = self.owner()
+            started = time.monotonic()
+            deadline = started+DELIVERY_ROUTE_WALL_S
+            goals = copy.deepcopy(self.task.get('delivery_approach_poses', []))
+            goals.append(copy.deepcopy(self.task.get('delivery_pose', self.stations()['delivery'])))
+            with self.lock:
+                self.owner(token)
+                self.delivery_route_started_monotonic = started
+                route = {'budget_wall_s': DELIVERY_ROUTE_WALL_S, 'clock': 'monotonic_wall',
+                         'boundary': 'after_required_egress_through_final_nav_stop_and_hold',
+                         'started_wall_time': time.time(), 'finished_wall_time': None,
+                         'elapsed_wall_s': 0., 'remaining_wall_s': DELIVERY_ROUTE_WALL_S,
+                         'status': 'running', 'goals': goals,
+                         'completed_legs': 0, 'active_leg_index': None, 'active_leg_kind': None}
+                self.task['delivery_route'] = route
+            try:
+                for index, goal in enumerate(goals):
+                    with self.lock:
+                        self.owner(token)
+                        route.update(active_leg_index=index,
+                                     active_leg_kind='approach' if index < len(goals)-1 else 'delivery')
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError('配送导航共用120秒预算已耗尽，未派发下一段')
+                    self.navigate(goal, carrying=True, deadline=deadline, route_leg_index=index)
+                    with self.lock:
+                        self.owner(token)
+                        route['completed_legs'] = index+1
+                    if time.monotonic() > deadline:
+                        raise RuntimeError('配送导航共用120秒预算已耗尽')
+                route.update(status='succeeded', active_leg_index=None, active_leg_kind=None)
+            except Exception as error:
+                route.update(status='failed', error=str(error))
+                raise
+            finally:
+                with self.lock:
+                    route.update(elapsed_wall_s=time.monotonic()-started, finished_wall_time=time.time())
+                    route['within_budget'] = route['elapsed_wall_s'] <= DELIVERY_ROUTE_WALL_S
+                    route['remaining_wall_s'] = max(0., DELIVERY_ROUTE_WALL_S-route['elapsed_wall_s'])
 
         def dock_at_station(self):
             request = DockRobot.Goal()
@@ -1035,8 +1079,16 @@ def run(args):
 
         def dispatch_goal(self,client,request,*,carrying=False,label,timeout,station_localization=False,
                           allow_outside_station=False,docking_guard=False,goal_pose=None,goal_motion=None,
-                          goal_behavior_tree=None):
+                          goal_behavior_tree=None,deadline=None,route_leg_index=None):
             token = self.owner()
+            def remaining(maximum):
+                if deadline is None:
+                    return maximum
+                value = min(maximum, deadline-time.monotonic())
+                if value <= 0:
+                    raise RuntimeError('配送导航共用120秒预算已耗尽')
+                return value
+            remaining(timeout)
             self.hold(True, token)
             try:
                 with self.lock:
@@ -1045,12 +1097,14 @@ def run(args):
                     dispatch = {'token': token, 'epoch': self.dispatch_epoch, 'label': label, 'request': None, 'handle': None,
                                 'result': None, 'cancel': None, 'received': False, 'aborted': False, 'error': None,
                                 'carrying': bool(carrying), 'goal_pose': copy.deepcopy(goal_pose),
-                                'goal_motion': copy.deepcopy(goal_motion), 'goal_behavior_tree':goal_behavior_tree}
+                                'goal_motion': copy.deepcopy(goal_motion), 'goal_behavior_tree':goal_behavior_tree,
+                                'route_leg_index': route_leg_index,
+                                'sent_wall_time': time.time()}
                     self.dispatches.append(dispatch)
                     sent = client.send_goal_async(request)
                     dispatch['request'] = sent
                     sent.add_done_callback(lambda future: self.received_goal(dispatch, future))
-                handle = self.wait_future(sent, 8, carrying=carrying)
+                handle = self.wait_future(sent, remaining(8), carrying=carrying)
                 self.received_goal(dispatch, sent)
                 with self.lock:
                     self.owner(token)
@@ -1073,7 +1127,7 @@ def run(args):
                     self.owner(token)
                     if not dispatch['result'].done():
                         self.hold(False, token)
-                result = self.wait_future(dispatch['result'], timeout, carrying=carrying,
+                result = self.wait_future(dispatch['result'], remaining(timeout), carrying=carrying,
                     station_localization=station_localization,allow_outside_station=allow_outside_station,
                     docking_guard=docking_guard)
                 native = getattr(result, 'result', None)
@@ -1081,7 +1135,7 @@ def run(args):
                         and getattr(getattr(self, 'loaded_limits', None), 'phase', None) == 'applied'):
                     # A brief threshold crossing can precede the smoother's
                     # zero command. Do not hard-hold through its braking tail.
-                    raw = self.wait_condition(stopped, duration=.7, timeout=6., carrying=True)
+                    raw = self.wait_condition(stopped, duration=.7, timeout=remaining(6.), carrying=True)
                     dispatch['stopped_before_hold'] = {'source_stamp': raw['stamp'],
                         'required_continuous_stop_source_s': .7,
                         'linear_speed': raw['car']['speed'], 'angular_speed': raw['car']['yaw_rate'],
@@ -1094,7 +1148,8 @@ def run(args):
                     error_code = f'，错误码{code}' if code is not None else '，错误码未提供'
                     raise RuntimeError(f'{label}目标未成功，状态{result.status}{error_code}：{detail}')
                 raw=self.wait_condition(lambda value: stopped(value) and value['car_hold'] is True,
-                                        carrying=carrying)
+                                        carrying=carrying,timeout=remaining(8.))
+                remaining(timeout)
                 if docking_guard:
                     disabled_at = raw['stamp']
                     self.set_docking_guard(False,token)
@@ -1231,7 +1286,7 @@ def run(args):
                     self.event('car','delivery','收到交接确认，先驶出工位，再前往交付点。')
                     self.navigate(copy.deepcopy(self.task['egress_pose']),carrying=True)
                 self.event('car','delivery','收到交接确认，驶往交付点。')
-                self.navigate(copy.deepcopy(self.task.get('delivery_pose', self.stations()['delivery'])),carrying=True)
+                self.delivery_route()
                 raw = self.wait_condition(lambda v: transport_handoff_ready(v, manifest['arm_home_qpos6']),
                                           duration=1., timeout=8., carrying=True)
                 if math.hypot(raw['cargo']['position'][0]-start[0],raw['cargo']['position'][1]-start[1])<.5:
@@ -1543,6 +1598,8 @@ def run(args):
                     'carrying': bool(item.get('carrying', False)), 'goal_pose': copy.deepcopy(item.get('goal_pose')),
                     'goal_motion': copy.deepcopy(item.get('goal_motion')),
                     'goal_behavior_tree': item.get('goal_behavior_tree'),
+                    'route_leg_index': item.get('route_leg_index'),
+                    'sent_wall_time': item.get('sent_wall_time'),
                     'stopped_before_hold': copy.deepcopy(item.get('stopped_before_hold')),
                     'status': status, 'result_known': known, 'terminal': dispatch_terminal(item),
                     'cancel_requested_wall_time': item.get('cancel_requested_wall_time')})
@@ -1680,6 +1737,11 @@ def run(args):
                                           'url': '/coop-api/report' if (args.output.parent/'acceptance-report.json').is_file() else None},
                     **({'episode_id': self.episode_id} if self.episode_id else {}),
                     'reset': self.reset_state(raw), 'history': copy.deepcopy(self.history[-10:])}
+                route = result['task'].get('delivery_route')
+                route_started = getattr(self, 'delivery_route_started_monotonic', None)
+                if route and route['status'] == 'running' and route_started is not None:
+                    route['elapsed_wall_s'] = time.monotonic()-route_started
+                    route['remaining_wall_s'] = max(0., route['budget_wall_s']-route['elapsed_wall_s'])
                 self.timing_record('http_assembly', assembled_at, assembly_context)
             timing = getattr(self, 'bridge_timing', None)
             if timing is not None:
@@ -1707,7 +1769,7 @@ def run(args):
                 raise ValueError('相机文件与当前回合不匹配')
             return args.frame_dir/info['image_file']
 
-        def existing_start(self, task_id, scope, delivery):
+        def existing_start(self, task_id, scope, delivery, approaches):
             """Called under the telemetry lock at both admission boundaries."""
             if task_id not in self.known_ids:
                 return None
@@ -1716,6 +1778,8 @@ def run(args):
                 raise Rejected('任务编号已绑定另一范围；请读取原任务',409)
             if self.task.get('delivery_pose', task_delivery_pose({}, manifest.get('delivery_pose'))) != delivery:
                 raise Rejected('任务编号已绑定另一交付点；请读取原任务',409)
+            if self.task.get('delivery_approach_poses', []) != approaches:
+                raise Rejected('任务编号已绑定另一进场路线；请读取原任务',409)
             return {'task_id':task_id,'task':copy.deepcopy(self.task)}
 
         def start(self, body):
@@ -1724,11 +1788,12 @@ def run(args):
                 task_id=request_identity(body, episode_id=self.episode_id)
                 scope = task_scope(body)
                 delivery = task_delivery_pose(body, manifest.get('delivery_pose'))
+                approaches = task_delivery_approaches(body)
                 egress = (task_delivery_pose({}, manifest['egress_pose'])
                           if scope == 'transport' and manifest.get('egress_pose') is not None else None)
                 motion = (normalize_egress_motion(manifest['egress_motion'])
                           if scope == 'transport' and manifest.get('egress_motion') is not None else None)
-                existing = self.existing_start(task_id, scope, delivery)
+                existing = self.existing_start(task_id, scope, delivery, approaches)
                 if existing is not None:
                     return existing
                 episode = self.episode_id
@@ -1740,11 +1805,13 @@ def run(args):
                          if scope == 'transport' and 'delivery_pose' in body else None)
             if preflight is not None:
                 preflight.update(cargo_minimum_net_displacement_m=.5, cargo_transport_validated=False)
+            approach_preflight = ([self.validate_delivery_goal(goal) for goal in approaches]
+                                  if scope == 'transport' else [])
             with self.lock:
                 if self.episode_id != episode:
                     raise Rejected('场景回合已变化，请读取最新状态后重新开始',409)
                 request_identity(body, episode_id=self.episode_id)
-                existing = self.existing_start(task_id, scope, delivery)
+                existing = self.existing_start(task_id, scope, delivery, approaches)
                 if existing is not None:
                     return existing
                 current=self.state()
@@ -1759,7 +1826,9 @@ def run(args):
                 self.cleanup_summary = {'state': 'not_started', 'native_terminal': False,
                                         'quiet': False, 'hold': False, 'guard_disabled': False}
                 self.task={'id':task_id,'scope':scope,'status':'running','stage':'submitted','message':'任务已提交，等待原生执行','stop_reason':None,
-                           'delivery_pose':copy.deepcopy(delivery), 'delivery_goal_preflight':copy.deepcopy(preflight)}
+                           'delivery_pose':copy.deepcopy(delivery), 'delivery_goal_preflight':copy.deepcopy(preflight),
+                           'delivery_approach_poses':copy.deepcopy(approaches),
+                           'delivery_approach_preflight':copy.deepcopy(approach_preflight)}
                 for attribute in ('loaded_limits', 'loaded_controller'):
                     current = getattr(self, attribute, None)
                     if current is not None:

@@ -29,6 +29,7 @@ PYTHON_GROUPS = {
         'test_cooperation_scene.py', 'test_cooperation_geometry.py',
         'test_cooperation_launch.py',
         'test_cooperation_loaded_limits.py', 'test_cooperation_factory.py',
+        'test_cooperation_delivery_route.py', 'test_cooperation_factory_scene.py',
         'test_cooperation_factory_policy.py',
         'test_cooperation_staging.py',
         'test_cooperation_recording.py', 'test_cooperation_evidence_recording.py',

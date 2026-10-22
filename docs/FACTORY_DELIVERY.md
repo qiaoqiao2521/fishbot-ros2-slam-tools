@@ -177,3 +177,29 @@ FISHBOT_COOP_PYTHON=/home/muqiao/.cache/so101-colab/planning-venv/bin/python \
 随后使用上面的原 factory run，选择此 manifest，增加 `--publication-mode asynchronous --order order-b --order order-a`，输出到新的私有目录。J100 复用原 body-frame DriveOnHeading 出站，不传仅支持 FishBot 的 `--policy-config`。规划器配置、路径预检、原生 Goal 终态、完整物理评分分别报告，不能互相代替。临时进程级防休眠写法与上一节一致。
 
 源码依据：[Nav2 1.3.13 RPP 参数合同](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/src/parameter_handler.cpp)、[原生 SmacPlannerHybrid](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_smac_planner/src/smac_planner_hybrid.cpp)。当前完整运输结果回源本轮实施进度；预检成功不计运输成功。
+
+## 配送站进场姿态与共用时间预算
+
+2026-10-23 新增可选 `destinations[].approach_poses`，按顺序填写 map 坐标的 `{x,y,yaw}`，单位 m/rad。它描述如何进入配送站；`pose` 仍是原最终交付姿态。旧配置省略此字段时保持直达，不增加中间目标。
+
+```json
+{
+  "id": "line_b",
+  "pose": {"x": 0.7, "y": -2.0, "yaw": 0.0},
+  "approach_poses": [{"x": 0.9, "y": -2.4, "yaw": 1.1}]
+}
+```
+
+此例是具名**未通过候选**，不是可验收默认路线。完整输入见 [line-side-j100-approach-candidate.json](../tools/config/factory_delivery/line-side-j100-approach-candidate.json)。原 open/occupied 配置与父 FishBot 2/2 输入未改。使用原 `prepare --factory-config` 加载新配置；重建独立 scene，再运行原 factory adapter。只修改已生成 manifest 不会更新其配套输入。
+
+执行顺序为：原 J100 `DriveOnHeading` 车体方向出站 → 可选进场点 → 原最终交付点。出站不能被 map 中转点替换。必需出站结束后，进场与交付共用 **120 墙秒**，含 Goal 接纳、规划、运动、每段原生成功、原 `.7` 源秒停稳以及 hold 后确认。单任务 360 秒、整轮 1000 秒保持；出站仍有原生 45 秒允许时间与原动作 owner。超时取消当前原 UUID，不派发后续段，不自动重发。
+
+`/coop-api/start` 可选字段为 `delivery_approach_poses`。Workflow 将进场列表、最终点与请求共同落盘，重新连接按原任务对账；同 task ID 改进场点会明确拒绝。CLI `cooperation_workflow.py init --delivery-approach-poses JSON` 接收 batch UUID → 姿态列表；`--from-scene` 自动提取厂区进场配置。旧 ledger、旧请求与历史 oracle 捕获仍可读取。
+
+`/coop-api/state` 的 `task.delivery_route` 显示当前段序号、进场/交付阶段、共用预算、单调墙钟已用/剩余时间及完成段数。验收报告新增 `expected_delivery_approach_poses`、`delivery_route_budget`；独立 ROS 状态仍需按顺序证明每个原生 UUID 成功，最终真值、同货物、连续支撑、停稳和清理评分不变。桥预发送元数据不是控制器消费 ACK。
+
+`cooperation_delivery_route.path_time_budget()` 从实际路径采样估算线/角速下界、换向、加减速与段末停稳余量。线/角运动可重叠，不能只算长度/速度。估算假设按采样路径朝向跟踪、源/墙钟速率为 1；不是执行时间上界，不证明所有可行路线都超时，也不增加运行阻塞锁。
+
+本轮仅规划预检使用独占 141/9111，15 组输入、25 个原生 `ComputePathToPose` 请求。两次实例共 5583 个物理样本全部 hold，Navigate/Dock/任务 start 均为零。每条路径用原完整实体几何和采样间距界检查。5 组整路几何通过，但时间估算均超预算：原 direct 下界 128.690 秒、含余量 142.090 秒；上述 B 进场候选下界 141.189 秒、含余量 155.989 秒。北侧若干目标被原生 costmap 以 lethal cost/206 拒绝；这些不计为可用路线。
+
+因此**新增合同和预算实现完成，J100 完整 B→A 尚未通过**。本轮未重复抓放或声称运动验收；下一步须找到兼顾完整几何与原 120 秒的路径，再验证实际 RPP 跟踪，最后回到同轮两单完整 oracle。全部原生失败、路径、估算、静止和清理证据在 `~/.cache/fishbot/factory-line-delivery-20261021/j100-delivery-approach-20261023/`。原结果保留；双停稳余量的离线重算单列 `time-budget-recalculation.json`，没有重跑仿真或覆盖旧结果。
