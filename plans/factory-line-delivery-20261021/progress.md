@@ -1,11 +1,12 @@
 # F1 Progress
 
 ## Current
-2026-10-22 in_progress：新增可选运输Smac与原生AMCL Omni参考点模型，默认source/NavFn保持。原生六案例证实Diff解释偏轴foot小圆弧的均值误差5.701cm、Omni近0；34项检查过。新短运输段1.345cm/.00421rad通过，临时入站点5.678cm失败，整短探针false。首次完整任务入站3秒因源龄.34s取消并清理；当前只一次同源独立复现direct-repeat/run已越过入站/精停靠，装货中。原旧完整1/2、B末端超时、两个规划短失败与启动失败均保留。
+2026-10-22 本轮F1 direct基线完成：实体占用场景同轮B→A原独立完整物理2/2，run5e1f02eb-d912-452d-9c76-0acc42d9b029、源码b158b65。B3.259cm/.02692rad、A2.531cm/.01719rad；原抓放/交接/留盘/运输/清理与120/360/1000预算保持。109项相关检查和两份原ROS记录独立回算通过。有效配置为Omni参考点模型＋运输Smac半径.10m＋两Python进程异步发布；默认值保持。旧失败保留，当前没有运行中的owned实例。
 
-用户本轮明确后续只在当前对话独立实施，不再等待跨对话资源交接。每次原生运行前核对实际进程和端口，不停止其他任务。探针143/9113已结束；当前配送复现独占141/9111，源码cbe3251冻结。保留原120/360/1000预算及原物理评分。入口见docs/FACTORY_DELIVERY.md“阶段控制探针”；原固定direct失败与e/d各轮完整历史保留在下文。
+用户本轮明确后续只在当前对话独立实施，不再等待跨对话资源交接。每次原生运行前核对实际进程和端口，不停止其他任务。本轮141/9111、探针143/9113及临时sleep inhibitor均已清理；完整取证与采样缺口见下方“本轮有效交付”。原固定direct、NavFn/Smac .20、休眠/时效失败及e/d各轮历史仍保留。
 
 ## Done
+- 2026-10-22当前有效切片：B→A完整物理2/2、109项相关检查通过；默认兼容、原门槛和独立知识本地回写已核对。细节见下方本轮有效交付。
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
 - 确认现有订单/目标、prepare 地图生成和原物理 oracle 可直接复用。
 - prepare 的可选 --factory-config 与 workflow 场景订单薄 hook 已接入；旧 workflow 49 项回归通过，尚未计厂区实际配送成绩。
@@ -13,7 +14,7 @@
 - 评测入口经独立审查修复running任务误清理及跨360秒误通过，根独立19项合同回归过（0.011s）；不修改原评分。根另重跑10项场景/四静态构建过（16.954s），证据 ~/.cache/fishbot/factory-line-delivery-20261021/factory-scene-tests-root.log。
 
 ## Remaining
-原open无需重复。后续真实策略入口按task_plan接续；occupied-v2 的 B 物理未到位保留为后续策略开发失败样本，不算全场景通过。
+本轮occupied direct的B→A已通过，原open无需重复；旧occupied-v2 B失败保持其历史裁决。via策略、RGB和P8的J100/3D雷达复用仍待各自面板，不算本轮全场景通过。下一实施owner为本对话FishBot root。
 
 ## First entry
 公开入口 tools/cooperation_factory.py 已冻结，完整命令见 docs/FACTORY_DELIVERY.md。根已生成 ~/.cache/fishbot/factory-line-delivery-20261021/open-v1/scene/scene-manifest.json，并独立dry-run确认两订单A/B、0 ROS/动作、输出未创建。实际命令：

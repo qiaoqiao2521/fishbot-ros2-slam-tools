@@ -1,12 +1,15 @@
 # F1 Findings
 
+## 最新已核实结论
+2026-10-22源码b158b65在原占用场景同轮B→A完整物理2/2，原ROS记录独立回算及109项相关检查通过。有效组合为Omni参考点模型、运输Smac显式半径.10m、两Python进程异步发布及验收期间临时阻止sleep；原控制/碰撞/到达与预算保持。这是有限配置组合结果，不唯一分解各改动因果，也不覆盖P8、RGB或via。后文阶段性失败按原证据保留，完整参数/ID与缺口见progress。
+
 ## 已复用
 - 原 workflow 已支持任意 N 个 batch 和每批 delivery_pose；只需让新场景的订单数据进入原初始化入口。
 - 原 prepare 在编译碰撞体后生成激光切片和完整碰撞图。实体通道占用在编译前加入，可复用同一地图生成链。
 - 原独立 oracle 区分执行终态、物理交接/运输与目标停车，不新增评分实现。
 
-## 当前边界
-P8 保留 39 项运行文本观测和所有 A–J 失败。J 的新 frame 已进入回调但缓存提交受控制锁阻塞；独立短缓存锁候选尚待定向测试与原生运行。H 未获得 callback 调度的间隙不能由该修复直接宣称解决。
+## P8历史边界
+P8旧记录保留39项运行文本观测和所有A–J失败：当时J的新frame进入回调而缓存提交受控制锁阻塞，H存在未获得callback调度的间隙。本轮F1成功不证明P8全部组合已修复；后续回原P8计划与实际实例验收，不能用本轮成绩覆盖旧失败。
 
 ARIAC2025 仅作订单、工位与交付评价语义参照。官方来源已由场景worker打开核实：[ARIAC仓库](https://github.com/usnistgov/ARIAC)、[2025文档](https://pages.nist.gov/ARIAC_docs/en/stable/index.html)、[任务场景](https://pages.nist.gov/ARIAC_docs/en/main/pages/scenario.html)。当前一物体在两订单之间显式 reset；不宣称同回合多货物库存、真实产线 PLC 签收或跨引擎统一物理。
 
