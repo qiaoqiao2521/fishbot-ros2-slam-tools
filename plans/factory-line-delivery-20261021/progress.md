@@ -1,9 +1,9 @@
 # F1 Progress
 
 ## Current
-2026-10-22 in_progress：本轮离线探针与几何查询修复完成，最终15项相关检查通过。新两段fixture沿西侧各平移0.25m，277姿态静态扫掠的保守余量0.128831m；未初始化ROS、未步进物理、未运行新Goal。原motion-d仍failed：Stage1控制循环有证据但物理停车9.41cm超限；Stage2原UUID取消5，其消息因旧异常路径未保存，数量未知。具体RPP实例归属及原occupied完整配送仍未验收。
+2026-10-22 partial：控制器消费/实例切换已补齐原生证据，aligned两段Goal及独立物理评分2/2通过，真实RPP GID互异，误差2.55/2.63cm，原实例与端口已清理。16项局部检查与C++编译通过；fixed朝向探针及旧motion-d仍失败。原staged occupied direct两订单已完成，完整物理1/2：A误差3.59cm/.04375rad通过；B载货末端120秒超时，最终XY1.85cm/yaw1.57329rad失败。原评分不改、任务无重发、owned全清理，下一入口是B末端收敛。
 
-用户本轮明确后续只在当前对话独立实施。现场无机器人仿真实例，143/9113空闲，16CPU/load3.78，现运行公开探针两段并依据结果接续，不再等待跨对话资源交接。入口见docs/FACTORY_DELIVERY.md“阶段控制探针”；原固定direct失败与e/d各轮完整历史保留在下文。
+用户本轮明确后续只在当前对话独立实施，不再等待跨对话资源交接。每次原生运行前核对实际进程和端口，不停止其他任务。探针143/9113、配送141/9111均已结束；保留原120/360/1000预算及原物理评分。入口见docs/FACTORY_DELIVERY.md“阶段控制探针”；原固定direct失败与e/d各轮完整历史保留在下文。
 
 ## Done
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
@@ -162,3 +162,27 @@ Knowledge：already_covered，沿用原Wiki/ROS2 与 FishBot第18节软代价与
 原Goal终态、fresh hold、连续quiet.72源秒、owned launch/端口/native上下文关闭均独立确认。旧失败不覆盖。下一aligned fixture只隔离路径跟踪，目标(-.25,-2,π)/(-.5,-2,π)，相同25cm与原门槛；静态check0064a1ed-b7ff-451d-8172-5c6836847c19通过，未步进。
 
 新增只读C++ plan witness编译通过，16项阶段/探针局部检查全部通过.259s。覆盖实际accepted时间窗、共享/未知GID、溢出拒绝及默认fixture保持。下一次新输出运行两段运动并记录native GID，不启动完整运输或把探针替代F1；资源依据实际进程核对，不再跨对话排队。knowledge_status=already_covered（双时钟、真值与物理评分），MuJoCo双箱经验pending接续owner更正为本对话FishBot root。
+
+## 控制器消费与实例切换已取得原生证据
+
+`staging-aligned-fbfdbbe-20261022-a`，checkfa4ebc93-8bfe-49ae-8fa1-f3153223d251，源码fbfdbbe071d5e384a79a88417ed4f5710ec83e41起止一致，51.2408墙秒。staging UUID027e86545ae8485eb75a52e80638d7f6、default UUID5c80075efeef4742ab56bdd510d6292a均原状态4且FollowPath子目标独立成功。真实rmw GID分别尾6c03与6703，对应同运行已发现的两controller_server发布者；331/193份计划、Python非零命令331/195、实际位移.234267/.244159m，阶段实例切换true。
+
+原真值XY .0254803/.0262903m、yaw .0255410/.0135831rad，禁碰0、连续quiet各.72源秒，参数未变。native见证527事件（含ready及窗外消息）、无overflow，原始文件76328字节、结果11966911字节。原Goal终态、hold、连续quiet、native上下文、见证进程、owned launch与9113关闭均确认。原fixed失败保持，aligned只完成路径跟踪/阶段切换验收，不证明原固定朝向到达、整车臂任务或泛化。
+
+随后实际核对无机器人仿真实例及9111/9113空闲，在本对话启动原`occupied-policy-staged-20261021/direct/run`，141/9111。保持原direct函数、原工位/订单目标、120/360/1000预算与物理评分，不修改路径或运行源码。首单taskbfe5a9c1-0377-4309-bd8e-d5629c989bbb已越过入站与Dock，正在arm_grasp；完整评分在途，不提前记成功，不自动扩via。
+
+knowledge_status=updated(local)。原`Wiki/ROS2 与 FishBot.md`第19节“换车型与雷达”新增同点Goal/原生DDS消费见证与MuJoCo分离箱体距离边界两段；`Wiki/开发知识入口.md`同步触发词，已读回381/383及50行并diff检查通过。保留知识仓原dirty内容，未提交或推送该独立知识仓；此前MuJoCo经验pending已由本对话完成正文回写，不再挂给其他对话。
+
+## 原staged occupied direct已完成：A通过，B末端朝向失败
+
+run c15891fe-7f44-48de-93ab-935b4b98c050、源码fbfdbbe、141/9111，证据`~/.cache/fishbot/factory-line-delivery-20261021/occupied-policy-staged-20261021/direct/run/`。整轮680.8608墙秒，两个原task耗时266.7911/351.7359，均在原360内；总在1000内。原direct函数实际调用/返回None，新derived manifest两端接纳；2start/1reset/0 API cancel，没有自动重发。execution completed、task_verdict failed、overall=false，不能把执行完成当业务通过。
+
+A taskbfe5a9c1-0377-4309-bd8e-d5629c989bbb/episode9280b416-1989-4d56-ad7e-00abfbf1fe68，原载货Nav6957fe4b98cb4b7cba6a6e7dd3b04995状态4，原K与完整评分均true；末XY.03593570m/yaw.04375309rad、连续停稳2.58源秒。B task17c13bd7-22d4-4536-ba23-70ef5a429e7b/episode85c1838f-f2d7-47f2-9388-4917ba4d6c4e，原载货Nav39cdc2aefe75407f82aa008a13418693在约120.06墙秒取消5；原K/连续交接与运输true，但目标yaw1.573289rad、XY.01853856m，完整评分false。双指抓取/抬升/释放/落稳/home/留盘不等于最终朝向达标。
+
+两单入站Nav分别1b9252f6f0494bd3b4885b6a8f04ceb5、75d20cf5e08847af9e05e62f8cd73d1c，均请求staging XML并原状态4；对应Dock7a6badb0be1b4c03b27ccb982b9d50b1、946b5f116386438faeaa06899776868f均4。原完整oracle未声称控制消费ACK；此前两段探针独立GID见证已通过，不移植其字段来修饰完整任务。
+
+B最后30墙秒只读取证已保存`order-2/terminal-convergence-readback.json`：862物理帧hold全false、禁碰0、XY1.31–2.23cm、yaw1.30–1.79rad；601条原命令v=0、w±.8、换向21次，HTTP map15mm圈20次。它定位末端位置/朝向切换环节，不独占内部根因，原日志无collision/progress/patience错误。下一步先此局部收敛，via和P8未派发；不新引模型或放宽原评分。
+
+两份原score、独立native状态、source_integrity/recording_integrity均已读回；两份原记录未截断。护栏enabled但tripped样本0，未观察plant辅助介入。原task/UUID终态、hold/quiet/guard-off、owned launch/observer/上下文与9111关闭已确认，owned_process_survivors=[]，保留源码起止selected_text一致。保护单位前后仍均not-found，只说明该集合未改，不是旧实例活跃证明。
+
+独立两段探针另保存`independent-readback.json`，不用探针评分函数，从原四元数/位置和accepted窗重新计算出同样2.548/2.629cm、.02554/.01358rad与331/193个原GID消息；两原UUID独立状态2→4，禁碰0。knowledge_status=updated(local)见前节；本次B末端现象为第19节既有双XY锁经验的实例证据，already_covered，不将尚未修复的候选写成长期结论。接续owner=当前对话FishBot root。

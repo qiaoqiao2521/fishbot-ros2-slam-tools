@@ -113,11 +113,17 @@ cmake --build "$HOME/.cache/fishbot/build/cooperation-plan-witness" -j2
 
 见证器最多记录20000条计划，达到上限会明确报告overflow，不能再声称来源覆盖完整；原始JSONL与日志只留私有输出目录。来源归属与物理评分分列，终态失败不会因GID已知而改为通过。
 
+2026-10-22 aligned实跑check`fa4ebc93-8bfe-49ae-8fa1-f3153223d251`通过：源码`fbfdbbe`、143/9113，staging/default原Goal各status4，C++分别接收331/193份计划，独占对应不同controller_server GID；非零命令331/195条、物理位移23.43/24.42cm。最终真值XY2.548/2.629cm、yaw.02554/.01358rad，连续静止各.72源秒，禁碰0。51.241墙秒、参数/探针源码起止一致、原UUID与owned清理完成。证据`~/.cache/fishbot/factory-line-delivery-20261021/staging-aligned-fbfdbbe-20261022-a/`。它证明两阶段实际计算与实例切换，不是原固定朝向配送通过。
+
 ## 实测边界
 
 开放通道首轮两订单均通过原物理评分。v2 占用通道的两次原生 Nav2 均成功，独立物理评分只有 A 通过；B 的最终位置误差 0.043478m，超过原 0.04m，保持失败。各轮任务均未超 360 墙秒，owned 实例已清理。详见所属进度与私有原始报告。
 
 open-v1 与 occupied-v2 之间补充了 teardown 诊断及保护单位快照，不宣称严格同源码性能对照。保护检查仅比较配置的 systemd 单位；这些历史单位当时均不存在，不能解释成旧 107/114 活进程持续运行。
+
+2026-10-22原staged occupied direct两订单实跑`c15891fe-7f44-48de-93ab-935b4b98c050`：两单入站/精停靠成功，原双指抓取、释放、机械臂回位及连续交接/运输均通过；独立完整评分只有A通过。A用时266.791墙秒，最终XY.035936m/yaw.043753rad、连续停稳2.58源秒。B用时351.736墙秒，载货原UUID在约120墙秒取消5，最终XY.018539m/yaw1.573289rad，保持失败。总680.861墙秒、2start/1reset、同源码与原评分，owned清理完成；没有改变原4cm/.05rad、120/360/1000预算。此轮ideal/FishBot/planar，不是视觉或跨车型通过。
+
+B末30墙秒的862个原物理样本全程hold=false、禁碰0，XY误差1.31–2.23cm、偏航1.30–1.79rad；601条命令线速度全0、角速度±.8rad/s并换向21次。HTTP所记map位姿跨15mm圈20次，它不是逐周期控制器分支回执；只将末端收敛列为已定位环节，不独占因果。原完整任务oracle的`native_goal_consumption_ack_claimed=false`保持，本节前面的DDS消费证据来自独立两段探针，不移花接木为这轮每个动作的消费ACK。via尚未执行，需先解决末端收敛，再冻结新同源对照。
 
 ## 来源
 

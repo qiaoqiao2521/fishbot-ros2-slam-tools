@@ -55,3 +55,11 @@ fixed direct末段真实cmd线速度0而角速度正负交替，map 15mm圈30源
 2026-10-22固定朝向probe check9fe1577a-54f3-4583-8a54-44adc61c133d：Stage1计划331/命令332，Stage2计划1411/命令1411；前者原UUID4但真值XY.066540481m，后者末端转向超时取消原UUID5。日志未出现collision ahead、Failed to make progress或Controller patience exceeded，不能将本轮归为碰撞拒绝。Stage1首次AMCL进入15mm圈时yaw误差2.601rad，结束时AMCL XY6.227cm/真值6.654cm；Stage2进入位置圈后多次角速度反向，末yaw仍2.745rad。此为收敛现象证据，不独占根因。
 
 `EncoderOdometry`已从真实编译轮轴推导偏置并转换回foot原点，不能把忽略轮轴偏置当作漏改。为隔离控制消费，新增显式aligned目标朝向，不改固定目标或配送验收。系统已安装rclcpp28.1.22的MessageInfo暴露原生rmw publisher_gid，而本地rclpy包装层没有；故采用约60行只读订阅器，不改RPP、不造控制器。其消息按同机CLOCK_MONOTONIC对齐原accepted窗口，必须归属已发现的controller_server endpoint，overflow/未知来源不充作完成。
+
+aligned原生checkfa4ebc93：C++实际消息GID分别为010fa54e488cb39f0000000000006c03与010fa54e488cb39f0000000000006703，与运行中的两个controller_server endpoint逐项一致；331/193条在原accepted时间窗内、两阶段独占且不同。Python计划数331/195，默认阶段额外2条落在C++accepted窗外，分开记录不强行凑齐。每阶段均有实际平移、非零控制、原外层及FollowPath子Goal成功和原物理误差通过；控制器消费/切换缺口已补齐，不能据此称原F1配送已通过。
+
+fixed首阶段在源18.5s以后命令v始终0，轮轴真值从(-.2118484,-1.9716661)到(-.2111766,-1.9692849)，只漂2.47mm；foot原点则随转向绕轮轴移动。该读回支持坐标点转向位移的几何解释，但18.5s的AMCL/真值还存在平移差，不能把全6.65cm终误差独占归为轮轴或忽略定位误差。已有原里程计补偿与物理碰撞保持。
+
+原staged occupied direct run c15891fe-7f44-48de-93ab-935b4b98c050：两单入站各使用staging树，原入站Nav与Dock均4，第一单完整通过；第二单装货/交接/原K仍通过，但载货目标(.7,-2,0)原UUID39cdc2aefe75407f82aa008a13418693在120.06墙秒取消5。最后30墙秒，862物理样本、源330.20–347.42，hold全部false、禁碰0；XY误差.013092–.022339m，abs yaw1.301287–1.787098rad，真实yawrate-.744188至+.704035。601条原cmd的v全0，w±.8，角速度符号变21次；54个HTTP map样本跨15mm圈20次，不能把该HTTP位姿当同步控制分支ACK。日志没有collision ahead/progress/patience错误，本轮不支持安全层锁住或没有Goal消费的解释，也尚不能独占根因。
+
+此轮源码selected_text起止一致、运行681墙秒内、两任务均360内；A完整物理通过，B最终位置1.85cm但yaw1.57329rad失败。原完整oracle的native_goal_consumption_ack_claimed=false保持；先前两阶段DDS证明只能覆盖对应探针，不能转写为这两订单每个控制循环的回执。路线策略direct确实调用并返回None，无中转；via仍未跑，不形成策略优劣结论。
