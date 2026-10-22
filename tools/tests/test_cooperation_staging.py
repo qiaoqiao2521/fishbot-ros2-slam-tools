@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 import yaml
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from cooperation_prepare import staging_navigation
+from cooperation_prepare import navigation_planner, staging_navigation
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -28,6 +28,34 @@ class StagingNavigationTests(unittest.TestCase):
             '<ControllerSelector default_controller="FollowPath"/>'
             '<FollowPath path="{path}" controller_id="{selected_controller}"/>'
             '<Wait wait_duration="5.0"/></RecoveryNode></BehaviorTree></root>')
+
+    def test_default_planner_keeps_source_configuration_editable_and_unchanged(self):
+        before = copy.deepcopy(self.params)
+        result = navigation_planner(self.params)
+        self.assertEqual(self.params, before)
+        self.assertEqual(result['plugin'],
+                         before['planner_server']['ros__parameters']['GridBased']['plugin'])
+
+    def test_smac_changes_only_global_planning_preserving_all_control_and_safety(self):
+        before = copy.deepcopy(self.params)
+        result = navigation_planner(self.params, 'smac-hybrid')
+        planner = self.params['planner_server']['ros__parameters']
+        self.assertEqual(result['plugin'], 'nav2_smac_planner::SmacPlannerHybrid')
+        self.assertEqual(planner['GridBased']['motion_model_for_search'], 'DUBIN')
+        self.assertEqual(planner['GridBased']['tolerance'], 0.)
+        self.assertEqual(planner['GridBased']['allow_unknown'],
+                         before['planner_server']['ros__parameters']['GridBased']['allow_unknown'])
+        self.assertEqual({key: value for key, value in planner.items() if key != 'GridBased'},
+                         {key: value for key, value in before['planner_server']['ros__parameters'].items()
+                          if key != 'GridBased'})
+        self.assertEqual({key: value for key, value in self.params.items() if key != 'planner_server'},
+                         {key: value for key, value in before.items() if key != 'planner_server'})
+
+    def test_unknown_planner_does_not_partially_mutate_configuration(self):
+        before = copy.deepcopy(self.params)
+        with self.assertRaisesRegex(ValueError, 'unknown native planner'):
+            navigation_planner(self.params, 'missing-plugin')
+        self.assertEqual(self.params, before)
 
     def test_phase_copies_only_xy_latches_and_preserves_original_delivery_and_collision_parameters(self):
         before = copy.deepcopy(self.params)

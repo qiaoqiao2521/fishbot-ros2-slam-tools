@@ -186,3 +186,9 @@ B最后30墙秒只读取证已保存`order-2/terminal-convergence-readback.json`
 两份原score、独立native状态、source_integrity/recording_integrity均已读回；两份原记录未截断。护栏enabled但tripped样本0，未观察plant辅助介入。原task/UUID终态、hold/quiet/guard-off、owned launch/observer/上下文与9111关闭已确认，owned_process_survivors=[]，保留源码起止selected_text一致。保护单位前后仍均not-found，只说明该集合未改，不是旧实例活跃证明。
 
 独立两段探针另保存`independent-readback.json`，不用探针评分函数，从原四元数/位置和accepted窗重新计算出同样2.548/2.629cm、.02554/.01358rad与331/193个原GID消息；两原UUID独立状态2→4，禁碰0。knowledge_status=updated(local)见前节；本次B末端现象为第19节既有双XY锁经验的实例证据，already_covered，不将尚未修复的候选写成长期结论。接续owner=当前对话FishBot root。
+
+## B末端原生姿态规划候选（软件准备中）
+
+新增可选navigation_planner配置与prepare参数，默认不改原源配置；smac-hybrid只替换GridBased，控制/碰撞/目标检查器不变。原短探针新增真实planner参数前后回读，避免只换标签。尚未启动新原生试验；下一入口为原fixed两段Goal和新私有candidate manifest。采用知识第19节的双XY锁风险/目标方向、双时钟和真值隔离经验；knowledge_status=already_covered，候选未验收不写为知识结论。
+
+19项配置/探针检查通过.172s，原13项真实场景prepare检查通过10.149s，零skip。新candidate输入`smac-hybrid-20261022/scene/scene-manifest.json`直接复用原staged世界、两地图、原BT与几何，只使用同一navigation_planner函数替换GridBased；全部非planner节点独立比较不变。fixed静态check9bbf592c-7806-485e-9982-645f96611358通过，目标仍(-.25,-2,0)/(-.5,-2,π/2)，未步进。新原生短试验准备在143/9113单独执行，默认60源秒/70墙秒每段，完整运输尚未启动。

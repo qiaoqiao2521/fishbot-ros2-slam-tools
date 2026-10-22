@@ -475,8 +475,16 @@ def main(argv=None):
   names += ['progress_checker.'+key for key in ('required_movement_radius','required_movement_angle','movement_time_allowance')]
   expected={name:(c[name] if '.' not in name else c[name.split('.')[0]][name.split('.')[1]]) for name in names}
   actual=get_parameters('controller_server',names);report['controller_parameters']={'expected':expected,'actual':actual,'matches':expected==actual}
+  planner_config=config['planner_server']['ros__parameters']
+  planner_names=['planner_plugins']+['GridBased.'+key for key in planner_config['GridBased']]
+  planner_expected={key:(planner_config[key] if '.' not in key else
+    planner_config['GridBased'][key.split('.',1)[1]]) for key in planner_names}
+  planner_actual=get_parameters('planner_server',planner_names)
+  report['planner_parameters']={'expected':planner_expected,'actual':planner_actual,
+   'matches':planner_expected==planner_actual}
   report['navigator_parameters']=get_parameters('bt_navigator',['default_nav_to_pose_bt_xml'])
   if expected!=actual:raise RuntimeError('native controller parameters differ')
+  if planner_expected!=planner_actual:raise RuntimeError('native planner parameters differ')
   report['initial_source_identity']=node.raw['source']
   report['plan_publishers']=[{'node':i.node_name,'gid':bytes(i.endpoint_gid).hex()} for i in node.get_publishers_info_by_topic('/received_global_plan')]
   report['plan_publisher_qos']=[{'node':i.node_name,'gid':bytes(i.endpoint_gid).hex(),
@@ -550,7 +558,9 @@ def main(argv=None):
    save()
   node.phase='cleanup';report['final_quiet']=quiet()
   report['controller_parameters_after']=get_parameters('controller_server',names)
-  report['parameters_unchanged']=actual==report['controller_parameters_after']
+  report['planner_parameters_after']=get_parameters('planner_server',planner_names)
+  report['parameters_unchanged']=(actual==report['controller_parameters_after'] and
+   planner_actual==report['planner_parameters_after'])
   report['native_statuses']=node.statuses;report['native_status_first_phase']=node.first_phase
   a,b=(node.gids['staging'],node.gids['default'])
   gid_values=a|b
