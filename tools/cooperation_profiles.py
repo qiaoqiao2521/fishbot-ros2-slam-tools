@@ -122,7 +122,7 @@ def vehicle_profile(selected=None):
             'transport_egress_motion': {'type':'drive_on_heading',
                 'speed_m_s':.03, 'time_allowance_s':45.},
             'loaded_velocity_smoother': {'max_accel': [.025, 0., .05],
-                'max_decel': [-.1, 0., -.2], 'max_velocity': [.03, 0., .05],
+                'max_decel': [-.025, 0., -.05], 'max_velocity': [.03, 0., .05],
                 'min_velocity': [-.03, 0., -.05]},
             'loaded_controller': {'FollowPath.desired_linear_vel': .03,
                 'FollowPath.regulated_linear_scaling_min_speed': .03,

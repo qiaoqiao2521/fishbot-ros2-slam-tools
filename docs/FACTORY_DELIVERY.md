@@ -155,3 +155,23 @@ Smac的路径曲率约束可显式设置：prepare使用`--navigation-planner sm
 ## 来源
 
 借用 [ARIAC 官方任务场景](https://pages.nist.gov/ARIAC_docs/en/main/pages/scenario.html)的订单、运输车、命名工位与独立评价语义。没有复制其资产、AGV锁定机制或评分。当前小场景不是完整工业尺度或真机验收。
+
+## 同任务切换 J100＋3D 雷达
+
+使用 `tools/config/cooperation_profiles/jackal_j100-lidar3d-transport.json`，原 F1 配置、订单 B→A 和原目的地保持。车型适配复用四轮滑移／有效轮距、原生 IMU＋EKF、完整足迹、托盘高度、工位交接和直线出站；16线通用理想雷达生成标准 PointCloud2，接入两 costmap 与 Collision Monitor。不是标定过的商业雷达，也不是热换活动实例。
+
+本场景中，前向 Smac 的四个半径预检未找到 B 路径；NavFn 路径中有完整 J100 外廓相交。可显式选择原 Nav2 SmacPlannerHybrid 的 REEDS_SHEPP 模式，允许载货阶段倒车，保持原场地／目标和物理评分。原入站 StagingPath 仍为前进＋rotate-to-heading；载货 FollowPath 设置 allow_reversing=true、use_rotate_to_heading=false。默认 navfn 和旧 smac-hybrid/DUBIN 均保持。
+
+```bash
+FISHBOT_COOP_PYTHON=/home/muqiao/.cache/so101-colab/planning-venv/bin/python \
+./fishbot.sh cooperation prepare \
+  --so101-project /home/muqiao/dev/ros2/projects/so101 \
+  --scene-profile tools/config/cooperation_profiles/jackal_j100-lidar3d-transport.json \
+  --factory-config tools/config/factory_delivery/line-side-occupied.json \
+  --navigation-planner smac-reeds-shepp --planner-minimum-turning-radius .60 \
+  --output "$HOME/.cache/fishbot/factory-j100-example/scene"
+```
+
+随后使用上面的原 factory run，选择此 manifest，增加 `--publication-mode asynchronous --order order-b --order order-a`，输出到新的私有目录。J100 复用原 body-frame DriveOnHeading 出站，不传仅支持 FishBot 的 `--policy-config`。规划器配置、路径预检、原生 Goal 终态、完整物理评分分别报告，不能互相代替。临时进程级防休眠写法与上一节一致。
+
+源码依据：[Nav2 1.3.13 RPP 参数合同](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/src/parameter_handler.cpp)、[原生 SmacPlannerHybrid](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_smac_planner/src/smac_planner_hybrid.cpp)。当前完整运输结果回源本轮实施进度；预检成功不计运输成功。

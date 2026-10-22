@@ -258,3 +258,5 @@ knowledge_status=updated(local)：重置两次GET竞态已写原Wiki/ROS2 与 Fi
 当前 in_progress；父 FishBot/planar/ideal 的同轮 B→A 2/2 保持。新组合尚未运行，不把既有 J100 模型或旧 P8 两批成功计入本轮。输出：`~/.cache/fishbot/factory-line-delivery-20261021/j100-lidar3d-20261022/`。owner=本对话 root，不跨对话协调。knowledge_status=already_covered：采用原第19/20节，待实际新证据后决定是否修订。
 
 预检已结束并清理：`native-preflight`、`native-preflight-radii`、`native-preflight-navfn`保留全部未通过，`native-preflight-reverse`的入站/A/B原生路径与完整几何采样通过，独立全hold、无Navigate/Dock/速度发布。109原合同与新增反向阶段合同11项定向通过（重复项不相加）；冻结源码后以同订单B→A、same factory配置和新 `run-reverse` 运行，不传仅支持FishBot的map-egress policy，保留J100必要的原生body-frame直线出站。知识已覆盖，阶段/方向适配结果仍待完整运输。
+
+首完整 J100 轮未通过：B在换向时一帧底面失接触，原K通过但原连续运输/交付失败，载货Nav5，A未执行。原360/120/评分保持。source/recording完整、quiet/hold/guard-off/两参数组恢复和owned实例/9111关闭均已确认。独立原始记录倒车7.24源秒，16个物理序号缺失保留。下一候选只将车型载货减速上限对称收敛，先离线检查后新输入新run；不重发旧UUID。knowledge_status=pending（本对话root，待候选实证后审定）。

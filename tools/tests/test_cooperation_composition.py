@@ -60,7 +60,7 @@ class CompositionNavigationTest(unittest.TestCase):
             'FollowPath.rotate_to_heading_angular_vel': .05,
             'progress_checker.required_movement_radius': .005,
             'progress_checker.required_movement_angle': .05})
-        self.assertEqual(loaded['max_decel'], [-.1,0.,-.2])
+        self.assertEqual(loaded['max_decel'], [-.025,0.,-.05])
         self.assertEqual(smoothing, before['velocity_smoother']['ros__parameters'])
         for key in ('max_velocity', 'min_velocity', 'smoothing_frequency', 'velocity_timeout'):
             self.assertEqual(smoothing[key], before['velocity_smoother']['ros__parameters'][key])
