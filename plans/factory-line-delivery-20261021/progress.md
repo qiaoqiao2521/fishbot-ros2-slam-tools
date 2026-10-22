@@ -3,7 +3,7 @@
 ## Current
 2026-10-22 in_progress：本轮离线探针与几何查询修复完成，最终15项相关检查通过。新两段fixture沿西侧各平移0.25m，277姿态静态扫掠的保守余量0.128831m；未初始化ROS、未步进物理、未运行新Goal。原motion-d仍failed：Stage1控制循环有证据但物理停车9.41cm超限；Stage2原UUID取消5，其消息因旧异常路径未保存，数量未知。具体RPP实例归属及原occupied完整配送仍未验收。
 
-当前重实例资源保持交给SO101；只在后续明确窗口使用公开探针的`--run-native`运行两段。原direct/via/P8不自动启动。入口见docs/FACTORY_DELIVERY.md“阶段控制探针”；原固定direct失败与e/d各轮完整历史保留在下文。
+用户本轮明确后续只在当前对话独立实施。现场无机器人仿真实例，143/9113空闲，16CPU/load3.78，现运行公开探针两段并依据结果接续，不再等待跨对话资源交接。入口见docs/FACTORY_DELIVERY.md“阶段控制探针”；原固定direct失败与e/d各轮完整历史保留在下文。
 
 ## Done
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
@@ -154,3 +154,11 @@ Staging Goal UUID`b397308cebdb4f529642c6dc7e2ffb97`原状态2→4，result error
 首轮相关14项检查通过23.308s；补充有界尾部不能隐藏早期接触/缺失接触字段的负例后，最终15项检查通过8.184s，包括原真实场景的开放扫掠/占用拒绝、独立双箱几何正负例、阶段树合同、默认零ROS入口、超时实存、双时钟边界和重复manifest回归；零skip。没有运行完整反馈套件、任何新ROS/MuJoCo动作或完整运输。新入口使用说明与测试命令已写入FACTORY_DELIVERY.md。
 
 Knowledge：already_covered，沿用原Wiki/ROS2 与 FishBot第18节软代价与禁区分层、第19/20节真值/原ID/物理评分、第17节去重记录；本轮只纠正项目记录。新增MuJoCo3.3.7旋转箱体静态距离边界为pending，owner=研究根Codex，最短入口为本节双箱负例与pair_clearance审阅，再串行回写原第19节，避免并发写共享知识页。
+
+## 当前对话首轮运动结果与GID补证准备
+
+本对话独立运行`staging-native-044acee-20261022-a`，check9fe1577a-54f3-4583-8a54-44adc61c133d，143/9113，一次launch、两个顺序原Goal。staging UUID77cad8cdb5634a3c843c8bae5b0836a6状态4，331计划/332命令、330非零，物理XY.066540481m/yaw.01980702rad，位置失败。default UUIDeb6536a51a304262a1c96d37ed7dd0d1状态5，1411计划/命令/非零，物理XY.0251961m/yaw2.74538349rad，70墙秒预算超时并取消；不是碰撞或progress拒绝。整体false，107.896墙秒，禁碰0，完整有界报告16.39MB。
+
+原Goal终态、fresh hold、连续quiet.72源秒、owned launch/端口/native上下文关闭均独立确认。旧失败不覆盖。下一aligned fixture只隔离路径跟踪，目标(-.25,-2,π)/(-.5,-2,π)，相同25cm与原门槛；静态check0064a1ed-b7ff-451d-8172-5c6836847c19通过，未步进。
+
+新增只读C++ plan witness编译通过，16项阶段/探针局部检查全部通过.259s。覆盖实际accepted时间窗、共享/未知GID、溢出拒绝及默认fixture保持。下一次新输出运行两段运动并记录native GID，不启动完整运输或把探针替代F1；资源依据实际进程核对，不再跨对话排队。knowledge_status=already_covered（双时钟、真值与物理评分），MuJoCo双箱经验pending接续owner更正为本对话FishBot root。

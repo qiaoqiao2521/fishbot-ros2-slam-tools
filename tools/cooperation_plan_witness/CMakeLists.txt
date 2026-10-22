@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.16)
+project(cooperation_plan_witness LANGUAGES CXX)
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(nav_msgs REQUIRED)
+add_executable(cooperation_plan_witness main.cpp)
+target_compile_features(cooperation_plan_witness PRIVATE cxx_std_17)
+ament_target_dependencies(cooperation_plan_witness rclcpp nav_msgs)

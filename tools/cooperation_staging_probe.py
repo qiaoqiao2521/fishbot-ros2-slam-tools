@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Static preflight or one owned two-phase control probe, without transport."""
-import argparse,collections,copy,json,math,os,socket,subprocess,sys,time,traceback,uuid,urllib.request
+import argparse,collections,copy,json,math,os,signal,socket,subprocess,sys,time,traceback,uuid,urllib.request
 from pathlib import Path
 import yaml
 ROOT=Path(__file__).resolve().parents[1]
@@ -85,6 +85,7 @@ def declared_sweep(query, points):
 def phase_snapshot(node, entry, point):
  """Save observed data even if the result future never completes."""
  phase=entry['phase']
+ entry['evidence_end_monotonic']=time.monotonic()
  entry['plan_publisher_gids']=sorted(node.gids[phase])
  entry['received_global_plans']=list(node.plan_messages[phase])
  entry['controller_commands']=list(node.commands[phase])
@@ -114,6 +115,46 @@ def phase_snapshot(node, entry, point):
  entry['control_loop_observed']=bool(entry['plan_receive_observed'] and
   entry['controller_command_observed'] and entry.get('motion_observed'))
  return entry
+
+
+def attach_native_witness(report, path):
+ """Attribute only actual DDS receipts in accepted goal windows."""
+ events=[json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+ complete=not any(event.get('kind')=='overflow' for event in events)
+ known={item['gid'] for item in report.get('plan_publishers',[])
+        if item.get('node')=='controller_server'}
+ phase_gids=[]
+ for entry in report['goals']:
+  start=entry.get('accepted_monotonic',math.inf)
+  end=entry.get('evidence_end_monotonic',-math.inf)
+  plans=[event for event in events if event.get('kind')=='plan' and
+         start<=event['receive_monotonic']<=end]
+  gids={event['publisher_gid'] for event in plans}
+  phase_gids.append(gids)
+  verified=bool(complete and len(gids)==1 and gids<=known and
+                entry.get('control_loop_observed'))
+  entry['native_plan_witness']={'plan_count':len(plans),'publisher_gids':sorted(gids),
+   'complete':complete,'source':'rclcpp MessageInfo / rmw publisher_gid',
+   'controller_endpoint_verified':verified}
+  entry['controller_instance_binding']=({'publisher_gid':next(iter(gids)),
+   'requested_behavior_tree':entry['requested_behavior_tree'],
+   'basis':'exclusive native publisher in accepted goal window; explicit BT controller ID'}
+   if verified else None)
+ available=len(phase_gids)==2 and all(len(gids)==1 and gids<=known for gids in phase_gids)
+ switched=bool(available and complete and phase_gids[0].isdisjoint(phase_gids[1]))
+ report['phase_rpp_gid_switch_status']='observed' if switched else 'unverified'
+ report['phase_rpp_activity_switch_observed']=switched
+ report['native_plan_witness_complete']=complete
+ report['native_plan_witness_events']=len(events)
+
+
+def probe_goals(spawn, leg, heading_mode):
+ """The aligned fixture isolates path tracking; fixed retains terminal turns."""
+ staging={**copy.deepcopy(spawn),'x':spawn['x']-leg,'yaw':spawn['yaw']}
+ default={**copy.deepcopy(spawn),'x':spawn['x']-2*leg,'yaw':spawn['yaw']+math.pi/2}
+ if heading_mode=='aligned':
+  staging['yaw']=default['yaw']=math.pi
+ return staging,default
 
 
 def compact_physics_sample(raw, received):
@@ -160,6 +201,10 @@ def main(argv=None):
  parser.add_argument('--leg-m',type=float,default=.25)
  parser.add_argument('--max-source-s',type=float,default=60.)
  parser.add_argument('--max-wall-s',type=float,default=70.)
+ parser.add_argument('--heading-mode',choices=('fixed','aligned'),default='fixed',
+  help='fixed reproduces terminal turns; aligned isolates tracking on the westward legs')
+ parser.add_argument('--plan-witness-bin',type=Path,
+  help='optional compiled read-only rclcpp DDS publisher witness')
  mode=parser.add_mutually_exclusive_group()
  mode.add_argument('--preflight-only',action='store_true',help='default: static checks without ROS')
  mode.add_argument('--run-native',action='store_true',help='run only in the allocated native resource window')
@@ -177,9 +222,7 @@ def main(argv=None):
              'yaw':float(manifest.get('spawn_yaw',0.))}
  spawn={**geometry.check_pose(spawn_goal)['delivery_pose'],
         'z':float(geometry.base_height)}
- staging_goal={**copy.deepcopy(spawn),'x':spawn['x']-args.leg_m,'yaw':spawn['yaw']}
- default_goal={**copy.deepcopy(spawn),'x':spawn['x']-2*args.leg_m,
-               'yaw':spawn['yaw']+math.pi/2}
+ staging_goal,default_goal=probe_goals(spawn,args.leg_m,args.heading_mode)
  geometry_checks={'spawn':geometry.check_pose(spawn_goal),
   'staging_destination':geometry.check_pose(
     {'x':staging_goal['x'],'y':staging_goal['y'],'yaw':staging_goal['yaw']}),
@@ -196,6 +239,8 @@ def main(argv=None):
   'transport_task_started':False,'motion_accuracy_or_delivery_claimed':False,'passed':False,'errors':[],
   'probe_leg_m':args.leg_m,'probe_max_source_s':args.max_source_s,
   'probe_max_wall_s':args.max_wall_s,
+  'probe_heading_mode':args.heading_mode,
+  'native_plan_witness_requested':args.plan_witness_bin is not None,
   'probe_route':'open west corridor; controller isolation only, not factory delivery',
   'geometry_checks':geometry_checks,'map_inflation_checks':map_checks,
   'declared_sweep':sweep,'preflight_passed':preflight_passed,
@@ -208,7 +253,7 @@ def main(argv=None):
   print(json.dumps({'check_id':report['check_id'],'preflight_passed':preflight_passed,
    'planned_goals':report['planned_goals'],'map_inflation_checks':map_checks},ensure_ascii=False))
   return 0 if preflight_passed else 1
- launch=node=executor=None;handles=[];stream=None;started=time.monotonic()
+ launch=node=executor=witness=None;handles=[];stream=None;witness_stream=witness_errors=None;started=time.monotonic()
  def save():private_json(out/'result.json',report,replace=(out/'result.json').exists())
  def spin_until(condition,timeout,description):
   end=time.monotonic()+timeout
@@ -439,6 +484,19 @@ def main(argv=None):
     'history':i.qos_profile.history.name,'depth':i.qos_profile.depth}
    for i in node.get_publishers_info_by_topic('/received_global_plan')]
   report['plan_subscription_qos']={'reliability':'RELIABLE','durability':'VOLATILE','history':'KEEP_LAST','depth':10}
+  if args.plan_witness_bin is not None:
+   witness_stream=(out/'native-plan-witness.jsonl').open('x')
+   witness_errors=(out/'native-plan-witness.log').open('x')
+   os.chmod(witness_stream.name,0o600);os.chmod(witness_errors.name,0o600)
+   witness=subprocess.Popen([str(args.plan_witness_bin.resolve())],cwd=ROOT,env=env,
+    stdout=witness_stream,stderr=witness_errors,start_new_session=True)
+   report['native_plan_witness_pid']=witness.pid
+   def witness_ready():
+    if witness.poll() is not None:raise RuntimeError('native plan witness exited before readiness')
+    return any(json.loads(line).get('kind')=='ready'
+               for line in Path(witness_stream.name).read_text().splitlines(keepends=True)
+               if line.endswith('\n'))
+   spin_until(witness_ready,10,'native plan witness did not match both controller publishers')
   save()
   for phase,tree,point in (
     ('staging',manifest['staging_navigation_behavior_tree'],staging_goal),
@@ -568,6 +626,21 @@ def main(argv=None):
    except BaseException as error:report['errors'].append('launch cleanup: '+str(error))
    report['retained_launch_pid']=launch.pid if launch.poll() is None else None
   if stream is not None:stream.close()
+  if witness is not None:
+   try:
+    if witness.poll() is None:witness.send_signal(signal.SIGINT)
+    witness.wait(timeout=5)
+   except subprocess.TimeoutExpired:
+    witness.kill();witness.wait(timeout=5)
+   report['native_plan_witness_stopped']=witness.poll() is not None
+  if witness_stream is not None:
+   witness_stream.close();witness_errors.close()
+   try:attach_native_witness(report,witness_stream.name)
+   except (OSError,ValueError,KeyError,TypeError) as error:
+    report['errors'].append('native plan witness: '+str(error))
+   report['passed']=bool(report['passed'] and report.get('native_plan_witness_stopped') and
+     report.get('phase_rpp_activity_switch_observed') is True and
+     all(entry.get('controller_instance_binding') for entry in report['goals']))
   with socket.socket() as probe:report['owned_port_closed']=probe.connect_ex(('127.0.0.1',args.port))!=0
   report['elapsed_wall_s']=time.monotonic()-started
   report['source_end']=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()

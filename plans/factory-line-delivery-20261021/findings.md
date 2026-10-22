@@ -51,3 +51,7 @@ fixed direct末段真实cmd线速度0而角速度正负交替，map 15mm圈30源
 旧探针在`get_result`成功返回之后才复制阶段消息。Stage2超时会跳过复制，故原result中的消息数量未知；不能再写“未产生计划/控制命令”。新增`record_phase_wait`在finally保存，测试实际触发其TimeoutError分支，核对已保存消息、原计数与未知终态。source/wall预算分开，缺GID保持unknown；每帧删除重复manifest，保留episode身份与单份完整来源。
 
 静态新fixture的首轮预检失败定位到MuJoCo3.3.7旧箱体查询：车姿态(0,-2,2.2938613026)，托盘中心(.0185194,-1.9303076,.162)，障碍中心(.35,-2.1,.25)，两世界AABB沿X分离，`mj_geomDistance(...,.2)`却返回-.506279389m。独立双箱最小模型复现其矛盾。公共几何查询现对严格分离的box-box返回保守AABB下界，AABB重叠仍调用原生查询；真实重叠负例和原声明路线的开放/占用检查通过。不改变nativeccd、接触、几何尺寸或原物理评分，不将该静态查询缺陷倒推为旧RPP失败根因。
+
+2026-10-22固定朝向probe check9fe1577a-54f3-4583-8a54-44adc61c133d：Stage1计划331/命令332，Stage2计划1411/命令1411；前者原UUID4但真值XY.066540481m，后者末端转向超时取消原UUID5。日志未出现collision ahead、Failed to make progress或Controller patience exceeded，不能将本轮归为碰撞拒绝。Stage1首次AMCL进入15mm圈时yaw误差2.601rad，结束时AMCL XY6.227cm/真值6.654cm；Stage2进入位置圈后多次角速度反向，末yaw仍2.745rad。此为收敛现象证据，不独占根因。
+
+`EncoderOdometry`已从真实编译轮轴推导偏置并转换回foot原点，不能把忽略轮轴偏置当作漏改。为隔离控制消费，新增显式aligned目标朝向，不改固定目标或配送验收。系统已安装rclcpp28.1.22的MessageInfo暴露原生rmw publisher_gid，而本地rclpy包装层没有；故采用约60行只读订阅器，不改RPP、不造控制器。其消息按同机CLOCK_MONOTONIC对齐原accepted窗口，必须归属已发现的controller_server endpoint，overflow/未知来源不充作完成。

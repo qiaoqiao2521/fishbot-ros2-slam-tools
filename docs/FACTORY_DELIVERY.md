@@ -96,9 +96,22 @@ env PYTHONPATH="/usr/lib/python3/dist-packages:${PYTHONPATH:-}" \
 
 预检使用完整原始碰撞体，检查声明的“原地转向→直线→目标转向”扫掠，并扣除空间采样间距。箱体世界AABB明确分离时使用保守距离下界，重叠时继续原生几何查询；不改物理碰撞选项。源图到目标的距离只用于选择低干扰fixture，不能将膨胀区内的软代价解释为碰撞。实际Nav2路径、定位和停车仍须另验。
 
-取得原生资源窗口后，先加载`/opt/ros/jazzy/setup.bash`。在上述命令中选择新输出目录，将`--preflight-only`替换为`--run-native`，并增加`--domain 143 --port 9113`。只运行一个实例和两个顺序Goal；默认每段60源秒、70墙秒，最终误差仍要求≤0.04m/0.05rad及连续0.7源秒停稳。当前只完成离线预检，未执行这个新fixture。
+先核对本机仿真实例和端口，再加载`/opt/ros/jazzy/setup.bash`。在上述命令中选择新输出目录，将`--preflight-only`替换为`--run-native`，并增加`--domain 143 --port 9113`。只运行一个实例和两个顺序Goal；默认每段60源秒、70墙秒，最终误差仍要求≤0.04m/0.05rad及连续0.7源秒停稳。2026-10-22固定朝向首轮已运行但未通过：staging原生成功、真值位置误差6.65cm；默认阶段末端转向超时并取消。两个阶段均保留实际路径、非零命令和物理轨迹，不能记配送通过。
 
 报告逐阶段保存原UUID/终态、AMCL、物理姿态、计划和非零命令计数。复用已有`NavigationDiagnostics`有界保存`/plan`、`/received_global_plan`、`/lookahead_point`、`/local_costmap/costmap`，另留必要TF；源戳与接收时刻分列。超时在取消前先保存证据，缺少发布端GID时保留unknown，不把请求树路径或两个endpoint解释成具体RPP实例的消费回执。原UUID取消、fresh hold、连续静止及owned实例清理分别记录。每帧只留episode身份，完整manifest每轮保存一次。
+
+为单独核验控制消费，可显式使用`--heading-mode aligned`：相同25cm西向平移，两目标均朝西，原`fixed`默认保留末端转向。新fixture不替代原配送，也不证明固定朝向已收敛。可选只读C++见证器使用`rclcpp::MessageInfo`读取真实DDS发布者GID，不发布命令，不接入真值；只将accepted Goal时间窗内的消息与原生发现的controller_server endpoint匹配。两阶段GID必须不同，且各自有非零控制与物理位移，才标记实例切换已观察。
+
+```bash
+source /opt/ros/jazzy/setup.bash
+cmake -S tools/cooperation_plan_witness \
+  -B "$HOME/.cache/fishbot/build/cooperation-plan-witness" -DCMAKE_BUILD_TYPE=Release
+cmake --build "$HOME/.cache/fishbot/build/cooperation-plan-witness" -j2
+# 在原生探针命令追加：
+# --heading-mode aligned --plan-witness-bin "$HOME/.cache/fishbot/build/cooperation-plan-witness/cooperation_plan_witness"
+```
+
+见证器最多记录20000条计划，达到上限会明确报告overflow，不能再声称来源覆盖完整；原始JSONL与日志只留私有输出目录。来源归属与物理评分分列，终态失败不会因GID已知而改为通过。
 
 ## 实测边界
 

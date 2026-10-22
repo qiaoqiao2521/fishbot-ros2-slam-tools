@@ -52,6 +52,17 @@ class GeometryFixture:
 
 
 class StaticProbeTests(unittest.TestCase):
+    def test_aligned_fixture_changes_only_heading_and_preserves_default_fixture(self):
+        spawn = {'x': 0., 'y': -2., 'yaw': 0., 'z': .002}
+        fixed = probe.probe_goals(spawn, .25, 'fixed')
+        aligned = probe.probe_goals(spawn, .25, 'aligned')
+        self.assertEqual([goal['yaw'] for goal in fixed], [0., math.pi/2])
+        self.assertEqual([goal['yaw'] for goal in aligned], [math.pi, math.pi])
+        for a, b in zip(fixed, aligned):
+            self.assertEqual({key: a[key] for key in ('x', 'y', 'z')},
+                             {key: b[key] for key in ('x', 'y', 'z')})
+        self.assertEqual(spawn, {'x': 0., 'y': -2., 'yaw': 0., 'z': .002})
+
     def test_nested_costmaps_and_relative_image_use_stricter_fixture_margin(self):
         config = parameters()
         before = copy.deepcopy(config)
@@ -126,6 +137,44 @@ def physical_frame():
 
 
 class EvidenceProbeTests(unittest.TestCase):
+    def witness_report(self):
+        return {'plan_publishers': [{'node': 'controller_server', 'gid': 'aa'},
+                                   {'node': 'controller_server', 'gid': 'bb'}],
+            'goals': [{'phase': phase, 'accepted_monotonic': start,
+                'evidence_end_monotonic': start+1., 'control_loop_observed': True,
+                'requested_behavior_tree': phase+'.xml'}
+                for phase, start in (('staging', 10.), ('default', 20.))]}
+
+    def attach(self, report, events):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)/'native.jsonl'
+            path.write_text(''.join(json.dumps(event)+'\n' for event in events))
+            probe.attach_native_witness(report, path)
+
+    def test_native_receipts_bind_only_inside_accepted_goal_windows(self):
+        report = self.witness_report()
+        self.attach(report, [
+            {'kind': 'plan', 'receive_monotonic': 9., 'publisher_gid': 'foreign'},
+            {'kind': 'plan', 'receive_monotonic': 10.5, 'publisher_gid': 'aa'},
+            {'kind': 'plan', 'receive_monotonic': 20.5, 'publisher_gid': 'bb'},
+            {'kind': 'plan', 'receive_monotonic': 21.5, 'publisher_gid': 'foreign'}])
+        self.assertTrue(report['phase_rpp_activity_switch_observed'])
+        self.assertEqual([g['native_plan_witness']['plan_count'] for g in report['goals']], [1, 1])
+        self.assertEqual([g['controller_instance_binding']['publisher_gid']
+                          for g in report['goals']], ['aa', 'bb'])
+
+    def test_shared_foreign_or_overflow_receipts_cannot_prove_switch(self):
+        for second_gid, overflow in (('aa', False), ('foreign', False), ('bb', True)):
+            report = self.witness_report()
+            events = [{'kind': 'plan', 'receive_monotonic': 10.5, 'publisher_gid': 'aa'},
+                      {'kind': 'plan', 'receive_monotonic': 20.5, 'publisher_gid': second_gid}]
+            if overflow:
+                events.append({'kind': 'overflow'})
+            self.attach(report, events)
+            self.assertFalse(report['phase_rpp_activity_switch_observed'])
+            self.assertFalse(report['goals'][1].get('controller_instance_binding')
+                             if second_gid == 'foreign' or overflow else False)
+
     def node(self):
         node = SimpleNamespace(phase='default', raw=physical_frame())
         node.gids = collections.defaultdict(set)
