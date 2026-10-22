@@ -210,7 +210,13 @@ Omni短运动`fixed-cbe3251-a`已结束，check3e782927-7a2f-4341-9f59-bcb16e962
 按task_plan只允许一次独立同源复现到`direct-repeat/run`，若再出现同类时效失败便停止完整重复，先取证；不称同源码复现为新改善。当前task21cdd2d8-446e-4a2b-86a5-e7e5e3432db7已完成入站Nav eb096c050f114a9aaecb4fea188f4871及Dock aa1804c925084877a41907c001b7a94e（均4），闭爪装货中，完整结果在途。knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节加入参考点/原生AMCL均值段落，开发知识入口同步触发词，已rg读回原385/入口52行且diff检查通过；只讲已复现均值，不写完整业务已修复。独立知识仓保留原dirty，未提交推送。
 # 回合切换修复接续（2026-10-22）
 
-当前：保持唤醒的完整试验A通过、B在Smac规划阶段失败，没有时效异常。原生只规划对照已证明同一B请求由原NavFn成功求得精确终点路径，Smac候选失败；世界全程hold且清理完成。下一输入回原NavFn，仅改AMCL参考点模型，先B后A完整验收到`navfn-omni-20261022/b-first/run`，141/9111；原120/360/1000与全部门槛保持。旧unknown和failed不改，仍不得称完整2/2。
+当前：NavFn＋Omni的B仍在末端朝向超时；仅修定位均值不足以闭环。原生零运动半径对照已确认Smac .20失败、.10/.05成功且末段方向更接近目标。显式半径参数及36项检查通过；下一新输入`smac-r010-omni-20261022/scene`只改原Smac半径.20→.10，先B后A完整验收到同目录`b-first/run`，141/9111，保留原全部门槛。旧失败不改，不记2/2。
+
+NavFn＋Omni run6f7b9880-07a8-4332-981d-2891a1403d5e，a27cb6e，302.732秒，执行incomplete、0/1通过、A未执行。B taske9196637-2f3a-4622-a42c-7dab67f84b2a，272.542秒，原载货Nav764b9823af324e48a9eb7a998b393802在原120秒超时取消5；真值XY.03860390m/yaw1.356731rad，未完成连续终点静止。无freshness_failure，原生终态与hold/quiet/guard-off、owned launch/9111已清理；没有延长期限或拼旧A。
+
+`native-planner-radius-20261022`零运动对照：.20m UUID31d71329ea3248609733f0abb254fc44为6/207、4.444秒0点；.10m UUID8837d98a3b434b148c3ccc8b91d23335为4/0、.10114秒86点；.05m UUIDe84873f6722b4eda84d46e82729bd724为4/0、.10115秒95点；NavFn4092158100184a01a1084db96da6452b为4/0、342点。实际参数读回分别.20/.10/.05。目标末段方向：.10为-.1433rad、.05为-.2912、NavFn2.3562；目标orientation均0，位置误差<.2µm。733原物理样本全hold、quiet2.98源秒、零车辆动作和速度发布，owned清理完成。
+
+prepare新增显式规划半径、默认.20保留；无效半径不部分改原配置。36项配置/场景/探针检查通过16.980秒、零skip。新candidate与原Omni/Smac父配置仅半径.20→.10，其余节点、原双树、世界/地图不变；尚待完整物理验收。knowledge_status=updated(local)：规划对照和宿主休眠两条已写原Wiki第19/20节，原387/397及入口56行读回、diff检查通过，独立知识仓未提交推送；新半径效果仍不写成完整业务成功。
 
 保持唤醒run477813c5-e130-4fe7-a0bb-e16c87bd3738，6b01bde（运行代码同353701c），442.357秒，执行completed/完整物理1/2。A task316cca14-fbac-4b02-bbea-c555b4aec4cc，163.811秒，末2.416cm/.01763rad、静止2.58源秒通过。B task40d0cd60-6fc3-42d4-8c85-dad9f71d964c，234.562秒，双指/交接/留盘通过，但载货Nav5faad13b8d8d4e66b5d8b6ba1e0657f1失败6/208，末距2.533m/yaw2.902rad；原HeadingAware多次no valid path，车辆未完成运输。无freshness_failure，两份source/recording完整性过、全部owned实例/9111已关闭，临时sleep inhibitor已自动释放。
 

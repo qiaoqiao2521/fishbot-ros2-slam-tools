@@ -133,6 +133,8 @@ B末30墙秒的862个原物理样本全程hold=false、禁碰0，XY误差1.31–
 
 ## 发布阻塞配置实验
 
+Smac的路径曲率约束可显式设置：prepare使用`--navigation-planner smac-hybrid --planner-minimum-turning-radius 0.10`。默认0.20保持旧行为；字段写入native planner参数和manifest说明。该值不修改车体或RPP执行限制，需按车型与具体场景做原生规划、实际路径跟踪及完整物理评分。F1的0.20/0.10对照结果见计划，不把更小半径解释成通用升级。
+
 `run --publication-mode asynchronous`只为共同世界和任务桥两个Python子进程设置Fast DDS异步发布；默认`source`沿用原环境。Nav2和独立观察器不随此开关改变；源时间戳、QoS、时效阈值、速度与物理评分保持原值。直接启动同一launch时对应`publication_mode:=asynchronous`。
 
 该配置复用[官方异步发送线程](https://github.com/ros2/rmw_fastrtps/tree/jazzy#change-publication-mode)，不新增转发节点。配置写入factory声明和实际启动命令；自定义XML可能覆盖该环境设置，需核原生配置。原生writer模式读回只证明设置生效，发布耗时和完整运输成绩仍以独立运行记录为准。同步模式下的旧时效失败保留。

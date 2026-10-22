@@ -66,6 +66,24 @@ class StagingNavigationTests(unittest.TestCase):
         self.assertEqual({key: value for key, value in self.params.items() if key != 'planner_server'},
                          {key: value for key, value in before.items() if key != 'planner_server'})
 
+    def test_explicit_radius_preserves_all_other_planner_and_control_settings(self):
+        parent=copy.deepcopy(self.params)
+        navigation_planner(parent,'smac-hybrid')
+        result=navigation_planner(self.params,'smac-hybrid',minimum_turning_radius=.10)
+        expected=copy.deepcopy(parent)
+        expected['planner_server']['ros__parameters']['HeadingAware']['minimum_turning_radius']=.10
+        self.assertEqual(self.params,expected)
+        self.assertEqual(result['minimum_turning_radius_m'],.10)
+        self.assertEqual(parent['planner_server']['ros__parameters']['HeadingAware']['minimum_turning_radius'],.20)
+
+    def test_invalid_radius_does_not_partially_mutate_native_configuration(self):
+        for radius in (0.,-.1,float('nan'),float('inf')):
+            with self.subTest(radius=radius):
+                before=copy.deepcopy(self.params)
+                with self.assertRaisesRegex(ValueError,'finite and positive'):
+                    navigation_planner(self.params,'smac-hybrid',minimum_turning_radius=radius)
+                self.assertEqual(self.params,before)
+
     def test_optional_planner_routes_only_transport_and_preserves_stage_navfn(self):
         profile=navigation_planner(self.params,'smac-hybrid')
         path=staging_navigation(self.params,self.behavior,self.folder,

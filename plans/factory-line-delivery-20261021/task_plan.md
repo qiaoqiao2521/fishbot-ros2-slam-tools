@@ -79,3 +79,9 @@ Omni短试验默认运输段通过1.345cm/.00421rad，临时入站点仍5.678cm�
 保持唤醒的完整试验B在Smac规划阶段原生失败6/208，无反馈时效异常；不是RPP末端收敛已验收。只规划对照已完成：同一原生实例、同源地图、新鲜costmap，原B前AMCL起点与B终点固定，HeadingAware失败6/207、GridBased成功4/0并精确终止于原B，零Navigate/Dock/速度发布、560个物理样本全hold、清理完成。该对照不是载货B costmap重放或运输验收。
 
 下一输入`navfn-omni-20261022/scene`由原staged NavFn manifest派生，只改AMCL robot_model_type；原地图、世界、双行为树、NavFn参数与全部控制/评分保持。继续显式异步发布与父进程临时阻止sleep。为了优先验证长期失败点，预声明顺序B→A（目标值不变），独立输出`navfn-omni-20261022/b-first/run`；记录顺序变化，不将它作为单因素因果对照。只有同轮两单完整oracle通过才记2/2；失败不靠扩期限、近似终点或拼旧A取得通过。owner=本对话FishBot root。
+
+## 显式规划半径的有限候选
+
+NavFn＋Omni的B末端仍超时，回原规划器不足以闭环。原生只规划对照在同实例动态设置并读回最小半径.20/.10/.05：.20失败6/207，.10/.05均4/0、约.101秒；.10输出86点、末段方向-.143rad，原NavFn末段2.356rad。所有目标仍(.7,-2,0)，733物理样本全hold，零Navigate/Dock/速度发布，清理完成。此处修正的是此前任意.20m规划约束，不改变实体运动学或RPP限制。
+
+新增prepare --planner-minimum-turning-radius，默认.20兼容旧输入，显式.10仅改Smac配置。36项配置/场景/探针检查通过；新输入`smac-r010-omni-20261022/scene`与原Omni/Smac父输入字典差异仅minimum_turning_radius。冻结源码后一次B→A完整验收`smac-r010-omni-20261022/b-first/run`，保留异步和临时防休眠、原120/360/1000及全部评分。路径末段接近目标朝向是候选依据，不预判完整通过；失败后保留原生终态和物理证据，避免无原因完整重跑。

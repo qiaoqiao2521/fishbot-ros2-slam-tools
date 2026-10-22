@@ -85,17 +85,19 @@ def staging_navigation(params, behavior_path, output, *, transport_planner=None)
     return stage_path
 
 
-def navigation_planner(params, profile='navfn'):
+def navigation_planner(params, profile='navfn', *, minimum_turning_radius=.20):
     """Select installed native planning; leave control and scoring unchanged."""
     planner = params['planner_server']['ros__parameters']
     if profile == 'smac-hybrid':
+        if not math.isfinite(minimum_turning_radius) or minimum_turning_radius <= 0:
+            raise ValueError('planner minimum turning radius must be finite and positive')
         # Nav2 1.3.13 SmacPlannerHybrid, Apache-2.0. DUBIN is forward-only,
         # matching RPP allow_reversing=false. No approximate goal fallback.
         previous = planner['GridBased']
         planner['HeadingAware'] = {
             'plugin': 'nav2_smac_planner::SmacPlannerHybrid',
             'tolerance': 0., 'allow_unknown': previous.get('allow_unknown', True),
-            'motion_model_for_search': 'DUBIN', 'minimum_turning_radius': .20,
+            'motion_model_for_search': 'DUBIN', 'minimum_turning_radius': minimum_turning_radius,
             'angle_quantization_bins': 72, 'lookup_table_size': 5.,
             'smooth_path': True,
         }
@@ -105,6 +107,7 @@ def navigation_planner(params, profile='navfn'):
         raise ValueError('unknown native planner profile: '+str(profile))
     chosen='HeadingAware' if profile=='smac-hybrid' else 'GridBased'
     return {'profile': profile, 'plugin': planner[chosen]['plugin'],
+            'minimum_turning_radius_m': planner[chosen].get('minimum_turning_radius'),
             'transport_planner': chosen if profile=='smac-hybrid' else None,
             'staging_planner': 'GridBased',
             'role': 'global path generation; not controller or physical acceptance'}
@@ -374,7 +377,8 @@ def prepare(args):
     manifest['transport_height_envelope'] = height_envelope(model, data, manifest,
         padding_m=float(params['local_costmap']['local_costmap']['ros__parameters'].get('footprint_padding', .01)))
     composition_navigation(params, manifest, args.output)
-    planner_profile = navigation_planner(params,getattr(args,'navigation_planner','navfn'))
+    planner_profile = navigation_planner(params,getattr(args,'navigation_planner','navfn'),
+        minimum_turning_radius=getattr(args,'planner_minimum_turning_radius',.20))
     staging_behavior = staging_navigation(params,behavior_path,args.output,
         transport_planner=planner_profile.get('transport_planner'))
     nav_path=args.output/'cooperation-nav2.yaml';nav_path.write_text(yaml.safe_dump(params,sort_keys=False))
@@ -434,6 +438,8 @@ def main():
                         help='Editable delivery stations, orders and physical channel occupancy')
     parser.add_argument('--navigation-planner',choices=('navfn','smac-hybrid'),default='navfn',
                         help='Optional native planner candidate; preserves controller and physical limits')
+    parser.add_argument('--planner-minimum-turning-radius',type=float,default=.20,
+                        help='Smac path radius in metres; control and physical geometry remain unchanged')
     parser.add_argument('--amcl-motion-model',choices=('source','omni'),default='source',
                         help='Native motion proposal for the odometry reference point; no truth input')
     parser.add_argument('--perception-config',type=Path,
