@@ -52,13 +52,19 @@ def navigation_behavior(project, output):
                  for source in (helper,default,validity)]
 
 
-def staging_navigation(params, behavior_path, output, *, transport_planner=None):
+def staging_navigation(params, behavior_path, output, *, transport_planner=None,
+                       transport_reversing=False):
     """Isolate transit XY latches using existing native plugins and trees."""
     controller = params['controller_server']['ros__parameters']
     controller['StagingPath'] = copy.deepcopy(controller['FollowPath'])
     controller['StagingPath']['stateful'] = True
     controller['staging_goal_checker'] = copy.deepcopy(controller['general_goal_checker'])
     controller['staging_goal_checker']['stateful'] = True
+    if transport_reversing:
+        # Native RPP rejects reversing together with rotate-to-heading.
+        # Preserve forward/rotate staging; only the loaded path follows cusps.
+        controller['StagingPath'].update(allow_reversing=False, use_rotate_to_heading=True)
+        controller['FollowPath'].update(allow_reversing=True, use_rotate_to_heading=False)
     for field, name in (('controller_plugins','StagingPath'),
                         ('goal_checker_plugins','staging_goal_checker')):
         if name not in controller[field]:
@@ -88,16 +94,17 @@ def staging_navigation(params, behavior_path, output, *, transport_planner=None)
 def navigation_planner(params, profile='navfn', *, minimum_turning_radius=.20):
     """Select installed native planning; leave control and scoring unchanged."""
     planner = params['planner_server']['ros__parameters']
-    if profile == 'smac-hybrid':
+    if profile in ('smac-hybrid', 'smac-reeds-shepp'):
         if not math.isfinite(minimum_turning_radius) or minimum_turning_radius <= 0:
             raise ValueError('planner minimum turning radius must be finite and positive')
-        # Nav2 1.3.13 SmacPlannerHybrid, Apache-2.0. DUBIN is forward-only,
-        # matching RPP allow_reversing=false. No approximate goal fallback.
+        # Nav2 1.3.13 SmacPlannerHybrid, Apache-2.0. Match the native RPP
+        # direction contract; neither profile accepts an approximate goal.
         previous = planner['GridBased']
         planner['HeadingAware'] = {
             'plugin': 'nav2_smac_planner::SmacPlannerHybrid',
             'tolerance': 0., 'allow_unknown': previous.get('allow_unknown', True),
-            'motion_model_for_search': 'DUBIN', 'minimum_turning_radius': minimum_turning_radius,
+            'motion_model_for_search': ('REEDS_SHEPP' if profile == 'smac-reeds-shepp' else 'DUBIN'),
+            'minimum_turning_radius': minimum_turning_radius,
             'angle_quantization_bins': 72, 'lookup_table_size': 5.,
             'smooth_path': True,
         }
@@ -105,10 +112,11 @@ def navigation_planner(params, profile='navfn', *, minimum_turning_radius=.20):
             planner['planner_plugins'].append('HeadingAware')
     elif profile != 'navfn':
         raise ValueError('unknown native planner profile: '+str(profile))
-    chosen='HeadingAware' if profile=='smac-hybrid' else 'GridBased'
+    chosen='HeadingAware' if profile in ('smac-hybrid','smac-reeds-shepp') else 'GridBased'
     return {'profile': profile, 'plugin': planner[chosen]['plugin'],
             'minimum_turning_radius_m': planner[chosen].get('minimum_turning_radius'),
-            'transport_planner': chosen if profile=='smac-hybrid' else None,
+            'transport_planner': chosen if chosen=='HeadingAware' else None,
+            'transport_reversing': profile=='smac-reeds-shepp',
             'staging_planner': 'GridBased',
             'role': 'global path generation; not controller or physical acceptance'}
 
@@ -380,7 +388,8 @@ def prepare(args):
     planner_profile = navigation_planner(params,getattr(args,'navigation_planner','navfn'),
         minimum_turning_radius=getattr(args,'planner_minimum_turning_radius',.20))
     staging_behavior = staging_navigation(params,behavior_path,args.output,
-        transport_planner=planner_profile.get('transport_planner'))
+        transport_planner=planner_profile.get('transport_planner'),
+        transport_reversing=planner_profile.get('transport_reversing',False))
     nav_path=args.output/'cooperation-nav2.yaml';nav_path.write_text(yaml.safe_dump(params,sort_keys=False))
     manifest.update(map_yaml=str(localization_path),localization_map_yaml=str(localization_path),
         collision_map_yaml=str(collision_path),nav2_yaml=str(nav_path),static_map_rectangles=rectangles,
@@ -436,7 +445,7 @@ def main():
                         help='Editable vehicle/sensors/task JSON; creates a new independent scene')
     parser.add_argument('--factory-config',type=Path,
                         help='Editable delivery stations, orders and physical channel occupancy')
-    parser.add_argument('--navigation-planner',choices=('navfn','smac-hybrid'),default='navfn',
+    parser.add_argument('--navigation-planner',choices=('navfn','smac-hybrid','smac-reeds-shepp'),default='navfn',
                         help='Optional native planner candidate; preserves controller and physical limits')
     parser.add_argument('--planner-minimum-turning-radius',type=float,default=.20,
                         help='Smac path radius in metres; control and physical geometry remain unchanged')

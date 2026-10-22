@@ -99,3 +99,11 @@ Smac是在排查AMCL均值前加入的假设候选，其B完整任务未验收�
 新增回归精确将完成事件插在state与ACK两次GET之间，原代码失败为unknown；成功ACK后再GET state的三行修复使72项调度/厂区合同全部通过（.396s）。保存原workflow/真实state/原ACK的离线重放，结果waiting_ready、index1、0POST；原失败结果不改写。此结果不证明修复后原生两订单已通过，仍须新版本完整原oracle。
 
 旧首单task21cdd2d8-446e-4a2b-86a5-e7e5e3432db7，载货Nav6b12b614f0ad4fd782b469c63a26c90e原状态4；190.153墙秒，末XY.02439442m/yaw.02658130rad，连续停稳2.58源秒；保护enabled但tripped0，不主张纯视觉精度。reset f8bb2c00-8be4-4517-9aed-2949e931a6e1成功到65f9f3e6-0e18-42a7-b23b-cf5f677b2c63，第二单未发。原runner保留实例，根用只读ROS monitor独立确认新idle回合hold/guard-off、连续quiet.74源秒后停止确切owned PID432025，端口与进程组均关闭；补充证据`recovery-cleanup-readback.json`独列，旧result仍unknown。
+
+## J100＋3D 雷达输入核对（2026-10-22）
+
+现有 `cooperation_profiles.py` 已提供 J100 四轮／有效轮距、原生 IMU＋robot_localization、加高托盘、工位偏置、载货 RPP 参数与恢复事务。现有三批 profile 仅是演示模板；本轮显式选择 task=transport，原 F1 两订单与目标不改。先按真实几何和载货控制边界验证，不盲搬 FishBot 的偏心原点 Omni 配置。
+
+J100 新生成场景：工位接近扫掠168样本/432几何对，扣采样间距界后余量.02565237m；原A/B静态净距均.061m。J100参考点在轮轴中心，保留原生DifferentialMotionModel＋既有IMU/EKF，不照搬FishBot Omni。16×360 PointCloud2、raw点云、IMU与wheel/odom原生均有接收；两costmap及CM实际topic读回/scope分别记录。
+
+前向Smac在本次B预检半径.60/.30/.20/.10未得到路径，失败207/208原件保留；不是任意前向路径均不可能的证明。NavFn虽原生4，但采样完整外廓最小-.140855m，不能计作可跟踪成功。新增可选 `smac-reeds-shepp` 复用原Nav2 1.3.13插件：载货RPP反向开启、rotate-to-heading关闭，入站仍原行为。默认navfn/DUBIN保持，控制速度／碰撞／时限／评分不变。反向半径.60原生入站/A/B均4，B95姿态采样最小.04001943m；仅采样静态检查，不冒充连续扫掠或实际运输。

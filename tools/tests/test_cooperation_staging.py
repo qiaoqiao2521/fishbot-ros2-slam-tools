@@ -101,6 +101,30 @@ class StagingNavigationTests(unittest.TestCase):
             navigation_planner(self.params, 'missing-plugin')
         self.assertEqual(self.params, before)
 
+    def test_reverse_transport_preserves_forward_staging_and_physical_limits(self):
+        before=copy.deepcopy(self.params)
+        profile=navigation_planner(self.params,'smac-reeds-shepp',minimum_turning_radius=.6)
+        path=staging_navigation(self.params,self.behavior,self.folder,
+            transport_planner=profile['transport_planner'],
+            transport_reversing=profile['transport_reversing'])
+        self.assertEqual(self.params['planner_server']['ros__parameters']['HeadingAware']
+                         ['motion_model_for_search'],'REEDS_SHEPP')
+        for name,reverse,rotate in (('FollowPath',True,False),('StagingPath',False,True)):
+            self.assertIs(self.controller[name]['allow_reversing'],reverse)
+            self.assertIs(self.controller[name]['use_rotate_to_heading'],rotate)
+            self.assertEqual(self.controller[name]['desired_linear_vel'],
+                             before['controller_server']['ros__parameters']['FollowPath']['desired_linear_vel'])
+            self.assertTrue(self.controller[name]['use_collision_detection'])
+        self.assertEqual(ET.parse(path).find('.//ComputePathToPose').get('planner_id'),'GridBased')
+        for name in ('global_costmap','local_costmap','collision_monitor','velocity_smoother'):
+            self.assertEqual(self.params[name],before[name])
+        for name in ('general_goal_checker','progress_checker'):
+            self.assertEqual(self.controller[name],before['controller_server']['ros__parameters'][name])
+        configured=copy.deepcopy(self.params)
+        staging_navigation(self.params,self.behavior,self.folder,
+            transport_planner=profile['transport_planner'],transport_reversing=True)
+        self.assertEqual(self.params,configured)
+
     def test_phase_copies_only_xy_latches_and_preserves_original_delivery_and_collision_parameters(self):
         before = copy.deepcopy(self.params)
         staging_navigation(self.params,self.behavior,self.folder)

@@ -252,3 +252,9 @@ prepare新增显式规划半径、默认.20保留；无效半径不部分改原�
 新证据`publication-stall-readback.json`：桥位姿publish用时.323778秒，期间独立physics收到17帧（9694–9710）、源间隔.02秒、接收最大.02116秒、缺序0；cache锁max12.43µs、physics callbackmax45.57ms。只定位桥发布/调度路径，底层等待原因未唯一隔离。官方rmw_fastrtps异步发送复用候选通过原生writer get_qos读回，私有诊断0消息/0动作；新增--publication-mode仅作用sim/bridge，原Nav2、QoS、阈值保持。73项调度/启动/厂区合同通过.909秒，下一完整运行仅测试新配置，不是原配置第三次重试。
 
 knowledge_status=updated(local)：重置两次GET竞态已写原Wiki/ROS2 与 FishBot第20节，原393行读回；开发知识入口54行已补触发词，两个文件diff检查通过。保留知识仓原dirty，未提交推送。异步发布尚为候选，不将未验收的效果写成知识结论。
+
+## J100＋3D 雷达同任务复用启动（2026-10-22）
+
+当前 in_progress；父 FishBot/planar/ideal 的同轮 B→A 2/2 保持。新组合尚未运行，不把既有 J100 模型或旧 P8 两批成功计入本轮。输出：`~/.cache/fishbot/factory-line-delivery-20261021/j100-lidar3d-20261022/`。owner=本对话 root，不跨对话协调。knowledge_status=already_covered：采用原第19/20节，待实际新证据后决定是否修订。
+
+预检已结束并清理：`native-preflight`、`native-preflight-radii`、`native-preflight-navfn`保留全部未通过，`native-preflight-reverse`的入站/A/B原生路径与完整几何采样通过，独立全hold、无Navigate/Dock/速度发布。109原合同与新增反向阶段合同11项定向通过（重复项不相加）；冻结源码后以同订单B→A、same factory配置和新 `run-reverse` 运行，不传仅支持FishBot的map-egress policy，保留J100必要的原生body-frame直线出站。知识已覆盖，阶段/方向适配结果仍待完整运输。
