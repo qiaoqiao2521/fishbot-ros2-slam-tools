@@ -119,6 +119,10 @@ cmake --build "$HOME/.cache/fishbot/build/cooperation-plan-witness" -j2
 
 可选姿态规划候选：`tools/cooperation_prepare.py --navigation-planner smac-hybrid`保留原入站GridBased/NavFn，增加运输HeadingAware/SmacPlannerHybrid；默认`navfn`沿用源配置。两阶段树的ComputePathToPose分别明确选择插件。候选使用DUBIN前进搜索、.20m最小转弯半径、72方向格和原生平滑，近似目标容差0。不改RPP、检查器、足迹、碰撞、地图、速度或原评分。生成manifest记录实际planner配置；短探针前后回读全部规划插件。此前全阶段Smac试验未整体通过，不能默认部署或称完整运输已修复。
 
+可选定位候选：`--amcl-motion-model omni`仅选择已安装的`nav2_amcl::OmniMotionModel`，保持噪声参数、base_footprint、传感器输入、物理底盘与评分。默认`source`保持原配置。FishBot的foot原点比轮轴前移2cm；原生DifferentialMotionModel对不足1cm的逐次圆弧位移把rot1设0，离线零噪声半圈输入产生5.701cm均值误差。原生Omni模型对此输入、零偏置旋转与25cm直线均匹配几何期望。它描述参考点的侧向位移，不改变车轮可执行运动；运行仍使用原噪声，真值只作独立评分。
+
+原生复现构建在`tools/cooperation_plan_witness/`，运行其中`cooperation_amcl_motion_probe`。该程序不初始化ROS或步进物理；其结果验证运动模型均值合同，不代表AMCL整滤波、完整运输或真机已通过。两份原始运动模型源码：[Differential](https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_amcl/src/motion_model/differential_motion_model.cpp)、[Omni](https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_amcl/src/motion_model/omni_motion_model.cpp)。
+
 开放通道首轮两订单均通过原物理评分。v2 占用通道的两次原生 Nav2 均成功，独立物理评分只有 A 通过；B 的最终位置误差 0.043478m，超过原 0.04m，保持失败。各轮任务均未超 360 墙秒，owned 实例已清理。详见所属进度与私有原始报告。
 
 open-v1 与 occupied-v2 之间补充了 teardown 诊断及保护单位快照，不宣称严格同源码性能对照。保护检查仅比较配置的 systemd 单位；这些历史单位当时均不存在，不能解释成旧 107/114 活进程持续运行。

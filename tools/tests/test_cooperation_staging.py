@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 import yaml
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from cooperation_prepare import navigation_planner, staging_navigation
+from cooperation_prepare import amcl_motion_model, navigation_planner, staging_navigation
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -36,6 +36,18 @@ class StagingNavigationTests(unittest.TestCase):
         self.assertEqual(self.params, before)
         self.assertEqual(result['plugin'],
                          before['planner_server']['ros__parameters']['GridBased']['plugin'])
+
+    def test_native_omni_changes_only_reference_point_motion_proposal(self):
+        before=copy.deepcopy(self.params)
+        self.assertEqual(amcl_motion_model(self.params)['plugin'],
+                         before['amcl']['ros__parameters']['robot_model_type'])
+        self.assertEqual(self.params,before)
+        chosen=amcl_motion_model(self.params,'omni')
+        self.assertFalse(chosen['truth_input'])
+        self.assertFalse(chosen['physical_kinematics_changed'])
+        expected=copy.deepcopy(before)
+        expected['amcl']['ros__parameters']['robot_model_type']='nav2_amcl::OmniMotionModel'
+        self.assertEqual(self.params,expected)
 
     def test_smac_changes_only_global_planning_preserving_all_control_and_safety(self):
         before = copy.deepcopy(self.params)

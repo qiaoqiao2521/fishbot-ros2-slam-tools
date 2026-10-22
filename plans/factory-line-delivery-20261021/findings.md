@@ -67,3 +67,7 @@ fixed首阶段在源18.5s以后命令v始终0，轮轴真值从(-.2118484,-1.971
 当前源planner为NavfnPlanner，配置没有显式use_final_approach_orientation；RPP use_rotate_to_heading=true、stateful=false。同版RPP源码先按carrot到达距离选择目标朝向，否则按carrot方向选择路径转向。RotationShim的末端分支也以XY位置检查为入口，暂不叠加另一层转向。已安装同版SmacPlannerHybrid，官方实现将起终点yaw加入搜索，并使用原完整costmap足迹；选择其作为可选路径候选，控制/评分不改。来源：https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/src/regulated_pure_pursuit_controller.cpp 及 nav2_smac_planner/src/smac_planner_hybrid.cpp。当前只完成候选接线，尚未有新原生结果。
 
 全Smac check2604eaa4-3aef-4bc3-bf20-6d115323673c：原两个Goal均4，stage XY.06730769m/yaw.05267926rad失败，default XY.03825184m/yaw.02458898rad通过；整体false、errors空不等于业务通过。原生planner参数匹配，运行前后不变；GID切换已观察，69.224墙秒且完整清理。日志曾无法规划短U形再由原BT spin恢复，不能称姿态规划全面更优。基于默认运输段通过、原完整任务入站已成功的证据，下一候选仅运输换Smac，入站保留NavFn；保留该试验原件与源码a076e86。
+
+分阶段Smac短试验check686917c3-21ee-40d9-9b2c-cecfb73c8b04仍failed：两原Nav4，stage .06634146m/.03468895rad、default .05913391m/.02441632rad；双planner/原RPP参数前后不变，完整清理。default同末段AMCL近邻源44.3与真值44.22，XY差.0719843m，源龄差.08s；成功到hold后真实位移.1258mm，不能把5.91cm归为刹车滑移。离线模型重建扫描的近似likelihood在真值附近优于该估计，但非原生AMCL重放，保留这个边界。
+
+原生AMCL 1.3.13均值复现发现可确定的模型不匹配：实际foot在轮轴前2cm，转向会有每步<1cm的侧向圆弧；DifferentialMotionModel在此分支rot1=0，半圈100步的期望位移(-.04,0)被预测为(.0006283,.0399951)，误差.0570111m。直接调用已安装lib的OmniMotionModel得几何期望（误差1.72e-19）；偏置0及25cm直线对照均正确。这不是“忽略轮轴的里程计”旧猜测：原EncoderOdometry已正确转换，问题在下游提议模型如何解释该参考点的增量。它证明均值合同缺陷，仍不独占运行中的全部误差或证明整滤波已修复。

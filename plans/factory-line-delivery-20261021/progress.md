@@ -196,3 +196,9 @@ B最后30墙秒只读取证已保存`order-2/terminal-convergence-readback.json`
 全Smac原生试验`smac-hybrid-20261022/fixed-a076e86-a`已结束，check2604eaa4-3aef-4bc3-bf20-6d115323673c、69.224墙秒，passed=false/errors=[]。原Goal均4，stage物理.06730769m/.05267926rad失败，default物理.03825184m/.02458898rad通过；真实planner参数匹配/前后不变、RPP GID切换已观察、原UUID/hold/quiet/见证/native上下文/launch/端口全清理。不修改该失败，不因两个Nav4当通过。
 
 下一软件候选保留原GridBased/NavFn及全部入站控制，只增加HeadingAware给运输树显式选择；短探针回读双planner。此更改不是原全Smac结果改判，新输入另建`smac-transport-20261022/scene/`。短入站旧失败不重定义评分，若新默认运输段通过且原入站软件未变，再用原完整任务验证实际Dock/交接与A/B；完整运输此前未启动。
+
+分阶段短试验`smac-transport-20261022/fixed-027fd08-a`已结束，check686917c3-21ee-40d9-9b2c-cecfb73c8b04、55.248墙秒，整体false。stage UUIDe322013c5c754ca09fb879b20d90fa96/default UUIDb37f483ce382499d801d2180622fe177均4，误差分别6.634cm/.03469rad、5.913cm/.02442rad；控制/RPP GID/双planner实际回读，参数与源码前后不变、禁碰0、清理全过。结果保留，不按成功重写，未跑完整运输。
+
+随后离线只读真值/AMCL与native模型：`offline-scan-map-readback.json`明确为重建扫描近似评分、0步进，非实时AMCL重放。真正原生均值复现在`amcl-motion-model-proof-20261022`，直接链接系统nav2_amcl；差速模型2cm偏置半圈误差5.701cm，Omni近0，零偏置与25cm直线控制正确。首手工链接失败已保留工具输出，改用原生ament依赖后编译成功。新增项目`cooperation_amcl_motion_probe`六案例均值合同通过，不把诊断退出码当物理验收。
+
+新候选只比前一双planner输入改一字段AMCL robot_model_type，私有manifest在`smac-transport-20261022/amcl-motion-omni-20261022/scene/scene-manifest.json`；独立字典比较确认仅此字段改变。默认source不改源设置，所有噪声/观测/TF/物理/控制/评分保持。新增AMCL参数原生前后回读、34项配置/探针/prepare检查过9.646s，C++原生六案例过；短运动待验。knowledge_status=pending（新的参考点/运动模型均值经验），owner=本对话FishBot root，运行边界明确后写原第19节，不把尚未验收业务写成已修复。

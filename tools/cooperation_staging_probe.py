@@ -486,6 +486,15 @@ def main(argv=None):
   report['navigator_parameters']=get_parameters('bt_navigator',['default_nav_to_pose_bt_xml'])
   if expected!=actual:raise RuntimeError('native controller parameters differ')
   if planner_expected!=planner_actual:raise RuntimeError('native planner parameters differ')
+  amcl_config=config['amcl']['ros__parameters']
+  amcl_names=[key for key in ('robot_model_type','base_frame_id','alpha1','alpha2','alpha3',
+   'alpha4','alpha5','laser_model_type','sigma_hit','max_beams','min_particles','max_particles')
+   if key in amcl_config]
+  amcl_expected={key:amcl_config[key] for key in amcl_names}
+  amcl_actual=get_parameters('amcl',amcl_names)
+  report['amcl_parameters']={'expected':amcl_expected,'actual':amcl_actual,
+   'matches':amcl_actual==amcl_expected}
+  if amcl_actual!=amcl_expected:raise RuntimeError('native AMCL parameters differ')
   report['initial_source_identity']=node.raw['source']
   report['plan_publishers']=[{'node':i.node_name,'gid':bytes(i.endpoint_gid).hex()} for i in node.get_publishers_info_by_topic('/received_global_plan')]
   report['plan_publisher_qos']=[{'node':i.node_name,'gid':bytes(i.endpoint_gid).hex(),
@@ -560,8 +569,10 @@ def main(argv=None):
   node.phase='cleanup';report['final_quiet']=quiet()
   report['controller_parameters_after']=get_parameters('controller_server',names)
   report['planner_parameters_after']=get_parameters('planner_server',planner_names)
+  report['amcl_parameters_after']=get_parameters('amcl',amcl_names)
   report['parameters_unchanged']=(actual==report['controller_parameters_after'] and
-   planner_actual==report['planner_parameters_after'])
+   planner_actual==report['planner_parameters_after'] and
+   amcl_actual==report['amcl_parameters_after'])
   report['native_statuses']=node.statuses;report['native_status_first_phase']=node.first_phase
   a,b=(node.gids['staging'],node.gids['default'])
   gid_values=a|b

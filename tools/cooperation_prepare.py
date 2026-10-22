@@ -110,6 +110,18 @@ def navigation_planner(params, profile='navfn'):
             'role': 'global path generation; not controller or physical acceptance'}
 
 
+def amcl_motion_model(params, profile='source'):
+    """Use native lateral odometry at a foot origin displaced from the axle."""
+    amcl=params['amcl']['ros__parameters']
+    if profile=='omni':
+        amcl['robot_model_type']='nav2_amcl::OmniMotionModel'
+    elif profile!='source':
+        raise ValueError('unknown AMCL motion profile: '+str(profile))
+    return {'profile':profile,'plugin':amcl['robot_model_type'],
+            'base_reference':amcl['base_frame_id'],
+            'physical_kinematics_changed':False,'truth_input':False}
+
+
 def laser_slice(vertices, height):
     """Intersect a box or MuJoCo convex collision mesh with the scan plane."""
     import numpy as np
@@ -302,6 +314,7 @@ def prepare(args):
         'max_beams':180,'z_hit':.95,'z_rand':.05,'update_min_d':.01,
         'update_min_a':.01,'do_beamskip':False}
     params['amcl']['ros__parameters'].update(localization_parameters)
+    motion_profile=amcl_motion_model(params,getattr(args,'amcl_motion_model','source'))
     controller=params['controller_server']['ros__parameters']
     # Reuse the installed Nav2 checker also used by the passage profile. A
     # short transit after cancellation can require turning before translating;
@@ -372,6 +385,7 @@ def prepare(args):
         navigation_behavior_tree=str(behavior_path),
         staging_navigation_behavior_tree=str(staging_behavior),
         navigation_planner=planner_profile,
+        amcl_motion_model=motion_profile,
         navigation_behavior_tree_sha256=hashlib.sha256(behavior_path.read_bytes()).hexdigest(),
         navigation_behavior_tree_sources=behavior_sources,
         navigation_behavior_tree_license='Apache-2.0 (Nav2 1.3.13)',
@@ -420,6 +434,8 @@ def main():
                         help='Editable delivery stations, orders and physical channel occupancy')
     parser.add_argument('--navigation-planner',choices=('navfn','smac-hybrid'),default='navfn',
                         help='Optional native planner candidate; preserves controller and physical limits')
+    parser.add_argument('--amcl-motion-model',choices=('source','omni'),default='source',
+                        help='Native motion proposal for the odometry reference point; no truth input')
     parser.add_argument('--perception-config',type=Path,
                         help='JSON station observation contract; ideal by default, no vision truth fallback')
     parser.add_argument('--spawn',type=float,nargs=2,default=(0.,-2.),metavar=('X','Y'))

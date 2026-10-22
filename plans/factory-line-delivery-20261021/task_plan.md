@@ -53,3 +53,7 @@ aligned原生已通过，来源与物理证据齐全。下一步先用当前已�
 只在新输入启用`--navigation-planner smac-hybrid`，原默认NavFn配置保持。使用原生DUBIN前进搜索、.20m最小曲率半径、72方向格、5m启发查询表、原生平滑；近似目标容差设0，allow_unknown继承原值。RPP/检查器/足迹/地图/碰撞/速度/进度与原预算、物理评分不变；不新增控制器。先用原失败fixed两段目标在143/9113验证（60源秒/70墙秒每段），保存真实planner参数回读与RPP DDS见证。若通过，再用新独立输出跑原A/B完整direct；若失败，保留原UUID、失败与清理，按新证据修正假设，不把aligned成功替代fixed成功。
 
 全Smac实际试验整体失败：两原Nav均4但短入站真值6.73cm/.05268rad失败，运输默认阶段3.83cm/.02459rad通过。修正候选只对运输选择HeadingAware，原GridBased/NavFn和入站控制配置逐字段不改；两个ComputePathToPose显式绑ID。再核实际双planner加载与默认运输段物理误差，保留旧入站短探针失败及顶层false，不能靠改判短入站来称整体通过。只有新运输阶段有证据且入站软件未变时才进入原完整任务，仍由原Dock/抓放/运输oracle判定入站及整单，不把短阶段评分替代真实业务。
+
+分阶段规划短试验也未全过：stage6.63cm、default5.91cm，原Nav均4；default末AMCL/近邻真值偏7.20cm，Native4后真实滑移仅.126mm。转向模型原生复现随后证实：base_footprint偏轮轴2cm时，Diff将<1cm的侧向圆弧误当沿heading前进，半圈无噪声均值误差5.701cm；Omni保留平移方位，误差近0，零偏置及直线控制均正确。
+
+新候选在相同双planner输入只改AMCL robot_model_type为Omni，alpha1..5=.2、观测、TF/base、粒子数、控制与原门槛不改。先同fixed短试验回读AMCL/双planner参数并量测真值；旧短入站评分保留。默认运输段物理及清理有据后，才能作为独立新试验跑原完整Dock/交接/A/B，以原oracle判断实际业务；不将均值复现解释为整滤波或完整运输成功。当前owner仍本对话，禁止使用真值反馈定位或增大容差。
