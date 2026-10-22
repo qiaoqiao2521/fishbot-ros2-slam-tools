@@ -1,6 +1,6 @@
 --- a/src/node_lattice.cpp
 +++ b/src/node_lattice.cpp
-@@ -226,8 +226,10 @@
+@@ -226,7 +226,9 @@
    MotionPrimitive * motion_primitive,
    bool is_backwards)
  {
@@ -12,4 +12,3 @@
 +  if (!std::isnan(_cell_cost) && motion_primitive == nullptr) {
      return _is_node_valid;
    }
- 
