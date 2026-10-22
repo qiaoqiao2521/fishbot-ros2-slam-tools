@@ -158,6 +158,8 @@ Smac的路径曲率约束可显式设置：prepare使用`--navigation-planner sm
 
 ## 同任务切换 J100＋3D 雷达
 
+2026-10-23 实测结论：**组合未通过**。两次完整B均未到交付成功，A未执行；第二次原K与连续支撑通过，但原120秒载货导航超时。以下是实验复现入口，不是已验收的稳定配方。140项有效源码检查通过，所有owned实例已清理；原FishBot两单通过保持。
+
 使用 `tools/config/cooperation_profiles/jackal_j100-lidar3d-transport.json`，原 F1 配置、订单 B→A 和原目的地保持。车型适配复用四轮滑移／有效轮距、原生 IMU＋EKF、完整足迹、托盘高度、工位交接和直线出站；16线通用理想雷达生成标准 PointCloud2，接入两 costmap 与 Collision Monitor。不是标定过的商业雷达，也不是热换活动实例。
 
 本场景中，前向 Smac 的四个半径预检未找到 B 路径；NavFn 路径中有完整 J100 外廓相交。可显式选择原 Nav2 SmacPlannerHybrid 的 REEDS_SHEPP 模式，允许载货阶段倒车，保持原场地／目标和物理评分。原入站 StagingPath 仍为前进＋rotate-to-heading；载货 FollowPath 设置 allow_reversing=true、use_rotate_to_heading=false。默认 navfn 和旧 smac-hybrid/DUBIN 均保持。

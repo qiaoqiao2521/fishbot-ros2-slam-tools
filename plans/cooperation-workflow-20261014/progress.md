@@ -121,7 +121,7 @@ job1新attempt 0c1bf47d在准备导航失败：原Nav31701beb到5，没有Dock/�
 
 ## P8 Current
 
-in_progress：O（bcefdb0）首批触原360墙秒上限，source150.42仅到臂回位，loaded六参数均not_applied；整行408.734墙秒。18个owned PID及9110清理完成，39源码/11生成文本一致；不是新导航参数效果验证。M的A/A通过/B失败、N及N诊断失败均保留，其余三组合仍零启动，四组合12次未完成。当前无FishBot物理仿真/浏览器QA；已与研究根/无人机owner串行协调，等明确交回窗口先做F1 occupied direct，两单完成清理即归还；via另约窗口。完整离线反馈集成后1678项通过（control948/mission209/autonomy61/frontend460），零skip/缺依赖；55项新事务/策略合同已纳入统一入口。
+2026-10-23 当前本对话的F1 J100＋3D雷达验证已结束，组合未通过：原K／连续载货支撑有通过，B末端原120秒超时、A未执行。140项有效源码检查通过，未通过曲率／接近候选存档撤回默认，实验全部清理；父FishBot两单2/2保持。[F1最终读回](../factory-line-delivery-20261021/progress.md)为本轮权威入口。原P8四组合12次仍未完成，不拼接分母，也不等待跨对话交接。
 
 最新根验证：完整反馈1621项通过（control891/mission209/autonomy61/frontend460，零skip/缺依赖）；133项P8/F1相关完整原生离线测试通过。随后雷达自定义topic/range统一接线与goal XY持续检查的6项composition测试通过；新goal参数尚待完整原生运行验证。前端桌面/390px实际配置草稿与下载验收保持，非运行时热换。知识updated(local)，已回写Wiki/ROS2 与 FishBot第19/20节及开发知识入口并读回，独立知识仓未提交发布。当前root继续校准与冻结面板；后文为逐轮历史，旧失败原件不覆盖。
 
@@ -294,3 +294,9 @@ F1 fixed direct已运行并安全归还窗口：派生身份接纳成功，A入�
 
 
 F1阶段XY合同最小软件候选已接：原RPP/检查器两个配置实例，入站stateful=true、交付false保持，原参数与期限不变。独立BT通过原NavigateToPose.behavior_tree选择，旧/null字段兼容默认；actual request路径单列而非消费ACK。108项core及36项配置/报告检查过，额外4项optional复验通过；两个原车型完整YAML/BT纯软件解析通过，无ROS/编译/物理步进。原prepare/native多插件和完整运输尚待明确窗口。P8私人runner已纳入可选staging XML起止观察，不改旧结果；未新运行O载货或四组合。
+
+### F1复用接续（2026-10-22）
+
+原P8 O轮状态保留：in_progress：O（bcefdb0）首批触原360墙秒上限，source150.42仅到臂回位，loaded六参数均not_applied；整行408.734墙秒。18个owned PID及9110清理完成，39源码/11生成文本一致；不是新导航参数效果验证。M的A/A通过/B失败、N及N诊断失败均保留，其余三组合仍零启动，四组合12次未完成。当前无FishBot物理仿真/浏览器QA；已与研究根/无人机owner串行协调，等明确交回窗口先做F1 occupied direct，两单完成清理即归还；via另约窗口。完整离线反馈集成后1678项通过（control948/mission209/autonomy61/frontend460），零skip/缺依赖；55项新事务/策略合同已纳入统一入口。
+
+本轮仅从该组合复用车型/雷达、直线出站与载货参数事务，实验和独立评分属于F1两订单；零派发生命周期启动失败、原B连续支撑失败与减速候选分开计。未用新的同组合结果覆盖原四组合面板分母。owner=本对话root。
