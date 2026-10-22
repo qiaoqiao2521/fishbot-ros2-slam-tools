@@ -210,7 +210,21 @@ Omni短运动`fixed-cbe3251-a`已结束，check3e782927-7a2f-4341-9f59-bcb16e962
 按task_plan只允许一次独立同源复现到`direct-repeat/run`，若再出现同类时效失败便停止完整重复，先取证；不称同源码复现为新改善。当前task21cdd2d8-446e-4a2b-86a5-e7e5e3432db7已完成入站Nav eb096c050f114a9aaecb4fea188f4871及Dock aa1804c925084877a41907c001b7a94e（均4），闭爪装货中，完整结果在途。knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节加入参考点/原生AMCL均值段落，开发知识入口同步触发词，已rg读回原385/入口52行且diff检查通过；只讲已复现均值，不写完整业务已修复。独立知识仓保留原dirty，未提交推送。
 # 回合切换修复接续（2026-10-22）
 
-当前：NavFn＋Omni的B仍在末端朝向超时；仅修定位均值不足以闭环。原生零运动半径对照已确认Smac .20失败、.10/.05成功且末段方向更接近目标。显式半径参数及36项检查通过；下一新输入`smac-r010-omni-20261022/scene`只改原Smac半径.20→.10，先B后A完整验收到同目录`b-first/run`，141/9111，保留原全部门槛。旧失败不改，不记2/2。
+当前：本轮F1实体占用场景的B→A完整验收已完成，原独立物理评分2/2，109项相关检查通过。有效候选为Omni参考点模型＋运输Smac半径.10m＋显式异步发布；原阶段树、速度、碰撞、目标容差和120/360/1000期限保持。源码b158b65，独立原记录回算、同源/清理与临时防休眠释放均已确认。旧失败保持，via、RGB与J100/3D雷达不计本轮通过。
+
+## 本轮有效交付：同轮B→A完整物理2/2
+
+- run `5e1f02eb-d912-452d-9c76-0acc42d9b029`，源码`b158b65af753f5c6422bbab796d44f6054520bf7`，domain141/API9111，输入`~/.cache/fishbot/factory-line-delivery-20261021/smac-r010-omni-20261022/scene/scene-manifest.json`，输出同目录`b-first/run`。执行completed、task_verdict passed、overall true；479.706单调秒，实际墙钟479.706秒。两单分别203.638/232.162秒，均在原360内，总在原1000内；2start/1reset/0APIcancel，不重发。
+- B task `aab663ba-f2a4-449c-966f-ea13097447a4`、episode `e5c73a76-8894-4439-b03f-1ac9859c6d57`，原载货Nav `1bdab46c3a8249629ac7fae585aa553e` 独立状态2→4；XY.03258884m/yaw.02692002rad，连续终点静止3.62源秒。A task `29d42ad3-33e4-49b1-b308-ae27118b94b5`、episode `459b348d-dfe3-4f5b-9ebe-4363bc13a31e`，载货Nav `96b67e0d2a4c4d9b87569131b6c4feaa` 2→4；XY.02531214m/yaw.01719479rad，连续静止2.50源秒。原K、连续交接与运输、完整目的地评分分别true，目标仍B(.7,-2,0)/A(0,-2,0)。
+- 双指抓取/抬升/松爪落稳/机械臂回位、同自由货物运输和最终留盘均由原oracle验收。reset `f7963040-4dcb-4c3e-a42b-51d15d7d66a7` 原ACK、新episode与独立physics吻合。原生参数服务实际读回半径.10、DUBIN、近似目标容差0、双planner；原RPP、足迹、地图/世界及物理评分不变。B→A顺序已预声明，不能当相同顺序的单因素性能对照。
+- 两份`order-N/independent-readback.json`只流式读原ROS记录，不导入控制或oracle helper；独立重算真值XY/yaw与原评分相差<1e-6、原UUID2→4、末hold/guard-off/留盘均确认。B90433/A81171行与原recording written逐项一致，164717516/152353509字节、无截断；source_integrity/recording_integrity均true。`independent-final-readback.json`确认选定源码起止一致、预算和原任务/回合独立。
+- 采样仍有缺口：两单physics各缺2序号，最大接收间隔.07217/.10743秒、最大源间隔.04/.04秒；A clock最大接收间隔.13489秒。完整落盘不等于无损采集。guard enabled约6.44/6.36源秒、tripped样本均0，未观察plant辅助；mode仍ideal，不宣称RGB、真机或泛化。
+- 两原task/所有原动作终态、hold、quiet、guard-off已读回，owned launch/observer/端口关闭、survivors=[]；临时sleep inhibitor随父进程释放，未改全局电源。旧107/114配置单位仍not-found前后一致，只说明该集合未变化，不宣称旧活实例持续运行。
+- 最终六模块相关检查109项全部通过10.896秒、零skip，日志`smac-r010-omni-20261022/final-contract-tests.log`。没有前端变更，不额外跑全工作台或实车测试。默认NavFn/source AMCL/.20m半径和原固件脚本保持，成功配置需显式选择。
+
+knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节387行已纠正“NavFn有路即可”的不充分结论，补路径末段切线/显式半径与有限F1结果；第20节395/397行记录重置竞态与宿主休眠，开发知识入口56行同步触发词，已读回并diff检查通过。保留知识仓原dirty，未提交推送该独立仓库。
+
+下一步：冻结本轮F1有效配置；由本对话沿`plans/cooperation-workflow-20261014/`的P8入口验证J100＋3D雷达复用，不盲目复制FishBot的参考点模型或半径。via、其他研究候选和跨硬件成绩仍待各自原oracle，未运行不记通过。
 
 NavFn＋Omni run6f7b9880-07a8-4332-981d-2891a1403d5e，a27cb6e，302.732秒，执行incomplete、0/1通过、A未执行。B taske9196637-2f3a-4622-a42c-7dab67f84b2a，272.542秒，原载货Nav764b9823af324e48a9eb7a998b393802在原120秒超时取消5；真值XY.03860390m/yaw1.356731rad，未完成连续终点静止。无freshness_failure，原生终态与hold/quiet/guard-off、owned launch/9111已清理；没有延长期限或拼旧A。
 

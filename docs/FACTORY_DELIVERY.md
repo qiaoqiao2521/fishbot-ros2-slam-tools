@@ -131,6 +131,19 @@ open-v1 与 occupied-v2 之间补充了 teardown 诊断及保护单位快照，�
 
 B末30墙秒的862个原物理样本全程hold=false、禁碰0，XY误差1.31–2.23cm、偏航1.30–1.79rad；601条命令线速度全0、角速度±.8rad/s并换向21次。HTTP所记map位姿跨15mm圈20次，它不是逐周期控制器分支回执；只将末端收敛列为已定位环节，不独占因果。原完整任务oracle的`native_goal_consumption_ack_claimed=false`保持，本节前面的DDS消费证据来自独立两段探针，不移花接木为这轮每个动作的消费ACK。via尚未执行，需先解决末端收敛，再冻结新同源对照。
 
+## 2026-10-22 已验收的有限配置
+
+原实体通道占用场景、FishBot＋平面雷达＋理想工位观测，采用同一程序完成B→A，原独立物理评分2/2。原始记录另行重算真值和原生UUID终态均吻合；同轮完整抓放、回位、留盘、运输与清理通过，原4cm/.05rad及120/360/1000秒门槛保持。
+
+| 目的地 | 位置误差 | 偏航误差 | 单单耗时 | 连续停稳 |
+| --- | --- | --- | --- | --- |
+| B `(.7,-2,0)` | 3.259cm | .02692rad | 203.638s | 3.62源秒 |
+| A `(0,-2,0)` | 2.531cm | .01719rad | 232.162s | 2.50源秒 |
+
+prepare显式组合为`--amcl-motion-model omni --navigation-planner smac-hybrid --planner-minimum-turning-radius 0.10`；沿用原工位、阶段树及factory配置。factory run显式选择`--publication-mode asynchronous --order order-b --order order-a`。验收期间可用现成`systemd-inhibit --what=sleep --mode=block`包裹该运行命令，退出即释放；不修改全局电源策略。默认配置保持旧值，不能把FishBot参考点模型和半径直接套到其它底盘。
+
+原始源码为b158b65、run5e1f02eb-d912-452d-9c76-0acc42d9b029、总479.706秒。guard触发0；每单physics仍缺2序号，完整记录不代表无损采样或生产稳定性。本轮不覆盖RGB、via或J100/3D雷达；历史失败、完整取证与下一入口见[本轮进度](../plans/factory-line-delivery-20261021/progress.md)。
+
 ## 发布阻塞配置实验
 
 Smac的路径曲率约束可显式设置：prepare使用`--navigation-planner smac-hybrid --planner-minimum-turning-radius 0.10`。默认0.20保持旧行为；字段写入native planner参数和manifest说明。该值不修改车体或RPP执行限制，需按车型与具体场景做原生规划、实际路径跟踪及完整物理评分。F1的0.20/0.10对照结果见计划，不把更小半径解释成通用升级。
