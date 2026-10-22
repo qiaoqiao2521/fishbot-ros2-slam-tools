@@ -457,6 +457,9 @@ class Workflow:
             self.data.update(status='fault' if ack['status'] == 'failed' else 'reset_pending',
                              reason='reset_'+ack['status'])
             return
+        # The ACK may complete after tick's state GET. Re-read only after the
+        # original reset succeeds, so its new episode and history agree.
+        state = self._state()
         new_episode = identity(ack.get('new_episode_id'))
         attempt = self._job()['attempts'][-1]
         if attempt['status'] != 'rejected':

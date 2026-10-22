@@ -71,3 +71,10 @@ fixed首阶段在源18.5s以后命令v始终0，轮轴真值从(-.2118484,-1.971
 分阶段Smac短试验check686917c3-21ee-40d9-9b2c-cecfb73c8b04仍failed：两原Nav4，stage .06634146m/.03468895rad、default .05913391m/.02441632rad；双planner/原RPP参数前后不变，完整清理。default同末段AMCL近邻源44.3与真值44.22，XY差.0719843m，源龄差.08s；成功到hold后真实位移.1258mm，不能把5.91cm归为刹车滑移。离线模型重建扫描的近似likelihood在真值附近优于该估计，但非原生AMCL重放，保留这个边界。
 
 原生AMCL 1.3.13均值复现发现可确定的模型不匹配：实际foot在轮轴前2cm，转向会有每步<1cm的侧向圆弧；DifferentialMotionModel在此分支rot1=0，半圈100步的期望位移(-.04,0)被预测为(.0006283,.0399951)，误差.0570111m。直接调用已安装lib的OmniMotionModel得几何期望（误差1.72e-19）；偏置0及25cm直线对照均正确。这不是“忽略轮轴的里程计”旧猜测：原EncoderOdometry已正确转换，问题在下游提议模型如何解释该参考点的增量。它证明均值合同缺陷，仍不独占运行中的全部误差或证明整滤波已修复。
+# 2026-10-22 回合切换竞态
+
+`direct-repeat/run`（源码cbe3251）首单物理与原K通过，第二单未执行，整轮unknown。Workflow.tick先GET state，随后GET原reset ACK；bridge在reset期间先更新episode、稍后才清空旧task并置reset succeeded。因此ACK可能已完成，而前一个state仍是“新episode＋旧task＋原episode历史”，触发`conflicting task history or episode`。这是两次读取间的竞态，当前只读回看时历史与原任务完全一致，不是重置未执行。
+
+新增回归精确将完成事件插在state与ACK两次GET之间，原代码失败为unknown；成功ACK后再GET state的三行修复使72项调度/厂区合同全部通过（.396s）。保存原workflow/真实state/原ACK的离线重放，结果waiting_ready、index1、0POST；原失败结果不改写。此结果不证明修复后原生两订单已通过，仍须新版本完整原oracle。
+
+旧首单task21cdd2d8-446e-4a2b-86a5-e7e5e3432db7，载货Nav6b12b614f0ad4fd782b469c63a26c90e原状态4；190.153墙秒，末XY.02439442m/yaw.02658130rad，连续停稳2.58源秒；保护enabled但tripped0，不主张纯视觉精度。reset f8bb2c00-8be4-4517-9aed-2949e931a6e1成功到65f9f3e6-0e18-42a7-b23b-cf5f677b2c63，第二单未发。原runner保留实例，根用只读ROS monitor独立确认新idle回合hold/guard-off、连续quiet.74源秒后停止确切owned PID432025，端口与进程组均关闭；补充证据`recovery-cleanup-readback.json`独列，旧result仍unknown。

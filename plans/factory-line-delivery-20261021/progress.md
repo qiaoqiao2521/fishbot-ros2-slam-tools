@@ -1,9 +1,9 @@
 # F1 Progress
 
 ## Current
-2026-10-22 partial：控制器消费/实例切换已补齐原生证据，aligned两段Goal及独立物理评分2/2通过，真实RPP GID互异，误差2.55/2.63cm，原实例与端口已清理。16项局部检查与C++编译通过；fixed朝向探针及旧motion-d仍失败。原staged occupied direct两订单已完成，完整物理1/2：A误差3.59cm/.04375rad通过；B载货末端120秒超时，最终XY1.85cm/yaw1.57329rad失败。原评分不改、任务无重发、owned全清理，下一入口是B末端收敛。
+2026-10-22 in_progress：新增可选运输Smac与原生AMCL Omni参考点模型，默认source/NavFn保持。原生六案例证实Diff解释偏轴foot小圆弧的均值误差5.701cm、Omni近0；34项检查过。新短运输段1.345cm/.00421rad通过，临时入站点5.678cm失败，整短探针false。首次完整任务入站3秒因源龄.34s取消并清理；当前只一次同源独立复现direct-repeat/run已越过入站/精停靠，装货中。原旧完整1/2、B末端超时、两个规划短失败与启动失败均保留。
 
-用户本轮明确后续只在当前对话独立实施，不再等待跨对话资源交接。每次原生运行前核对实际进程和端口，不停止其他任务。探针143/9113、配送141/9111均已结束；保留原120/360/1000预算及原物理评分。入口见docs/FACTORY_DELIVERY.md“阶段控制探针”；原固定direct失败与e/d各轮完整历史保留在下文。
+用户本轮明确后续只在当前对话独立实施，不再等待跨对话资源交接。每次原生运行前核对实际进程和端口，不停止其他任务。探针143/9113已结束；当前配送复现独占141/9111，源码cbe3251冻结。保留原120/360/1000预算及原物理评分。入口见docs/FACTORY_DELIVERY.md“阶段控制探针”；原固定direct失败与e/d各轮完整历史保留在下文。
 
 ## Done
 - 已读 F0 厂区协作约定，明确两个配送工位/目的地和可选通道占用。
@@ -202,3 +202,16 @@ B最后30墙秒只读取证已保存`order-2/terminal-convergence-readback.json`
 随后离线只读真值/AMCL与native模型：`offline-scan-map-readback.json`明确为重建扫描近似评分、0步进，非实时AMCL重放。真正原生均值复现在`amcl-motion-model-proof-20261022`，直接链接系统nav2_amcl；差速模型2cm偏置半圈误差5.701cm，Omni近0，零偏置与25cm直线控制正确。首手工链接失败已保留工具输出，改用原生ament依赖后编译成功。新增项目`cooperation_amcl_motion_probe`六案例均值合同通过，不把诊断退出码当物理验收。
 
 新候选只比前一双planner输入改一字段AMCL robot_model_type，私有manifest在`smac-transport-20261022/amcl-motion-omni-20261022/scene/scene-manifest.json`；独立字典比较确认仅此字段改变。默认source不改源设置，所有噪声/观测/TF/物理/控制/评分保持。新增AMCL参数原生前后回读、34项配置/探针/prepare检查过9.646s，C++原生六案例过；短运动待验。knowledge_status=pending（新的参考点/运动模型均值经验），owner=本对话FishBot root，运行边界明确后写原第19节，不把尚未验收业务写成已修复。
+
+Omni短运动`fixed-cbe3251-a`已结束，check3e782927-7a2f-4341-9f59-bcb16e962765、54.919墙秒，原两Goal均4；stage .05678021m/.03230424rad仍失败，default .01344995m/.00420539rad通过。整探针false不改。实际AMCL Omni/alpha=.2/500–2000粒子已回读，AMCL/双planner/控制参数与源码起止不变，禁碰0、原UUID/hold/quiet/见证/上下文/launch/9113全清理。
+
+首次完整`.../amcl-motion-omni-20261022/direct/run`，runfc8589c7-d008-4816-ace2-a29a9159d869、20.204墙秒。首单task0d1580bb-3d7e-45bb-80c1-04478554db5d在3.008秒因共享反馈源龄.340s/接收龄.348s失效；入站UUIDc0428a6376724d2099c1b723f3b8bc95取消5并原清理verified。1start/0reset/0 API cancel，原score失败、B未执行、overallfalse；没有放宽门槛或重发未知任务。桥计时physics callback最大34ms、cache锁等待最大1.2µs，无>100ms slow事件，不能将该空窗独占归为长锁。原observer与result完整保留，owned进程/9111已清理。
+
+按task_plan只允许一次独立同源复现到`direct-repeat/run`，若再出现同类时效失败便停止完整重复，先取证；不称同源码复现为新改善。当前task21cdd2d8-446e-4a2b-86a5-e7e5e3432db7已完成入站Nav eb096c050f114a9aaecb4fea188f4871及Dock aa1804c925084877a41907c001b7a94e（均4），闭爪装货中，完整结果在途。knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节加入参考点/原生AMCL均值段落，开发知识入口同步触发词，已rg读回原385/入口52行且diff检查通过；只讲已复现均值，不写完整业务已修复。独立知识仓保留原dirty，未提交推送。
+# 回合切换修复接续（2026-10-22）
+
+当前：首单完整物理通过，第二单因状态/ACK竞态未派发；修复已完成软件回归，原A/B新版本原生验收待运行。原`direct-repeat/run/result.json`保持unknown，不拼接旧首单成2/2。下一输出`smac-transport-20261022/amcl-motion-omni-20261022/direct-reset-fixed/run`，141/9111，保持原120/360/1000期限与所有物理门槛。
+
+复现run4da35c3e-84b2-4f0c-b933-205cabb0fb02，237.506墙秒：首单task21cdd2d8-446e-4a2b-86a5-e7e5e3432db7通过原K/完整物理，XY2.439cm/yaw.02658rad、停稳2.58源秒；1start/1reset/0cancel，B未执行。reset原编号f8bb2c00-8be4-4517-9aed-2949e931a6e1已成功，新idle回合独立quiet.74源秒、原历史/所有Nav终态确认，确切owned PID432025、进程组和9111已清理；补充回读单列，不覆盖原runner清理失败。
+
+新增竞态回归先失败，再以成功ACK后重读state的最小修复通过72项调度/厂区测试（.396s，零skip）；原记录离线重放3GET/0POST推进waiting_ready/index1。源码尚待本轮冻结；不得把软件测试当完整业务通过。既有知识写回updated(local)保持，新竞态经验暂为pending，owner=本对话FishBot root，原生结果后串行决定是否回写原第20节。

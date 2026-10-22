@@ -597,6 +597,34 @@ class WorkflowTest(unittest.TestCase):
         self.assertEqual([kind for kind, body in self.bridge.calls], ['start', 'reset'])
         self.assertTrue(all(x[1] == request_id for x in self.bridge.gets if x[0] == 'reset'))
 
+    def test_reset_completion_between_state_and_ack_reloads_new_episode(self):
+        with self.open() as workflow:
+            self.start(workflow)
+            self.bridge.terminal()
+            workflow.reset()
+            request_id = workflow.data['operation']['request_id']
+            old_episode = self.bridge.value['episode_id']
+            self.bridge.acknowledge_reset(request_id)
+            completed = copy.deepcopy(self.bridge.value)
+            # The bridge exposes the new physics episode before it clears the
+            # old terminal task; reset completion can follow the state GET.
+            self.bridge.value.update(ready=False,
+                task=copy.deepcopy(completed['history'][-1]['task']))
+            original_reset_get = self.bridge.reset
+
+            def completed_ack(value):
+                self.bridge.value = copy.deepcopy(completed)
+                return original_reset_get(value)
+
+            with patch.object(self.bridge, 'reset', side_effect=completed_ack):
+                value = workflow.tick()
+            self.assertEqual(value['status'], 'waiting_ready')
+            self.assertEqual(value['index'], 1)
+            self.assertNotEqual(value['episode_id'], old_episode)
+            self.assertEqual(value['episode_id'], completed['episode_id'])
+            self.assertEqual(value['resets'][0]['ack']['request_id'], request_id)
+            self.assertEqual([kind for kind, body in self.bridge.calls], ['start', 'reset'])
+
     def test_wrong_reset_ack_new_episode_and_missing_history_block(self):
         with self.open() as workflow:
             self.start(workflow)
