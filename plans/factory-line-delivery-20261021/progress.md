@@ -210,7 +210,13 @@ Omni短运动`fixed-cbe3251-a`已结束，check3e782927-7a2f-4341-9f59-bcb16e962
 按task_plan只允许一次独立同源复现到`direct-repeat/run`，若再出现同类时效失败便停止完整重复，先取证；不称同源码复现为新改善。当前task21cdd2d8-446e-4a2b-86a5-e7e5e3432db7已完成入站Nav eb096c050f114a9aaecb4fea188f4871及Dock aa1804c925084877a41907c001b7a94e（均4），闭爪装货中，完整结果在途。knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节加入参考点/原生AMCL均值段落，开发知识入口同步触发词，已rg读回原385/入口52行且diff检查通过；只讲已复现均值，不写完整业务已修复。独立知识仓保留原dirty，未提交推送。
 # 回合切换修复接续（2026-10-22）
 
-当前：重置竞态已修复并通过原生跨单。异步发布候选原生仍1/2，B在交接时遭宿主真实休眠（已核系统日志）；位姿发布max7.30ms。停止无原因重复。下一独立同源复现用systemd-inhibit在验收父进程期间临时阻止sleep，结束释放，输出`smac-transport-20261022/amcl-motion-omni-20261022/direct-async-awake/run`，141/9111。保持同输入、原120/360/1000期限及全部门槛；旧unknown和failed不改。
+当前：保持唤醒的完整试验A通过、B在Smac规划阶段失败，没有时效异常。原生只规划对照已证明同一B请求由原NavFn成功求得精确终点路径，Smac候选失败；世界全程hold且清理完成。下一输入回原NavFn，仅改AMCL参考点模型，先B后A完整验收到`navfn-omni-20261022/b-first/run`，141/9111；原120/360/1000与全部门槛保持。旧unknown和failed不改，仍不得称完整2/2。
+
+保持唤醒run477813c5-e130-4fe7-a0bb-e16c87bd3738，6b01bde（运行代码同353701c），442.357秒，执行completed/完整物理1/2。A task316cca14-fbac-4b02-bbea-c555b4aec4cc，163.811秒，末2.416cm/.01763rad、静止2.58源秒通过。B task40d0cd60-6fc3-42d4-8c85-dad9f71d964c，234.562秒，双指/交接/留盘通过，但载货Nav5faad13b8d8d4e66b5d8b6ba1e0657f1失败6/208，末距2.533m/yaw2.902rad；原HeadingAware多次no valid path，车辆未完成运输。无freshness_failure，两份source/recording完整性过、全部owned实例/9111已关闭，临时sleep inhibitor已自动释放。
+
+`native-planner-contrast-20261022`只规划对照：HeadingAware UUID3ead6e54a5574ea689ad78e0b523838b失败6/207，4.351秒、0点；GridBased UUID1e8fe2432aa04e0395e5e6c433981f64成功4/0，.18282秒、342点、3.43764m，终点(.7,-2,0)精确。560物理样本全hold、连续quiet2.98源秒、零Navigate/Dock/速度发布、owned launch/9111已清理。其costmap为同场景原spawn的新实例，不冒充原载货B costmap重放。
+
+`navfn-omni-20261022/scene/derivation.json`独立字典差异只有amcl.ros__parameters.robot_model_type，原GridBased/NavFn和原双树保留，地图/世界路径未变。新实验预声明B→A，原任务目标与期限不变；先完成新同轮原oracle，不拼旧成功。
 
 异步run5a9e2528-eee6-46ae-a0cb-2fb735efbd06，353701c，328.617单调墙秒，执行completed/物理1/2/overallfalse；A task73420a4e-1bfd-4c00-978e-52a0cc793e18，165.848秒、2.444cm/.01697rad、静止2.44源秒通过。reset d50fbf69-bcea-4371-9e75-a668af3df8b5成功；B task999e60ee-82a7-4dee-b062-bfe02a6b50fa，121.529秒，在arm_transport因共享物理反馈中断失败；入站820f5ed7ba8f40178c9153f9d3c7731c与Dock fd217807509c43aa98bf8f5700bc4d21原4，未载货导航。2start/1reset/0APIcancel；原source/recording完整性过、原生终态/hold/quiet/guard-off、owned进程与9111均清理，源码起止不变。
 

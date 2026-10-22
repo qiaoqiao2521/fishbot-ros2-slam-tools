@@ -73,3 +73,9 @@ Omni短试验默认运输段通过1.345cm/.00421rad，临时入站点仍5.678cm�
 先复用官方RMW_FASTRTPS_PUBLICATION_MODE=ASYNCHRONOUS，仅对本轮sim/bridge两个Python子进程设置；原Nav2与observer继承源配置，所有QoS、源时间戳、物理门槛与动作owner保持。启动参数source为原默认，asynchronous显式选择，factory声明和实际launch命令留痕。原生writer模式零运动读回与73项相关检查已通过，冻结源码后在同一输入/目标/预算跑一次`direct-async/run`。失败仍保留，不把配置生效当发布时效或完整物理通过；若仍超时，返回阻塞证据，不循环完整运行。
 
 异步原生已结束，原评分1/2，不重复碰运气。已回源确认本次B中断是宿主真实休眠：systemd-suspend.service从19:36:30到21:24:28，物理与桥查询同时停顿，源时间仅推进.02秒。下一独立复现采用系统现有systemd-inhibit，仅随验收父进程阻止sleep、结束释放；不改全局电源、网络、ROS时间阈值或评分。复用同源码/同输入，独立输出`direct-async-awake/run`，141/9111；标为宿主不休眠条件下的复现，不宣称新增算法改善。保留休眠失败及系统日志，结果与inhibitor释放单列。
+
+## 回到原NavFn，独立验收参考点修正
+
+保持唤醒的完整试验B在Smac规划阶段原生失败6/208，无反馈时效异常；不是RPP末端收敛已验收。只规划对照已完成：同一原生实例、同源地图、新鲜costmap，原B前AMCL起点与B终点固定，HeadingAware失败6/207、GridBased成功4/0并精确终止于原B，零Navigate/Dock/速度发布、560个物理样本全hold、清理完成。该对照不是载货B costmap重放或运输验收。
+
+下一输入`navfn-omni-20261022/scene`由原staged NavFn manifest派生，只改AMCL robot_model_type；原地图、世界、双行为树、NavFn参数与全部控制/评分保持。继续显式异步发布与父进程临时阻止sleep。为了优先验证长期失败点，预声明顺序B→A（目标值不变），独立输出`navfn-omni-20261022/b-first/run`；记录顺序变化，不将它作为单因素因果对照。只有同轮两单完整oracle通过才记2/2；失败不靠扩期限、近似终点或拼旧A取得通过。owner=本对话FishBot root。
