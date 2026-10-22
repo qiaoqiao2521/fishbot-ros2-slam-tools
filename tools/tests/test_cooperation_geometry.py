@@ -10,6 +10,42 @@ PYTHON = Path.home()/'.cache/so101-colab/planning-venv/bin/python'
 
 
 class GeometryTests(unittest.TestCase):
+    def test_rotated_boxes_keep_positive_clearance_across_aabb_contact(self):
+        code = r'''
+import json,math,sys
+import numpy as np
+sys.path.insert(0,sys.argv[1]+'/tools')
+import mujoco
+from cooperation_geometry_check import pair_clearance
+yaw=.7144845128932502
+xml=f"""<mujoco><worldbody>
+<geom name="car" type="box" pos=".6702008874948888 -2.412933979264536 .15"
+ size=".244 .222795 .1" quat="{math.cos(yaw/2)} 0 0 {math.sin(yaw/2)}"/>
+<geom name="obstacle" type="box" pos=".35 -2.1 .25" size=".06 .15 .25"/>
+</worldbody></mujoco>"""
+m=mujoco.MjModel.from_xml_string(xml);d=mujoco.MjData(m)
+a=m.geom('car').id;b=m.geom('obstacle').id;rows=[]
+for offset in (0.,-.002,.002):
+ m.geom_pos[a,0]=.6702008874948888+offset;mujoco.mj_forward(m,d)
+ extent=sum(np.abs(d.geom_xmat[i].reshape(3,3))@m.geom_size[i] for i in (a,b))
+ gap=float(np.linalg.norm(np.maximum(np.abs(d.geom_xpos[a]-d.geom_xpos[b])-extent,0)))
+ rows.append({'aabb_gap':gap,'lower':pair_clearance(m,d,a,b),
+  'native':float(mujoco.mj_geomDistance(m,d,a,b,.2,None))})
+m.geom_pos[a]=m.geom_pos[b];mujoco.mj_forward(m,d)
+print(json.dumps({'rows':rows,'overlap':pair_clearance(m,d,a,b)}))
+'''
+        run = subprocess.run([str(PYTHON), '-B', '-c', code, str(PROJECT)],
+                             capture_output=True, text=True, timeout=30)
+        self.assertEqual(run.returncode, 0, run.stdout+run.stderr)
+        result = json.loads(run.stdout)
+        self.assertLess(result['rows'][0]['aabb_gap'], 1e-6)
+        self.assertEqual(result['rows'][1]['aabb_gap'], 0.)
+        # Analytic face separation, independent of the unstable legacy query.
+        for row, expected in zip(result['rows'],
+                (.07078132591540687, .06947086973785377, .07209178209295997)):
+            self.assertAlmostEqual(row['lower'], expected, places=8)
+        self.assertLessEqual(result['overlap'], 0.)
+
     def test_separated_rotated_box_uses_conservative_bound_and_keeps_overlap_rejected(self):
         code = r'''
 import json,math,sys

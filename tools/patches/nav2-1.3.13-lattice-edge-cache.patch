@@ -1,0 +1,15 @@
+--- a/src/node_lattice.cpp
++++ b/src/node_lattice.cpp
+@@ -226,8 +226,10 @@
+   MotionPrimitive * motion_primitive,
+   bool is_backwards)
+ {
+-  // Already found, we can return the result
+-  if (!std::isnan(_cell_cost)) {
++  // Cached endpoint validity does not validate a different incoming primitive.
++  // Start/goal checks may have populated this cache without an edge at all.
++  // Keep the cache only for endpoint-only queries; recheck complete transitions.
++  if (!std::isnan(_cell_cost) && motion_primitive == nullptr) {
+     return _is_node_valid;
+   }
+ 

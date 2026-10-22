@@ -137,3 +137,24 @@ J100 新生成场景：工位接近扫掠168样本/432几何对，扣采样间�
 `cooperation_delivery_route.py`的路径估算显式考虑线/角运动重叠、换向、加减速与pre/post-hold两段原`.7`源秒停稳。运行预算用单调墙钟，估算声明源/墙速率和路径朝向跟踪假设。它既不是上界，也不是所有可能路线的最优下界，不新增内容哈希或Held执行门禁。
 
 真实25个ComputePath请求证实北侧若干直观点在当前地图为lethal/206；南侧可以找到整路几何通过的候选，但此次采样的时间预算不足。没有因此扩大期限或复跑完整抓放。代码、独立路线评分、原1719项反馈回归和补充CLI检查均通过；J100实际多段路线和完整业务仍待验收。
+
+## Smac Lattice 原生缓存复现（2026-10-23）
+
+系统已安装Nav2 1.3.13 SmacPlannerLattice；官方diff生成器产生前进曲线与原地转向，原5cm样例不匹配当前2cm地图。本轮使用原版生成器生成diff/.60m/2cm/16head原语。
+
+真实原生库最小反例：clear endpoint=true，cold blocked edge=false；先检查同endpoint后，warm blocked edge错误为true。`NodeLattice::isNodeValid`先返回`_cell_cost`缓存，绕过与incoming primitive相关的整段碰撞。补丁只让motion_primitive非空时重新检查；同程序在独立overlay中两条blocked edge均false。源1.3.13头文件node_lattice/types与系统安装完全相同，不改公共ABI、系统安装或已运行实例。实体工厂只规划首次路径穿障碍-.22596m，costmap实际正确为254，关闭analytic无效；修库后前进模式208无路，倒车得到完整几何通过但估算198.14秒的路线，尚非业务成功。
+
+原生入口/最小复现/补丁：`tools/cooperation_lattice.py`、`cooperation_plan_witness/lattice_cache_probe.cpp`、`patches/nav2-1.3.13-lattice-edge-cache.patch`。源码来源为navigation2/1.3.13，license随生成资产保留；实际动态库路径在私有native-patched-preflight/loaded-planner-libraries.json。
+
+
+### 旋转箱体下界与控制衔接
+
+旧AABB下界可在两包围框相触时趋于0，即使实际箱体仍分离。J100路径一姿态的AABB间距2.06nm，而原生与旋转分离轴均为.138576m。仅加密会追到AABB零点，不能解决下界本身过弱。`pair_clearance`保留远端AABB快速下界，对近端box-box增加15个旋转分离轴投影下界；有正分离证明才使用，重叠仍查原生距离。人工双箱解析距离、AABB两侧小位移和真实重叠负例均回归，未缩车、未改物理接触或原评分。
+
+同一旧路径独立重算未覆盖原报告：原未修库路径仍-.225964m拒绝；低软代价候选仍-.017173m拒绝。padding .03/.04两候选分别取得.006505/.054791m扣采样界后的正余量，32heading也通过完整几何但估算150.96秒。保守padding只作用全局搜索，不改变实际车体/local costmap/CM。原始coarse失败与projection读回分列。
+
+16heading/padding .04/原生reverse，静态长度2.908075m、yaw4.428595rad，采样下界112.644秒、含余量估算118.844秒。该估算未声称执行上界。原B空托盘实际Goal56a4914f3f2046cbbf0e38ad2b16133f接纳，2339条带received_global_plan的非零命令，相对第一条保留真值的最大位移2.138122m；120.070秒取消/原status5，末误差.988705m/.326931rad，禁碰累计0，hold/停稳/owned/端口清理通过。保留物理窗内有.92秒最大源间隙，不称完整无损。
+
+原路径起始同XY三次旋转至-.463648rad；倒车RPP不能同时开启use_rotate_to_heading，初始请求v=.03/w=-.134被原平滑器角上限.05限制，原地动作被走成弧线。复用官方1.3.13 RotationShim（原RPP同命名空间、use_path_orientations=true、原阈值.3/速度限制）后，原B第二Goal1621b06d421c4356b742dc42d9aec0a6仍120.061秒取消，末误差.349670m/.880649rad；2173条实际带plan非零命令、保留窗相对位移1.649046m。此只证明相应控制/物理活动，均非到达或完整交付。下一单参数对照只缩approach_velocity_scaling_dist .6→.12，保留原最高速度、加减速、原min_approach=.005及评分。
+
+最后Shim/approach .12对照Goalcd5ccbac3afe46c2ac587b15bd316bea在120.071秒原status5，末误差.226143m/1.003603rad，2157条带plan非零命令；仍未到达。三轮监控只保留20000条尾窗，原位移统计以第一条保留真值为原点；不能称从Goal起点的完整轨迹。没有做新完整抓放或A目标，也没有把未通过Shim/软代价/padding/approach提升为默认参数。有限试验保留，下一根owner应针对真实跟踪/反向切换与时间裕量继续，不据仅规划参数宣称业务修复。

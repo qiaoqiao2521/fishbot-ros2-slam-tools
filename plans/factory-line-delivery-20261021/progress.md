@@ -1,6 +1,8 @@
 # F1 Progress
 
 ## Current
+2026-10-23 Smac Lattice显式接入与有限面板已交付，J100组合仍未通过。原生1.3.13插件、官方248条diff/.60m/2cm原语、独立库缓存补丁、可选Rotation Shim均落盘；39项相关与1727项完整反馈检查通过。9轮只规划找到完整几何正余量.05479m、估算118.844秒候选；3轮原B空托盘真实跟踪均在原120秒取消，最后22.614cm/1.00360rad，未执行新的完整抓放或A。不拼接成B→A成功。全部owned实例/9111/inhibitor已清理；知识updated(local)且读回。细节与最短接续入口见本文件末节，owner=本对话root。
+
 2026-10-23 配送站进场与共享路线预算已实现：可选有序map姿态沿原Workflow持久化，原J100 body-frame出站后各进场点和最终点共用120墙秒，原360/1000与评分保持。当前原生只规划15组/25请求，5组整路完整几何通过，但这些采样路径预算均不足；新运输与新路线实际运动未启动、不计验收。两实例5583物理样本全hold、零任务/运动Goal，owned/9111已清理。原J100两次完整失败、A未执行和父FishBot2/2均保留；后续须先找到可验收路线。软件最终回归见下方本轮条目。
 
 2026-10-23 本轮 J100＋3D 雷达验证已结束，组合未通过；父FishBot/planar同轮B→A物理2/2保持。新硬件已真实发布点云/IMU/wheel odom、接入原生两costmap/CM，完成入站、Dock、SO101抓放及出站；第二完整尝试的原K和连续交接/运输通过，但B载货Nav原120秒超时、交付false，A未执行。两个完整B尝试与短探针失败均保留，不拼接为两单成功。当前源码63ca9c4的140项相关检查通过；未通过的曲率/接近参数改动已存私有patch并从默认源码撤回。全部owned实例、9111和sleep inhibitor已清理。其后已补进场姿态与路径预算，当前仍需合格路线后验证同轮B→A。
@@ -291,3 +293,29 @@ knowledge_status=updated(local)：重置两次GET竞态已写原Wiki/ROS2 与 Fi
 - 取证根：`~/.cache/fishbot/factory-line-delivery-20261021/j100-delivery-approach-20261023/`；`native-route-preflight`、`native-route-preflight-south`、`time-budget-recalculation.json`、`final-cleanup.json`。最终独立进程starttime对账零owned存活、9111关闭；FishBot临时sleep inhibitor已释放，其他系统inhibitor未动。无新完整运输，原J100失败与父FishBot2/2保持。
 - knowledge_status=already_covered：沿用原Wiki/ROS2 与 FishBot第19/20节的双时钟、原ID、完整几何、线/角速预算和真值隔离；本轮新增的是项目合同与有限候选证据，不重复写知识页。独立知识仓原dirty保持。owner=本对话root。
 - 最短接续：在原实体/最终姿态/速度/120秒内先找一条几何与预算均合理的进场路线，再运行原UUID真实跟踪和停稳，最后同轮B→A完整oracle。当前具名JSON明确为未通过候选，不能直接作为默认可交付路线。
+
+
+## Smac Lattice 本轮交付与原生有限面板（2026-10-23）
+
+- 实现：prepare显式smac-lattice、原语文件复制与网格适配、可选reverse/原生RotationShim；旧NavFn/Hybrid/Reeds默认不变。公开CLI生成24qpos/22qvel/10ctrl场景，独立读回原语相同、运输Shim/内部RPP和前进入站RPP、manifest修复声明。
+- 原生缓存：同一个C++程序在原库得到cold blocked=false/warm blocked=true，在补丁overlay得到false/false。实际native库映射已核对。完整package独立构建通过，未替换系统库。原生反例的无inflation警告属于诊断fixture，不修改真实costmap。
+- 几何：新增旋转分离轴正下界，保留真实穿障碍与重叠负例。相同旧路径另存projection读回，不覆盖原coarse报告；padding .04候选710个样本、最小.061000m，扣.006210间距界后余量.054791m。原实际车体、local costmap、CM、接触评分不变。
+- 只规划共9轮：原库、costmap读回、禁analytic、补丁前进、补丁倒车、低软代价、padding .03、32heading、padding .04。原库路径真实穿障碍；修库后前进208，倒车长路超预算；有正完整几何与名义118.844秒估算的16heading候选才进入空托盘运动。估算不是执行上界，也不是所有路线不可能性证明。
+
+| 原B空托盘 | 原Navigate UUID | 原生终态 | 到原期限耗时 | 末真值误差 m/rad | 带plan非零cmd | 保留窗位移 m |
+|---|---|---|---|---|---|---|
+| 原倒车RPP | 56a4914f3f2046cbbf0e38ad2b16133f | 5/取消 | 120.070s | .988705/.326931 | 2339 | 2.138122 |
+| 原生Shim＋原RPP | 1621b06d421c4356b742dc42d9aec0a6 | 5/取消 | 120.061s | .349670/.880649 | 2173 | 1.649046 |
+| 同Shim＋approach .12 | cd5ccbac3afe46c2ac587b15bd316bea | 5/取消 | 120.071s | .226143/1.003603 | 2157 | 1.636800 |
+
+三轮原生参数服务读回均保留载货max_velocity=.03/0/.05、max_accel=.025/0/.05及原减速度；最后两轮实际Shim/内部RPP和加载overlay已读回。末累计车/臂禁碰均0，原UUID取消、hold=true及.7源秒连续静止确认后才清理。三轮不是严格同随机轨迹的性能A/B，不能用末误差排名宣称改进通过。软代价、padding .04、Shim与approach .12均未提升为默认业务参数。
+
+**记录覆盖限制**：实时monitor有界为20000条；退出保留的三轮物理源窗分别35.42–138.72、33.16–136.74、35.16–138.54秒，未保留各轮所有初始帧。表中位移相对于各自第一条保留真值，不能称从Goal起点的完整路程；仍足以证明实际非零运动。窗口内最大源间隙分别.92/1.04/.88秒；不宣称无损采样。最终累计禁碰和原Goal结果各自保留，桥接转发不冒充控制器逐帧消费ACK，也不据此宣称两阶段GID切换已证。
+
+验证：最新39项相关检查17.015秒通过；完整check-feedback为control997/mission209/autonomy61/frontend460，共1727项，零skip/缺依赖/失败。保留Browserslist数据库陈旧提示，未为此升级依赖。原生build、两版同程序反例、公开prepare和独立YAML/manifest读回通过；源码改动期间未重启其他任务。全部12个owned上下文/9111已关闭，未操作实车或执行固件发布。
+
+原始输出根：`~/.cache/fishbot/factory-line-delivery-20261021/j100-lattice-20261023/`。聚合`native-results-summary.json`；原生`native-*/result.json`、3份`independent-ros.jsonl`保留窗；几何`geometry-projection-summary.json`；反例`cache-probe-{original,fixed}.log`；公开入口`public-cli-readback.json`；完整回归`feedback-final.log`。运行时日志不入Git。
+
+最短接续：先读`native-shim-approach/result.json`和对应路径/ROS保留窗，用已接入的原生planner/controller边界解决路线跟踪的转向、反向切换与时间余量；不要再发送同点Goal，不延长原120/360/1000、不缩车、不关闭碰撞。复现准备命令见`docs/FACTORY_DELIVERY.md`的差速Lattice节，原B探针脚本在同缓存`native-shim-approach.py`，使用domain141/9111，启动前核对实际占用。实际原B到达及清理通过后，再同轮B→A完整原物理评分；当前均pending，owner=本对话root，不跨对话协作。
+
+knowledge_status=updated(local)：已修订原`Wiki/ROS2 与 FishBot.md`第19节的AABB/旋转分离轴下界，并补原生Lattice冷/热边缓存、网格匹配与原地动作消费经验；`Wiki/开发知识入口.md`补触发入口。逐段rg读回已核对，保留知识仓原dirty，本轮未提交/推送知识仓。源码交付提交与远端读回由本节后续Git收尾记录对应。

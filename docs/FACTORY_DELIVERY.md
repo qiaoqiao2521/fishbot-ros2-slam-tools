@@ -178,6 +178,66 @@ FISHBOT_COOP_PYTHON=/home/muqiao/.cache/so101-colab/planning-venv/bin/python \
 
 源码依据：[Nav2 1.3.13 RPP 参数合同](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_regulated_pure_pursuit_controller/src/parameter_handler.cpp)、[原生 SmacPlannerHybrid](https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_smac_planner/src/smac_planner_hybrid.cpp)。当前完整运输结果回源本轮实施进度；预检成功不计运输成功。
 
+## 差速 Smac Lattice（显式候选）
+
+`prepare --navigation-planner smac-lattice` 使用原生 Nav2 1.3.13
+`nav2_smac_planner::SmacPlannerLattice`。默认 NavFn、Hybrid、Reeds-Shepp 保持。
+同版官方生成器提供 diff／0.60m 曲线半径／2cm 网格／16 朝向的 248 条原语，
+包含前进与原地转向，不包含横移。`--lattice-allow-reversing` 显式开启倒车扩展。
+`--lattice-rotation-shim` 可选包装运输 RPP，按路径朝向先转向；入站 RPP 保持。
+自定义原语可通过 `--lattice-filepath PATH` 传入，prepare 将其复制到独立 scene。
+原语网格必须匹配 costmap；不通过缩放地图迁就原5cm样例。
+
+```bash
+FISHBOT_COOP_PYTHON="$HOME/.cache/so101-colab/planning-venv/bin/python" \
+tools/fishbot_cooperation.sh prepare \
+  --so101-project /home/muqiao/dev/ros2/projects/so101 \
+  --output "$HOME/.cache/fishbot/j100-lattice-scene" \
+  --scene-profile tools/config/cooperation_profiles/jackal_j100-lidar3d-transport.json \
+  --factory-config tools/config/factory_delivery/line-side-occupied.json \
+  --navigation-planner smac-lattice --lattice-allow-reversing
+```
+
+输出目录须为新的。此命令只准备输入，不启动运动。
+
+**本机1.3.13需要原生缓存修复。** 实测发现 `NodeLattice::isNodeValid` 可复用终点缓存，
+跳过另一条入边的碰撞检查。仓库包含最小 C++ 复现和仅修该条件的补丁。
+在独立 overlay 构建后，通过现有 `FISHBOT_NAV2_QUERY_OVERLAY=<overlay>/install`
+传给启动入口，并核对 planner 进程实际加载库；不修改 `/opt/ros/jazzy`。
+具体构建、许可证和原生反例见[原语说明](../tools/config/navigation_lattices/README.md)。
+Manifest 中的修复要求只是声明，不能证明运行库已修复。
+
+本轮已执行原生规划、完整车体扫掠和原 B 点空托盘跟踪。
+旋转箱体预检增加分离轴距离下界，避免把世界轴包围框相触误认成真实零净距；
+原穿障碍路径仍拒绝，动态 MuJoCo 接触和原 oracle 不变。
+路径存在、非零控制命令、空托盘到达与完整载货交付分别验收。
+倒车 RPP 自身不能同时启用 rotate-to-heading；Lattice 的原地转向不能仅凭插件接通就算执行。
+实际轮次、时间与未通过项回源[当前进度](../plans/factory-line-delivery-20261021/progress.md)。
+
+本轮最后一个**未通过**空托盘候选在上述两个可选开关外，使用以下搜索/减速差异。
+将对应键合并到生成的 YAML，保留其他字段；这不是可验收默认参数。
+
+```yaml
+planner_server:
+  ros__parameters:
+    HeadingAware:
+      reverse_penalty: 1.0
+      rotation_penalty: 12.0
+      cost_penalty: 0.0
+      analytic_expansion_max_cost: 252.0
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      footprint_padding: 0.04
+controller_server:
+  ros__parameters:
+    FollowPath:
+      approach_velocity_scaling_dist: 0.12
+```
+
+该候选仍在120秒取消，末误差22.6cm/1.004rad，不能据此运行完整交付并记成功。
+原最高线/角速度、加减速、目标容差、碰撞/CM及任务评分保持。
+
 ## 配送站进场姿态与共用时间预算
 
 2026-10-23 新增可选 `destinations[].approach_poses`，按顺序填写 map 坐标的 `{x,y,yaw}`，单位 m/rad。它描述如何进入配送站；`pose` 仍是原最终交付姿态。旧配置省略此字段时保持直达，不增加中间目标。

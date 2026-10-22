@@ -1,5 +1,13 @@
 # F1 厂区线边配送
 
+## 当前实施：Smac Lattice 差速候选（2026-10-23）
+
+用户明确要求复用原生Smac Lattice。使用已安装Nav2 1.3.13插件和同版官方运动原语生成器；按原2cm costmap生成diff/0.60m原语，包含原地旋转、不引入横移。原5cm样例不直接用于2cm地图。新增显式planner选择与文件输入，保持原NavFn/Hybrid/Reeds默认；默认载货RPP使用前进＋rotate-to-heading；可显式开启原生倒车扩展与原RPP倒车合同。倒车中的原地转向另用原生RotationShim有限对照，不以参数组合等同控制成功。
+
+顺序：合同/网格/原地旋转检查 → 同原场景真实只规划/完整实体扫掠/原预算估算 → 原UUID的空托盘实际路径跟踪 → 通过后同轮B→A原完整运输。原最大线/角速度、加减速、碰撞/连续支撑/到达门槛、120/360/1000不变，不把路径存在当作闭环成功。原J100失败、旧FishBot2/2和未通过进场候选保留；只有验证有效的能力晋级，失败也保留证据并清理。owner=本对话root，不跨对话或外部Agent协作。
+
+采用知识：原Wiki/ROS2 与 FishBot第19/20节，尤其完整几何、源/墙时钟、路径/控制/物理分层和原UUID清理。官方依据：navigation2/1.3.13/nav2_smac_planner/{README.md,lattice_primitives/README.md,src/smac_planner_lattice.cpp}。已执行原生库缓存反例、修库前后路径、原完整几何与空托盘原B跟踪；实际结果回源progress。未完成同轮B→A不晋级组合，原失败保留；knowledge_status=updated(local)，根已在已有第19节修订分离轴下界并补原生冷/热缓存与原地动作经验，入口同步且读回；知识仓未发布。
+
 ## 当前实施：配送站进场与共享路线预算（2026-10-23）
 
 用户要求补配送站进场姿态与路线时间预算。复用 destination → Workflow → 原桥 → 原生 NavigateToPose，增加可选有序进场姿态，保持最终 A/B 位置与 yaw。J100 必需的 body-frame 出站仍先执行；其后的进场与交付各段共用原 120 墙秒，含请求、规划、行走、段末停稳与 hold，不按段重置。原任务 360 秒、全轮 1000 秒及物理评分保持。

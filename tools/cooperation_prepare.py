@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -53,7 +54,8 @@ def navigation_behavior(project, output):
 
 
 def staging_navigation(params, behavior_path, output, *, transport_planner=None,
-                       transport_reversing=False):
+                       transport_reversing=False, transport_in_place_rotation=False,
+                       transport_rotation_shim=False):
     """Isolate transit XY latches using existing native plugins and trees."""
     controller = params['controller_server']['ros__parameters']
     controller['StagingPath'] = copy.deepcopy(controller['FollowPath'])
@@ -65,6 +67,20 @@ def staging_navigation(params, behavior_path, output, *, transport_planner=None,
         # Preserve forward/rotate staging; only the loaded path follows cusps.
         controller['StagingPath'].update(allow_reversing=False, use_rotate_to_heading=True)
         controller['FollowPath'].update(allow_reversing=True, use_rotate_to_heading=False)
+    elif transport_in_place_rotation:
+        # Forward differential primitives include zero-translation turns.
+        # Preserve those poses and let the existing native RPP rotate first.
+        for name in ('StagingPath', 'FollowPath'):
+            controller[name].update(allow_reversing=False, use_rotate_to_heading=True)
+    if transport_rotation_shim:
+        follow = controller['FollowPath']
+        angle = follow.get('rotate_to_heading_min_angle', .785)
+        follow.update(primary_controller=follow.get('primary_controller', follow['plugin']),
+            plugin='nav2_rotation_shim_controller::RotationShimController',
+            angular_dist_threshold=angle, angular_disengage_threshold=angle/2.,
+            forward_sampling_distance=params['global_costmap']['global_costmap']['ros__parameters']['resolution'],
+            use_path_orientations=True, rotate_to_goal_heading=True,
+            rotate_to_heading_once=False, closed_loop=True)
     for field, name in (('controller_plugins','StagingPath'),
                         ('goal_checker_plugins','staging_goal_checker')):
         if name not in controller[field]:
@@ -91,9 +107,12 @@ def staging_navigation(params, behavior_path, output, *, transport_planner=None,
     return stage_path
 
 
-def navigation_planner(params, profile='navfn', *, minimum_turning_radius=.20):
+def navigation_planner(params, profile='navfn', *, minimum_turning_radius=.20,
+                       lattice_filepath=None, lattice_allow_reversing=False,
+                       lattice_rotation_shim=False):
     """Select installed native planning; leave control and scoring unchanged."""
     planner = params['planner_server']['ros__parameters']
+    lattice_info = {}
     if profile in ('smac-hybrid', 'smac-reeds-shepp'):
         if not math.isfinite(minimum_turning_radius) or minimum_turning_radius <= 0:
             raise ValueError('planner minimum turning radius must be finite and positive')
@@ -110,15 +129,25 @@ def navigation_planner(params, profile='navfn', *, minimum_turning_radius=.20):
         }
         if 'HeadingAware' not in planner['planner_plugins']:
             planner['planner_plugins'].append('HeadingAware')
+    elif profile == 'smac-lattice':
+        from cooperation_lattice import lattice_parameters
+        settings, lattice_info = lattice_parameters(params, lattice_filepath,
+            allow_reversing=lattice_allow_reversing)
+        planner['HeadingAware'] = settings
+        if 'HeadingAware' not in planner['planner_plugins']:
+            planner['planner_plugins'].append('HeadingAware')
     elif profile != 'navfn':
         raise ValueError('unknown native planner profile: '+str(profile))
-    chosen='HeadingAware' if profile in ('smac-hybrid','smac-reeds-shepp') else 'GridBased'
+    chosen='HeadingAware' if profile in ('smac-hybrid','smac-reeds-shepp','smac-lattice') else 'GridBased'
     return {'profile': profile, 'plugin': planner[chosen]['plugin'],
             'minimum_turning_radius_m': planner[chosen].get('minimum_turning_radius'),
             'transport_planner': chosen if chosen=='HeadingAware' else None,
-            'transport_reversing': profile=='smac-reeds-shepp',
+            'transport_reversing': profile=='smac-reeds-shepp' or (profile=='smac-lattice' and lattice_allow_reversing),
+            'transport_in_place_rotation': profile=='smac-lattice' and not lattice_allow_reversing,
+            'transport_rotation_shim': profile=='smac-lattice' and lattice_rotation_shim,
             'staging_planner': 'GridBased',
-            'role': 'global path generation; not controller or physical acceptance'}
+            'role': 'global path generation; not controller or physical acceptance',
+            **lattice_info}
 
 
 def amcl_motion_model(params, profile='source'):
@@ -386,10 +415,22 @@ def prepare(args):
         padding_m=float(params['local_costmap']['local_costmap']['ros__parameters'].get('footprint_padding', .01)))
     composition_navigation(params, manifest, args.output)
     planner_profile = navigation_planner(params,getattr(args,'navigation_planner','navfn'),
-        minimum_turning_radius=getattr(args,'planner_minimum_turning_radius',.20))
+        minimum_turning_radius=getattr(args,'planner_minimum_turning_radius',.20),
+        lattice_filepath=getattr(args,'lattice_filepath',None),
+        lattice_allow_reversing=getattr(args,'lattice_allow_reversing',False),
+        lattice_rotation_shim=getattr(args,'lattice_rotation_shim',False))
+    if planner_profile['profile'] == 'smac-lattice':
+        source_lattice = Path(planner_profile['lattice_filepath'])
+        prepared_lattice = args.output/'cooperation-diff-lattice.json'
+        shutil.copyfile(source_lattice, prepared_lattice)
+        planner_profile.update(source_lattice_filepath=str(source_lattice),
+                               lattice_filepath=str(prepared_lattice))
+        params['planner_server']['ros__parameters']['HeadingAware']['lattice_filepath'] = str(prepared_lattice)
     staging_behavior = staging_navigation(params,behavior_path,args.output,
         transport_planner=planner_profile.get('transport_planner'),
-        transport_reversing=planner_profile.get('transport_reversing',False))
+        transport_reversing=planner_profile.get('transport_reversing',False),
+        transport_in_place_rotation=planner_profile.get('transport_in_place_rotation',False),
+        transport_rotation_shim=planner_profile.get('transport_rotation_shim',False))
     nav_path=args.output/'cooperation-nav2.yaml';nav_path.write_text(yaml.safe_dump(params,sort_keys=False))
     manifest.update(map_yaml=str(localization_path),localization_map_yaml=str(localization_path),
         collision_map_yaml=str(collision_path),nav2_yaml=str(nav_path),static_map_rectangles=rectangles,
@@ -445,10 +486,16 @@ def main():
                         help='Editable vehicle/sensors/task JSON; creates a new independent scene')
     parser.add_argument('--factory-config',type=Path,
                         help='Editable delivery stations, orders and physical channel occupancy')
-    parser.add_argument('--navigation-planner',choices=('navfn','smac-hybrid','smac-reeds-shepp'),default='navfn',
+    parser.add_argument('--navigation-planner',choices=('navfn','smac-hybrid','smac-reeds-shepp','smac-lattice'),default='navfn',
                         help='Optional native planner candidate; preserves controller and physical limits')
     parser.add_argument('--planner-minimum-turning-radius',type=float,default=.20,
-                        help='Smac path radius in metres; control and physical geometry remain unchanged')
+                        help='Hybrid radius in metres; lattice radius comes from its selected primitives')
+    parser.add_argument('--lattice-filepath',type=Path,
+                        help='Native differential primitive JSON matching the costmap grid; optional for smac-lattice')
+    parser.add_argument('--lattice-allow-reversing',action='store_true',
+                        help='Enable native lattice reverse expansion and the existing reversing RPP phase contract')
+    parser.add_argument('--lattice-rotation-shim',action='store_true',
+                        help='Wrap transport RPP in the native RotationShim; does not imply task qualification')
     parser.add_argument('--amcl-motion-model',choices=('source','omni'),default='source',
                         help='Native motion proposal for the odometry reference point; no truth input')
     parser.add_argument('--perception-config',type=Path,
@@ -461,6 +508,11 @@ def main():
     args=parser.parse_args()
     if args.output.exists():parser.error('输出目录必须是新的，以保留已有回合')
     manifest=prepare(args)
+    if args.navigation_planner == 'smac-lattice':
+        import sys
+        print('WARNING: Nav2 1.3.13 lattice needs the transition-cache patch overlay; '
+              'see tools/config/navigation_lattices/README.md. '
+              'The manifest alone does not verify the loaded native library.', file=sys.stderr)
     print(json.dumps({k:manifest[k] for k in ['world_xml','map_yaml','collision_map_yaml','nav2_yaml','dock_pose','nq','nv','nu']}))
 
 

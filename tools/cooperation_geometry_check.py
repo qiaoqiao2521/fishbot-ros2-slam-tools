@@ -13,21 +13,32 @@ from pathlib import Path
 
 
 def pair_clearance(model, data, a, b, cutoff=.20):
-    """Conservative lower bound for disjoint box AABBs, native query otherwise.
+    """Conservative box separation bound, native query for overlapping boxes.
 
     A positive-margin legacy box query can report a negative distance for
     clearly separated rotated boxes. World AABB separation proves clearance
     without shrinking either compiled box or changing the physics options.
+    Oriented separating axes keep that bound useful where AABBs touch.
     """
     import mujoco
     import numpy as np
     if (model.geom_type[a] == mujoco.mjtGeom.mjGEOM_BOX and
             model.geom_type[b] == mujoco.mjtGeom.mjGEOM_BOX):
-        extents = [np.abs(data.geom_xmat[i].reshape(3, 3)) @ model.geom_size[i]
-                   for i in (a, b)]
-        gap = np.maximum(np.abs(data.geom_xpos[a]-data.geom_xpos[b])-
+        rotations = [data.geom_xmat[i].reshape(3, 3) for i in (a, b)]
+        extents = [np.abs(rotation) @ model.geom_size[i]
+                   for rotation, i in zip(rotations, (a, b))]
+        delta = data.geom_xpos[a]-data.geom_xpos[b]
+        gap = np.maximum(np.abs(delta)-
                          extents[0]-extents[1], 0.)
         lower_bound = float(np.linalg.norm(gap))
+        if lower_bound < cutoff:
+            axes = np.asarray([*rotations[0].T, *rotations[1].T,
+                *[np.cross(x, y) for x in rotations[0].T for y in rotations[1].T]])
+            norms = np.linalg.norm(axes, axis=1)
+            axes = axes[norms > 1e-12]/norms[norms > 1e-12, None]
+            radii = sum(np.abs(axes @ rotation) @ model.geom_size[i]
+                        for rotation, i in zip(rotations, (a, b)))
+            lower_bound = max(lower_bound, float(np.max(np.abs(axes @ delta)-radii)))
         if lower_bound > 0:
             return min(cutoff, lower_bound)
     return float(mujoco.mj_geomDistance(model, data, a, b, cutoff, None))
@@ -96,7 +107,7 @@ class SceneGeometry:
         return {'passed': reason is None, 'scope': 'static_delivery_goal_original_geometry_and_scene_bounds',
                 'delivery_pose': goal, 'minimum_sampled_clearance_m': minimum,
                 'collision_pair_count': len(self.pairs), 'witness': witness,
-                'distance_policy': 'disjoint_box_aabb_lower_bound_else_native',
+                'distance_policy': 'disjoint_box_projection_lower_bound_else_native',
                 'scene_bounds': bounds, 'reason': reason, 'robot_geometry_shrunk': False,
                 'path_validated': False, 'arrival_validated': False}
 
@@ -150,7 +161,7 @@ def check(manifest_path):
             'spacing_bound_m':maximum_spacing_bound, 'geometry_margin_m':certified,
             'certified_margin_m':certified,
             'sample_count':count, 'collision_pair_count':len(pairs), 'witness':witness,
-            'distance_policy':'disjoint_box_aabb_lower_bound_else_native',
+            'distance_policy':'disjoint_box_projection_lower_bound_else_native',
             'excluded_expected_contacts':['arena_floor_planes','target_collision cargo'],
             'spawn':spawn, 'waypoint_branches':paths, 'robot_geometry_shrunk':False,
             'manifest_sha256':hashlib.sha256(path.read_bytes()).hexdigest(),
