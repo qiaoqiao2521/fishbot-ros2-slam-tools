@@ -162,7 +162,7 @@ def run(args):
     import rclpy
     from rclpy.action import ActionClient
     from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
-    from rclpy.executors import MultiThreadedExecutor
+    from rclpy.executors import MultiThreadedExecutor, ExternalShutdownException
     from rclpy.node import Node
     from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy, qos_profile_sensor_data
     from rclpy.time import Time
@@ -1896,8 +1896,13 @@ def run(args):
     server = make_server(bridge, args, runtime=runtime)
     threading.Thread(target=server.serve_forever,daemon=True,name='cooperation-http').start()
     try:executor.spin()
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass  # The launch signal can close the ROS context before spin returns.
     finally:
-        bridge.cancel_event.set();bridge.hold(True);server.shutdown();executor.shutdown();bridge.destroy_node();rclpy.shutdown()
+        bridge.cancel_event.set()
+        if bridge.context.ok():
+            bridge.hold(True)
+        server.shutdown();executor.shutdown();bridge.destroy_node();rclpy.try_shutdown()
 
 
 def main():
