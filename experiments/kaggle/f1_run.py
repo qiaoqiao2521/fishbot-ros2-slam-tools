@@ -49,11 +49,13 @@ def prepare_scene(fishbot, so101, python, data, runtime_env):
     factory = json.loads((fishbot/"tools/config/factory_delivery/line-side-occupied.json").read_text())
     for destination in factory["destinations"]:
         if destination["id"] == "line_b":
-            destination["approach_poses"] = [{"x": .95, "y": -2., "yaw": 0.}]
+            destination["approach_poses"] = [{"x": 1.35, "y": -2., "yaw": 0.}]
     factory_file = ARTIFACTS/"factory.json"
     factory_file.write_text(json.dumps(factory, indent=2)+"\n")
     options = (["--omit-unused-native-rangefinders"]
                if os.environ.get("FISHBOT_OMIT_UNUSED_NATIVE_RANGEFINDERS") == "1" else [])
+    if os.environ.get("FISHBOT_STAGING_REVERSING") == "1":
+        options.append("--staging-reversing")
     run("scene-prepare", ["bash", "-ec", "source /opt/ros/jazzy/setup.bash; exec \"$@\"",
         "f1-prepare", str(fishbot/"tools/fishbot_cooperation.sh"), "prepare",
         "--so101-project", str(so101), "--scene-profile",

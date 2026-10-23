@@ -35,6 +35,24 @@ j100=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_projec
     output=out/'j100',scene_profile=j100_profile))
 lean=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
     output=out/'lean',scene_profile=j100_profile,omit_unused_native_rangefinders=True))
+reverse=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
+    output=out/'reverse',scene_profile=j100_profile,staging_reversing=True))
+reverse_nav=yaml.safe_load(Path(reverse['nav2_yaml']).read_text())
+j100_nav=yaml.safe_load(Path(j100['nav2_yaml']).read_text())
+reverse_controllers=reverse_nav['controller_server']['ros__parameters']
+original_controllers=j100_nav['controller_server']['ros__parameters']
+reverse_evidence={'declaration':reverse['staging_motion'],
+    'default_declaration':j100['staging_motion'],
+    'staging':reverse_controllers['StagingPath'],
+    'transport_unchanged':reverse_controllers['FollowPath']==original_controllers['FollowPath'],
+    'goal_checkers_unchanged':all(reverse_controllers[key]==original_controllers[key]
+        for key in ('general_goal_checker','staging_goal_checker','progress_checker')),
+    'original_staging_fields_preserved':all(reverse_controllers['StagingPath'][key]==value
+        for key,value in original_controllers['StagingPath'].items()
+        if key not in ('plugin','allow_reversing','use_rotate_to_heading')),
+    'physical_world_unchanged':Path(reverse['world_xml']).read_bytes()==Path(j100['world_xml']).read_bytes(),
+    'maps_unchanged':all(reverse[key]==j100[key]
+        for key in ('generated_map_sha256','generated_collision_map_sha256'))}
 pair=[mujoco.MjModel.from_xml_path(row['world_xml']) for row in (j100,lean)]
 pair_data=[mujoco.MjData(model) for model in pair]
 for model,data in zip(pair,pair_data):
@@ -215,6 +233,7 @@ result={'egress':{'legacy_absent':'egress_pose' not in m, 'pose':j100.get('egres
         'installed_docking_version':ET.parse('/opt/ros/jazzy/share/opennav_docking/package.xml').getroot().findtext('version'),
         'registered_docking_plugins':[node.get('type') for node in ET.parse('/opt/ros/jazzy/share/opennav_docking/plugins.xml').getroot().iter('class')]}
 result['sensor_compute']=sensor_compute
+result['staging_reverse']=reverse_evidence
 print('RESULT_JSON:'+json.dumps(result))
 '''
         result = subprocess.run([str(RUNTIME), '-B', '-c', code, str(PROJECT), cls.temp.name],
@@ -226,6 +245,21 @@ print('RESULT_JSON:'+json.dumps(result))
     @classmethod
     def tearDownClass(cls):
         cls.temp.cleanup()
+
+    def test_optional_reverse_staging_preserves_original_transport_and_geometry(self):
+        e=self.evidence['staging_reverse']
+        self.assertEqual(e['default_declaration'],{'allow_reversing':False,'rotation_shim':False})
+        self.assertEqual(e['declaration'],{'allow_reversing':True,'rotation_shim':True})
+        self.assertEqual(e['staging']['plugin'],'nav2_rotation_shim_controller::RotationShimController')
+        self.assertEqual(e['staging']['primary_controller'],
+                         'nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController')
+        self.assertTrue(e['staging']['allow_reversing'])
+        self.assertFalse(e['staging']['use_rotate_to_heading'])
+        self.assertTrue(e['staging']['use_path_orientations'])
+        self.assertTrue(e['staging']['rotate_to_goal_heading'])
+        for name in ('transport_unchanged','goal_checkers_unchanged',
+                     'original_staging_fields_preserved','physical_world_unchanged','maps_unchanged'):
+            self.assertTrue(e[name],name)
 
     def test_optional_compute_policy_preserves_physics_maps_and_used_imu(self):
         e=self.evidence['sensor_compute']

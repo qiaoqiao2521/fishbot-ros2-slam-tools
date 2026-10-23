@@ -185,6 +185,9 @@ FISHBOT_COOP_PYTHON=/home/muqiao/.cache/so101-colab/planning-venv/bin/python \
 同版官方生成器提供 diff／0.60m 曲线半径／2cm 网格／16 朝向的 248 条原语，
 包含前进与原地转向，不包含横移。`--lattice-allow-reversing` 显式开启倒车扩展。
 `--lattice-rotation-shim` 可选包装运输 RPP，按路径朝向先转向；入站 RPP 保持。
+`--staging-reversing` 独立启用入站原生 RotationShim＋倒车 RPP，默认关闭；
+保留原入站速度、GoalChecker、进度检查与完整几何。适用于车前近障、路线先向车后的场景。
+已在原 J100 占用场景完成 24.119 秒短停靠；停车保护曾介入，不能称纯观测精度。
 自定义原语可通过 `--lattice-filepath PATH` 传入，prepare 将其复制到独立 scene。
 原语网格必须匹配 costmap；不通过缩放地图迁就原5cm样例。
 
@@ -199,6 +202,13 @@ tools/fishbot_cooperation.sh prepare \
 ```
 
 输出目录须为新的。此命令只准备输入，不启动运动。
+
+2026-10-24 的 J100 载货短路线使用 B 进场 `(1.35,-2,0)`，随后倒入原 B `(0.7,-2,0)`。
+同一原 120 墙秒内，两原生 UUID 成功，105.794 秒，末误差 1.543cm/.00543rad，
+原载货保持与停稳/参数恢复/owned 清理通过。该初态来自实际装货后的静止记录，
+速度、轮编码器和求解器 warmstart 未完整重放；不计完整抓放或 B→A 成功。
+原 `.95m` 进场、直达、`.065` 曲率目标和周期重规划的失败分别保留。
+完整两单仍以所属 progress 和原 oracle 为准。
 
 **本机1.3.13需要原生缓存修复。** 实测发现 `NodeLattice::isNodeValid` 可复用终点缓存，
 跳过另一条入边的碰撞检查。仓库包含最小 C++ 复现和仅修该条件的补丁。

@@ -8,6 +8,20 @@
 - 对照仍受云VM分配与采样范围限制。后续保留默认场景，显式配置省略、清单可追溯；实际ROS held容量另验，再跑原始任务。source overlay由Kaggle代码版本保存原文，输入v2仍明确634c6e6；不引入内容哈希执行锁。
 - 取证根~/.local/share/fishbot/cloud-jobs/kaggle-20261024/{f1-output-v6,compute-output-v2}。全输出下载曾连接超时，已完整读回关键result/score/任务账本/世界XML/195MB observer（0坏行）/loop timing，不能把下载失败归为机器人失败。
 
+## 载货路线与已验证入站（2026-10-24）
+
+原NavFn入站先向车后，前进RPP原地转向受前方46mm余量限制；显式原生Shim＋反向RPP在同原实体场景24.119秒完成短停靠。--staging-reversing默认关闭，保持transport/GoalChecker/速度与世界；16项prepare通过。该分项有理想plant guard介入，不称纯观测或RGB精度。
+
+完整d已完成真实抓放、home、出站和连续运输，但(.95,-2,0)在共享120秒前未收敛。原B直达的path约2.656m/累计偏航4.429rad，6.18mm最小采样净距；跟踪到末y偏差约56mm后超时。.065曲率候选虽然更快，却触原cargo_retained=false，不能用它换成绩。原1Hz重规划确实发布61个新plan但仍超时，不能称重规划修复了配送。
+
+只规划有限面板的经(1.35,-2,0)第一段3.201m/累计偏航π、净距66.0mm，第二段.65m纯倒车；完整加密扫掠和spacing bound均通过。经1.70的名义下界90.424秒，经1.35为89.554秒；均不代替实际预算。经1.35实际双原UUID4/105.794秒/15.43mm/.00543rad与原载货保持、原停稳/restore/清理通过，支持选择宽处完成姿态再倒入原B，不能泛化所有路径或拼接成完整K。
+
+官方Nav2 1.3.13 IsPathValid服务从近点检查原路径代价/足迹；它不证明当前车辆可按原姿态连接路径。原stock树周期1Hz；这只是本次对照的源码依据，不是本轮通过结论。来源：https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_planner/src/planner_server.cpp ；https://raw.githubusercontent.com/ros-navigation/navigation2/1.3.13/nav2_bt_navigator/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml 。桥与观察记录不冒充控制器逐帧消费ACK，GID缺失也未被伪装为实例绑定证明。
+
+## 当前入站控制证据（2026-10-24）
+
+本机完整b/c首个NavFn路径相同，前12点向车后负X，初始yaw0；StagingPath仍为前进RPP/rotate_to_heading=true，与载货FollowPath的反向＋原生Shim不同。初态车前沿x=.244m，实体占用障碍近沿x=.29m，仅约.046m余量；旋转扩大扫掠。c记录明确collision ahead，几乎没有平移。只支持测试倒退原生控制组合，不用关闭碰撞或缩足迹处理。b曾经恢复后到站，不能声称现配置绝对无法入站。c已清理，桥析构publish/context退出诊断单列。
+
 ## Kaggle接续（2026-10-24）
 
 - v4/v5实际错误区分运行依赖与构建SDK：liborocos-kdl1.5存在不代表orocos_kdlConfig.cmake存在，LTTng运行库不含开发链接名，class_loader实际CMake导出还要求console_bridge。仅递归package.xml公开字段未完全覆盖，先前“依赖已核对”不能外推编译通过。原生CMake查询两安装包+OMPL，trace与cache文件通过dpkg归属找到Console Bridge/OpenSSL与Boost组件；3.12配置返回0，仍不是云端编译或运动证据。查询、旧默认3.11记录及所有云失败保留在私有交接根。

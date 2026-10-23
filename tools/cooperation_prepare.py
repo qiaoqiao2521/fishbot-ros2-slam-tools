@@ -55,7 +55,7 @@ def navigation_behavior(project, output):
 
 def staging_navigation(params, behavior_path, output, *, transport_planner=None,
                        transport_reversing=False, transport_in_place_rotation=False,
-                       transport_rotation_shim=False):
+                       transport_rotation_shim=False, staging_reversing=False):
     """Isolate transit XY latches using existing native plugins and trees."""
     controller = params['controller_server']['ros__parameters']
     controller['StagingPath'] = copy.deepcopy(controller['FollowPath'])
@@ -72,8 +72,13 @@ def staging_navigation(params, behavior_path, output, *, transport_planner=None,
         # Preserve those poses and let the existing native RPP rotate first.
         for name in ('StagingPath', 'FollowPath'):
             controller[name].update(allow_reversing=False, use_rotate_to_heading=True)
-    if transport_rotation_shim:
-        follow = controller['FollowPath']
+    if staging_reversing:
+        controller['StagingPath'].update(allow_reversing=True, use_rotate_to_heading=False)
+    shim_controllers = (['FollowPath'] if transport_rotation_shim else [])
+    if staging_reversing:
+        shim_controllers.append('StagingPath')
+    for name in shim_controllers:
+        follow = controller[name]
         angle = follow.get('rotate_to_heading_min_angle', .785)
         follow.update(primary_controller=follow.get('primary_controller', follow['plugin']),
             plugin='nav2_rotation_shim_controller::RotationShimController',
@@ -431,7 +436,8 @@ def prepare(args):
         transport_planner=planner_profile.get('transport_planner'),
         transport_reversing=planner_profile.get('transport_reversing',False),
         transport_in_place_rotation=planner_profile.get('transport_in_place_rotation',False),
-        transport_rotation_shim=planner_profile.get('transport_rotation_shim',False))
+        transport_rotation_shim=planner_profile.get('transport_rotation_shim',False),
+        staging_reversing=getattr(args,'staging_reversing',False))
     nav_path=args.output/'cooperation-nav2.yaml';nav_path.write_text(yaml.safe_dump(params,sort_keys=False))
     manifest.update(map_yaml=str(localization_path),localization_map_yaml=str(localization_path),
         collision_map_yaml=str(collision_path),nav2_yaml=str(nav_path),static_map_rectangles=rectangles,
@@ -439,6 +445,8 @@ def prepare(args):
         localization_parameters=localization_parameters,
         navigation_behavior_tree=str(behavior_path),
         staging_navigation_behavior_tree=str(staging_behavior),
+        staging_motion={'allow_reversing':bool(getattr(args,'staging_reversing',False)),
+                        'rotation_shim':bool(getattr(args,'staging_reversing',False))},
         navigation_planner=planner_profile,
         amcl_motion_model=motion_profile,
         navigation_behavior_tree_sha256=hashlib.sha256(behavior_path.read_bytes()).hexdigest(),
@@ -499,6 +507,8 @@ def main():
                         help='Enable native lattice reverse expansion and the existing reversing RPP phase contract')
     parser.add_argument('--lattice-rotation-shim',action='store_true',
                         help='Wrap transport RPP in the native RotationShim; does not imply task qualification')
+    parser.add_argument('--staging-reversing',action='store_true',
+                        help='Use native reversing RPP and RotationShim for staging; preserve transport and physical limits')
     parser.add_argument('--amcl-motion-model',choices=('source','omni'),default='source',
                         help='Native motion proposal for the odometry reference point; no truth input')
     parser.add_argument('--perception-config',type=Path,

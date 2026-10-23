@@ -2,6 +2,26 @@
 
 ## Current
 
+J100＋16×360/10Hz三维雷达的同轮B→A仍待完整验收，原FishBot父2/2保持。当前有效分项是倒车进场与原120秒内的载货进场/交付路线，未把分项拼成完整成功。Kaggle账号保持CLI muqiaoqiao；本机完整栈计算余量已实测恢复，复用v6同版原生库继续，不暂停其它任务或改网络。
+
+- 原占用场景短停靠：d3655b15，24.119墙秒，Nav 2e20ff7d与Dock 8202b958均原4；独立物理停靠/静止/源码/记录完整性通过，P95 6.945mm/.00846rad。理想停车保护介入.78源秒，单列辅助，不称纯观测精度。新--staging-reversing默认关闭，16项prepare检查通过；只改变原生进场组合，原速度/checker/物理保持。
+- 完整d：B task47bf85ae-bff1-41b7-b4bb-e9cac3648dca，261.793墙秒，原K与连续handoff/运输通过；出站原4，后续(.95,-2,0)在共享120.015秒取消5，A未执行。原始记录、源码起止与清理通过。桥退出修复已在本轮实际读回全子进程正常退出，旧bridge context退出1失败保留。
+- 载货开发短测：直达B原UUID3e948c1d在120秒取消5，6042个检查样本保持通过，末5.56cm；.065曲率候选在原cargo_retained=false时取消5（首违例floor仍true，零禁碰），拒绝采用。原生1Hz树独立61个plan/中位1.054秒，但仍120秒取消5，不晋级默认。
+- 只规划c有限面板：direct/经1.35/经1.70三路线共5原ComputePath，均4并通过完整几何加密扫掠，全程hold、零Navigate/业务start。经1.35把累计偏航4.429→3.142rad，最小采样净距.00618→.06603m，名义下界89.554秒不是实际时限保证。
+- 载货经1.35短测通过：原Nav 1aca34d7c45a46f2a60adbd9b485fccf与d17d2a72275044f982577a04dd3bbc1e均2→4，共105.794墙秒，末1.543cm/.005425rad，5084个检查样本未触发原载货保持/禁碰。原.7源秒停稳、hold、两参数组restore、owned存活0/9111关闭与源码起止一致通过。初态从完整d装货后记录重建、速度/轮编码器归零且无solver warmstart，原oracle仅收集而无完整业务marker，不称完整抓放验收。
+
+当前用公开prepare和同一f1_run/f1_candidate重建原spawn=(0,-2,0)、原A/B/occupied实体的完整输入；B仅增加进场(1.35,-2,0)，最终B不变。loaded .06/.10、曲率原.055、原加减速/连续载货/完整碰撞/120/360/1000保持，使用已通过倒车进场，不采用.065或周期树。公开prepare与dry-run已通过，逐项读回world XML、两控制器、平滑器与载货profile均与短测配置相同。将冻结源码运行local-full-b-a-e，原factory/Workflow/SO101/DockRobot和独立oracle为准。
+
+本轮私有证据根：~/.local/share/fishbot/cloud-jobs/kaggle-20261024/。local-staging-reverse-dock-a、local-full-b-a-{c,d}、local-loaded-{direct-b-a,direct-b-065,direct-periodic-a,plan-c,via135-a}分别保留。plan-a因错误业务ready与清理episode缺键失败，零Goal；plan-b原ComputePath4后系统Python缺MuJoCo，离线原路径加密几何补证另存，不覆盖原失败。两次工具问题已修正并定点清理。
+
+knowledge_status=pending：原FishBot19/20经验持续采用，先前传感器/终态零目标已updated(local)；本轮纳秒边界、正常shutdown和进场姿态的新认识由本对话root收尾修订原页并读回。仅仿真，不外推真机或sim-to-real。下一步是同轮完整B→A，不重复短测充数，也不以进程/HTTP/阶段标签代替验收。
+
+## Prior 2026-10-24 run notes (preserved)
+
+最新本机完整c（源码b3828f1）失败于入站：task6e0d5bff-0022-4ef9-bd22-663b5c522d7a，25.794墙秒，原Nav终态6/error104；RPP反复报告collision ahead及patience exceeded，车仅约6mm平移、偏航.143rad，未停靠/抓取，A未执行。原时间精度修复未在任务期触发时效拒绝，不把这次碰撞失败归因于时钟。原1327个物理记录/计划/400速度命令保留；独立quiet、owned存活0、9111关闭及sim finalization=[]通过，但bridge销毁时publish遇已关闭context的退出1另列，不称所有子进程正常退出。
+
+当前先用相同原world/spawn/占用障碍与原scope=dock验入站：复用已安装原生RotationShim＋反向RPP，保留原Staging .12线速、加减速/足迹/CM/碰撞与60秒短停靠期限。NavFn原路径向负X，旧前进控制器先旋转而受近障碍限制；倒退候选尚未验收，不能宣称唯一根因。独立输出local-staging-reverse-candidate、local-staging-reverse-dock-a；通过后再原B→A。CLI账号保持muqiaoqiao，本对话root串行，knowledge_status=pending（待新候选实证）。
+
 本机完整b保留失败：task ccef0009-1869-4717-8c90-5af65d1cf62b，222.017墙秒；原K/连续handoff/source integrity均true，出站UUIDd6449a97b3b7420f94559e72ffc3116f/status4，24.056秒并已停稳。首进场Nav255f89e190b249159a7ad8325c7b937c接纳后在3.006秒取消5，因共享物理反馈时效失败，最终误差1.6025m/.07325rad；A未执行。271项原检查仍保持，owned/9111/quiet清理通过、finalization=[]，源码8d2435d起止一致。初次完整a缺用户bus环境在ROS前退出，原日志保留；b补XDG/DBUS，不使用isolated-runtime跳过本机保护。
 
 本次取消的精确样本clock=231.12、physics=231.22000000037593、接收龄5.791ms，差值-100.000000375928ms；相对原-100ms边界仅多.376ns。115.72/115.84的-120ms只是更早HTTP状态拒绝，保留其真实越界，不把它算浮点误差。按生产器ROS Time同一“整秒＋小数纳秒round”比较，原[-100000000,250000000]ns与.5墙秒门槛不变；±边界外1ns继续拒绝。最新core118项23.608秒通过，新增实录小数漂移与两侧1ns反例。将冻结此最小修复后重跑原local-full-b-a-c，不合并旧任务或自动重发unknown。

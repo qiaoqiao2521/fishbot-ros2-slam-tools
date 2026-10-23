@@ -89,3 +89,8 @@ cp experiments/kaggle/f1_candidate.py /absolute/private/f1-dataset/
 使用空marker明确零业务，独立确认采集完整，不能把其业务false当作配送失败或通过。
 非交互ROS launch的停止请求只送launcher，由其原生转发；仍用原owned PID/starttime
 核对全体子进程退出。原组信号导致的销毁中断保留为失败记录，不忽略finalization错误。
+
+`FISHBOT_STAGING_REVERSING=1`显式复用prepare的倒车进场组合，默认关闭。
+当前重建J100候选的B进场为`(1.35,-2,0)`，最终B仍为`(.7,-2,0)`。
+本机载货短路线已在原120秒内完成105.794秒；这是路线分项，不是云端完整配送成绩。
+云端v6/v7失败、`.95m`进场失败及其余开发候选均保留；完整B→A另由原factory评分。
