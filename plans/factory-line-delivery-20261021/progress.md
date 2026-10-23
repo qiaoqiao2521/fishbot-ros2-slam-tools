@@ -1,6 +1,8 @@
 # F1 Progress
 
 ## Current
+最新v6已越过nav2-build、scene-prepare、candidate-configuration和native-clock，进入原factory-b-a；后续required阶段出现，证明前一阶段按原返回合同成功。source-clock脚本仅当两组实际加速度/暂停/动态频率检查均通过且私有domain清理后返回0；仍将在作业结束独立读回其原result。当前Kaggle状态RUNNING，运行中按版本6取输出返回404，尚无B/A评分、原生UUID或位移取证，不能计配送通过。不重新派发或修改当前回合。
+
 当前kernel v6已提交，数据v2/核心源码634c6e6保持。v4实际进入CMake但缺KDL开发配置；v5补KDL/LTTng等后继续在class_loader的console_bridge配置处失败，均零ROS/零配送。XML公开依赖核对没有覆盖该安装包实际CMake导出，不能记为已完整解决。改用原生CMake配置轨迹和dpkg文件归属，补Console Bridge/OpenSSL及Boost atomic/serialization/system开发组件；本机两个安装包与OMPL的配置查询在明确Python3.12时通过（仅配置，无插件编译/ROS节点）。完整云编译、native-clock与原B→A仍待验收；若编译成功将保留native-install.tar.gz。
 
 云端v3已失败并保留原始报告：apt43.54秒、3.12venv5.03秒、规划依赖52.10秒、官方源码5.19秒及两份patch全部通过；build在.67秒因缺colcon-override-check的--allow-overriding参数而解析失败，尚未编译C++或启动ROS。实际pip版本读回MuJoCo3.3.7/OMPL2.0.1/SciPy1.18.1。本轮补本机同版override-check0.0.1，原构建命令已在空隔离目录解析通过，0包编译、零ROS；不冒充真实构建通过。首次新提交在SaveKernel连接阶段超时；已读回服务器仍为未含插件的v3且ERROR，确认未收到后才重试，避免重复派发。
