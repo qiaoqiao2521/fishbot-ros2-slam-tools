@@ -72,7 +72,10 @@ def main():
         "python3.12", "python3.12-dev", "python3.12-venv",
         "build-essential", "cmake", "pkg-config", "libeigen3-dev", "libboost-dev",
         "libboost-filesystem-dev", "libboost-program-options-dev", "libyaml-cpp-dev",
-        "libtinyxml2-dev", "libompl-dev", "libassimp5", "libglib2.0-0t64", "libgl1", "libegl1"]))
+        "libtinyxml2-dev", "libompl-dev", "libassimp5", "libglib2.0-0t64", "libgl1", "libegl1",
+        "liborocos-kdl-dev", "liblttng-ust-dev", "libyaml-dev", "nlohmann-json3-dev",
+        "libatomic1", "libconsole-bridge-dev", "libssl-dev", "libboost-atomic-dev",
+        "libboost-serialization-dev", "libboost-system-dev"]))
     run("ubuntu-dependencies", ["apt-get", "install", "-y", "--no-install-recommends", *packages],
         env=apt_env, timeout=900)
     version = subprocess.check_output(["/usr/bin/python3", "--version"], text=True).strip()
@@ -115,6 +118,8 @@ def main():
                            planning/"lib/python3.12/site-packages", Path("/usr/lib/python3/dist-packages")))))
     run("nav2-build", ["bash", "-ec", build, "f1-build", str(native), python, str(planning/"bin/colcon")],
         env=runtime_env, timeout=900)
+    with tarfile.open(ARTIFACTS/"native-install.tar.gz", "w:gz") as archive:
+        archive.add(native/"install", arcname="install")
     scene = ARTIFACTS/"scene"
     factory = json.loads((fishbot/"tools/config/factory_delivery/line-side-occupied.json").read_text())
     for destination in factory["destinations"]:

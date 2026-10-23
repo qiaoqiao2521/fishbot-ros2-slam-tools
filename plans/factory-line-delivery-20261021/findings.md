@@ -2,6 +2,7 @@
 
 ## Kaggle接续（2026-10-24）
 
+- v4/v5实际错误区分运行依赖与构建SDK：liborocos-kdl1.5存在不代表orocos_kdlConfig.cmake存在，LTTng运行库不含开发链接名，class_loader实际CMake导出还要求console_bridge。仅递归package.xml公开字段未完全覆盖，先前“依赖已核对”不能外推编译通过。原生CMake查询两安装包+OMPL，trace与cache文件通过dpkg归属找到Console Bridge/OpenSSL与Boost组件；3.12配置返回0，仍不是云端编译或运动证据。查询、旧默认3.11记录及所有云失败保留在私有交接根。
 - pip colcon-common-extensions0.3.0不含override-check插件；--allow-overriding由独立colcon-override-check提供。本机0.0.1与源码参数定义已核对，显式补依赖，保留原覆写声明。空隔离目录只证明原命令可解析，不是C++编译、控制器计算或配送验收。
 - 云端v2确认原archives解包通过，但apt缺python3-colcon-common-extensions。官方文档说明该元包经ROS/packagecloud仓分发，并支持venv pip；本轮采用本机版本的pip colcon工具链，不绕过ROS仓TLS错误或重置系统Python。真实错误143字节原log已通过官方SDK的DownloadKernelOutput(file_path)读回。
 - Kaggle CLI output的file-pattern仅过滤下载，仍循环列举整个输出树。此前把源码/runtime/venv放working会增加至少数千文件，未来完整venv更大；临时依赖树转/tmp，scene及原任务证据继续持久化。网络ConnectTimeout也真实出现，二者不能混成单一原因；本机取证进程可限定单次连接超时，不改账号或全局网络。新失败日志尾部输出保留原状态，低层异常不替代物理裁决。
