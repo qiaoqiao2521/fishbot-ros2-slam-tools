@@ -1,4 +1,40 @@
-# Nav2 state confirmation patch
+# Nav2 local patches
+
+## Simulation clock for velocity smoothing (explicit candidate)
+
+`nav2-1.3.13-velocity-smoother-ros-time.patch` adds the optional
+`use_ros_time_for_smoothing` parameter to the upstream velocity smoother.
+Its default is `false`, preserving the wall timer. Set it to `true` with
+`use_sim_time: true` to keep the original acceleration increments per
+simulation second when the simulation runs below real time. Activation and
+dynamic smoothing-frequency changes both use the selected clock.
+Changing the clock option requires reactivation. Velocity bounds,
+acceleration/deceleration values, command timestamps and timeout logic remain
+upstream behavior. This patch does not establish cargo retention or delivery.
+
+Apply the patch from the root of the official Nav2 `1.3.13` source checkout.
+Build only `nav2_velocity_smoother` in a separate workspace with the installed
+Jazzy dependencies. Preserve the upstream Apache-2.0 headers and license.
+
+```bash
+patch -p1 < /absolute/fishbot/tools/patches/nav2-1.3.13-velocity-smoother-ros-time.patch
+source /opt/ros/jazzy/setup.bash
+colcon build --packages-select nav2_velocity_smoother \
+  --allow-overriding nav2_velocity_smoother --parallel-workers 1 \
+  --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+  -DPython3_EXECUTABLE=/usr/bin/python3
+source install/local_setup.bash
+/usr/bin/python3 /absolute/fishbot/tools/tests/verify_nav2_smoothing_clock.py \
+  --domain 142 --output "$HOME/.cache/fishbot/smoothing-clock-new-run"
+```
+
+The native diagnostic uses a half-speed clock and a short clock pause.
+All velocity topics use private test remaps; no world or navigation action is
+started. It compares source-time slopes with identical acceleration settings,
+checks pause behavior and changes the smoothing frequency dynamically.
+Use a fresh output directory to preserve previous results.
+
+## Lifecycle state confirmation
 
 `nav2-1.3.13-state-query.patch` changes only lifecycle state confirmation.
 The mutating transition runs once. A `std::runtime_error` from `GetState`

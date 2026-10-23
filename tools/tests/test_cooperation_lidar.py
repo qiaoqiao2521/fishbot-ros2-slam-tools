@@ -95,6 +95,26 @@ class NativeCloudTests(unittest.TestCase):
         self.assertEqual(self.query.data.time, .12)
         self.assertEqual(frame['native_version'], '3.3.7')
 
+    def test_moving_query_cloud_matches_full_forward_reference(self):
+        import mujoco
+        import numpy as np
+        reference = lidar.NativeCloudQuery(self.path, self.c)
+        full_forward = mujoco.mj_forward
+        for x, y, yaw in ((0., 0., 0.), (.3, -.2, .4), (-.2, .4, -1.2)):
+            snapshot = self.snapshot()
+            snapshot['qpos'][:2] = x, y
+            snapshot['qpos'][3:7] = math.cos(yaw/2), 0., 0., math.sin(yaw/2)
+            snapshot['qvel'][:] = np.arange(len(snapshot['qvel'])) * .01
+            actual = self.query.compute(snapshot)
+            with patch.object(mujoco, 'mj_kinematics', side_effect=full_forward):
+                expected = reference.compute(snapshot)
+            np.testing.assert_array_equal(self.query.hit, reference.hit)
+            np.testing.assert_allclose(actual['raw_points'], expected['raw_points'],
+                                       rtol=0., atol=0., equal_nan=True)
+            np.testing.assert_allclose(actual['points'], expected['points'],
+                                       rtol=0., atol=0., equal_nan=True)
+            self.assertEqual(actual['valid_points'], expected['valid_points'])
+
     def test_standard_pointcloud_roundtrip_keeps_xyz_layout_stamp_and_frame_identity(self):
         import numpy as np
         from sensor_msgs_py import point_cloud2

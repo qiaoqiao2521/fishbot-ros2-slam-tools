@@ -40,6 +40,10 @@ def start(context):
         '--manifest',str(manifest_path),'--domain',domain,
         '--stamped-cmd-vel','--frame-dir',str(frames),'--frame-fps','2',
         '--timing-log',str(output/'loop-timing.json')]
+    if manifest.get('render_overview', True) is False:
+        simulation.append('--no-overview-render')
+    if manifest.get('queued_ros_dispatch') is True:
+        simulation.append('--queued-ros-dispatch')
     if record_state=='true':
         simulation += ['--state-log',str(output/'physics.jsonl'),
             '--state-log-hz',LaunchConfiguration('state_log_hz',default='2').perform(context),

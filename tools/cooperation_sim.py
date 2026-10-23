@@ -14,6 +14,7 @@ import json
 import math
 import os
 from pathlib import Path
+import queue
 import random
 import shutil
 import sys
@@ -116,7 +117,7 @@ class LoopTiming:
     Stage totals are inclusive wall time. Nested stages overlap; their totals
     cannot be added into elapsed time or interpreted as CPU time.
     """
-    STAGES = ('spin_once', 'mj_step', 'publish', 'snapshot_refresh',
+    STAGES = ('spin_once', 'command_apply', 'mj_step', 'publish', 'snapshot_refresh',
               'clock_publish', 'joint_publish', 'odom_publish', 'tf_publish',
               'truth_publish', 'cargo_publish', 'imu_publish', 'state_publish',
               'record_write', 'record_flush', 'scan', 'scan_publish',
@@ -326,6 +327,29 @@ def arm_reference(names, positions, limits):
 def unique_arm_publisher(publishers, expected_name):
     if len(publishers) != 1 or publishers[0].node_name != expected_name:
         raise ValueError(f'arm reference requires the unique {expected_name} publisher')
+
+
+class CallbackInbox:
+    """Receive on an executor thread; apply only at the physics boundary."""
+    def __init__(self):
+        self.pending = queue.SimpleQueue()
+
+    def callback(self, function, *, with_received_time=False):
+        def receive(message):
+            received = time.monotonic() if with_received_time else None
+            self.pending.put((function, message, received))
+        return receive
+
+    def drain(self):
+        while True:
+            try:
+                function, message, received = self.pending.get_nowait()
+            except queue.Empty:
+                return
+            if received is None:
+                function(message)
+            else:
+                function(message, received_at=received)
 
 
 class WheelCommands:
@@ -931,7 +955,8 @@ def run_ros(args):
     manifest = getattr(args, 'manifest', None)
     physics = Physics(args.scene, manifest=manifest) if manifest is not None else Physics(args.scene)
     timing = LoopTiming(lambda: float(physics.data.time))
-    frames = FrameWriter(physics, args.frame_dir, args.frame_fps, args.camera) if args.frame_dir else None
+    frames = (FrameWriter(physics, args.frame_dir, args.frame_fps, args.camera)
+              if args.frame_dir and not getattr(args, 'no_overview_render', False) else None)
     record = None
     timing_record = None
     if args.state_log:
@@ -954,6 +979,7 @@ def run_ros(args):
     class Adapter(Node):
         def __init__(self):
             super().__init__('cooperation_physics')
+            self.callback_inbox = CallbackInbox() if getattr(args, 'queued_ros_dispatch', False) else None
             self.recording_error_reported = None
             self.sensor_qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
             self.latest_qos = latest_sensor_qos()
@@ -992,10 +1018,11 @@ def run_ros(args):
                                   durability=DurabilityPolicy.VOLATILE)
             self.reset_pub = self.create_publisher(String, RESET_RESULT_TOPIC, reset_qos)
             self.reset_requests = ResetRequests()
-            self.create_subscription(String, RESET_REQUEST_TOPIC, self.reset_command, reset_qos)
-            self.create_subscription(String, FAULT_TOPIC, self.fault_trigger, 10)
+            self.create_subscription(String, RESET_REQUEST_TOPIC, self.handler(self.reset_command), reset_qos)
+            self.create_subscription(String, FAULT_TOPIC, self.handler(self.fault_trigger), 10)
             from rclpy.utilities import get_rmw_implementation_identifier
             self.runtime_observation = {'rmw': get_rmw_implementation_identifier(),
+                'ros_dispatch': 'queued_receive_main_owner_apply' if self.callback_inbox else 'inline',
                 'record_write_includes_handler_flush': True,
                 'ephemeral_qos': {topic: {'depth': pub.qos_profile.depth,
                     'reliability': pub.qos_profile.reliability.name,
@@ -1006,19 +1033,24 @@ def run_ros(args):
             self.tf = TransformBroadcaster(self)
             self.static_tf = StaticTransformBroadcaster(self)
             command_type = TwistStamped if args.stamped_cmd_vel else Twist
-            self.create_subscription(command_type, '/cmd_vel', self.car_command, 10)
-            self.create_subscription(JointState, '/cooperation/arm_reference', self.arm_command, 10)
+            self.create_subscription(command_type, '/cmd_vel', self.handler(self.car_command, with_received_time=True), 10)
+            self.create_subscription(JointState, '/cooperation/arm_reference', self.handler(self.arm_command), 10)
             hold_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
-            self.create_subscription(Bool, '/cooperation/car_hold', self.car_hold, hold_qos)
-            self.create_subscription(Bool, '/cooperation/docking_guard', self.guard_command, hold_qos)
+            self.create_subscription(Bool, '/cooperation/car_hold', self.handler(self.car_hold), hold_qos)
+            self.create_subscription(Bool, '/cooperation/docking_guard', self.handler(self.guard_command), hold_qos)
             self.native_busy = {}
             action_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                                    durability=DurabilityPolicy.TRANSIENT_LOCAL)
             for topic in ('/navigate_to_pose/_action/status', '/dock_robot/_action/status'):
                 self.create_subscription(GoalStatusArray, topic,
-                    lambda message, topic=topic: self.native_status(topic, message), action_qos)
+                    self.handler(lambda message, topic=topic: self.native_status(topic, message)), action_qos)
             self.last_rejected = None
             self.publish_static_tf()
+
+        def handler(self, function, *, with_received_time=False):
+            if self.callback_inbox is None:
+                return function
+            return self.callback_inbox.callback(function, with_received_time=with_received_time)
 
         def car_hold(self, message):
             physics.wheels.set_hold(message.data)
@@ -1079,15 +1111,16 @@ def run_ros(args):
                 physics.wheels.stop()
                 self.reject('docking_guard', error)
 
-        def car_command(self, message):
+        def car_command(self, message, *, received_at=None):
             try:
+                received = time.monotonic() if received_at is None else received_at
                 if args.stamped_cmd_vel:
                     twist = message.twist
                     source_stamp = message.header.stamp.sec + message.header.stamp.nanosec*1e-9
-                    physics.wheels.accept(twist.linear.x, twist.angular.z, time.monotonic(),
+                    physics.wheels.accept(twist.linear.x, twist.angular.z, received,
                                           source_stamp=source_stamp, sim_now=physics.data.time)
                 else:
-                    physics.wheels.accept(message.linear.x, message.angular.z, time.monotonic())
+                    physics.wheels.accept(message.linear.x, message.angular.z, received)
             except (ValueError, TypeError, OverflowError) as error:
                 physics.wheels.stop()
                 self.reject('car', error)
@@ -1257,10 +1290,32 @@ def run_ros(args):
 
     rclpy.init(args=[])
     node = Adapter()
+    receiver_executor = receiver_thread = None
+    receiver_errors = []
     deadline, started = time.monotonic(), time.monotonic()
     try:
+        if node.callback_inbox is not None:
+            from rclpy.executors import SingleThreadedExecutor, ExternalShutdownException
+            receiver_executor = SingleThreadedExecutor()
+            receiver_executor.add_node(node)
+
+            def receive_ros():
+                try:
+                    receiver_executor.spin()
+                except ExternalShutdownException:
+                    pass
+                except Exception as error:
+                    receiver_errors.append(error)
+
+            receiver_thread = threading.Thread(target=receive_ros, name='cooperation-ros-receive', daemon=True)
+            receiver_thread.start()
         while rclpy.ok() and (args.duration is None or time.monotonic()-started < args.duration):
-            timing.measure('spin_once', rclpy.spin_once, node, timeout_sec=0.)
+            if receiver_errors:
+                raise RuntimeError('ROS receive executor failed') from receiver_errors[0]
+            if node.callback_inbox is None:
+                timing.measure('spin_once', rclpy.spin_once, node, timeout_sec=0.)
+            else:
+                timing.measure('command_apply', node.callback_inbox.drain)
             node.process_reset()
             timing.measure('mj_step', physics.step)
             # 50 Hz state/odom and 10 Hz synchronous rays; physics stays single-owner.
@@ -1290,6 +1345,18 @@ def run_ros(args):
                 finalization_errors.append((stage, error))
 
         try:
+            if receiver_executor is not None:
+                def stop_receiver():
+                    try:
+                        receiver_executor.shutdown(timeout_sec=2.)
+                    finally:
+                        if receiver_thread is not None:
+                            receiver_thread.join(timeout=2.)
+                            if receiver_thread.is_alive():
+                                raise RuntimeError('ROS receive thread did not stop')
+                    if receiver_errors:
+                        raise RuntimeError('ROS receive executor failed') from receiver_errors[0]
+                finalize_stage('ros_receive.stop', stop_receiver)
             for name, resource in (('frames', frames), ('camera', node.camera),
                                    ('lidar', node.lidar), ('record', record)):
                 if resource is not None:
@@ -1326,12 +1393,16 @@ def parser():
     result.add_argument('--frame-dir', type=Path)
     result.add_argument('--frame-fps', type=float, default=3.)
     result.add_argument('--camera', default='cooperation_overview')
+    result.add_argument('--no-overview-render', action='store_true',
+                        help='Disable the display-only overview; retain sensor cameras and physics')
     result.add_argument('--state-log', type=Path, help='opt-in rolling diagnostic JSONL, never complete scoring evidence')
     result.add_argument('--state-log-hz', type=float, default=2.)
     result.add_argument('--state-log-max-bytes', type=int, default=8*1024*1024)
     result.add_argument('--state-log-backups', type=int, default=3)
     result.add_argument('--timing-log', type=Path, help='optional final bounded timing observations')
     result.add_argument('--duration', type=float)
+    result.add_argument('--queued-ros-dispatch', action='store_true',
+                        help='receive ROS off-thread and apply commands at the physics boundary')
     result.add_argument('--stamped-cmd-vel', action='store_true')
     result.add_argument('--arm-publisher-node', default='fishbot_so101_cooperation')
     return result

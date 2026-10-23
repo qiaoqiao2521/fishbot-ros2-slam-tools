@@ -34,6 +34,39 @@ def load(name, path):
 sim = load('cooperation_sim', TOOLS/'cooperation_sim.py')
 
 
+class CallbackInboxTests(unittest.TestCase):
+    def test_callbacks_keep_receive_order_and_run_on_the_physics_owner(self):
+        inbox = sim.CallbackInbox()
+        seen = []
+        receive = inbox.callback(lambda value: seen.append((value, threading.get_ident())))
+        worker = threading.Thread(target=lambda: (receive('hold'), receive('reference')))
+        worker.start(); worker.join()
+        self.assertEqual(seen, [])
+        inbox.drain()
+        self.assertEqual(seen, [('hold', threading.get_ident()), ('reference', threading.get_ident())])
+
+    def test_queue_wait_does_not_refresh_the_car_watchdog(self):
+        inbox = sim.CallbackInbox()
+        wheels = sim.WheelCommands()
+        wheels.set_hold(False)
+        def command(value, *, received_at):
+            wheels.accept(*value, received_at, source_stamp=1., sim_now=1.1)
+        with patch.object(sim.time, 'monotonic', return_value=2.):
+            inbox.callback(command, with_received_time=True)((.06, .1))
+        inbox.drain()
+        self.assertEqual(wheels.last_received, 2.)
+        self.assertNotEqual(wheels.velocities(2.1), (0., 0.))
+        self.assertEqual(wheels.velocities(2.6), (0., 0.))
+
+    def test_application_error_is_not_swallowed(self):
+        inbox = sim.CallbackInbox()
+        def fail(message):
+            raise RuntimeError(message)
+        inbox.callback(fail)('failed command')
+        with self.assertRaisesRegex(RuntimeError, 'failed command'):
+            inbox.drain()
+
+
 class StationObservationProducerTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
@@ -438,7 +471,7 @@ class ExitFinalizationTests(unittest.TestCase):
         self.code = compile(ast.fix_missing_locations(wrapper), '<current-simulation-finally>', 'exec')
         self.stderr = io.StringIO()
 
-    def probe(self, errors=None, *, timing_enabled=True):
+    def probe(self, errors=None, *, timing_enabled=True, queued=False):
         errors = errors or {}
         events = []
         def stage(name):
@@ -470,6 +503,9 @@ class ExitFinalizationTests(unittest.TestCase):
                                destroy_node=lambda: stage('node.destroy_node'),
                                runtime_observation={'rmw': 'controlled_test_not_ROS'})
         scope = {'sys': sys, 'json': json,
+                 'receiver_executor': SimpleNamespace(shutdown=lambda **kw: stage('receiver.shutdown')) if queued else None,
+                 'receiver_thread': SimpleNamespace(join=lambda **kw: stage('receiver.join'), is_alive=lambda: False),
+                 'receiver_errors': [],
                  'physics': SimpleNamespace(wheels=SimpleNamespace(set_hold=lambda value: events.append(('hold', value))),
                                             data=SimpleNamespace(ctrl=Control()), wheel_a='wheels'),
                  'frames': resource('frames'), 'record': record, 'node': node,
@@ -482,6 +518,20 @@ class ExitFinalizationTests(unittest.TestCase):
             with contextlib.redirect_stderr(self.stderr):
                 scope['shutdown_probe'](operation)
         return invoke, writer, events
+
+    def test_queued_receiver_stops_before_publisher_resources(self):
+        invoke, writer, events = self.probe(queued=True)
+        invoke()
+        self.assert_closed(writer, events)
+        self.assertLess(events.index('receiver.shutdown'), events.index('receiver.join'))
+        self.assertLess(events.index('receiver.join'), events.index('camera.close'))
+
+    def test_receiver_shutdown_failure_still_joins_and_closes_resources(self):
+        invoke, writer, events = self.probe({'receiver.shutdown': RuntimeError('receiver failed')}, queued=True)
+        with self.assertRaisesRegex(RuntimeError, 'receiver failed'):
+            invoke()
+        self.assert_closed(writer, events)
+        self.assertEqual(events.count('receiver.join'), 1)
 
     def assert_closed(self, writer, events):
         self.assertEqual(events[:2], [('hold', True), ('wheel_ctrl', 'wheels', 0.)])

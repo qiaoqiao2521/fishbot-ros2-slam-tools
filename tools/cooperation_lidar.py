@@ -116,11 +116,12 @@ class NativeCloudQuery:
     def compute(self, snapshot):
         c, np, started = self.config, self.np, time.monotonic()
         # Same convention as the existing camera query clone: copy immutable
-        # source state, refresh kinematics/sensors, and never mj_step this data.
+        # source state and never mj_step this data. Ray casting needs only
+        # mj_kinematics; solving contact dynamics in this query clone is unused.
         self.data.qpos[:] = snapshot['qpos']
         self.data.qvel[:] = snapshot['qvel']
         self.data.time = snapshot['stamp']
-        self.mj.mj_forward(self.model, self.data)
+        self.mj.mj_kinematics(self.model, self.data)
         rotation = self.data.xmat[self.laser].reshape(3, 3)
         origin = self.data.xpos[self.laser] + rotation @ np.asarray(c['mount_xyz'])
         rays = (self.directions @ rotation.T).reshape(-1)

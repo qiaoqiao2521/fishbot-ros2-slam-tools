@@ -98,7 +98,7 @@ def loaded_code_reference():
                cooperation_factory_scene, cooperation_workflow)
     module_files = {module.__name__: str(Path(module.__file__).resolve()) for module in modules}
     runtime_files = [ROOT/'tools'/name for name in
-                     ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_oracle.py',
+                     ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_lidar.py', 'cooperation_oracle.py',
                       'cooperation_oracle_base.py', 'cooperation_core.py', 'cooperation_arm.py',
                       'cooperation_factory_policy.py', 'cooperation_delivery_route.py')]
     paths = [Path(path) for path in module_files.values()]+runtime_files

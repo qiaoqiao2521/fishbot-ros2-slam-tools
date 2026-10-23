@@ -1,7 +1,17 @@
 # F1 Progress
 
 ## Current
-2026-10-23 J100完整配送在本对话继续，尚无新完整成功。原生IsPathValid确认初始路径有效；MPPI原B短段在120墙秒振荡取消。RPP曲率联动候选已将行驶角速度原请求超限从约36%降至0，但该轮源/墙速率仅约0.16，仍超时且不能当路线性能验收。同原速度的软代价减速对照亦超时，现141/9111与owned已清理，硬碰撞、CM、几何/物理评分与期限不变。已向用户提出独立J100 .06m/s/.10rad/s业务速度选项，答复前不执行提速；root独立负责。
+2026-10-23 J100组合仍未通过完整B→A。已采用用户确认的.06m/s/.10rad/s上限；原B空托盘原生4/86.151s/2.079cm。首轮完整B原K通过，但起步后瞬时托盘断触，连续支撑与交付失败，A未执行。后续载货诊断分别出现原120秒取消或1–3帧支撑失败；远侧(1.7,-2)入口原生4且连续支撑通过，但用时118.429秒，最终B仍取消，不能计交付成功。
+
+原生半速时钟对照已通过：原墙钟平滑器源时间斜率.04997/.09995，显式ROS时钟候选.025/.05；暂停时钟输出6/0，动态调频均接纳。此事实修正计时语义，不独占货物失败因果。雷达查询仅做原生运动学，20组×5760射线的点/命中ID与完整forward逐点一致，13项雷达测试通过。可选关闭概览渲染保留RGB路径。
+
+116项相关检查通过；同一个performance窗口零运动对照，原inline推进.89173倍实时，显式queued推进1.000倍，清理无错误。队列只在后台接收，原回调接收墙钟保留、命令/重置/物理仍由主线程应用。默认inline保持。公开原生时钟入口在改频后重测源斜率.05及暂停0输出，通过；不是仅ACK。
+
+最新两个短试验均全程载货支撑通过。50Hz源时钟/.055弯道候选在终点附近w=0，未完成收尾；trace目标距最小15.618mm，原RPP在31.62mm内曲率归零，未进15mm目标圈。保持全部容差，启用原生fixed curvature/after-goal后，入口(.95,-2,0)原生4、连续静止与hold确认通过，但用时114.524墙秒；原B第二段5.56秒后在9.406cm处取消5，整路仍false。曲率前视点实际发布2137条，参数回读true/.2/true。owned/9111全部清理。
+
+当前没有运行中的ROS实验。完整反馈的control组首次外层180秒超时，其余mission209/autonomy61/frontend460共730项通过；同源码control组从原`--python-group control`独立入口完成997项/435.448秒，无跳过或缺依赖，未修改测试或配送期限。首次整命令仍记failed，不改写为默认入口通过。接着执行已备`native-loaded-east-terminal-tracking-probe.py`（进场仍.95、固定曲率前视.3、接近距离.12/最低.02、总限幅.06/.10），短路线通过后才启动已dry-run的`j100-source-clock-terminal-full-manifest.json`原始场景B→A。所有候选保留原1.5cm/.035rad原生容差、4cm/.05rad物理评分与120/360/1000。
+
+知识回写`updated(local)`：原`Wiki/ROS2 与 FishBot.md`第19节补半速/暂停/改频的原生计时验证和后台接收/物理owner/原收包时刻边界，保留“计时不替代连续载货”的限定；`Wiki/开发知识入口.md`新增对应触发行。原页与入口已读回。知识仓已有其它dirty修改，保留且本轮未宣称发布知识仓。
 
 2026-10-23 Smac Lattice显式接入与有限面板已交付，J100组合仍未通过。原生1.3.13插件、官方248条diff/.60m/2cm原语、独立库缓存补丁、可选Rotation Shim均落盘；39项相关与1727项完整反馈检查通过。9轮只规划找到完整几何正余量.05479m、估算118.844秒候选；3轮原B空托盘真实跟踪均在原120秒取消，最后22.614cm/1.00360rad，未执行新的完整抓放或A。不拼接成B→A成功。全部owned实例/9111/inhibitor已清理；知识updated(local)且读回。细节与最短接续入口见本文件末节，owner=本对话root。
 
@@ -329,3 +339,17 @@ knowledge_status=updated(local)：已修订原`Wiki/ROS2 与 FishBot.md`第19节
 原生0.40m/2cm/16向官方差速生成器得到96条原语；仅规划UUID574eb20ad28d4b7d97aeb69beb5283d2/status4、完整几何余量+.055366m且IsPathValid=true，但路径3.252143m/3换向，含余量154.022墙秒，未发运动。917个物理样本全hold，owned已清理。更小半径不保证更短可行路线。
 
 用户速度选择pending，owner=本对话root。已准备独立j100-fast-probe-manifest.json与j100-fast-full-manifest.json（.06m/s/.10rad/s、原加减速、原所有评分/期限），prepared_not_dispatched，不在答复前执行提速。原完整新scene已prepare为原spawn/A/B/occupied/J100/lidar3d/Omni/Lattice；不是旧probe出生点。最短接续：允许后先native-j100-fast-probe.py原B实走，通过再原cooperation_factory.py run绑定j100-fast-full-manifest.json、order-b/order-a，完整oracle与原360/1000；不拼接旧成功。证据根仍为j100-transport-20261023，未覆盖原件。knowledge_status=already_covered（FishBot19/20双时钟与原生/物理分层）。
+
+
+## 用户确认独立速度后：原B实走通过，完整B→A在途
+用户已确认.06m/s/.10rad/s；原加减速.025m/s²/.05rad/s²、完整车体/碰撞/CM、连续载货与4cm/.05rad、120/360/1000均保持。原B探针UUID3a11d31425024d6e81ea7e71db20da65原生4，86.150713墙秒，独立真值2.0793cm/.009458rad、连续quiet .86源秒。5151个物理样本累计车/臂禁碰均0，起点窗口保留；已确认末hold、owned/9111清理。原记录源采样仍有.14–.84s缺口（含只规划预检），不称无损记录。原生速度上限、RPP/.6m曲率调速、.01最低速度及patched库路径已读回。
+
+完整运行已启动：同一cooperation_factory.py原订单B→A，输出j100-transport-20261023/full-b-a，原初态(0,-2,0)，原occupied实体障碍。复用原Workflow/DockRobot/SO101/oracle，无policy-config，无跨对话协作。当前仅短段通过，完整抓放/运输与A仍在途；不以标签或HTTP状态代替原物理评分。knowledge_status=already_covered，收尾按最终结果更新。
+
+
+## 独立速度首轮完整失败与载货重放（不计两单成功）
+- run81d05dac-87a0-4207-8dfd-7e3ecbcbb038，B taska3deb85b-db0c-432e-94ed-a8c5b07460d0，191.978墙秒。原入站77f3741552e24fb3a224c107a402fc7d、Dock7550b9ebf894489fb32a4b31fefeeb7e、原body出站8e2e7aa7f47e456c89e846f5d61d7199均4；载货41a01cf11f8f4d62805cb8f1606b30da在8.084秒正确取消5。原K true，连续支撑false、完整交付false；A未派发。selected_text起止一致、owned/observer/9111清理通过。
+- 原记录182.46/184.58源秒floor_contact=false，货物相对托盘仍居中，z=.010017/.010013m；非几何越界，真实floor force=0。仅缺触两个观测也保留原失败，不去抖、不放宽门槛。
+- 从记录qpos/qvel/ctrl重放、1s held settle（solver warmstart未存，非逐比特回放），原模型/碰撞/执行器保持。.10纯转与.06/.10弧线各800个50Hz样本失支撑4次、500Hz各30断触；.05正负纯转、.06/.05正负弧线各800个50Hz与8000个500Hz均0断触、车臂禁碰0。只支持该初态有限面板，不宣称泛化。
+- 下一候选保留用户.06/.10上限、原加减速，实际载货turn目标.05、RPP调速半径1.2m、最低调速.005，使转弯稳定并提高直线速度。先用记录车/货位姿做载货短段；其初态不是完整抓放验收。首个keyframe载入因MuJoCo replicate的qpos尺寸拒绝，0物理/Goal，保留失败；b2改为记录车/货初始位姿、速度/轮编码器归零，编译后原质量/惯量/摩擦/接触/执行器参数逐项相同。原完整scene与失败原件未修改。
+- 证据根j100-transport-20261023/{full-b-a,loaded-turn-replay-result.json,loaded-turn-005-replay-result.json,native-loaded-turn-probe,native-loaded-turn-probe-b2}；owner=本对话root，knowledge_status=already_covered，待最终闭环后回写新增稳载经验。

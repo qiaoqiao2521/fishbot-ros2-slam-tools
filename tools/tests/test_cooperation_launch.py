@@ -51,6 +51,15 @@ with tempfile.TemporaryDirectory() as directory:
  assert '--state-log' not in simulation_cmd(actions)
  command=simulation_cmd(actions)
  assert command[command.index('--manifest')+1]==str(p.resolve())
+ assert '--no-overview-render' not in command
+ assert '--queued-ros-dispatch' not in command
+ original=json.loads(p.read_text());headless=dict(original,render_overview=False,queued_ros_dispatch=True)
+ p.write_text(json.dumps(headless))
+ headless_command=simulation_cmd(module['start'](context))
+ assert '--no-overview-render' in headless_command
+ assert '--queued-ros-dispatch' in headless_command
+ assert headless_command[headless_command.index('--frame-dir')+1]==str(Path('/unused/output/frames'))
+ p.write_text(json.dumps(original))
  context.launch_configurations['record_state']='true'
  configured=simulation_cmd(module['start'](context))
  assert configured[configured.index('--state-log-hz')+1]=='2'
@@ -98,11 +107,12 @@ with tempfile.TemporaryDirectory() as directory:
  assert ledger.read_text()=='preserve corrupt old ledger'
  # Exercise the vision-only helper import and environment without ROS startup.
  context.launch_configurations['output']='/unused/vision-output'
- manifest=json.loads(p.read_text());manifest.update(station_perception={'mode':'vision'},station_camera={})
+ manifest=json.loads(p.read_text());manifest.update(station_perception={'mode':'vision'},station_camera={},render_overview=False)
  p.write_text(json.dumps(manifest))
  actions=module['start'](context)
  processes=[a for a in actions if isinstance(a,ExecuteProcess) and not isinstance(a,Node)]
  assert len(processes)==3
+ assert '--no-overview-render' in simulation_cmd(actions)
  # Optional J100 fusion uses the existing upstream EKF, retaining the old nodes.
  ekf=Path(directory)/'ekf.yaml';ekf.write_text('ekf_filter_node:\n  ros__parameters:\n    use_sim_time: true\n')
  manifest['localization']={'enabled':True,'ekf_yaml':str(ekf)}

@@ -1,0 +1,50 @@
+--- a/nav2_velocity_smoother/src/velocity_smoother.cpp
++++ b/nav2_velocity_smoother/src/velocity_smoother.cpp
+@@ -18,6 +18,7 @@
+ #include <string>
+ #include <utility>
+ #include <vector>
++#include "rclcpp/create_timer.hpp"
+ 
+ #include "nav2_velocity_smoother/velocity_smoother.hpp"
+ 
+@@ -51,6 +52,9 @@
+   std::string feedback_type;
+   double velocity_timeout_dbl;
+ 
++  // Opt-in simulation clock; keep the upstream wall timer by default.
++  declare_parameter_if_not_declared(
++    node, "use_ros_time_for_smoothing", rclcpp::ParameterValue(false));
+   // Smoothing metadata
+   declare_parameter_if_not_declared(node, "smoothing_frequency", rclcpp::ParameterValue(20.0));
+   declare_parameter_if_not_declared(
+@@ -182,9 +186,11 @@
+   RCLCPP_INFO(get_logger(), "Activating");
+   smoothed_cmd_pub_->on_activate();
+   double timer_duration_ms = 1000.0 / smoothing_frequency_;
+-  timer_ = this->create_wall_timer(
+-    std::chrono::milliseconds(static_cast<int>(timer_duration_ms)),
+-    std::bind(&VelocitySmoother::smootherTimer, this));
++  const auto period = std::chrono::milliseconds(static_cast<int>(timer_duration_ms));
++  auto callback = std::bind(&VelocitySmoother::smootherTimer, this);
++  timer_ = get_parameter("use_ros_time_for_smoothing").as_bool() ?
++    rclcpp::create_timer(this, get_clock(), rclcpp::Duration(period), callback) :
++    this->create_wall_timer(period, callback);
+ 
+   dyn_params_handler_ = this->add_on_set_parameters_callback(
+     std::bind(&VelocitySmoother::dynamicParametersCallback, this, _1));
+@@ -425,9 +431,11 @@
+         }
+ 
+         double timer_duration_ms = 1000.0 / smoothing_frequency_;
+-        timer_ = this->create_wall_timer(
+-          std::chrono::milliseconds(static_cast<int>(timer_duration_ms)),
+-          std::bind(&VelocitySmoother::smootherTimer, this));
++        const auto period = std::chrono::milliseconds(static_cast<int>(timer_duration_ms));
++        auto callback = std::bind(&VelocitySmoother::smootherTimer, this);
++        timer_ = get_parameter("use_ros_time_for_smoothing").as_bool() ?
++          rclcpp::create_timer(this, get_clock(), rclcpp::Duration(period), callback) :
++          this->create_wall_timer(period, callback);
+       } else if (name == "velocity_timeout") {
+         velocity_timeout_ = rclcpp::Duration::from_seconds(parameter.as_double());
+       } else if (name == "odom_duration") {

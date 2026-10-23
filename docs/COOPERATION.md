@@ -195,6 +195,22 @@ FISHBOT_SO101_PYTHON="$FISHBOT_COOP_PYTHON" \
 
 当时的本机验收资料位于 `~/.cache/fishbot/cooperation/session-20261014/`，含 `ui-k-result.json`、`oracle/run-1791919665149152720/score-1791920037922113535.json`、`oracle/k-native-guard-end-proof.json` 和 `runtime-k/accepted-source/`。2026-10-17检查时该session目录已清理，不再保证这些本机原件可读。历史结论与当时的来源、失败和检查记录见[任务进度](../plans/fishbot-so101-cooperation-20261014/progress.md)；本轮没有重新执行K运输，也没有把清理当作重新验收。
 
+## 显式运行选项
+
+manifest 可设置 `render_overview: false`，跳过概览相机渲染。
+`frame-dir` 保留，后向 RGB 相机和检测路径独立运行。默认仍渲染概览。
+
+`queued_ros_dispatch: true` 让标准 SingleThreadedExecutor 在后台接收 ROS。
+命令、hold、guard、reset 和 MuJoCo 状态仍由原物理线程统一应用。
+底盘命令保存首次回调接收的单调时刻，排队不会刷新看门狗。
+默认仍在物理循环内分发。直接运行 sim 的对应参数为
+`--no-overview-render`、`--queued-ros-dispatch`。
+timing 报告记录 `ros_dispatch` 模式和 `command_apply` 阶段。
+
+原生 velocity_smoother 的仿真时钟选项需要独立 overlay，见
+[Nav2 补丁与原生对照](../tools/patches/README.md)。
+速度、加减速、碰撞、载货及任务评分分别验收；短测实时率不代表运输通过。
+
 ## 日志与容量
 
 演示启动默认 `record_state:=false`，不创建 `physics.jsonl`。物理/ROS状态仍按原周期发布，独立评分合同不变。任务完成或关闭网页不结束仿真进程，因此不能依赖页面生命周期停止磁盘日志。需要排障时显式启用：
