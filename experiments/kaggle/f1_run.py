@@ -91,7 +91,8 @@ def main():
     python = str(planning/"bin/python")
     run("planning-dependencies", [python, "-m", "pip", "install", "--disable-pip-version-check",
         "-r", str(so101/"experiments/colab-twin/requirements.txt"), "PyYAML", "daqp",
-        "colcon-common-extensions==0.3.0", "catkin-pkg==1.1.1", "empy==3.3.4", "lark==1.1.9"],
+        "colcon-common-extensions==0.3.0", "colcon-override-check==0.0.1",
+        "catkin-pkg==1.1.1", "empy==3.3.4", "lark==1.1.9"],
         env=planning_env, timeout=900)
     run("planning-versions", [python, "-m", "pip", "freeze"], env=planning_env)
     native = WORK/"native"

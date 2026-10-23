@@ -1,6 +1,8 @@
 # F1 Progress
 
 ## Current
+云端v3已失败并保留原始报告：apt43.54秒、3.12venv5.03秒、规划依赖52.10秒、官方源码5.19秒及两份patch全部通过；build在.67秒因缺colcon-override-check的--allow-overriding参数而解析失败，尚未编译C++或启动ROS。实际pip版本读回MuJoCo3.3.7/OMPL2.0.1/SciPy1.18.1。本轮补本机同版override-check0.0.1，原构建命令已在空隔离目录解析通过，0包编译、零ROS；不冒充真实构建通过。首次新提交在SaveKernel连接阶段超时；已读回服务器仍为未含插件的v3且ERROR，确认未收到后才重试，避免重复派发。
+
 云端最新：私有数据集v2实际ready，远端bundle读回源码634c6e6、格式fishbot-prefixed-tar-gzip-v1。kernel v2真实挂载并解包，代码及metadata读回一致；ubuntu-index通过，ubuntu-dependencies在2.324秒以100失败，唯一错误为缺少python3-colcon-common-extensions，零ROS任务。原始日志已通过官方SDK按file_path直接下载读回；CLI output虽带file-pattern仍分页列举全部文件，依赖树置working会显著扩大取证和输出成本，不能全归因于网络。
 
 kernel v3已提交：apt不再要求该ROS源元包，按colcon官方文档在3.12 venv安装本机同版colcon0.3.0/catkin-pkg1.1.1/empy3.3.4/lark1.1.9；CMake也显式使用该解释器。源码/venv/编译树改存/tmp，只把scene/native-clock/full-run和日志报告保留在working。新增失败日志尾部直接输出，非零100与false评分的故障注入通过，四脚本语法通过。本轮还未证明云端完整构建或导航成功；原数据源码保持634c6e6，新的bootstrap由Kaggle代码版本单独绑定。

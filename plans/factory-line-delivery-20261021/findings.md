@@ -2,6 +2,7 @@
 
 ## Kaggle接续（2026-10-24）
 
+- pip colcon-common-extensions0.3.0不含override-check插件；--allow-overriding由独立colcon-override-check提供。本机0.0.1与源码参数定义已核对，显式补依赖，保留原覆写声明。空隔离目录只证明原命令可解析，不是C++编译、控制器计算或配送验收。
 - 云端v2确认原archives解包通过，但apt缺python3-colcon-common-extensions。官方文档说明该元包经ROS/packagecloud仓分发，并支持venv pip；本轮采用本机版本的pip colcon工具链，不绕过ROS仓TLS错误或重置系统Python。真实错误143字节原log已通过官方SDK的DownloadKernelOutput(file_path)读回。
 - Kaggle CLI output的file-pattern仅过滤下载，仍循环列举整个输出树。此前把源码/runtime/venv放working会增加至少数千文件，未来完整venv更大；临时依赖树转/tmp，scene及原任务证据继续持久化。网络ConnectTimeout也真实出现，二者不能混成单一原因；本机取证进程可限定单次连接超时，不改账号或全局网络。新失败日志尾部输出保留原状态，低层异常不替代物理裁决。
 - 用户已选择CLI账号`muqiaoqiao`；官方access-token introspection与私有前检作业属该账号。Chrome的`muqiao147`不是该私有数据集的访问凭据，不据其404判断CLI资源不存在，也不切换账号。
