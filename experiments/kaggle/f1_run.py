@@ -15,6 +15,18 @@ ARTIFACTS = Path("/kaggle/working")/("f1-results-"+RUN_TAG)
 REPORT = Path("/kaggle/working/f1-deployment.json")
 STEPS = []
 ARCHIVE_MAGIC = b"FISHBOT-TAR-GZIP-1\n"
+NATIVE_BUILD_SHELL = """source /opt/ros/jazzy/setup.bash
+_f1_native="$1"; _f1_python="$2"; _f1_colcon="$3"; shift 3
+_f1_paths=()
+for _f1_package in "$@"; do
+  _f1_paths+=("$_f1_native/src/navigation2/$_f1_package")
+done
+"$_f1_python" "$_f1_colcon" --log-base "$_f1_native/log" build \\
+  --base-paths "${_f1_paths[@]}" --build-base "$_f1_native/build" \\
+  --install-base "$_f1_native/install" --packages-select "$@" \\
+  --allow-overriding "$@" --parallel-workers 1 --cmake-args \\
+  -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DPython3_EXECUTABLE="$_f1_python"
+"""
 
 
 def save(value):
@@ -153,9 +165,12 @@ def main():
         str(fishbot/"tools/patches/nav2-1.3.13-lattice-edge-cache.patch")], cwd=source)
     run("smoother-patch", ["git", "apply",
         str(fishbot/"tools/patches/nav2-1.3.13-velocity-smoother-ros-time.patch")], cwd=source)
-    build = """source /opt/ros/jazzy/setup.bash
-"$2" "$3" --log-base "$1/log" build --base-paths "$1/src/navigation2/nav2_smac_planner" "$1/src/navigation2/nav2_velocity_smoother" --build-base "$1/build" --install-base "$1/install" --packages-select nav2_smac_planner nav2_velocity_smoother --allow-overriding nav2_smac_planner nav2_velocity_smoother --parallel-workers 1 --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DPython3_EXECUTABLE="$2"
-"""
+    native_packages = ["nav2_smac_planner", "nav2_velocity_smoother"]
+    yaw_stop = os.environ.get("FISHBOT_TRANSPORT_CONTROLLER") == "graceful"
+    if yaw_stop:
+        run("rotation-yaw-stop-patch", ["git", "apply",
+            str(fishbot/"tools/patches/nav2-1.3.13-rotation-yaw-stop.patch")], cwd=source)
+        native_packages.append("nav2_rotation_shim_controller")
     runtime_env = dict(os.environ, CMAKE_BUILD_PARALLEL_LEVEL="2", OMP_NUM_THREADS="2",
                        OPENBLAS_NUM_THREADS="1", FISHBOT_COOP_PYTHON=python,
                        FISHBOT_MUJOCO_DOMAIN_ID="141", FISHBOT_NAV2_QUERY_OVERLAY=str(native/"install"),
@@ -183,10 +198,17 @@ def main():
         STEPS.append({'stage':'native-overlay-reused','input':str(archives[0]),
                       'origin':globals().get('NATIVE_INSTALL_ORIGIN','explicit private kernel output'),
                       'basis':'same Nav2 1.3.13 and unchanged project native patches; native checks still required'})
+        if yaw_stop:
+            # An older cache can retain the planner/smoother. Build the newly
+            # selected shim instead of treating a declared parameter as proof.
+            run("rotation-yaw-stop-build", ["bash", "-ec", NATIVE_BUILD_SHELL,
+                "f1-build", str(native), python, str(planning/"bin/colcon"),
+                "nav2_rotation_shim_controller"], env=runtime_env, timeout=900)
     else:
         if os.environ.get('FISHBOT_REUSE_NATIVE_INSTALL') == '1':
             print('WARNING: no unique native artifact; building the selected sources',flush=True)
-        run("nav2-build", ["bash", "-ec", build, "f1-build", str(native), python, str(planning/"bin/colcon")],
+        run("nav2-build", ["bash", "-ec", NATIVE_BUILD_SHELL, "f1-build", str(native),
+            python, str(planning/"bin/colcon"), *native_packages],
             env=runtime_env, timeout=900)
     with tarfile.open(ARTIFACTS/"native-install.tar.gz", "w:gz") as archive:
         archive.add(native/"install", arcname="install")

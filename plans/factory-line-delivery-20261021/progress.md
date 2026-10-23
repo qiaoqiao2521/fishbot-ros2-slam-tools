@@ -2,7 +2,29 @@
 
 ## Current
 
+J100＋3D雷达的同轮完整B→A仍未通过，原FishBot父2/2保持。CLI账号仍muqiaoqiao；本机计算余量已恢复，当前仅仿真，由本对话root串行推进，不改网络或其它任务。
+
+最新有效分项：同一F装货后重建初态，原Nav b7071018…与24c680d1…均2→4，原共享路线119.637墙秒，末2.173cm/.01542rad；5759个检查样本无留盘/禁碰违例，原.7源秒quiet、两参数组restore、owned存活0、9111关闭通过。余量仅.363秒，不称稳定或完整抓放。源/独立记录通过；空业务marker使原完整oracle任务评分false是预期，不冒充完整运输。
+
+关键修改是Nav2 1.3.13 RotationShim的显式stop_in_goal_yaw_tolerance：默认false；启用后，仅在原位置/朝向容差内请求零角速，原StoppedGoalChecker仍要求真实停稳。原生反例在20mrad、实际角速.04时旧实现仍输出±.055，补丁后11项原生测试全过，默认旧行为保留。新overlay仅增加Shim，Smac与源时钟平滑器原库保持；实际运行三库路径已读回。运输仍是GC .06/.055、原硬件.06/.10、.025/.05加减速、原检查器/几何/载货/120/360/1000。保留原pref_final_rotation=true与.12降速范围，不采用其余失败候选。
+
+控制计算另有只读证据：本轮两UUID分别1809/259次GC compute内变换路径发布，共2068；它不是输入消费ACK，也不代替原生终态与物理评分。先前离线后接入的独立见证计数0，原样保留为未取到证据。
+
+公开prepare已读回：原spawn=(0,-2,0)、原A/B/B进场1.35、world/rig/arm、载货限幅与progress保持，BT/lattice仅引用路径变化、内容相同。相对完整f仅FollowPath角速.06→.055与显式yaw-stop；81项配置/构建传参/factory/acceptance/loaded检查通过，11项原生测试通过；原factory dry-run为B→A/120/360/1000、零动作。下一步冻结本次源码，运行local-full-b-a-g。必须同轮原factory独立两单评分通过后才能更新PROJECT完成状态。完整e/f及所有短测、静止规划与标定失败继续保留。
+
+证据根：~/.local/share/fishbot/cloud-jobs/kaggle-20261024/；最新local-loaded-f-via135-graceful055-yaw-stop-a，原生源码/构建/反例在native-yaw-stop/，标签1.3.13实际f4108e5。新显式候选尚未在Kaggle重跑完整任务，不把本机结果称云端成功。
+
+knowledge_status=updated(local)：原Wiki/FishBot第19节的纳秒边界、正常shutdown、差速进场与问题入口已读回，知识仓未提交推送；本轮原生停车兼容经验待收尾在原段落串行补充。仅仿真，不外推真机或sim-to-real。
+
+## Prior 2026-10-24 run notes (preserved)
+
+### Before native yaw-stop qualification (preserved)
+
 J100＋16×360/10Hz三维雷达的同轮B→A仍待完整验收，原FishBot父2/2保持。当前有效分项是倒车进场与原120秒内的载货进场/交付路线，未把分项拼成完整成功。Kaggle账号保持CLI muqiaoqiao；本机完整栈计算余量已实测恢复，复用v6同版原生库继续，不暂停其它任务或改网络。
+
+最新接续：完整f失败已清理。F装货后短测中，Graceful .055/.12、.055/.10、Shim制动参考.05/open-loop、prefer_final_rotation=false均未在原120秒完成两段；未晋级默认、未重发unknown。末端实录显示位置已进入原生15mm范围，偏航却约.10rad且停稳条件交错；仅把超时归为排队或把插件注册当计算都不成立。新只读原生transformed_global_plan计数在完整位姿候选首Goal记录1878次compute内发布，但该候选仍失败，不能冒称输入ACK或业务成功。
+
+近邻/北侧的静止原生规划面板未找到更优合格路线：1.20穿障拒绝运动；0,-1.4多进场的第二段名义120.49秒；1.8,-1.6被原baffle_right实体占用，原Goal6，未发运动；1.28/1.30/1.32均完整几何通过但名义总耗时不优于原1.35。没有移动障碍或缩车。当前零活动ROS，先用同一Physics/4.5有效轮距/kv32/原500Hz与50Hz指令测标定覆盖，不再叠加末端参数猜测。首六例0/.02/.06×±.055实际积分转速约.039–.049rad/s，50Hz保持全0违例，而.06负转的500Hz支撑有17步断触；不将额外500Hz诊断冒称原50Hz已测到，也不宣称唯一根因。下一步对照原已标定.05及邻近.06工作点，再决定最小修复；所有失败在原私有证据根保留。
 
 - 原占用场景短停靠：d3655b15，24.119墙秒，Nav 2e20ff7d与Dock 8202b958均原4；独立物理停靠/静止/源码/记录完整性通过，P95 6.945mm/.00846rad。理想停车保护介入.78源秒，单列辅助，不称纯观测精度。新--staging-reversing默认关闭，16项prepare检查通过；只改变原生进场组合，原速度/checker/物理保持。
 - 完整d：B task47bf85ae-bff1-41b7-b4bb-e9cac3648dca，261.793墙秒，原K与连续handoff/运输通过；出站原4，后续(.95,-2,0)在共享120.015秒取消5，A未执行。原始记录、源码起止与清理通过。桥退出修复已在本轮实际读回全子进程正常退出，旧bridge context退出1失败保留。
@@ -18,11 +40,16 @@ J100＋16×360/10Hz三维雷达的同轮B→A仍待完整验收，原FishBot父2
 
 公开prepare已执行并逐项读回：world/rig/arm XML相同，FollowPath匹配声明，原Staging/checker/smoother参数保持；其它Nav差异仅新目录的BT/lattice路径，引用内容逐字节相同。factory dry-run为原B→A与120/360/1000、零动作。配置/原factory/acceptance/loaded参数79项通过，零失败或跳过；public-graceful-readback.json与graceful-configuration-tests.log留在私有证据根。
 
+完整f（92e5d88）失败：B task02388ebf-a5e1-455a-8565-8d68850e59b9，载货路线71.565秒时因保持失败取消原Nav54229242…/5，A未执行。首违例216.88源秒cargo仍在外廓内、floor接触0/力0、hold=false、指令龄约16ms；下一帧才hold=true，故不归因于旧时戳或取消后的硬停车。原K/交接通过，但连续运输有2个违例；原记录/源起止/owned与9111清理通过。短测Graceful .060不能晋级完整业务。
+
+接续保留原门槛，先用已验留盘的Graceful .055查路线余量。F装货后状态只重建初态、不恢复warmstart/AMCL历史。只规划local-loaded-f-plan120-a共5原ComputePath/4：1.20进场路径完整扫掠穿障约14.65mm，未发运动；1.35仍几何通过。下一有限候选复用原有多进场点合同，检查障碍北侧对正路径能否减少累计转角；预检通过前不运行新载货路线。
+
 本轮私有证据根：~/.local/share/fishbot/cloud-jobs/kaggle-20261024/。local-staging-reverse-dock-a、local-full-b-a-{c,d}、local-loaded-{direct-b-a,direct-b-065,direct-periodic-a,plan-c,via135-a}分别保留。plan-a因错误业务ready与清理episode缺键失败，零Goal；plan-b原ComputePath4后系统Python缺MuJoCo，离线原路径加密几何补证另存，不覆盖原失败。两次工具问题已修正并定点清理。
 
 knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节已补“时龄比较：对齐ROS纳秒精度，不加宽容差”“非交互ROS回收：父进程转发与已关闭context”“差速进场：宽处完成朝向，再倒入目标”，问题入口同步，已读回。进场条目明确仅短测通过，不称完整业务；知识仓未提交推送。仅仿真，不外推真机或sim-to-real。下一步是同轮完整B→A，不重复短测充数，也不以进程/HTTP/阶段标签代替验收。
 
-## Prior 2026-10-24 run notes (preserved)
+### Earlier native and cloud rounds (preserved)
+
 
 最新本机完整c（源码b3828f1）失败于入站：task6e0d5bff-0022-4ef9-bd22-663b5c522d7a，25.794墙秒，原Nav终态6/error104；RPP反复报告collision ahead及patience exceeded，车仅约6mm平移、偏航.143rad，未停靠/抓取，A未执行。原时间精度修复未在任务期触发时效拒绝，不把这次碰撞失败归因于时钟。原1327个物理记录/计划/400速度命令保留；独立quiet、owned存活0、9111关闭及sim finalization=[]通过，但bridge销毁时publish遇已关闭context的退出1另列，不称所有子进程正常退出。
 

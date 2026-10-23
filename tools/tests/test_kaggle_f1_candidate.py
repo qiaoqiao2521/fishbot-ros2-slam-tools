@@ -2,7 +2,10 @@
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -13,6 +16,9 @@ SPEC = importlib.util.spec_from_file_location(
     'f1_candidate', ROOT/'experiments/kaggle/f1_candidate.py')
 CANDIDATE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CANDIDATE)
+RUN_SPEC = importlib.util.spec_from_file_location('f1_run', ROOT/'experiments/kaggle/f1_run.py')
+RUNNER = importlib.util.module_from_spec(RUN_SPEC)
+RUN_SPEC.loader.exec_module(RUNNER)
 PRESET = ROOT/'experiments/kaggle/graceful-j100.yaml'
 
 
@@ -108,6 +114,36 @@ class NativeTransportSelectionTests(unittest.TestCase):
         CANDIDATE.configure(self.path, PRESET)
         manifest, _ = self.read()
         self.assertNotIn('loaded_controller', manifest['vehicle_profile'])
+
+
+class NativeBuildArgumentsTests(unittest.TestCase):
+    def check_packages(self, packages):
+        with tempfile.TemporaryDirectory(prefix='f1 native path ') as temp:
+            folder = Path(temp)
+            capture = folder/'args.json'
+            fake = folder/'fake colcon.py'
+            fake.write_text('import json,os,sys\nfrom pathlib import Path\n'
+                           'Path(os.environ["FISHBOT_TEST_ARG_OUTPUT"]).write_text(json.dumps(sys.argv[1:]))\n')
+            native = folder/'native runtime'
+            subprocess.run(['bash', '-ec', RUNNER.NATIVE_BUILD_SHELL, 'test-native-build',
+                            str(native), sys.executable, str(fake), *packages], check=True,
+                           env=dict(os.environ, FISHBOT_TEST_ARG_OUTPUT=str(capture)),
+                           capture_output=True, text=True)
+            args = json.loads(capture.read_text())
+            start = args.index('--base-paths')+1
+            end = args.index('--build-base')
+            self.assertEqual(args[start:end], [str(native/'src/navigation2'/p) for p in packages])
+            start = args.index('--packages-select')+1
+            end = args.index('--allow-overriding')
+            self.assertEqual(args[start:end], packages)
+            self.assertEqual(args[args.index('--install-base')+1], str(native/'install'))
+            self.assertIn('-DPython3_EXECUTABLE='+sys.executable, args)
+
+    def test_original_packages_with_spaces_in_runtime_path(self):
+        self.check_packages(['nav2_smac_planner', 'nav2_velocity_smoother'])
+
+    def test_cached_overlay_can_build_only_new_shim(self):
+        self.check_packages(['nav2_rotation_shim_controller'])
 
 
 if __name__ == '__main__':

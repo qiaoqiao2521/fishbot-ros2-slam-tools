@@ -100,8 +100,38 @@ cp experiments/kaggle/f1_candidate.py /absolute/private/f1-dataset/
 RotationShim＋Graceful；默认仍为RPP，不安装或重写控制器。
 `graceful-j100.yaml`只替换FollowPath，StagingPath/checker/物理保持；
 原载货平滑器的`.06/.10`和`.025/.05`加速度门槛保持。
-Graceful自身最大线/角速`.06/.06`、降速范围`.12m`。
+Graceful自身最大线/角速`.06/.055`、降速范围`.12m`。
 新prepare复制YAML并记录来源，移除不适用的RPP速度ACK，保留共享progress。
 也可用`f1_candidate.py MANIFEST --transport-controller-yaml PATH`显式传入原生配置。
-本机重建载货初态短测118.615秒通过，尚不能据此宣称同轮两单或云端配送完成；
-完整验收状态见原SpecMesh。`.065`与`.08m`候选分别载货失败/超时，均不采用。
+旧`.06`载货短测118.615秒通过，但原始出生点完整f触发底部接触保持失败，A未执行。
+`.065`、`.08/.10m`、预测参数对齐和完整位姿模式的失败分别保留，未晋级默认。
+当前`.055`＋可选原生yaw-stop短测119.637秒通过，余量仅.363秒；
+尚不能据此宣称完整两单、稳定性或云端配送完成。实际状态见原SpecMesh。
+
+## StoppedGoalChecker 与末端制动
+
+`tools/patches/nav2-1.3.13-rotation-yaw-stop.patch`面向官方
+[1.3.13 源码](https://github.com/ros-navigation/navigation2/tree/1.3.13)，
+实际tag commit为`f4108e5b1c2bce804a1aa0c7be6673a8eb4a1501`，保持Apache-2.0许可证。
+它增加默认关闭的`stop_in_goal_yaw_tolerance`。只在原checker返回的pose容差内
+请求零角速，保留原旋转碰撞检查；原StoppedGoalChecker仍须等待真实停稳。
+J100候选仅对FollowPath显式启用，StagingPath与旧默认不变。
+
+`FISHBOT_TRANSPORT_CONTROLLER=graceful`在同一1.3.13源码上应用该补丁，
+正常构建追加`nav2_rotation_shim_controller`。复用旧native缓存时保留原
+Smac/平滑器，再独立构建新Shim，不把参数声明当作补丁已生效的证明。
+本机已执行原生反例、补丁后11项上游/新增测试及实际加载路径读回。
+云端还需用最新源码包或显式source overlay；旧数据集不会自动获得新文件。
+
+手工构建可在独立Nav2 1.3.13树执行：
+
+```bash
+git apply /absolute/fishbot/tools/patches/nav2-1.3.13-rotation-yaw-stop.patch
+colcon build --packages-select nav2_rotation_shim_controller \
+  --allow-overriding nav2_rotation_shim_controller \
+  --cmake-args -DBUILD_TESTING=ON
+```
+
+复用已有planner/smoother overlay并核对实际加载路径；不覆盖系统安装。
+新增原生测试在`test_shim_controller`的`optInYawBandStopRetainsStoppedChecker`，
+同时验证默认旧行为、容差外旋转与“请求停止仍不等于native成功”。

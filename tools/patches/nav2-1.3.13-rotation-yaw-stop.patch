@@ -1,0 +1,145 @@
+diff --git a/nav2_rotation_shim_controller/include/nav2_rotation_shim_controller/nav2_rotation_shim_controller.hpp b/nav2_rotation_shim_controller/include/nav2_rotation_shim_controller/nav2_rotation_shim_controller.hpp
+index c95c23b..6d99c65 100644
+--- a/nav2_rotation_shim_controller/include/nav2_rotation_shim_controller/nav2_rotation_shim_controller.hpp
++++ b/nav2_rotation_shim_controller/include/nav2_rotation_shim_controller/nav2_rotation_shim_controller.hpp
+@@ -193,6 +193,7 @@ protected:
+   bool rotate_to_goal_heading_, in_rotation_, rotate_to_heading_once_;
+   bool closed_loop_;
+   bool use_path_orientations_;
++  bool stop_in_goal_yaw_tolerance_{false};
+   double last_angular_vel_ = std::numeric_limits<double>::max();
+
+   // Dynamic parameters handler
+diff --git a/nav2_rotation_shim_controller/src/nav2_rotation_shim_controller.cpp b/nav2_rotation_shim_controller/src/nav2_rotation_shim_controller.cpp
+index 1eb56a8..f284e0c 100644
+--- a/nav2_rotation_shim_controller/src/nav2_rotation_shim_controller.cpp
++++ b/nav2_rotation_shim_controller/src/nav2_rotation_shim_controller.cpp
+@@ -70,6 +70,8 @@ void RotationShimController::configure(
+     node, plugin_name_ + ".primary_controller", rclcpp::PARAMETER_STRING);
+   nav2_util::declare_parameter_if_not_declared(
+     node, plugin_name_ + ".rotate_to_goal_heading", rclcpp::ParameterValue(false));
++  nav2_util::declare_parameter_if_not_declared(
++    node, plugin_name_ + ".stop_in_goal_yaw_tolerance", rclcpp::ParameterValue(false));
+   nav2_util::declare_parameter_if_not_declared(
+     node, plugin_name_ + ".rotate_to_heading_once", rclcpp::ParameterValue(false));
+   nav2_util::declare_parameter_if_not_declared(
+@@ -92,6 +94,7 @@ void RotationShimController::configure(
+   control_duration_ = 1.0 / control_frequency;
+
+   node->get_parameter(plugin_name_ + ".rotate_to_goal_heading", rotate_to_goal_heading_);
++  node->get_parameter(plugin_name_ + ".stop_in_goal_yaw_tolerance", stop_in_goal_yaw_tolerance_);
+   node->get_parameter(plugin_name_ + ".rotate_to_heading_once", rotate_to_heading_once_);
+   node->get_parameter(plugin_name_ + ".closed_loop", closed_loop_);
+   node->get_parameter(plugin_name_ + ".use_path_orientations", use_path_orientations_);
+@@ -185,7 +188,7 @@ geometry_msgs::msg::TwistStamped RotationShimController::computeVelocityCommands
+
+       geometry_msgs::msg::Pose pose_tolerance;
+       geometry_msgs::msg::Twist vel_tolerance;
+-      goal_checker->getTolerances(pose_tolerance, vel_tolerance);
++      const bool tolerances_valid = goal_checker->getTolerances(pose_tolerance, vel_tolerance);
+       position_goal_checker_->setXYGoalTolerance(pose_tolerance.position.x);
+
+       if (position_goal_checker_->isGoalReached(pose.pose, sampled_pt_goal.pose, velocity)) {
+@@ -194,6 +197,18 @@ geometry_msgs::msg::TwistStamped RotationShimController::computeVelocityCommands
+
+         double angular_distance_to_heading = angles::shortest_angular_distance(pose_yaw, goal_yaw);
+
++        if (stop_in_goal_yaw_tolerance_ && tolerances_valid &&
++          std::abs(angular_distance_to_heading) <=
++          std::abs(tf2::getYaw(pose_tolerance.orientation)))
++        {
++          // Request braking; the original checker still requires actual rest.
++          geometry_msgs::msg::TwistStamped stop;
++          stop.header = pose.header;
++          isCollisionFree(stop, angular_distance_to_heading, pose);
++          last_angular_vel_ = 0.0;
++          return stop;
++        }
++
+         auto cmd_vel = computeRotateToHeadingCommand(angular_distance_to_heading, pose, velocity);
+         last_angular_vel_ = cmd_vel.twist.angular.z;
+         return cmd_vel;
+@@ -437,6 +452,8 @@ RotationShimController::dynamicParametersCallback(std::vector<rclcpp::Parameter>
+     } else if (type == ParameterType::PARAMETER_BOOL) {
+       if (name == plugin_name_ + ".rotate_to_goal_heading") {
+         rotate_to_goal_heading_ = parameter.as_bool();
++      } else if (name == plugin_name_ + ".stop_in_goal_yaw_tolerance") {
++        stop_in_goal_yaw_tolerance_ = parameter.as_bool();
+       } else if (name == plugin_name_ + ".rotate_to_heading_once") {
+         rotate_to_heading_once_ = parameter.as_bool();
+       } else if (name == plugin_name_ + ".closed_loop") {
+diff --git a/nav2_rotation_shim_controller/test/test_shim_controller.cpp b/nav2_rotation_shim_controller/test/test_shim_controller.cpp
+index 535a40e..285d792 100644
+--- a/nav2_rotation_shim_controller/test/test_shim_controller.cpp
++++ b/nav2_rotation_shim_controller/test/test_shim_controller.cpp
+@@ -24,6 +24,7 @@
+ #include "nav2_costmap_2d/cost_values.hpp"
+ #include "nav2_util/lifecycle_node.hpp"
+ #include "nav2_controller/plugins/simple_goal_checker.hpp"
++#include "nav2_controller/plugins/stopped_goal_checker.hpp"
+ #include "nav2_rotation_shim_controller/nav2_rotation_shim_controller.hpp"
+ #include "tf2_ros/transform_broadcaster.h"
+
+@@ -682,3 +683,62 @@ TEST(RotationShimControllerTest, maxCostThresholdTest)
+     controller->computeRotateToHeadingCommandWrapper(1.5, path.poses[1], velocity),
+     nav2_core::NoValidControl);
+ }
++
++TEST(RotationShimControllerTest, optInYawBandStopRetainsStoppedChecker)
++{
++  for (bool enabled : {false, true}) {
++    auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("YawBandStopTest");
++    auto tf = std::make_shared<tf2_ros::Buffer>(node->get_clock());
++    auto listener = std::make_shared<tf2_ros::TransformListener>(*tf, node, true);
++    auto costmap = std::make_shared<nav2_costmap_2d::Costmap2DROS>("yaw_stop_costmap");
++    rclcpp_lifecycle::State state;
++    costmap->on_configure(state);
++    node->declare_parameter("PathFollower.primary_controller", std::string(
++        "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"));
++    node->declare_parameter("controller_frequency", 20.0);
++    node->declare_parameter("PathFollower.rotate_to_goal_heading", true);
++    node->declare_parameter("PathFollower.stop_in_goal_yaw_tolerance", enabled);
++    node->declare_parameter("PathFollower.rotate_to_heading_angular_vel", 0.055);
++    node->declare_parameter("checker.xy_goal_tolerance", 0.015);
++    node->declare_parameter("checker.yaw_goal_tolerance", 0.035);
++    node->declare_parameter("checker.trans_stopped_velocity", 0.01);
++    node->declare_parameter("checker.rot_stopped_velocity", 0.01);
++    node->declare_parameter("checker.stateful", false);
++    auto controller = std::make_shared<RotationShimShim>();
++    controller->configure(node, "PathFollower", tf, costmap);
++    controller->activate();
++    nav2_controller::StoppedGoalChecker checker;
++    checker.initialize(node, "checker", costmap);
++    geometry_msgs::msg::PoseStamped pose;
++    pose.header.frame_id = "base_link";
++    pose.pose.orientation.w = 1.0;
++    geometry_msgs::msg::Twist moving;
++    moving.angular.z = 0.04;
++    for (double angle : {-0.04, -0.02, 0.02, 0.04}) {
++      nav_msgs::msg::Path path;
++      path.header.frame_id = "base_link";
++      path.poses.resize(2, pose);
++      path.poses.back().pose.position.x = 0.005;
++      path.poses.back().pose.orientation =
++        nav2_util::geometry_utils::orientationAroundZAxis(angle);
++      controller->setPlan(path);
++      checker.reset();
++      EXPECT_FALSE(checker.isGoalReached(pose.pose, path.poses.back().pose, moving));
++      auto command = controller->computeVelocityCommands(pose, moving, &checker);
++      if (enabled && std::abs(angle) < 0.035) {
++        EXPECT_DOUBLE_EQ(command.twist.linear.x, 0.0);
++        EXPECT_DOUBLE_EQ(command.twist.angular.z, 0.0);
++      } else {
++        EXPECT_GT(std::abs(command.twist.angular.z), 0.02);
++      }
++      // A stop request is not a native success or a relaxed pose tolerance.
++      EXPECT_FALSE(checker.isGoalReached(pose.pose, path.poses.back().pose, moving));
++      checker.reset();
++      geometry_msgs::msg::Twist stopped;
++      EXPECT_EQ(checker.isGoalReached(pose.pose, path.poses.back().pose, stopped),
++        std::abs(angle) < 0.035);
++    }
++    controller->deactivate();
++    controller->cleanup();
++  }
++}

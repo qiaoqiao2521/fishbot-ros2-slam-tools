@@ -214,6 +214,10 @@ tools/fishbot_cooperation.sh prepare \
 现可显式选择已安装1.3.13的Graceful作为运输FollowPath，保留倒车RPP进场、
 Smac Lattice与全部原门槛；入口见[Kaggle薄适配](../experiments/kaggle/README.md)。
 重建载货初态短测118.615秒仅证明该路线分项，新完整B→A仍须原factory独立评分。
+完整f又触货物保持失败，旧`.06`短测不晋级。当前`.055`＋默认关闭的原生
+yaw-stop补丁在同一F载货重建初态通过119.637秒，两UUID与原静止/恢复/清理通过，
+余量仅.363秒；这仍是路线分项。补丁保留原StoppedGoalChecker的全部门槛，
+由新显式overlay加载，原模型、Smac、平滑器与旧默认保持。
 
 **本机1.3.13需要原生缓存修复。** 实测发现 `NodeLattice::isNodeValid` 可复用终点缓存，
 跳过另一条入边的碰撞检查。仓库包含最小 C++ 复现和仅修该条件的补丁。
