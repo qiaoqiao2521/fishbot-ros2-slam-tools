@@ -1,6 +1,8 @@
 # F1 Progress
 
 ## Current
+2026-10-23 J100完整配送在本对话继续，尚无新完整成功。原生IsPathValid确认初始路径有效；MPPI原B短段在120墙秒振荡取消。RPP曲率联动候选已将行驶角速度原请求超限从约36%降至0，但该轮源/墙速率仅约0.16，仍超时且不能当路线性能验收。同原速度的软代价减速对照亦超时，现141/9111与owned已清理，硬碰撞、CM、几何/物理评分与期限不变。已向用户提出独立J100 .06m/s/.10rad/s业务速度选项，答复前不执行提速；root独立负责。
+
 2026-10-23 Smac Lattice显式接入与有限面板已交付，J100组合仍未通过。原生1.3.13插件、官方248条diff/.60m/2cm原语、独立库缓存补丁、可选Rotation Shim均落盘；39项相关与1727项完整反馈检查通过。9轮只规划找到完整几何正余量.05479m、估算118.844秒候选；3轮原B空托盘真实跟踪均在原120秒取消，最后22.614cm/1.00360rad，未执行新的完整抓放或A。不拼接成B→A成功。全部owned实例/9111/inhibitor已清理；知识updated(local)且读回。细节与最短接续入口见本文件末节，owner=本对话root。
 
 2026-10-23 配送站进场与共享路线预算已实现：可选有序map姿态沿原Workflow持久化，原J100 body-frame出站后各进场点和最终点共用120墙秒，原360/1000与评分保持。当前原生只规划15组/25请求，5组整路完整几何通过，但这些采样路径预算均不足；新运输与新路线实际运动未启动、不计验收。两实例5583物理样本全hold、零任务/运动Goal，owned/9111已清理。原J100两次完整失败、A未执行和父FishBot2/2均保留；后续须先找到可验收路线。软件最终回归见下方本轮条目。
@@ -319,3 +321,11 @@ knowledge_status=updated(local)：重置两次GET竞态已写原Wiki/ROS2 与 Fi
 最短接续：先读`native-shim-approach/result.json`和对应路径/ROS保留窗，用已接入的原生planner/controller边界解决路线跟踪的转向、反向切换与时间余量；不要再发送同点Goal，不延长原120/360/1000、不缩车、不关闭碰撞。复现准备命令见`docs/FACTORY_DELIVERY.md`的差速Lattice节，原B探针脚本在同缓存`native-shim-approach.py`，使用domain141/9111，启动前核对实际占用。实际原B到达及清理通过后，再同轮B→A完整原物理评分；当前均pending，owner=本对话root，不跨对话协作。
 
 knowledge_status=updated(local)：已修订原`Wiki/ROS2 与 FishBot.md`第19节的AABB/旋转分离轴下界，并补原生Lattice冷/热边缓存、网格匹配与原地动作消费经验；`Wiki/开发知识入口.md`补触发入口。逐段rg读回已核对，保留知识仓原dirty，本轮未提交/推送知识仓。源码交付提交与远端读回由本节后续Git收尾记录对应。
+
+
+## J100当前接续：同速失败保留，业务速度待选择
+2026-10-23 同速曲率联动＋关闭软代价减速探针，原UUID3c1064ccbc0e45de804fac59698be074在120.054墙秒取消5，末26.226cm/.870140rad；原完整B/A未启动。全起点窗口保留，末hold与quiet、owned/9111清理通过；monitor.close触发executor线程InvalidHandle，作为清理诊断保留，不把调用退出0解释成验收。
+
+原生0.40m/2cm/16向官方差速生成器得到96条原语；仅规划UUID574eb20ad28d4b7d97aeb69beb5283d2/status4、完整几何余量+.055366m且IsPathValid=true，但路径3.252143m/3换向，含余量154.022墙秒，未发运动。917个物理样本全hold，owned已清理。更小半径不保证更短可行路线。
+
+用户速度选择pending，owner=本对话root。已准备独立j100-fast-probe-manifest.json与j100-fast-full-manifest.json（.06m/s/.10rad/s、原加减速、原所有评分/期限），prepared_not_dispatched，不在答复前执行提速。原完整新scene已prepare为原spawn/A/B/occupied/J100/lidar3d/Omni/Lattice；不是旧probe出生点。最短接续：允许后先native-j100-fast-probe.py原B实走，通过再原cooperation_factory.py run绑定j100-fast-full-manifest.json、order-b/order-a，完整oracle与原360/1000；不拼接旧成功。证据根仍为j100-transport-20261023，未覆盖原件。knowledge_status=already_covered（FishBot19/20双时钟与原生/物理分层）。
