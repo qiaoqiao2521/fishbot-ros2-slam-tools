@@ -208,3 +208,14 @@ J100 新生成场景：工位接近扫掠168样本/432几何对，扣采样间�
 - 用户接受独立J100 .06/.10后，原B同UUID3a11d31425024d6e81ea7e71db20da65在86.151墙秒原生4，真值2.079cm/.009458rad及停稳/清理通过，5151样本累计车/臂禁碰0。只是空托盘跟踪通过，完整配送另用原factory/oracle同轮B→A验证。
 
 - 首轮完整.06/.10不是路径切错的既定根因：native YAML default_nav_to_pose_bt_xml仍指原HeadingAware树；桥goal.behavior_tree空值本身不证明走错默认树。实际独立失败为floor contact两样本中断，几何足迹仍居中；真实状态命令面板复现.10断触而.05正负转向/弧线均未断触，原评分保持。低转向候选仍需载货到达和新完整同轮B→A。
+
+## 停稳时戳与静态接触描述缓存（2026-10-24）
+
+- v7原343.711秒B失败发生在原DriveOnHeading成功后：输出零目标仍携229.56stamp，230.066拒绝过期，230.08原ctrl全0/floor force0而hold=false，位置仍在托盘内。不是已到货或几何越界。原.5源TTL不改。
+- Nav2 1.3.13官方已有stamp_smoothed_velocity_with_smoothing_time，且原生clock fixture此前启用true，真实候选却false；加速度/暂停测试不覆盖这种配置差异。全输出刷新会影响旧移动输入的TTL/episode语义，本轮未采用。改为显式终态零目标心跳，只有原owner/原Goal status4/新物理帧才发，仍走原生平滑器与碰撞链，不接管活动Goal或对旧运动改stamp。
+- compute v3成功：27→0过期拒绝，两组均50Hz断触0；故只证明时戳改善。根曾误认为辅助模块遗漏，实际上传文本已包含，未取消作业，已纠正。v4补500Hz后，旧路径3步断触、新路径0，双方50Hz仍0、最终静止；有限重建初态无warmstart，不能称现场逐比特重放或完整配送已修复。
+- compute v4完整ROS静止22墙秒，physics约1.0073倍、scan/cloud10Hz、IMU/physics50Hz，完整native readiness/owned清理通过；没有原完整oracle及活动规划负载，不能解释为v7活动任务.61实时率已解决。相同版本来源被服务端剔除，真实执行重建，来源拒绝原因仍待核实。
+- 另一已剖析热点为contact_state中每步重复的静态geom/body名字、归属和plane类型查询。只缓存不可变编译描述，逐步native force/dist与全部检查仍执行。五个实录状态各200步qpos/接触记录相同，四个真实碰撞反例保留；ABBA各5000次线程CPU原.564/.529秒、缓存.226/.243秒，是该分类片段收益，不冒称整环倍率。已有500Hz原生测距省略是独立可选配置，默认仍保留。
+- 本机同版依赖在独立fishbot-compute-tests venv恢复，未改系统包/其它运行环境。只读时16核约3.5GHz/load10.86/80℃，不是持续算力承诺；继续原生时钟与独立域静止，若不合格不开始新完整任务。GPU只读前检为T4×2/4CPU配额，未确认更高单核吞吐，未用GPU运行任务、未开启付费扩容。
+
+- 本机带原oracle测量实际1.0015倍/50Hz、采集closed/complete通过；没有业务marker，oracle业务false符合范围。原first测量1.0026倍但销毁KeyboardInterrupt，保留false。Jazzy execute_local.__on_shutdown对noninteractive会send_sigint，原killpg可重复信号；改只signal owned launcher后，复验finalization=[]/零survivor。所有helper调用者均为非交互ROS launch（包括exec shell入口），不把此法推广为任意进程树终止策略。

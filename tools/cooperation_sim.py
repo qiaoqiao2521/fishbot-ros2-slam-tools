@@ -546,6 +546,12 @@ class Physics:
         self.excluded = set()
         for node in ET.parse(self.scene).getroot().findall('./contact/exclude'):
             self.excluded.add(frozenset((node.get('body1'), node.get('body2'))))
+        # Descriptive compiled geometry is immutable within this scene. Forces
+        # and distances below still come from every current native contact.
+        self.contact_geom_names = tuple(self.model.geom(i).name for i in range(self.model.ngeom))
+        self.contact_body_names = tuple(self.model.body(i).name for i in range(self.model.nbody))
+        self.contact_geom_bodyids = tuple(map(int, self.model.geom_bodyid))
+        self.contact_planes = tuple(value == self.mj.mjtGeom.mjGEOM_PLANE for value in self.model.geom_type)
         # Ray groups do not modify contact geometry or forces. Exclude all car
         # descendants and decorative geoms, preserving arm/worktable obstacles.
         for geom in range(self.model.ngeom):
@@ -733,13 +739,13 @@ class Physics:
                 if self.tray_floor in pair:
                     floor_count += 1
                     floor_normal += normal
-            b1, b2 = (int(self.model.geom_bodyid[g]) for g in (g1, g2))
-            geom_names = (self.model.geom(g1).name, self.model.geom(g2).name)
+            b1, b2 = self.contact_geom_bodyids[g1], self.contact_geom_bodyids[g2]
+            geom_names = self.contact_geom_names[g1], self.contact_geom_names[g2]
             # The car may touch the arena floor and carry cargo. Any other
             # external collision remains independent evidence, including bench.
             car_external = (b1 in self.car_bodies) != (b2 in self.car_bodies)
             if (car_external and self.cargo_geom not in pair and normal > 1e-8
-                    and not any(self.model.geom_type[g] == self.mj.mjtGeom.mjGEOM_PLANE for g in pair)):
+                    and not any(self.contact_planes[g] for g in pair)):
                 car_forbidden.append({'geom1': geom_names[0], 'geom2': geom_names[1],
                                       'normal_force_n': normal, 'distance_m': float(contact.dist)})
             if not pair & self.arm_geoms:
@@ -747,7 +753,7 @@ class Physics:
             # Only the pads may touch the cargo. Other arm/cargo contact fails.
             if self.cargo_geom in pair and pair & set(self.finger_geoms.values()):
                 continue
-            body_names = (self.model.body(b1).name, self.model.body(b2).name)
+            body_names = self.contact_body_names[b1], self.contact_body_names[b2]
             if frozenset(body_names) in self.excluded:
                 continue
             # The fixed base is mounted on its table/plate by construction.

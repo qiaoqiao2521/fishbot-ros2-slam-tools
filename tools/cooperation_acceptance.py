@@ -439,7 +439,9 @@ def surviving_processes(identities):
 def stop_owned_launch(process,result):
     identities=owned_processes(process.pid)
     result['owned_process_identities']={str(pid):started for pid,started in identities.items()}
-    if process.poll() is None:os.killpg(process.pid,signal.SIGINT)
+    # These launchers are noninteractive: ROS launch forwards SIGINT itself.
+    # Signalling its process group first can interrupt child teardown twice.
+    if process.poll() is None:process.send_signal(signal.SIGINT)
     try:process.wait(timeout=20)
     except subprocess.TimeoutExpired:result['errors'].append('Owned launch still active after safe SIGINT')
     remaining=surviving_processes(identities)

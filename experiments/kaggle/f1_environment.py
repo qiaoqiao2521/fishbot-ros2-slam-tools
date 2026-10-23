@@ -42,6 +42,9 @@ def inspect_runtime():
     memory = Path("/proc/meminfo")
     report["memory"] = [line for line in memory.read_text().splitlines()
                         if line.startswith(("MemTotal:", "MemAvailable:", "SwapFree:"))]
+    report['cpu_models'] = sorted({line.split(':',1)[1].strip()
+        for line in Path('/proc/cpuinfo').read_text().splitlines() if line.startswith('model name')})
+    report['gpu'] = command(['nvidia-smi','--query-gpu=name,memory.total','--format=csv,noheader'])
     report["disk_free_bytes"] = shutil.disk_usage(Path.cwd()).free
     report["system_python"] = command(["/usr/bin/python3", "--version"])
     report["ros_prefix_exists"] = Path("/opt/ros/jazzy").is_dir()

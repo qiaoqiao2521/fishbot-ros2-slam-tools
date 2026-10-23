@@ -855,6 +855,44 @@ class BridgeRaceTests(unittest.TestCase):
                     self.assertGreaterEqual(first_hold[2]-stable_at[0],.7-1e-9)
                     self.assertEqual(evidence['required_continuous_stop_source_s'],.7)
 
+    def terminal_zero_probe(self):
+        p=self.bridge;self.namespace['manifest']['terminal_stop_heartbeat']=True
+        self.namespace['TwistStamped']=lambda:NS(header=NS(),twist=NS(
+            linear=NS(x=0.,y=0.,z=0.),angular=NS(x=0.,y=0.,z=0.)))
+        p.terminal_zeros=[];p.terminal_zero_pub=NS(publish=p.terminal_zeros.append)
+        return p,{'token':p.execution_token,'result':ControlledFuture(NS(status=4),True)}
+
+    def test_terminal_zero_is_fresh_stop_target_once_per_physics_sample(self):
+        p,d=self.terminal_zero_probe();p.raw['car']['speed']=.03
+        self.assertFalse(p.terminal_stop(d,p.raw));p.terminal_stop(d,p.raw)
+        self.assertEqual(len(p.terminal_zeros),1)
+        self.sleep(.02);p.raw['car']['speed']=0.
+        self.assertTrue(p.terminal_stop(d,p.raw));self.assertEqual(len(p.terminal_zeros),2)
+        for msg in p.terminal_zeros:
+            self.assertEqual([getattr(getattr(msg.twist,axis),key) for axis in ('linear','angular')
+                              for key in ('x','y','z')],[0.]*6)
+            self.assertEqual(msg.header.frame_id,'base_footprint')
+        self.assertEqual(d['terminal_stop_heartbeat']['count'],2)
+        self.assertEqual(d['terminal_stop_heartbeat']['last_source_stamp'],p.raw['stamp'])
+
+    def test_terminal_zero_never_overrides_active_failed_or_unknown_native_goal(self):
+        for future in (None,ControlledFuture(),ControlledFuture(NS(status=5),True),
+                       ControlledFuture(NS(status=4,result=NS(success=False)),True)):
+            with self.subTest(future=future):
+                self.setUp();p,d=self.terminal_zero_probe();d['result']=future
+                with self.assertRaisesRegex(RuntimeError,'owned native success'):p.terminal_stop(d,p.raw)
+                self.assertEqual(p.terminal_zeros,[])
+
+    def test_terminal_zero_preserves_owner_cancel_and_default_behavior(self):
+        p,d=self.terminal_zero_probe();p.cancel_event.set()
+        with self.assertRaises(self.namespace['Canceled']):p.terminal_stop(d,p.raw)
+        self.assertEqual(p.terminal_zeros,[])
+        self.setUp();p,d=self.terminal_zero_probe();d['token']=('old-task',0)
+        with self.assertRaisesRegex(RuntimeError,'失去车臂控制权'):p.terminal_stop(d,p.raw)
+        self.assertEqual(p.terminal_zeros,[])
+        self.setUp();p=self.bridge;p.raw['car']['speed']=0.
+        self.assertTrue(p.terminal_stop({},p.raw))
+
     def test_stale_callback_cancels_only_its_handle_without_overwriting_new_task(self):
         p=self.bridge;old={'token':p.execution_token,'epoch':1,'received':False,'handle':None,'result':None,'cancel':None,'aborted':True,'error':None}
         p.execution_token=('task-b',2);p.task['id']='task-b';new_handle=ControlledHandle()

@@ -50,6 +50,13 @@ sensor_compute={'default':j100['sensor_compute'],'candidate':lean['sensor_comput
  'geometry_equal':all(np.array_equal(getattr(pair[0],key),getattr(pair[1],key)) for key in
   ('geom_size','geom_pos','geom_quat','geom_friction','geom_contype','geom_conaffinity','body_mass','body_inertia')),
  'maps_equal':all(j100[key]==lean[key] for key in ('generated_map_sha256','generated_collision_map_sha256'))}
+from cooperation_sim import Physics
+contact_probe=Physics(Path(lean['world_xml']),manifest=out/'lean/scene-manifest.json')
+contact_probe.data.qpos[13:16]=[-2.,-2.,.002]
+mujoco.mj_forward(contact_probe.model,contact_probe.data)
+blocked_contacts=contact_probe.contact_state(accumulate=False)
+sensor_compute['blocked_car_contacts']=blocked_contacts['car_forbidden_contacts']
+sensor_compute['blocked_arm_contacts']=blocked_contacts['arm_forbidden_contacts']
 declared={'mode':'perturbed','max_covariance':[.01,.01,.01],
           'noise_std':[.01,.02,.03],'bias':[.02,-.01,.01],
           'dropout_probability':.25,'seed':37,'occlusion_windows':[[2.,3.]]}
@@ -231,6 +238,14 @@ print('RESULT_JSON:'+json.dumps(result))
         self.assertEqual(e['physics_error'],0.)
         self.assertTrue(e['geometry_equal'])
         self.assertTrue(e['maps_equal'])
+
+    def test_static_descriptor_cache_keeps_real_car_and_arm_collision_evidence(self):
+        e=self.evidence['sensor_compute']
+        for records in (e['blocked_car_contacts'],e['blocked_arm_contacts']):
+            self.assertTrue(records)
+            self.assertTrue(all(item['normal_force_n']>1e-8 for item in records))
+        self.assertTrue(any('worktable' in (item['geom1'],item['geom2'])
+                            for item in e['blocked_car_contacts']))
 
     def test_j100_declares_straight_staging_egress_without_changing_legacy(self):
         e = self.evidence['egress']

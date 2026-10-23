@@ -1,11 +1,30 @@
 # F1 Progress
 
 ## Current
-2026-10-24 Kaggle v6原任务已结束，完整B→A未通过，A未派发。云端原生编译179.28秒、时钟验证通过；B task=7db219ae-1658-4e9e-813b-b0794204c3c8，独立7295物理样本确认真实停靠/双指抓取/释放落稳/arm home通过，但源时钟约.4倍实时。出站UUID560e0ebb9f79432d8ab03bb20c34d206直到359.48墙秒才开始，原360秒取消5；未派载货Navigate，货物仅位移.001352m，最终B误差2.31166m，完整原K=false。原task记录failed，factory外层终态观测null仍保留。guard只在停靠介入，非纯视觉精度；.1源秒采样缺口保留。源码选定文本起止一致、owned存活0/9111关闭、finalization_errors=[]。
+
+本机原观察负载复验b通过：原同版NativeClock .025/.05源斜率、暂停0输出；146/9116完整ROS＋原oracle零Goal采集，22墙秒物理1.001461倍/50Hz，原oracle记录完整。容量first/a同1.0026倍但node.destroy_node受KeyboardInterrupt，原false保留；Jazzy非交互launch会转发SIGINT，原helper先killpg可重复打断。仅改为对owned launch父进程send_signal，原PID/starttime/survivor核对不变；b全finalization_errors=[]、owned存活0，原oracle无任务故业务评分false是预期，不计运输。输出local-full-capacity-oracle{-b}、local-native-clock-b，原native库从v6实际构建产物恢复到独立路径。
+
+当前源码相关core/oracle/loaded198、prepare15、scene7、factory25、acceptance26，共271项通过；原生时钟、500Hz停稳有限对照、静态缓存ABBA/碰撞反例和完整记录负载分别留证。将提交冻结后启动原141/9111的本轮local-full-b-a，原B→A与.06/.10、原加减速/几何/自由货物/120/360/1000保持；仍未宣称完整J100成功，不暂停其它任务。若活动负载再次变慢，按原期限保留失败。knowledge_status=updated(local)：原Wiki/FishBot19节与入口已补传感器计算、终态零目标；收尾继续核对原生信号转发限定，root串行维护，知识仓未发布。
+
+compute v4已COMPLETE并读回：原生时戳合同true，500Hz旧路径3步断触/新路径0，双方50Hz采样均0，不改写v3未复现50Hz物理失败的边界。完整栈静止22秒physics1.00726倍实时，scan/16×360 cloud10Hz、IMU50Hz，owned存活0/无finalization错误；没有原完整oracle与活动规划，不能把它当完整任务容量。artifact=f1-results-9619c1d4。两次kernel来源都被服务端剔除，实际重新构建；云复用未成功，来源拒绝原因未知。
+
+新增只缓存静态接触描述，原逐步native力/距离/禁碰和评分不动。私有contact-cache-result.json五状态各200步+四碰撞反例通过；ABBA5000调用线程CPU约.56/.53→.23/.24秒。当前core/oracle/loaded198项29.412秒、prepare15项17.594秒与scene7项7.97秒通过（共220项相关），源码语法/diff通过。新增辅助代码与bridge/cache仍待本根提交；完整J100两单仍failed/pending。原物理、原时间和旧成功保持。
+
+本机同版独立venv已恢复；首次native-clock命令缺tools PYTHONPATH，在导入前退出，零ROS；将补环境重跑（不覆盖失败日志）。只读观察16核3.5GHz/80℃，尚不能保证活动任务余量。下一步独立146/9116静止测试加原observer负载，通过再本轮完整B→A，所有其它任务保持；KaggleCLI仍muqiaoqiao。知识19节已updated(local)，新时戳/缓存经验收尾同步，owner=root。
+
+最新Kaggle v7原完整回合仍失败：B task54d9753c-088c-48a8-b272-c297dd06bfd3，343.711墙秒内failed；原K=true，但连续运输与交付false，A未执行。原出站UUID3a0b0139144045ab90dd2fe45f3d0f6c/status4，41.126秒；载货Navigate未派发。原factory404.458秒，清理owned存活0、9111关闭、选定源码起止一致。sim-only容量原报告.98879倍实时、scan/3D 10Hz、IMU/physics50Hz；完整ROS任务却只有约.61倍实时，不能称计算余量已全栈恢复。完整loop包装步均值1.7218ms、publish12.9339ms、snapshot1.0900ms，finalization_errors=[]。
+
+v7原253397175字节独立observer已直接通过官方SDK完整读回，解析0坏行。230.06源秒仍有.098066N托盘支撑、ctrl=.1887755；230.066起车端明确拒绝stale stamped car command，230.08源秒hold=false/command_age=null/ctrl全0，同帧托盘floor=false、force0、位置仍在托盘内。原cmd_vel减速输出仍用229.56时间戳，超过原.5源秒TTL；未到Bridge的hold阶段。不是几何越界，也不能把全部历史货物失败归为这一原因。
+
+当前根在本对话修复：显式terminal_stop_heartbeat只在同owner原native status4后、载货等待停稳期间，对每个新物理帧向原cmd_vel_nav发新的全零目标；原平滑器/加减速/碰撞/TTL/.7源秒/6墙秒与失败立即hold保持。默认false，不启用Nav2对所有输出刷新时间戳的选项，以保留旧非零运动输入的原时龄/episode拒绝。117项core合同回归28.936秒通过；首个测试错误地预期旧owner抛Canceled，实际原合同是RuntimeError，已按原类型修正，保留首轮失败日志。原生货物改善pending。
+
+私有compute v3已COMPLETE，原报告读回：同一v7载货实录初态，原生旧输出27次过期拒绝，新的终态零目标0次拒绝，均停稳、均50Hz载货断触0；因此只证明时戳改善，未重现货物故障、不称物理修复完成。原.5 TTL、.025/.05加减速、stamp_smoothed_velocity_with_smoothing_time=false保持，实际native库映射已读回。CLI不接受kernel_sources版本后缀并剔除，原生实际重建；未声称复用。根此前误判上传版本缺辅助模块：实际上传文本已包含，原生对照成功；未执行取消。保留这一纠正，后续版本判断只读回文本/报告，不凭轮次印象。
+
+下一私有compute v4将使用无后缀原full kernel来源，补500Hz接触、时间戳与物理反例分项，并独立执行完整ROS held容量（不因反例未复现阻塞容量）。当前新增bridge/辅助脚本未提交，117项合同通过、原生时戳有限对照通过，业务物理仍未通过。GPU只读前检v2完成：T4×2，但仍同4CPU配额/Intel2GHz级，不因GPU名称采用；未付费扩容或运行GPU任务。owner=root，完整新回合暂不派发，先验全栈容量。知识第19节计算经验已updated(local)并读回，停稳物理因果仍待验证。
 
 同账号compute v2零Goal短对照已读回：五个v6实录状态各200步，省略遗留laser/laser_ray原生rangefinder后，qpos/qvel/qacc/力/接触/IMU误差均0，实际360线scan和5760点云及命中ID逐点一致；完整几何/物理选项相同。原生步均值1.023–2.138ms→.198–.274ms；profile含Python的500步.772→.270秒。只证明有限状态等价与计算收益，不计运输或全栈实时成绩。compute v1因副本manifest仍指原world而在步进前拒绝，已保留失败；v2给副本自身清单，未绕过场景绑定。
 
-已接入显式--omit-unused-native-rangefinders，默认不变；manifest保存省略声明与实际scan/cloud producer，未减实际雷达射线或频率。14项prepare/物理/地图回归通过（14.988s），六脚本语法和diff检查通过。云端下一版本将显式附带两份源码overlay，保留v2基础commit和原文本，不假装数据集已含新代码。先零运动22墙秒实际ROS时钟/scan/16×360点云/IMU，再在计算余量满足时跑原B→A；原500Hz物理/50Hz观测、120/360/1000及全部评分不变。当前尚未派发该新完整回合；owner=root，不跨对话。knowledge_status=pending（本轮原生计算与完整任务继续验收）。
+已接入显式--omit-unused-native-rangefinders，默认不变；manifest保存省略声明与实际scan/cloud producer，未减实际雷达射线或频率。14项prepare/物理/地图回归通过（14.988s），六脚本语法和diff检查通过。云端下一版本将显式附带两份源码overlay，保留v2基础commit和原文本，不假装数据集已含新代码。先零运动22墙秒实际ROS时钟/scan/16×360点云/IMU，再在计算余量满足时跑原B→A；原500Hz物理/50Hz观测、120/360/1000及全部评分不变。已提交私有kernel v7，基础634c6e6＋显式两文件overlay（源码b71d567），当前依赖安装中，完整新成绩pending；owner=root，不跨对话。knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节新增“传感器计算：先找重复生产，再测整环实时率”，原开发知识入口新增触发行；原页及入口已rg读回，保留知识仓原dirty，未提交发布知识仓。源码b71d567首次push连接132秒超时，有限重试已成功推送既有origin/main。原场景7项回归7.970秒通过，连同prepare14项共21项相关检查；云端v7进入原生构建，运输成绩仍pending。
 
 当前kernel v6已提交，数据v2/核心源码634c6e6保持。v4实际进入CMake但缺KDL开发配置；v5补KDL/LTTng等后继续在class_loader的console_bridge配置处失败，均零ROS/零配送。XML公开依赖核对没有覆盖该安装包实际CMake导出，不能记为已完整解决。改用原生CMake配置轨迹和dpkg文件归属，补Console Bridge/OpenSSL及Boost atomic/serialization/system开发组件；本机两个安装包与OMPL的配置查询在明确Python3.12时通过（仅配置，无插件编译/ROS节点）。完整云编译、native-clock与原B→A仍待验收；若编译成功将保留native-install.tar.gz。
 

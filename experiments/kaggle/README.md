@@ -69,3 +69,23 @@ cp experiments/kaggle/f1_candidate.py /absolute/private/f1-dataset/
 不宣称数据集本身已更新。compute模式用`FISHBOT_KAGGLE_SCOPE=compute`，
 单文件Kaggle脚本可嵌入`COMPUTE_WORKER_SOURCE`与`COMPUTE_FIXTURES`；
 完整模式可嵌入`CAPACITY_WORKER_SOURCE`。这些都复用原控制与评分入口。
+
+2026-10-24 原v6/v7完整任务均未交付，不把部署或静止测试算配送通过。
+`f1_terminal_stop.py`用同版原生平滑器和实录初态比较旧输入与新的终态零目标，
+分别保存时戳拒绝、50Hz/500Hz接触和停稳；零导航Goal，不称完整任务回放。
+`terminal_stop_heartbeat=true`只允许原Goal status4后的当前owner等待停稳阶段，
+每个新物理帧向原`/cmd_vel_nav`发新的全零目标。保留旧非零指令的源时龄/episode检查、
+原减速度和失败立即hold；不统一刷新移动命令的时间戳。
+
+`f1_capacity.py MANIFEST OUT full [DOMAIN PORT]`启动原完整栈、只GET就绪，
+采样22墙秒并记录owned进程CPU与清理；默认域144/9114，可显式隔离。
+该短测没有原完整运输observer和活动规划负载，不能承诺真实任务实时率。
+`FISHBOT_FULL_STACK_CAPACITY=1`让新完整实验先执行这个更完整的容量检查。
+`FISHBOT_REUSE_NATIVE_INSTALL=1`尝试使用显式输入的唯一`native-install.tar.gz`；
+仍需同1.3.13/未改原生补丁和真实原生校验，缺失时WARNING后正常重建。
+本轮失败kernel作为输入被服务端拒绝，未宣称云端复用已经成功。
+
+完整ROS静止检查仍不包含活动规划和原业务observer；必要时同时启动原oracle，
+使用空marker明确零业务，独立确认采集完整，不能把其业务false当作配送失败或通过。
+非交互ROS launch的停止请求只送launcher，由其原生转发；仍用原owned PID/starttime
+核对全体子进程退出。原组信号导致的销毁中断保留为失败记录，不忽略finalization错误。

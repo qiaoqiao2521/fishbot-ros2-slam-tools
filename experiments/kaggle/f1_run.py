@@ -38,7 +38,7 @@ def run(name, args, *, cwd=None, timeout=600, env=None, required=True):
             print(log.read_text(errors="replace")[-6000:], flush=True)
             raise RuntimeError(name+" failed; see "+log.name)
         if result.returncode:
-            print("WARNING:", name, "failed; retaining log and trying required installation", flush=True)
+            print("WARNING:", name, "failed; retaining log and continuing independent checks", flush=True)
     finally:
         save({"kind": "f1_kaggle_deployment", "task_acceptance": False, "steps": STEPS})
     return row
@@ -63,6 +63,10 @@ def prepare_scene(fishbot, so101, python, data, runtime_env):
         "--output", str(scene), *options], env=runtime_env, timeout=180)
     run("candidate-configuration", [python, str(data/"f1_candidate.py"),
                                      str(scene/"scene-manifest.json")], env=runtime_env)
+    if os.environ.get("FISHBOT_TERMINAL_STOP_HEARTBEAT") == "1":
+        path=scene/"scene-manifest.json"
+        manifest=json.loads(path.read_text());manifest['terminal_stop_heartbeat']=True
+        path.write_text(json.dumps(manifest,indent=2)+"\n")
     return scene
 
 
@@ -164,8 +168,18 @@ def main():
         save({"kind": "f1_kaggle_compute", "task_acceptance": False, "navigation_goals": 0,
               "steps": STEPS, "benchmark": json.loads((ARTIFACTS/"compute/result.json").read_text())})
         return
-    run("nav2-build", ["bash", "-ec", build, "f1-build", str(native), python, str(planning/"bin/colcon")],
-        env=runtime_env, timeout=900)
+    archives=(list(Path('/kaggle/input').rglob('native-install.tar.gz'))
+              if os.environ.get('FISHBOT_REUSE_NATIVE_INSTALL') == '1' else [])
+    if len(archives)==1:
+        with tarfile.open(archives[0],'r:gz') as archive:archive.extractall(native,filter='data')
+        STEPS.append({'stage':'native-overlay-reused','input':str(archives[0]),
+                      'origin':globals().get('NATIVE_INSTALL_ORIGIN','explicit private kernel output'),
+                      'basis':'same Nav2 1.3.13 and unchanged project native patches; native checks still required'})
+    else:
+        if os.environ.get('FISHBOT_REUSE_NATIVE_INSTALL') == '1':
+            print('WARNING: no unique native artifact; building the selected sources',flush=True)
+        run("nav2-build", ["bash", "-ec", build, "f1-build", str(native), python, str(planning/"bin/colcon")],
+            env=runtime_env, timeout=900)
     with tarfile.open(ARTIFACTS/"native-install.tar.gz", "w:gz") as archive:
         archive.add(native/"install", arcname="install")
     scene = prepare_scene(fishbot, so101, python, data, runtime_env)
@@ -175,14 +189,31 @@ def main():
         capacity.write_text(globals().get("CAPACITY_WORKER_SOURCE") or
                             Path(__file__).with_name("f1_capacity.py").read_text())
         run("held-ros-capacity", ["bash", "-ec", setup, "f1-capacity", python, "-B", str(capacity),
-            str(scene/"scene-manifest.json"),str(ARTIFACTS/"capacity")],
-            cwd=fishbot,env=runtime_env,timeout=90)
+            str(scene/"scene-manifest.json"),str(ARTIFACTS/"capacity"),
+            'full' if os.environ.get('FISHBOT_FULL_STACK_CAPACITY')=='1' else 'simulator'],
+            cwd=fishbot,env=runtime_env,timeout=120)
         capacity_result=json.loads((ARTIFACTS/"capacity/result.json").read_text())
         if not capacity_result['capacity_passed']:
             raise RuntimeError("Held ROS loop has insufficient measured capacity; see capacity/result.json")
     run("native-clock", ["bash", "-ec", setup, "f1-clock", "/usr/bin/python3.12", "-B",
         "tools/tests/verify_nav2_smoothing_clock.py", "--domain", "142", "--output",
         str(ARTIFACTS/"native-clock")], cwd=fishbot, env=runtime_env, timeout=150)
+    if os.environ.get('FISHBOT_KAGGLE_SCOPE') == 'terminal_stop':
+        (WORK/'f1_compute.py').write_text(globals()['COMPUTE_WORKER_SOURCE'])
+        worker=WORK/'f1_terminal_stop.py'
+        worker.write_text(globals()['TERMINAL_WORKER_SOURCE'])
+        fixtures=ARTIFACTS/'terminal-fixture.json'
+        fixtures.write_text(json.dumps(globals()['TERMINAL_FIXTURE'],indent=2)+'\n')
+        run('terminal-stop-native-physics',['bash','-ec',setup,'terminal-stop',python,'-B',str(worker),
+            str(scene/'scene-manifest.json'),str(fixtures),str(ARTIFACTS/'terminal-stop')],
+            cwd=fishbot,env=runtime_env,timeout=120,required=False)
+        run('full-stack-held-capacity',['bash','-ec',setup,'full-capacity',python,'-B',str(capacity),
+            str(scene/'scene-manifest.json'),str(ARTIFACTS/'full-capacity'),'full'],
+            cwd=fishbot,env=runtime_env,timeout=120)
+        save({'kind':'f1_terminal_stop_diagnostic','task_acceptance':False,'navigation_goals':0,
+              'steps':STEPS,'result':json.loads((ARTIFACTS/'terminal-stop/result.json').read_text()),
+              'full_capacity':json.loads((ARTIFACTS/'full-capacity/result.json').read_text())})
+        return
     # This is a rebuilt input, not a replay of the deleted loaded-state cache.
     try:
         run("factory-b-a", ["bash", "-ec", setup, "f1-factory", "/usr/bin/python3.12", "-B",

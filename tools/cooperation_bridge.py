@@ -167,7 +167,7 @@ def run(args):
     from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy, qos_profile_sensor_data
     from rclpy.time import Time
     from rclpy.time_source import TimeSource
-    from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+    from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, TwistStamped
     from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
     from message_filters import Subscriber, TimeSynchronizer
     from nav2_msgs.action import NavigateToPose, DockRobot, DriveOnHeading
@@ -274,6 +274,8 @@ def run(args):
             self.station_sync.registerCallback(self.observe_station_pair)
             hold_qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL, reliability=ReliabilityPolicy.RELIABLE)
             self.hold_pub = self.create_publisher(Bool, '/cooperation/car_hold', hold_qos)
+            if manifest.get('terminal_stop_heartbeat') is True:
+                self.terminal_zero_pub = self.create_publisher(TwistStamped, '/cmd_vel_nav', 1)
             self.dock_guard_pub = self.create_publisher(Bool, '/cooperation/docking_guard', hold_qos)
             self.fault_trigger_pub = self.create_publisher(String, '/cooperation/observation_fault_trigger', 1)
             self.admission_pub = self.create_publisher(DiagnosticArray, '/cooperation/station_admission', 10)
@@ -594,6 +596,28 @@ def run(args):
                 if carrying and not arm_home_quiet(raw, manifest['arm_home_qpos6']):
                     raise RuntimeError('运输期间机械臂未保持回位停稳状态')
                 return raw
+
+        def terminal_stop(self, dispatch, raw):
+            """A fresh zero target after native success keeps the original braking tail live."""
+            if manifest.get('terminal_stop_heartbeat') is True:
+                with self.lock:
+                    self.owner(dispatch['token'])
+                    result = dispatch.get('result')
+                    if (result is None or not result.done() or result.result().status != 4
+                            or getattr(getattr(result.result(), 'result', None), 'success', True) is not True):
+                        raise RuntimeError('Terminal zero target requires the owned native success')
+                    evidence = dispatch.setdefault('terminal_stop_heartbeat', {'count': 0,
+                        'native_terminal_status': 4, 'target': 'zero',
+                        'scope': 'fresh terminal stop target, not refreshed motion or a consumption ACK'})
+                    if evidence.get('last_source_stamp') != raw['stamp']:
+                        message = TwistStamped()
+                        now = self.get_clock().now()
+                        message.header.stamp = now.to_msg()
+                        message.header.frame_id = 'base_footprint'
+                        self.terminal_zero_pub.publish(message)
+                        evidence.update(count=evidence['count']+1, last_source_stamp=raw['stamp'],
+                                        last_command_stamp=now.nanoseconds*1e-9)
+            return stopped(raw)
 
         def wait_condition(self, condition, *, duration=.7, timeout=8., carrying=False, cancelable=True):
             gate = ContinuousEvidence(duration)
@@ -1135,7 +1159,8 @@ def run(args):
                         and getattr(getattr(self, 'loaded_limits', None), 'phase', None) == 'applied'):
                     # A brief threshold crossing can precede the smoother's
                     # zero command. Do not hard-hold through its braking tail.
-                    raw = self.wait_condition(stopped, duration=.7, timeout=remaining(6.), carrying=True)
+                    raw = self.wait_condition(lambda value: self.terminal_stop(dispatch, value),
+                                              duration=.7, timeout=remaining(6.), carrying=True)
                     dispatch['stopped_before_hold'] = {'source_stamp': raw['stamp'],
                         'required_continuous_stop_source_s': .7,
                         'linear_speed': raw['car']['speed'], 'angular_speed': raw['car']['yaw_rate'],
@@ -1601,6 +1626,7 @@ def run(args):
                     'route_leg_index': item.get('route_leg_index'),
                     'sent_wall_time': item.get('sent_wall_time'),
                     'stopped_before_hold': copy.deepcopy(item.get('stopped_before_hold')),
+                    'terminal_stop_heartbeat': copy.deepcopy(item.get('terminal_stop_heartbeat')),
                     'status': status, 'result_known': known, 'terminal': dispatch_terminal(item),
                     'cancel_requested_wall_time': item.get('cancel_requested_wall_time')})
             return result
