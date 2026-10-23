@@ -566,6 +566,20 @@ class BridgeRaceTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'反馈中断'):p.fresh()
         self.assertFalse(p.abort_event.is_set())
 
+    def test_fresh_uses_ros_nanoseconds_at_measured_float_drift_boundary(self):
+        p=self.bridge;p.raw['stamp']=p.raw['time_s']=231.22000000037593
+        now=[231_120_000_000]
+        p.get_clock=lambda:NS(now=lambda:NS(nanoseconds=now[0]))
+        self.assertEqual(p.fresh()['stamp'],231.22000000037593)
+        now[0]-=1
+        with self.assertRaisesRegex(RuntimeError,'时间失效'):p.fresh()
+        self.assertEqual(p.last_freshness_failure['source_age_ns'],-100_000_001)
+        now[0]=231_470_000_000
+        self.assertEqual(p.fresh()['stamp'],231.22000000037593)
+        now[0]+=1
+        with self.assertRaisesRegex(RuntimeError,'时间失效'):p.fresh()
+        self.assertEqual(p.last_freshness_failure['source_age_ns'],250_000_001)
+
     def test_invalid_frame_clears_cache_before_abort_and_hold_outside_cache_lock(self):
         p=self.bridge;published=[]
         def hold_publish(message):

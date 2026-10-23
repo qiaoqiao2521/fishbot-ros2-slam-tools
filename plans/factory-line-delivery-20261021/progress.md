@@ -2,6 +2,10 @@
 
 ## Current
 
+本机完整b保留失败：task ccef0009-1869-4717-8c90-5af65d1cf62b，222.017墙秒；原K/连续handoff/source integrity均true，出站UUIDd6449a97b3b7420f94559e72ffc3116f/status4，24.056秒并已停稳。首进场Nav255f89e190b249159a7ad8325c7b937c接纳后在3.006秒取消5，因共享物理反馈时效失败，最终误差1.6025m/.07325rad；A未执行。271项原检查仍保持，owned/9111/quiet清理通过、finalization=[]，源码8d2435d起止一致。初次完整a缺用户bus环境在ROS前退出，原日志保留；b补XDG/DBUS，不使用isolated-runtime跳过本机保护。
+
+本次取消的精确样本clock=231.12、physics=231.22000000037593、接收龄5.791ms，差值-100.000000375928ms；相对原-100ms边界仅多.376ns。115.72/115.84的-120ms只是更早HTTP状态拒绝，保留其真实越界，不把它算浮点误差。按生产器ROS Time同一“整秒＋小数纳秒round”比较，原[-100000000,250000000]ns与.5墙秒门槛不变；±边界外1ns继续拒绝。最新core118项23.608秒通过，新增实录小数漂移与两侧1ns反例。将冻结此最小修复后重跑原local-full-b-a-c，不合并旧任务或自动重发unknown。
+
 本机原观察负载复验b通过：原同版NativeClock .025/.05源斜率、暂停0输出；146/9116完整ROS＋原oracle零Goal采集，22墙秒物理1.001461倍/50Hz，原oracle记录完整。容量first/a同1.0026倍但node.destroy_node受KeyboardInterrupt，原false保留；Jazzy非交互launch会转发SIGINT，原helper先killpg可重复打断。仅改为对owned launch父进程send_signal，原PID/starttime/survivor核对不变；b全finalization_errors=[]、owned存活0，原oracle无任务故业务评分false是预期，不计运输。输出local-full-capacity-oracle{-b}、local-native-clock-b，原native库从v6实际构建产物恢复到独立路径。
 
 当前源码相关core/oracle/loaded198、prepare15、scene7、factory25、acceptance26，共271项通过；原生时钟、500Hz停稳有限对照、静态缓存ABBA/碰撞反例和完整记录负载分别留证。将提交冻结后启动原141/9111的本轮local-full-b-a，原B→A与.06/.10、原加减速/几何/自由货物/120/360/1000保持；仍未宣称完整J100成功，不暂停其它任务。若活动负载再次变慢，按原期限保留失败。knowledge_status=updated(local)：原Wiki/FishBot19节与入口已补传感器计算、终态零目标；收尾继续核对原生信号转发限定，root串行维护，知识仓未发布。

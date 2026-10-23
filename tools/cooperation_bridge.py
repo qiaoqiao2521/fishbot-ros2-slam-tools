@@ -465,11 +465,19 @@ def run(args):
                     (manifest.get('nq',22), manifest.get('nv',20), manifest.get('nu',8)))
                 if episode is not None and raw.get('episode_id') != episode:
                     raise RuntimeError('等待新回合的物理反馈')
-                now = self.get_clock().now().nanoseconds*1e-9
-                if not -.1 <= now-raw['stamp'] <= .25:
+                now_ns = self.get_clock().now().nanoseconds
+                # Match the producer's standard ROS Time rounding. MuJoCo's
+                # accumulated float stamp can otherwise cross an exact bound
+                # by a fraction of a nanosecond while /clock is still on it.
+                whole_seconds = int(raw['stamp'])
+                physics_ns = whole_seconds*1_000_000_000 + round(
+                    (raw['stamp']-whole_seconds)*1_000_000_000)
+                age_ns = now_ns-physics_ns
+                if not -100_000_000 <= age_ns <= 250_000_000:
                     self.last_freshness_failure = {'wall_time':time.time(),'task_id':self.task.get('id'),
-                        'episode_id':episode,'clock_stamp':now,'physics_stamp':raw['stamp'],
-                        'source_age_s':now-raw['stamp'],'received_age_s':time.monotonic()-received}
+                        'episode_id':episode,'clock_stamp':now_ns*1e-9,'physics_stamp':raw['stamp'],
+                        'clock_stamp_ns':now_ns,'physics_stamp_ns':physics_ns,'source_age_ns':age_ns,
+                        'source_age_s':age_ns*1e-9,'received_age_s':time.monotonic()-received}
                     raise RuntimeError('共享物理反馈时间失效')
                 return copy.deepcopy(raw)
 

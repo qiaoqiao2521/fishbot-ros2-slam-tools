@@ -219,3 +219,5 @@ J100 新生成场景：工位接近扫掠168样本/432几何对，扣采样间�
 - 本机同版依赖在独立fishbot-compute-tests venv恢复，未改系统包/其它运行环境。只读时16核约3.5GHz/load10.86/80℃，不是持续算力承诺；继续原生时钟与独立域静止，若不合格不开始新完整任务。GPU只读前检为T4×2/4CPU配额，未确认更高单核吞吐，未用GPU运行任务、未开启付费扩容。
 
 - 本机带原oracle测量实际1.0015倍/50Hz、采集closed/complete通过；没有业务marker，oracle业务false符合范围。原first测量1.0026倍但销毁KeyboardInterrupt，保留false。Jazzy execute_local.__on_shutdown对noninteractive会send_sigint，原killpg可重复信号；改只signal owned launcher后，复验finalization=[]/零survivor。所有helper调用者均为非交互ROS launch（包括exec shell入口），不把此法推广为任意进程树终止策略。
+
+- 本机完整b确认compute余量已覆盖真实抓放/出站：包装物理步.914ms、真实任务222.017秒已原K/连续载货通过，仍未交付。随后取消来自fresh()在浮点-0.100000000375928s上拒绝，差原边界.376ns；原接收龄5.791ms，不是收包停止。保持同一100ms/250ms范围，改为生产器同样ROS整数纳秒量化，新增越界1ns负例。较早-120ms的HTTP拒绝是真实越界且仍拒绝；不据此改写所有旧时效问题因果。
