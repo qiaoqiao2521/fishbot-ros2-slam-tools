@@ -63,8 +63,14 @@ def prepare_scene(fishbot, so101, python, data, runtime_env):
         "--factory-config", str(factory_file), "--navigation-planner", "smac-lattice",
         "--lattice-allow-reversing", "--lattice-rotation-shim", "--amcl-motion-model", "omni",
         "--output", str(scene), *options], env=runtime_env, timeout=180)
-    run("candidate-configuration", [python, str(data/"f1_candidate.py"),
-                                     str(scene/"scene-manifest.json")], env=runtime_env)
+    candidate = data/"f1_candidate.py"
+    controller_options = []
+    if os.environ.get("FISHBOT_TRANSPORT_CONTROLLER") == "graceful":
+        candidate = fishbot/"experiments/kaggle/f1_candidate.py"
+        controller_options = ["--transport-controller-yaml",
+                              str(fishbot/"experiments/kaggle/graceful-j100.yaml")]
+    run("candidate-configuration", [python, str(candidate),
+                                     str(scene/"scene-manifest.json"), *controller_options], env=runtime_env)
     if os.environ.get("FISHBOT_TERMINAL_STOP_HEARTBEAT") == "1":
         path=scene/"scene-manifest.json"
         manifest=json.loads(path.read_text());manifest['terminal_stop_heartbeat']=True

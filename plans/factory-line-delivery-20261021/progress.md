@@ -10,11 +10,17 @@ J100＋16×360/10Hz三维雷达的同轮B→A仍待完整验收，原FishBot父2
 - 只规划c有限面板：direct/经1.35/经1.70三路线共5原ComputePath，均4并通过完整几何加密扫掠，全程hold、零Navigate/业务start。经1.35把累计偏航4.429→3.142rad，最小采样净距.00618→.06603m，名义下界89.554秒不是实际时限保证。
 - 载货经1.35短测通过：原Nav 1aca34d7c45a46f2a60adbd9b485fccf与d17d2a72275044f982577a04dd3bbc1e均2→4，共105.794墙秒，末1.543cm/.005425rad，5084个检查样本未触发原载货保持/禁碰。原.7源秒停稳、hold、两参数组restore、owned存活0/9111关闭与源码起止一致通过。初态从完整d装货后记录重建、速度/轮编码器归零且无solver warmstart，原oracle仅收集而无完整业务marker，不称完整抓放验收。
 
-当前用公开prepare和同一f1_run/f1_candidate重建原spawn=(0,-2,0)、原A/B/occupied实体的完整输入；B仅增加进场(1.35,-2,0)，最终B不变。loaded .06/.10、曲率原.055、原加减速/连续载货/完整碰撞/120/360/1000保持，使用已通过倒车进场，不采用.065或周期树。公开prepare与dry-run已通过，逐项读回world XML、两控制器、平滑器与载货profile均与短测配置相同。将冻结源码运行local-full-b-a-e，原factory/Workflow/SO101/DockRobot和独立oracle为准。
+- 完整e（e3bd3d0）仍失败：B task b06c871b-2267-4bd7-b0e0-3778b099e97a，264.920墙秒；原K与连续handoff/运输通过，原出站UUID f137eede…为4。进场1.35的Nav 288c0eb5…在共享120.039秒取消5，最终B与A未执行。靠近进场点后仍反复正反修正，不能把先前105.794秒短测当完整成功。源码/独立原记录/owned与9111清理通过。真实ROS只读采样另外确认16×360 PointCloud2/scan约10Hz、IMU约50Hz；分项不代替任务。
+- 原生函数反证：用1.3.13真实RPP函数和e实录路径检查，90秒附近普通carrot曲率为0，但活动fixed .3m曲率约-1.7至-1.8，100/110/119秒方向正反切换。未改C++零阈值，也不再把普通carrot的零曲率宣称唯一根因。
+- 原生替代有限短测：MPPI DiffDrive未保持货物；Graceful .055两Goal为4但最终停稳超120秒；Graceful .060/.12在118.615秒通过，末2.215cm/.00218rad，5709个留盘/禁碰检查通过、原quiet/恢复/清理通过。仅增加至.065会触载货保持失败；仅缩slowdown_radius .12→.08则首进场120秒取消5。后两候选均不采用。初态从完整e装货后重建，没有warmstart和AMCL滤波历史，不冒充精确重放或业务完成。
+
+当前通过公开prepare选择已有Nav2 1.3.13 RotationShim＋Graceful作为显式FollowPath候选；StagingPath仍用已验倒车RPP。保持原spawn=(0,-2,0)、原A/B/occupied实体、B进场1.35、loaded .06/.10、原加减速/连续载货/完整碰撞/120/360/1000。Graceful最大线/角速.06/.06、降速范围.12，未晋级默认。先定向配置检查与原factory dry-run，冻结后运行local-full-b-a-f；原factory/Workflow/SO101/DockRobot与独立oracle为准。
+
+公开prepare已执行并逐项读回：world/rig/arm XML相同，FollowPath匹配声明，原Staging/checker/smoother参数保持；其它Nav差异仅新目录的BT/lattice路径，引用内容逐字节相同。factory dry-run为原B→A与120/360/1000、零动作。配置/原factory/acceptance/loaded参数79项通过，零失败或跳过；public-graceful-readback.json与graceful-configuration-tests.log留在私有证据根。
 
 本轮私有证据根：~/.local/share/fishbot/cloud-jobs/kaggle-20261024/。local-staging-reverse-dock-a、local-full-b-a-{c,d}、local-loaded-{direct-b-a,direct-b-065,direct-periodic-a,plan-c,via135-a}分别保留。plan-a因错误业务ready与清理episode缺键失败，零Goal；plan-b原ComputePath4后系统Python缺MuJoCo，离线原路径加密几何补证另存，不覆盖原失败。两次工具问题已修正并定点清理。
 
-knowledge_status=pending：原FishBot19/20经验持续采用，先前传感器/终态零目标已updated(local)；本轮纳秒边界、正常shutdown和进场姿态的新认识由本对话root收尾修订原页并读回。仅仿真，不外推真机或sim-to-real。下一步是同轮完整B→A，不重复短测充数，也不以进程/HTTP/阶段标签代替验收。
+knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节已补“时龄比较：对齐ROS纳秒精度，不加宽容差”“非交互ROS回收：父进程转发与已关闭context”“差速进场：宽处完成朝向，再倒入目标”，问题入口同步，已读回。进场条目明确仅短测通过，不称完整业务；知识仓未提交推送。仅仿真，不外推真机或sim-to-real。下一步是同轮完整B→A，不重复短测充数，也不以进程/HTTP/阶段标签代替验收。
 
 ## Prior 2026-10-24 run notes (preserved)
 

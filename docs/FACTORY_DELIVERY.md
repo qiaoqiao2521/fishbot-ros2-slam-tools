@@ -210,6 +210,11 @@ tools/fishbot_cooperation.sh prepare \
 原 `.95m` 进场、直达、`.065` 曲率目标和周期重规划的失败分别保留。
 完整两单仍以所属 progress 和原 oracle 为准。
 
+原始出生点完整e未复现该短测：原K与连续载货通过，但1.35进场120秒取消，A未执行。
+现可显式选择已安装1.3.13的Graceful作为运输FollowPath，保留倒车RPP进场、
+Smac Lattice与全部原门槛；入口见[Kaggle薄适配](../experiments/kaggle/README.md)。
+重建载货初态短测118.615秒仅证明该路线分项，新完整B→A仍须原factory独立评分。
+
 **本机1.3.13需要原生缓存修复。** 实测发现 `NodeLattice::isNodeValid` 可复用终点缓存，
 跳过另一条入边的碰撞检查。仓库包含最小 C++ 复现和仅修该条件的补丁。
 在独立 overlay 构建后，通过现有 `FISHBOT_NAV2_QUERY_OVERLAY=<overlay>/install`

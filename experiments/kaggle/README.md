@@ -94,3 +94,14 @@ cp experiments/kaggle/f1_candidate.py /absolute/private/f1-dataset/
 当前重建J100候选的B进场为`(1.35,-2,0)`，最终B仍为`(.7,-2,0)`。
 本机载货短路线已在原120秒内完成105.794秒；这是路线分项，不是云端完整配送成绩。
 云端v6/v7失败、`.95m`进场失败及其余开发候选均保留；完整B→A另由原factory评分。
+
+原始出生点完整e未复现上述路线分项，1.35进场在120秒取消，A未执行。
+`FISHBOT_TRANSPORT_CONTROLLER=graceful`显式选择已安装Nav2 1.3.13的
+RotationShim＋Graceful；默认仍为RPP，不安装或重写控制器。
+`graceful-j100.yaml`只替换FollowPath，StagingPath/checker/物理保持；
+原载货平滑器的`.06/.10`和`.025/.05`加速度门槛保持。
+Graceful自身最大线/角速`.06/.06`、降速范围`.12m`。
+新prepare复制YAML并记录来源，移除不适用的RPP速度ACK，保留共享progress。
+也可用`f1_candidate.py MANIFEST --transport-controller-yaml PATH`显式传入原生配置。
+本机重建载货初态短测118.615秒通过，尚不能据此宣称同轮两单或云端配送完成；
+完整验收状态见原SpecMesh。`.065`与`.08m`候选分别载货失败/超时，均不采用。

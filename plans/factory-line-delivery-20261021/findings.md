@@ -1,5 +1,13 @@
 # F1 Findings
 
+## 2026-10-24：完整e未复现短测；显式原生运输候选
+
+- 公开prepare的原spawn/A/B/occupied与短测控制合同读回一致，但完整e仍在1.35进场120.039秒取消，K与连续货物保持通过、A未执行。重建装货初态不包含solver warmstart与AMCL滤波历史，不把短测105.794秒外推为完整业务。原独立记录完整，owned清理、源起止均通过。
+- 真实1.3.13 RPP函数对e实录路径的独立C++探针表明：普通carrot在90秒附近触零阈值，但当前use_fixed_curvature_lookahead=.3的活动曲率非零；后续普通carrot方向翻转。修改C++零阈值没有获证据支持，未实施。原件在私有rpp-recorded-probe/，不把观察关联宣称完整因果。
+- MPPI DiffDrive候选在有限载货初态未保持货物；原生Graceful可完成两UUID，.055最终停稳超120秒，.060/.12实际118.615秒、2.215cm/.00218rad并保持5709个采样检查。增角速.065触载货失败，降速范围.08首段超时。失败全保留，不晋级；选.060/.12继续完整原factory，仍未宣称稳定。
+- 新薄适配只选择已有FollowPath YAML并复制输入；不新建控制实现、owner或评分器。其它控制器不得继承未消费的RPP速度ACK字段，原共享progress与载货smoother事务保持。默认RPP与人工二改可继续使用，不以来源hash锁住内容。
+- 证据根仍为~/.local/share/fishbot/cloud-jobs/kaggle-20261024/；local-full-b-a-e、local-loaded-e-via135-{mppi-a,graceful-a,graceful060-a,graceful065-a,graceful060-slow008-a}分别保留。新完整结果回写本计划，不拼接各轮成功。
+
 ## Kaggle计算瓶颈有限对照（2026-10-24）
 
 - v6是真实原任务失败，非部署失败：KDL/ConsoleBridge等补齐后原生构建与source-clock通过；原任务360墙秒仅约146源秒，B真实抓放/home成立而尚无载货Nav，A未运行。loop包装step77046次总279.375s，publish7704次92.423s；前者包含控制/接触/静止检查，不冒称纯mj_step。

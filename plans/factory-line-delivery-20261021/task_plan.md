@@ -20,7 +20,7 @@
 
 ## 当前切片：原场景入站方向与完整两单（2026-10-24）
 
-保留原B/C失败与已证实终态零目标/纳秒边界修复。先复用原生RotationShim＋反向RPP配置StagingPath，在相同J100/3D/occupied初态执行原60秒scope=dock；要求原Nav/Dock UUID终态、4cm/.05rad物理停靠、.7源秒静止与有效清理。倒车入站与经1.35载货短路线已通过，现用公开prepare冻结原始出生点的新run重做同轮B→A/原120、360、1000墙秒。运行参数读回与独立oracle为准，候选YAML不晋级默认；owner=本对话root，knowledge_status=pending。
+保留原B/C/D/E失败与已证实终态零目标/纳秒边界修复。原60秒scope=dock的倒车进场通过，原始出生点完整e仍在1.35进场点原120秒失败、A未执行，不合并分项报成功。原生RPP函数反证后，不修改零曲率阈值；复用已安装1.3.13 Graceful显式替换运输FollowPath，StagingPath/Smac Lattice/目标检查器/完整物理门槛保持。载货重建初态Graceful .060/.12短测118.615秒通过；.065载货失败、.08降速范围超时，均不采用。公开prepare与定向检查后冻结原始出生点的新run，重做同轮B→A/原120、360、1000墙秒。运行参数读回与独立oracle为准，候选YAML不晋级默认；owner=本对话root，knowledge_status=updated(local)，原FishBot19节及问题入口已读回。
 
 ## 当前实施：Smac Lattice 差速候选（2026-10-23）
 
