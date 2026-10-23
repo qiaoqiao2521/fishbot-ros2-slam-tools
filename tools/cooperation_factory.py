@@ -43,6 +43,13 @@ PROTECTED_UNITS = (
 )
 
 
+def protected_units(args):
+    """A remote container has no local demo services; never invent snapshots."""
+    if getattr(args, 'isolated_runtime', False):
+        return ()
+    return tuple(getattr(args, 'protected_unit', None) or PROTECTED_UNITS)
+
+
 def save(path, value):
     path = Path(path)
     private_json(path, value, replace=path.exists())
@@ -344,7 +351,11 @@ def run(args, manifest, declaration):
     save(output/'loaded-code-start.json', source_start)
     save(output/'manifest-used.json', manifest)
     save(output/'declaration.json', declaration)
-    protected = protected_snapshot(args.protected_unit or PROTECTED_UNITS)
+    units = protected_units(args)
+    result['execution']['host_protection_scope'] = {
+        'isolated_runtime': bool(getattr(args, 'isolated_runtime', False)),
+        'configured_units': list(units), 'owned_launch_cleanup_required': True}
+    protected = protected_snapshot(units)
     save(output/'protected-before.json', protected)
     launcher = ROOT/'tools/fishbot_cooperation.sh'
     ledger = output/'workflow.json'
@@ -596,7 +607,7 @@ def run(args, manifest, declaration):
                                                        and observer.poll() is None else None)
         with socket.socket() as probe:
             result['execution']['owned_port_closed'] = probe.connect_ex(('127.0.0.1', args.port)) != 0
-        protected_after = protected_snapshot(args.protected_unit or PROTECTED_UNITS)
+        protected_after = protected_snapshot(units)
         save(output/'protected-after.json', protected_after)
         result['execution'].update(protection_observation(protected, protected_after))
         result['execution']['protected_snapshots'] = {
@@ -649,7 +660,10 @@ def main(argv=None):
     execute.add_argument('--order', action='append', help='Explicit permutation of all order IDs')
     execute.add_argument('--planning-python', type=Path,
                          default=Path.home()/'.cache/so101-colab/planning-venv/bin/python')
-    execute.add_argument('--protected-unit', action='append')
+    protection = execute.add_mutually_exclusive_group()
+    protection.add_argument('--protected-unit', action='append')
+    protection.add_argument('--isolated-runtime', action='store_true',
+                            help='Cloud/container has no host demo services; owned cleanup remains required')
     execute.add_argument('--dry-run', action='store_true')
     report = sub.add_parser('report')
     report.add_argument('--run', type=Path, required=True)

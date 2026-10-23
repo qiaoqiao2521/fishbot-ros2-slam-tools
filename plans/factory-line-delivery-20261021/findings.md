@@ -1,6 +1,18 @@
 # F1 Findings
 
+## Kaggle接续（2026-10-24）
+
+- 用户已选择CLI账号`muqiaoqiao`；官方access-token introspection与私有前检作业属该账号。Chrome的`muqiao147`不是该私有数据集的访问凭据，不据其404判断CLI资源不存在，也不切换账号。
+- 真实前检v1完成，不是本机模拟输出：Ubuntu24.04/glibc2.39可承载本机Jazzy库，默认Python却为3.13。薄适配另装3.12、固定ROS CLI及colcon解释器、隔离PYTHONPATH；不替换Kaggle系统Python。Smac 1.3.13原CMake明确依赖OMPL开发包。
+- Kaggle CLI可在无效dataset_sources被剔除后仍返回kernel推送成功；本次完整v1实际在输入检查失败，零ROS动作，不能算配送试验。补异常报告拼写并用真实except路径故障注入确认保留原RuntimeError与false评分。
+- 原运行包创建Ok后持续403且mine无记录；一个同账号、同other许可证且带description的小私有数据集实际ready。此对照只排除普遍账号创建失败，尚不能把原包问题唯一归因于description或文件。保持私有、原许可证，不反复创建公共副本。
+- 同slug补description重试仍403；四个原gzip/tar包加19字节格式头后ready，文件列表读回七文件，库包未自动展开。官方datasets文档明确会自动解压archives；ROS包含40533项和532个符号链接，平台摄取不宜代替原tarfile解包。保留原包与两次失败，不把文件封装与平台时序的联合变化写成唯一根因。标准流式tarfile小样本往返已保留内容、执行权限与符号链接。
+- 原factory的protected_snapshot强依赖本机user systemd，云端不存在该服务。增加显式isolated-runtime只选择空的本机保护对象，原本机默认和自选units保持；同时记录作用域，原任务/native/连续quiet/owned进程与端口清理仍硬性参与原评分。25项相关factory检查通过，不伪造107/114快照。
+- 历史`~/.cache/fishbot/factory-line-delivery-20261021/`与planning venv已不可用。此次从a8fe76f核心源码、现存Jazzy/vendor runtime、SO101实际工作源码与模型重建，不声明旧输入完整复现。SO101只打包8模块依赖闭包及原模型，不上传9.6GB实验历史。
+
 ## 最新已核实结论
+
+- 计算余量恢复不能只看启动前一次load：CPU压力从约31%降到3%后，同配置`recover`进入实际跟踪，但中途频率约1GHz；实测物理包装步均值6.682ms、50Hz发布19.402ms。原UUID8ec8b63099a9425aa8c1508e1e8532ff取消5，出现1个原载货失败样本；只有hold确认，没有连续quiet通过。资源波动与支撑失败分别保留，未用猜测给失败去抖，也不宣布算法通过。
 
 - J100源码9bf99c7后的同配置实际复跑仍未交付：原入口UUID00f5de16108f4733945ca991afa9bd9a在120.063墙秒取消，第二段未发。完整抓放两单未重跑；连续支撑、禁碰和清理通过不抵消路线未到达。原生规划成功、带plan的非零cmd与真实位移各自留证，不再从静止Goal推断消费。
 - 最新静止交替面板在相同原物理/16×360雷达/50Hz观测下得到.263–.305倍实时；原生步同线程CPU3.009–3.173ms，接近其墙钟耗时且已超过2ms步预算。缩短Python切换间隔没有可重复收益。支持当前计算能力不足，不支持把旧回合都归因GIL；不采用该调参，不改步长、碰撞、门槛或其他运行任务。

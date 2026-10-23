@@ -4,6 +4,7 @@ import copy
 import io
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import sys
 import tempfile
 import unittest
@@ -37,6 +38,16 @@ def successful_score(order):
 
 
 class ReferenceTests(unittest.TestCase):
+    def test_host_protection_default_is_unchanged_but_cloud_does_not_query_systemd(self):
+        self.assertEqual(factory.protected_units(SimpleNamespace()), factory.PROTECTED_UNITS)
+        self.assertEqual(factory.protected_units(SimpleNamespace(protected_unit=['demo.service'])),
+                         ('demo.service',))
+        self.assertEqual(factory.protected_units(SimpleNamespace(isolated_runtime=True)), ())
+        observation = factory.protection_observation({}, {})
+        self.assertEqual(observation['configured_systemd_units'], [])
+        self.assertEqual(observation['running_configured_units_before'], [])
+        self.assertFalse(observation['historical_instances_were_running'])
+
     def test_station_approach_reaches_order_without_rebinding_final_destination(self):
         source=manifest();station=source['factory_delivery']['destinations'][1]
         station['approach_poses']=[{'x':.8,'y':-2.5,'yaw':1.}]

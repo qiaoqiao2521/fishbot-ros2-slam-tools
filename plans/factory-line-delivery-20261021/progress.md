@@ -1,6 +1,20 @@
 # F1 Progress
 
 ## Current
+2026-10-24转入用户授权Kaggle，CLI身份经官方token introspection为`muqiaoqiao`，用户已确认继续该账号。真实私有CPU前检v1完成：Ubuntu24.04.5、glibc2.39、4核配额、约32GB内存，默认Python3.13、无ROS/MuJoCo；loopback UDP与GitHub可达。上传本机原Jazzy运行库，独立使用Python3.12，不绕过ROS源TLS主机名错误。运行包220.66MiB，原许可证保留。旧cache目录已不存在，新输入是重建候选，不称同输入重放。
+
+私有运行包首创建返回Ok，但status/files/metadata均403、mine无该条目。完整作业v1因CLI剔除无效数据源而在启动ROS前失败；同时保留异常报告拼写错误，当前已修复并故障注入验证。小型同账号私有数据集实际ready，排除“账号不能创建任何私有数据集”；正在给原运行包补许可证description后重试同slug，尚未宣称根因。未运行云端导航或两单。产物留`~/.local/share/fishbot/cloud-jobs/kaggle-20261024/`；部署入口`experiments/kaggle/`。
+
+运行包补description后仍403；保持相同description和私有slug，给四个原tar/gzip增加19字节格式头后实际ready。独立CLI文件列表读回四个`.tar.gz.bin`原尺寸加19字节，及bundle/candidate/versions三文件。官方文档明确平台自动解压archives；本地往返测试保留执行权限和符号链接。该对照支持归档摄取路径问题，不排除平台时序因素。新增显式`--isolated-runtime`仅跳过云端不存在的本机systemd服务快照，记录空范围；原UUID/静止/owned清理与全部物理评分不变，25项factory检查通过。部署四个脚本语法、异常报告故障注入和候选7项原门槛检查通过；将更新输入源码版本后运行云端部署。
+
+本轮不暂停本机其它任务，也不换浏览器账号。下一步先核实运行包ready/文件及真实挂载，再完成依赖、同版原生补丁与时钟检查，最后原factory的B→A独立评分。原速度.06/.10、加减速、碰撞、支撑与120/360/1000保持。knowledge_status=pending（云部署尚在执行，root收尾再判定可复用结论）。下文为历史本机试验，不作为云端通过证据。
+
+2026-10-23用户接续要求恢复计算余量后继续。启动前load12.668、CPU等待压力约3%、频率约1.99GHz；未停止其它任务，同配置复跑`native-loaded-east-terminal-tracking-recover.py`。运行中再次出现Blender/Applio并行占用、频率约1GHz，19.3墙秒仅推进8.28源秒。原UUID8ec8b63099a9425aa8c1508e1e8532ff在1帧原载货支撑失败后取消5；1396个独立物理样本、禁碰累计0，最大位移.397988m，1442条带plan非零cmd。最终相对B误差1.249013m/.873102rad，不是到达；最终hold=true，但原post-hold源时间停稳等待超时、quiet=null，不能计清理静止通过。
+
+原生进程/9111关闭、owned存活0；sim节点销毁阶段KeyboardInterrupt仍保留。包装物理步均值6.682ms、发布19.402ms，源样本保留窗内无>.1s缺口，不据此否认墙钟计算不足。新完整B→A未派发，速度/加减速/模型/碰撞/载货/评分/期限未变。证据根`j100-transport-20261023/native-loaded-east-terminal-tracking-recover/`，包括result、independent-ros、launch、loop-timing和少量只读bridge采样。
+
+历史上曾请求允许临时暂停本机Blender渲染和Applio语音任务，未获确认、未执行暂停；后续已按用户授权采用Kaggle。仍不自动改变热控制、网络或其它任务。owner=本对话root，原FishBot19/20双时钟、证据分层和进行中任务保护继续采用。
+
 2026-10-23 J100组合仍未通过完整B→A。已采用用户确认的.06m/s/.10rad/s上限；原B空托盘原生4/86.151s/2.079cm。首轮完整B原K通过，但起步后瞬时托盘断触，连续支撑与交付失败，A未执行。后续载货诊断分别出现原120秒取消或1–3帧支撑失败；远侧(1.7,-2)入口原生4且连续支撑通过，但用时118.429秒，最终B仍取消，不能计交付成功。
 
 原生半速时钟对照已通过：原墙钟平滑器源时间斜率.04997/.09995，显式ROS时钟候选.025/.05；暂停时钟输出6/0，动态调频均接纳。此事实修正计时语义，不独占货物失败因果。雷达查询仅做原生运动学，20组×5760射线的点/命中ID与完整forward逐点一致，13项雷达测试通过。可选关闭概览渲染保留RGB路径。
