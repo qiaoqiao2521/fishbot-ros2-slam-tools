@@ -9,9 +9,21 @@
 
 最新两个短试验均全程载货支撑通过。50Hz源时钟/.055弯道候选在终点附近w=0，未完成收尾；trace目标距最小15.618mm，原RPP在31.62mm内曲率归零，未进15mm目标圈。保持全部容差，启用原生fixed curvature/after-goal后，入口(.95,-2,0)原生4、连续静止与hold确认通过，但用时114.524墙秒；原B第二段5.56秒后在9.406cm处取消5，整路仍false。曲率前视点实际发布2137条，参数回读true/.2/true。owned/9111全部清理。
 
-当前没有运行中的ROS实验。完整反馈的control组首次外层180秒超时，其余mission209/autonomy61/frontend460共730项通过；同源码control组从原`--python-group control`独立入口完成997项/435.448秒，无跳过或缺依赖，未修改测试或配送期限。首次整命令仍记failed，不改写为默认入口通过。接着执行已备`native-loaded-east-terminal-tracking-probe.py`（进场仍.95、固定曲率前视.3、接近距离.12/最低.02、总限幅.06/.10），短路线通过后才启动已dry-run的`j100-source-clock-terminal-full-manifest.json`原始场景B→A。所有候选保留原1.5cm/.035rad原生容差、4cm/.05rad物理评分与120/360/1000。
+完整反馈的control组首次外层180秒超时，其余mission209/autonomy61/frontend460共730项通过；同源码control组从原`--python-group control`独立入口完成997项/435.448秒，无跳过或缺依赖，未修改测试或配送期限。首次整命令仍记failed，不改写为默认入口通过。相关源码9bf99c7已推既有远端，116项相关检查通过；没有改测试来消除超时。
+
+最新`.3m`曲率前视/`.12m`接近距离/`.02m/s`最低接近速度候选及同配置复跑均未到达。复跑原UUID00f5de16108f4733945ca991afa9bd9a在120.062695墙秒取消5，仅派第一入口，最终相对B误差.949036m/.747186rad。1981个独立物理样本连续载货失败0、累计车/臂禁碰0；1761条带plan的非零cmd和1.035450m真值位移证明实际跟踪，不能代替到达。源起点4.46s、清理quiet40.24s，包含清理也仅35.78源秒；最大保留源间隙.24s。末hold/原.7源秒静止、owned进程与9111清理通过；sim销毁节点阶段出现KeyboardInterrupt，保留该finalization诊断，不称无异常退出。未启动新的完整抓放/B→A。
+
+最新静止交替诊断将线程切换5ms/.5ms/5ms/.5ms/5ms逐段恢复。五段仅.286/.296/.305/.291/.263倍实时，主线程CPU占墙钟.846–.964；原生mj_step线程CPU均值3.009–3.173ms，墙钟3.191–3.603ms。当前有限面板支持计算能力不足，不能再把主要耗时猜作GIL等待；没有证据采用短切换间隔或实时调度。独立接收97条实际点云，物理观测全hold，0任务/0Goal，退出0且无finalization错误；保存phases/receipt，不是逐帧点云归档。原较好窗口曾到1倍实时，不能据此预测当前完整图也能实时。
+
+当前没有运行中的本轮ROS实验。候选未晋级默认参数，原完整`full-scene/world.xml`/A/B/自由货物保持。计算余量恢复后，从`native-loaded-east-terminal-tracking-reproduce.py`同配置短路线继续，先完整到达、连续载货、停稳和清理；随后才运行已dry-run的`j100-source-clock-terminal-full-manifest.json`同轮order-b/order-a，输出`full-source-clock-terminal-b-a`仍未创建。原native1.5cm/.035rad、物理4cm/.05rad及120/360/1000不变。不要放宽时间、关闭碰撞、减少雷达或修改其他任务来制造通过。
+
+新增证据均在`~/.cache/fishbot/factory-line-delivery-20261021/j100-transport-20261023/`：`native-loaded-east-terminal-tracking-{probe,reproduce}/`原result/ROS记录/loop-timing；`capacity-profile/`只作剖析、不用于性能排名；`capacity-native-thread-clock/`交替phases/receipt。`capacity-gil-aba/`探针末段ValueError保留；修正后的`capacity-gil-aba-b/`同时受频率变化影响，恢复5ms也达1倍实时，不宣称1ms改进。`capacity-physics-scheduler/`RR10仅.362→.423倍，已恢复SCHED_OTHER，不采用。CY只读确认3vCPU/约952MiB可用内存/无ROS容器栈，未部署、未改远端文件或网络。
 
 知识回写`updated(local)`：原`Wiki/ROS2 与 FishBot.md`第19节补半速/暂停/改频的原生计时验证和后台接收/物理owner/原收包时刻边界，保留“计时不替代连续载货”的限定；`Wiki/开发知识入口.md`新增对应触发行。原页与入口已读回。知识仓已有其它dirty修改，保留且本轮未宣称发布知识仓。
+
+最新线程CPU对照的knowledge_status=already_covered：原第19/20节与“控制排程：先核唯一业务组，再选执行器”已要求区分墙钟、同线程CPU与GIL/OS假设。本次有限数值留在项目，不重复写知识页。接续owner=本对话root。
+
+最终独立清理读回`source-clock-terminal-closeout.json`：原复跑PID/starttime匹配存活0，本轮sim/bridge/探针匹配进程0，9111关闭，无FishBot临时inhibitor，power profile恢复balanced。保留其它任务和网络。本次追加仅更新现有SpecMesh三文件，源码检查证据仍绑定9bf99c7，不为文档改动重复完整回归。
 
 2026-10-23 Smac Lattice显式接入与有限面板已交付，J100组合仍未通过。原生1.3.13插件、官方248条diff/.60m/2cm原语、独立库缓存补丁、可选Rotation Shim均落盘；39项相关与1727项完整反馈检查通过。9轮只规划找到完整几何正余量.05479m、估算118.844秒候选；3轮原B空托盘真实跟踪均在原120秒取消，最后22.614cm/1.00360rad，未执行新的完整抓放或A。不拼接成B→A成功。全部owned实例/9111/inhibitor已清理；知识updated(local)且读回。细节与最短接续入口见本文件末节，owner=本对话root。
 
