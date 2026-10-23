@@ -15,7 +15,7 @@
 - `f1_candidate.py`：重建未验收候选。保留原加减速、局部碰撞配置和评分；
   载货上限`.06m/s/.10rad/s`，全局规划padding为候选`.025m`。
 - `f1_run.py`：在临时Kaggle环境安装Python3.12，显式绑定上传ROS CLI和
-  colcon的解释器。独立构建原1.3.13的Smac缓存和源时钟平滑补丁，
+  venv内colcon的解释器。独立构建原1.3.13的Smac缓存和源时钟平滑补丁，
   运行原生时钟用例、原prepare和原factory的B→A。
 
 ## 使用
@@ -44,7 +44,8 @@ cp experiments/kaggle/f1_candidate.py /absolute/private/f1-dataset/
 不会扩大原路线120秒、单单360秒和整轮1000秒的评分期限。
 
 任务输出为`f1-deployment.json`、逐阶段日志以及
-`f1-work-*/full-run/result.json`和原独立oracle报告。
+`f1-results-*/full-run/result.json`和原独立oracle报告。
+源码、venv和编译树只放临时`/tmp`，不让Kaggle把依赖树保存成任务输出。
 只按原factory的最终物理结果报告配送；提交、构建和网页状态均不替代验收。
 本轮旧载货初态和独立overlay缓存已丢失，因此新包是重建候选，
 不宣称与已删除输入完全相同，也不拼接历史成功。

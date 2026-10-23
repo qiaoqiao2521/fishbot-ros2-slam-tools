@@ -1,6 +1,10 @@
 # F1 Progress
 
 ## Current
+云端最新：私有数据集v2实际ready，远端bundle读回源码634c6e6、格式fishbot-prefixed-tar-gzip-v1。kernel v2真实挂载并解包，代码及metadata读回一致；ubuntu-index通过，ubuntu-dependencies在2.324秒以100失败，唯一错误为缺少python3-colcon-common-extensions，零ROS任务。原始日志已通过官方SDK按file_path直接下载读回；CLI output虽带file-pattern仍分页列举全部文件，依赖树置working会显著扩大取证和输出成本，不能全归因于网络。
+
+kernel v3已提交：apt不再要求该ROS源元包，按colcon官方文档在3.12 venv安装本机同版colcon0.3.0/catkin-pkg1.1.1/empy3.3.4/lark1.1.9；CMake也显式使用该解释器。源码/venv/编译树改存/tmp，只把scene/native-clock/full-run和日志报告保留在working。新增失败日志尾部直接输出，非零100与false评分的故障注入通过，四脚本语法通过。本轮还未证明云端完整构建或导航成功；原数据源码保持634c6e6，新的bootstrap由Kaggle代码版本单独绑定。
+
 2026-10-24转入用户授权Kaggle，CLI身份经官方token introspection为`muqiaoqiao`，用户已确认继续该账号。真实私有CPU前检v1完成：Ubuntu24.04.5、glibc2.39、4核配额、约32GB内存，默认Python3.13、无ROS/MuJoCo；loopback UDP与GitHub可达。上传本机原Jazzy运行库，独立使用Python3.12，不绕过ROS源TLS主机名错误。运行包220.66MiB，原许可证保留。旧cache目录已不存在，新输入是重建候选，不称同输入重放。
 
 私有运行包首创建返回Ok，但status/files/metadata均403、mine无该条目。完整作业v1因CLI剔除无效数据源而在启动ROS前失败；同时保留异常报告拼写错误，当前已修复并故障注入验证。小型同账号私有数据集实际ready，排除“账号不能创建任何私有数据集”；正在给原运行包补许可证description后重试同slug，尚未宣称根因。未运行云端导航或两单。产物留`~/.local/share/fishbot/cloud-jobs/kaggle-20261024/`；部署入口`experiments/kaggle/`。

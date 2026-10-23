@@ -2,7 +2,7 @@
 
 ## 当前接续：J100完整配送（2026-10-23）
 
-2026-10-24用户授权改用Kaggle，并明确继续CLI账号`muqiaoqiao`，不使用浏览器的`muqiao147`。不暂停本机Blender/Applio，不改网络或热控制。复用原prepare、factory、Nav2 1.3.13和独立oracle，私有CPU作业部署上限3600秒含构建；原120/360/1000墙秒与完整物理评分不变。环境前检已真实完成，运行包挂载和完整两单仍待验收。薄适配入口见[experiments/kaggle](../../experiments/kaggle/README.md)。旧运行缓存与planning venv已不可用，新包明确为重建输入，不冒充历史输入重放。owner=本对话root。
+2026-10-24用户授权改用Kaggle，并明确继续CLI账号`muqiaoqiao`，不使用浏览器的`muqiao147`。不暂停本机Blender/Applio，不改网络或热控制。复用原prepare、factory、Nav2 1.3.13和独立oracle，私有CPU作业部署上限3600秒含构建；原120/360/1000墙秒与完整物理评分不变。环境前检、私有运行包ready/文件及输入源码634c6e6读回已完成；完整v2实际解包成功，因云apt缺colcon元包而在ROS启动前失败，当前v3改用原3.12 venv内官方pip colcon继续。完整两单仍待验收。薄适配入口见[experiments/kaggle](../../experiments/kaggle/README.md)。旧运行缓存与planning venv已不可用，新包明确为重建输入，不冒充历史输入重放。owner=本对话root。
 
 上一轮本机`native-loaded-east-terminal-tracking-recover`取消5，1帧原连续载货失败、清理源时间静止等待超时和计算负载回升均保留。临时暂停其它任务未获确认、从未执行；本轮采用已授权云环境继续。
 

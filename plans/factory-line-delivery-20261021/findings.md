@@ -2,6 +2,8 @@
 
 ## Kaggle接续（2026-10-24）
 
+- 云端v2确认原archives解包通过，但apt缺python3-colcon-common-extensions。官方文档说明该元包经ROS/packagecloud仓分发，并支持venv pip；本轮采用本机版本的pip colcon工具链，不绕过ROS仓TLS错误或重置系统Python。真实错误143字节原log已通过官方SDK的DownloadKernelOutput(file_path)读回。
+- Kaggle CLI output的file-pattern仅过滤下载，仍循环列举整个输出树。此前把源码/runtime/venv放working会增加至少数千文件，未来完整venv更大；临时依赖树转/tmp，scene及原任务证据继续持久化。网络ConnectTimeout也真实出现，二者不能混成单一原因；本机取证进程可限定单次连接超时，不改账号或全局网络。新失败日志尾部输出保留原状态，低层异常不替代物理裁决。
 - 用户已选择CLI账号`muqiaoqiao`；官方access-token introspection与私有前检作业属该账号。Chrome的`muqiao147`不是该私有数据集的访问凭据，不据其404判断CLI资源不存在，也不切换账号。
 - 真实前检v1完成，不是本机模拟输出：Ubuntu24.04/glibc2.39可承载本机Jazzy库，默认Python却为3.13。薄适配另装3.12、固定ROS CLI及colcon解释器、隔离PYTHONPATH；不替换Kaggle系统Python。Smac 1.3.13原CMake明确依赖OMPL开发包。
 - Kaggle CLI可在无效dataset_sources被剔除后仍返回kernel推送成功；本次完整v1实际在输入检查失败，零ROS动作，不能算配送试验。补异常报告拼写并用真实except路径故障注入确认保留原RuntimeError与false评分。
