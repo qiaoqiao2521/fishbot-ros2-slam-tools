@@ -14,6 +14,10 @@
   解引用vendor runtime目录链接，避免上传指向本机的空链接。
 - `f1_candidate.py`：重建未验收候选。保留原加减速、局部碰撞配置和评分；
   载货上限`.06m/s/.10rad/s`，全局规划padding为候选`.025m`。
+- `f1_compute.py`：零Goal有限实录状态消融；分别记录物理、IMU、实际scan与点云等价，
+  原生步与Python包装剖析分列，始终`task_acceptance=false`。
+- `f1_capacity.py`：独立ROS观察者，22墙秒静止，读回源时钟/scan/16×360点云/IMU，
+  不发布运动；容量结果不代替完整任务。
 - `f1_run.py`：在临时Kaggle环境安装Python3.12，显式绑定上传ROS CLI和
   venv内colcon的解释器。独立构建原1.3.13的Smac缓存和源时钟平滑补丁，
   运行原生时钟用例、原prepare和原factory的B→A。
@@ -56,3 +60,12 @@ cp experiments/kaggle/f1_candidate.py /absolute/private/f1-dataset/
 
 来源：[官方Kaggle CLI](https://github.com/Kaggle/kaggle-cli/blob/main/docs/kernels.md)、
 [kernel metadata](https://github.com/Kaggle/kaggle-cli/blob/main/docs/kernels_metadata.md)。
+
+显式设置`FISHBOT_OMIT_UNUSED_NATIVE_RANGEFINDERS=1`时，prepare只省略合作驱动
+未消费的legacy laser/laser_ray声明，默认保持。实际10Hz二维/三维射线、IMU、
+500Hz物理、完整碰撞与原时限不变；该模式在完整任务前执行held ROS容量检查。
+输入数据集比源码旧时，允许在私有Kaggle脚本中用`FISHBOT_SOURCE_OVERLAYS`
+显式附带更新文件原文。输出`source-overlay.json`与原文记录基础commit/文件，
+不宣称数据集本身已更新。compute模式用`FISHBOT_KAGGLE_SCOPE=compute`，
+单文件Kaggle脚本可嵌入`COMPUTE_WORKER_SOURCE`与`COMPUTE_FIXTURES`；
+完整模式可嵌入`CAPACITY_WORKER_SOURCE`。这些都复用原控制与评分入口。

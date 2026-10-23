@@ -211,7 +211,7 @@ def car_footprint(common_model, radius=.13, vehicle=None):
 
 def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
                 spawn=(0., -2.), station=DEFAULT_STATION, spawn_yaw=0., camera=False, camera_light_scale=1.,
-                tag_lateral_offset=.03, scene_profile=None):
+                tag_lateral_offset=.03, scene_profile=None, omit_unused_native_rangefinders=False):
     import numpy as np
 
     so101_project, fishbot_project, output = map(lambda path: Path(path).resolve(),
@@ -253,7 +253,17 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
     common_root.find("worldbody").append(car)
     for element in fish_root.find("actuator"):
         common_root.find("actuator").append(copy.deepcopy(element))
-    common_root.append(copy.deepcopy(fish_root.find("sensor")))
+    sensors = copy.deepcopy(fish_root.find("sensor"))
+    omitted = []
+    if omit_unused_native_rangefinders:
+        # Cooperation.scan() and NativeCloudQuery produce the used rays. This
+        # replicated legacy sensor has no consumer here; preserve all IMUs.
+        for sensor in list(sensors):
+            if (sensor.tag == 'rangefinder' and sensor.get('name') == 'laser'
+                    and sensor.get('site') == 'laser_ray'):
+                omitted.append(dict(sensor.attrib))
+                sensors.remove(sensor)
+    common_root.append(sensors)
     _append_arena(common_root, arena_xml)
     dock = tuple(float(station[i]+vehicle['dock_offset_m'][i] if i < 2 else vehicle['dock_offset_m'][2]) for i in range(3))
     station_camera = None
@@ -322,6 +332,11 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
                 "arm_contact_xml": str(contact_path), "so101_project": str(so101_project),
                 "fishbot_project": str(fishbot_project), "station_offset": station.tolist(),
                 "scene_profile": scene_profile, "vehicle_profile": vehicle,
+                "sensor_compute": {"omit_unused_native_rangefinders": bool(omit_unused_native_rangefinders),
+                                   "omitted_declarations": omitted,
+                                   "scan_producer": "Physics.scan/mj_multiRay",
+                                   "cloud_producer": "cooperation_lidar.NativeCloudQuery/mj_multiRay",
+                                   "native_imu_preserved": True},
                 "station_height_m": float(station[2]),
                 "display_cameras": {"overview": "cooperation_overview", "arm_detail": "overview"},
                 "spawn": spawn.tolist(), "dock_pose": list(dock),

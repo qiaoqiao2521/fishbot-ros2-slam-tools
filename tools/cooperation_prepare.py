@@ -297,7 +297,8 @@ def prepare(args):
                          spawn=spawn,spawn_yaw=spawn_yaw,camera=station_perception['mode']=='vision',
                          camera_light_scale=getattr(args,'camera_light_scale',1.),
                          tag_lateral_offset=getattr(args,'tag_lateral_offset',.03),
-                         scene_profile=scene_profile)
+                         scene_profile=scene_profile,
+                         omit_unused_native_rangefinders=getattr(args,'omit_unused_native_rangefinders',False))
     factory_path = getattr(args, 'factory_config', None)
     if factory_path:
         from cooperation_factory_scene import apply_factory_scene
@@ -486,6 +487,8 @@ def main():
                         help='Editable vehicle/sensors/task JSON; creates a new independent scene')
     parser.add_argument('--factory-config',type=Path,
                         help='Editable delivery stations, orders and physical channel occupancy')
+    parser.add_argument('--omit-unused-native-rangefinders',action='store_true',
+                        help='Omit legacy 500 Hz native rays; preserve actual scan, point cloud and IMU producers')
     parser.add_argument('--navigation-planner',choices=('navfn','smac-hybrid','smac-reeds-shepp','smac-lattice'),default='navfn',
                         help='Optional native planner candidate; preserves controller and physical limits')
     parser.add_argument('--planner-minimum-turning-radius',type=float,default=.20,

@@ -1,5 +1,13 @@
 # F1 Findings
 
+## Kaggle计算瓶颈有限对照（2026-10-24）
+
+- v6是真实原任务失败，非部署失败：KDL/ConsoleBridge等补齐后原生构建与source-clock通过；原任务360墙秒仅约146源秒，B真实抓放/home成立而尚无载货Nav，A未运行。loop包装step77046次总279.375s，publish7704次92.423s；前者包含控制/接触/静止检查，不冒称纯mj_step。
+- 合作场景复制的laser/laser_ray原生rangefinder扩展为360个，每500Hz物理步计算；实际合作驱动从不读该测距数组。/scan来自Physics.scan的10Hz mj_multiRay，3D来自NativeCloudQuery的16×360/10Hz，原生3个IMU仍消费sensordata。省略旧声明不等于降低被使用的传感器分辨率。
+- compute v2五个v6观测初态（start/docked/lifting/released/loaded_home），各200步的全部记录误差0；scan/点云/raw_points/命中ID相同，质量/惯量/接触/执行器/求解器参数相同。原生单步范围1.023–2.138ms→.198–.274ms。fixture没有solver warmstart，不能称逐比特现场续跑、泛化等价或配送成功。
+- 对照仍受云VM分配与采样范围限制。后续保留默认场景，显式配置省略、清单可追溯；实际ROS held容量另验，再跑原始任务。source overlay由Kaggle代码版本保存原文，输入v2仍明确634c6e6；不引入内容哈希执行锁。
+- 取证根~/.local/share/fishbot/cloud-jobs/kaggle-20261024/{f1-output-v6,compute-output-v2}。全输出下载曾连接超时，已完整读回关键result/score/任务账本/世界XML/195MB observer（0坏行）/loop timing，不能把下载失败归为机器人失败。
+
 ## Kaggle接续（2026-10-24）
 
 - v4/v5实际错误区分运行依赖与构建SDK：liborocos-kdl1.5存在不代表orocos_kdlConfig.cmake存在，LTTng运行库不含开发链接名，class_loader实际CMake导出还要求console_bridge。仅递归package.xml公开字段未完全覆盖，先前“依赖已核对”不能外推编译通过。原生CMake查询两安装包+OMPL，trace与cache文件通过dpkg归属找到Console Bridge/OpenSSL与Boost组件；3.12配置返回0，仍不是云端编译或运动证据。查询、旧默认3.11记录及所有云失败保留在私有交接根。

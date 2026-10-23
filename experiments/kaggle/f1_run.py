@@ -44,6 +44,28 @@ def run(name, args, *, cwd=None, timeout=600, env=None, required=True):
     return row
 
 
+def prepare_scene(fishbot, so101, python, data, runtime_env):
+    scene = ARTIFACTS/"scene"
+    factory = json.loads((fishbot/"tools/config/factory_delivery/line-side-occupied.json").read_text())
+    for destination in factory["destinations"]:
+        if destination["id"] == "line_b":
+            destination["approach_poses"] = [{"x": .95, "y": -2., "yaw": 0.}]
+    factory_file = ARTIFACTS/"factory.json"
+    factory_file.write_text(json.dumps(factory, indent=2)+"\n")
+    options = (["--omit-unused-native-rangefinders"]
+               if os.environ.get("FISHBOT_OMIT_UNUSED_NATIVE_RANGEFINDERS") == "1" else [])
+    run("scene-prepare", ["bash", "-ec", "source /opt/ros/jazzy/setup.bash; exec \"$@\"",
+        "f1-prepare", str(fishbot/"tools/fishbot_cooperation.sh"), "prepare",
+        "--so101-project", str(so101), "--scene-profile",
+        str(fishbot/"tools/config/cooperation_profiles/jackal_j100-lidar3d-transport.json"),
+        "--factory-config", str(factory_file), "--navigation-planner", "smac-lattice",
+        "--lattice-allow-reversing", "--lattice-rotation-shim", "--amcl-motion-model", "omni",
+        "--output", str(scene), *options], env=runtime_env, timeout=180)
+    run("candidate-configuration", [python, str(data/"f1_candidate.py"),
+                                     str(scene/"scene-manifest.json")], env=runtime_env)
+    return scene
+
+
 def main():
     WORK.mkdir(parents=True, exist_ok=False)
     ARTIFACTS.mkdir(parents=True, exist_ok=False)
@@ -66,6 +88,18 @@ def main():
                 raise ValueError("Invalid runtime archive header: "+name)
             with tarfile.open(fileobj=source, mode="r|gz") as archive:
                 archive.extractall(destination, filter="data")
+    overlays = globals().get("FISHBOT_SOURCE_OVERLAYS", {})
+    for relative, content in overlays.items():
+        target = fishbot/relative
+        target.write_text(content)
+    if overlays:
+        (ARTIFACTS/"source-overlay.json").write_text(json.dumps({
+            "base_commit": bundle.get("fishbot_commit"),
+            "files": list(overlays), "basis": "explicit Kaggle code-version source overlay"}, indent=2)+"\n")
+        for relative in overlays:
+            target = ARTIFACTS/"source-overlay"/relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(overlays[relative])
     apt_env = dict(os.environ, DEBIAN_FRONTEND="noninteractive")
     run("ubuntu-index", ["apt-get", "update"], env=apt_env, required=False)
     packages = sorted(set(bundle["system_packages"]+[
@@ -116,27 +150,36 @@ def main():
                        PATH="/usr/bin:/bin:"+os.environ.get("PATH", ""),
                        PYTHONPATH=":".join(map(str, (fishbot/"tools",
                            planning/"lib/python3.12/site-packages", Path("/usr/lib/python3/dist-packages")))))
+    if os.environ.get("FISHBOT_KAGGLE_SCOPE") == "compute":
+        scene = prepare_scene(fishbot, so101, python, data, runtime_env)
+        worker = WORK/"f1_compute.py"
+        source_text = globals().get("COMPUTE_WORKER_SOURCE")
+        worker.write_text(source_text if source_text is not None else
+                          Path(__file__).with_name("f1_compute.py").read_text())
+        fixtures = ARTIFACTS/"compute-fixtures.json"
+        fixtures.write_text(json.dumps(globals().get("COMPUTE_FIXTURES", []), indent=2)+"\n")
+        run("compute-profile", ["bash", "-ec", 'source tools/fishbot_mujoco_env.sh; exec "$@"',
+            "f1-compute", python, "-B", str(worker), str(scene/"scene-manifest.json"),
+            str(fixtures), str(ARTIFACTS/"compute")], cwd=fishbot, env=runtime_env, timeout=180)
+        save({"kind": "f1_kaggle_compute", "task_acceptance": False, "navigation_goals": 0,
+              "steps": STEPS, "benchmark": json.loads((ARTIFACTS/"compute/result.json").read_text())})
+        return
     run("nav2-build", ["bash", "-ec", build, "f1-build", str(native), python, str(planning/"bin/colcon")],
         env=runtime_env, timeout=900)
     with tarfile.open(ARTIFACTS/"native-install.tar.gz", "w:gz") as archive:
         archive.add(native/"install", arcname="install")
-    scene = ARTIFACTS/"scene"
-    factory = json.loads((fishbot/"tools/config/factory_delivery/line-side-occupied.json").read_text())
-    for destination in factory["destinations"]:
-        if destination["id"] == "line_b":
-            destination["approach_poses"] = [{"x": .95, "y": -2., "yaw": 0.}]
-    factory_file = ARTIFACTS/"factory.json"
-    factory_file.write_text(json.dumps(factory, indent=2)+"\n")
-    run("scene-prepare", ["bash", "-ec", "source /opt/ros/jazzy/setup.bash; exec \"$@\"",
-        "f1-prepare", str(fishbot/"tools/fishbot_cooperation.sh"), "prepare",
-        "--so101-project", str(so101), "--scene-profile",
-        str(fishbot/"tools/config/cooperation_profiles/jackal_j100-lidar3d-transport.json"),
-        "--factory-config", str(factory_file), "--navigation-planner", "smac-lattice",
-        "--lattice-allow-reversing", "--lattice-rotation-shim", "--amcl-motion-model", "omni",
-        "--output", str(scene)], env=runtime_env, timeout=180)
-    run("candidate-configuration", [python, str(data/"f1_candidate.py"),
-                                     str(scene/"scene-manifest.json")], env=runtime_env)
+    scene = prepare_scene(fishbot, so101, python, data, runtime_env)
     setup = 'source tools/fishbot_mujoco_env.sh; source "$FISHBOT_NAV2_QUERY_OVERLAY/local_setup.bash"; exec "$@"'
+    if os.environ.get("FISHBOT_OMIT_UNUSED_NATIVE_RANGEFINDERS") == "1":
+        capacity = WORK/"f1_capacity.py"
+        capacity.write_text(globals().get("CAPACITY_WORKER_SOURCE") or
+                            Path(__file__).with_name("f1_capacity.py").read_text())
+        run("held-ros-capacity", ["bash", "-ec", setup, "f1-capacity", python, "-B", str(capacity),
+            str(scene/"scene-manifest.json"),str(ARTIFACTS/"capacity")],
+            cwd=fishbot,env=runtime_env,timeout=90)
+        capacity_result=json.loads((ARTIFACTS/"capacity/result.json").read_text())
+        if not capacity_result['capacity_passed']:
+            raise RuntimeError("Held ROS loop has insufficient measured capacity; see capacity/result.json")
     run("native-clock", ["bash", "-ec", setup, "f1-clock", "/usr/bin/python3.12", "-B",
         "tools/tests/verify_nav2_smoothing_clock.py", "--domain", "142", "--output",
         str(ARTIFACTS/"native-clock")], cwd=fishbot, env=runtime_env, timeout=150)

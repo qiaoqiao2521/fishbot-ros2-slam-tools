@@ -33,6 +33,23 @@ m=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=p
 j100_profile=out/'j100-profile.json';j100_profile.write_text(json.dumps({'vehicle':'jackal_j100'}))
 j100=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
     output=out/'j100',scene_profile=j100_profile))
+lean=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
+    output=out/'lean',scene_profile=j100_profile,omit_unused_native_rangefinders=True))
+pair=[mujoco.MjModel.from_xml_path(row['world_xml']) for row in (j100,lean)]
+pair_data=[mujoco.MjData(model) for model in pair]
+for model,data in zip(pair,pair_data):
+ data.ctrl[:6]=j100['arm_home_qpos6'];mujoco.mj_forward(model,data)
+physical_error=0.
+for _ in range(200):
+ for model,data in zip(pair,pair_data):mujoco.mj_step(model,data)
+ physical_error=max(physical_error,float(np.max(np.abs(pair_data[0].qpos-pair_data[1].qpos))))
+sensor_compute={'default':j100['sensor_compute'],'candidate':lean['sensor_compute'],
+ 'sensor_counts':[model.nsensor for model in pair],
+ 'candidate_names':[pair[1].sensor(i).name for i in range(pair[1].nsensor)],
+ 'physics_error':physical_error,
+ 'geometry_equal':all(np.array_equal(getattr(pair[0],key),getattr(pair[1],key)) for key in
+  ('geom_size','geom_pos','geom_quat','geom_friction','geom_contype','geom_conaffinity','body_mass','body_inertia')),
+ 'maps_equal':all(j100[key]==lean[key] for key in ('generated_map_sha256','generated_collision_map_sha256'))}
 declared={'mode':'perturbed','max_covariance':[.01,.01,.01],
           'noise_std':[.01,.02,.03],'bias':[.02,-.01,.01],
           'dropout_probability':.25,'seed':37,'occlusion_windows':[[2.,3.]]}
@@ -190,6 +207,7 @@ result={'egress':{'legacy_absent':'egress_pose' not in m, 'pose':j100.get('egres
         'footprint_original_radius':m['car_footprint_original_radius_m'],
         'installed_docking_version':ET.parse('/opt/ros/jazzy/share/opennav_docking/package.xml').getroot().findtext('version'),
         'registered_docking_plugins':[node.get('type') for node in ET.parse('/opt/ros/jazzy/share/opennav_docking/plugins.xml').getroot().iter('class')]}
+result['sensor_compute']=sensor_compute
 print('RESULT_JSON:'+json.dumps(result))
 '''
         result = subprocess.run([str(RUNTIME), '-B', '-c', code, str(PROJECT), cls.temp.name],
@@ -201,6 +219,18 @@ print('RESULT_JSON:'+json.dumps(result))
     @classmethod
     def tearDownClass(cls):
         cls.temp.cleanup()
+
+    def test_optional_compute_policy_preserves_physics_maps_and_used_imu(self):
+        e=self.evidence['sensor_compute']
+        self.assertFalse(e['default']['omit_unused_native_rangefinders'])
+        self.assertEqual(e['default']['omitted_declarations'],[])
+        self.assertTrue(e['candidate']['omit_unused_native_rangefinders'])
+        self.assertEqual(e['candidate']['omitted_declarations'],[{'name':'laser','site':'laser_ray'}])
+        self.assertEqual(e['sensor_counts'],[363,3])
+        self.assertEqual(e['candidate_names'],['imu_quat','imu_gyro','imu_accel'])
+        self.assertEqual(e['physics_error'],0.)
+        self.assertTrue(e['geometry_equal'])
+        self.assertTrue(e['maps_equal'])
 
     def test_j100_declares_straight_staging_egress_without_changing_legacy(self):
         e = self.evidence['egress']

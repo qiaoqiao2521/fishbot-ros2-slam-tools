@@ -1,7 +1,11 @@
 # F1 Progress
 
 ## Current
-最新v6已越过nav2-build、scene-prepare、candidate-configuration和native-clock，进入原factory-b-a；后续required阶段出现，证明前一阶段按原返回合同成功。source-clock脚本仅当两组实际加速度/暂停/动态频率检查均通过且私有domain清理后返回0；仍将在作业结束独立读回其原result。当前Kaggle状态RUNNING，运行中按版本6取输出返回404，尚无B/A评分、原生UUID或位移取证，不能计配送通过。不重新派发或修改当前回合。
+2026-10-24 Kaggle v6原任务已结束，完整B→A未通过，A未派发。云端原生编译179.28秒、时钟验证通过；B task=7db219ae-1658-4e9e-813b-b0794204c3c8，独立7295物理样本确认真实停靠/双指抓取/释放落稳/arm home通过，但源时钟约.4倍实时。出站UUID560e0ebb9f79432d8ab03bb20c34d206直到359.48墙秒才开始，原360秒取消5；未派载货Navigate，货物仅位移.001352m，最终B误差2.31166m，完整原K=false。原task记录failed，factory外层终态观测null仍保留。guard只在停靠介入，非纯视觉精度；.1源秒采样缺口保留。源码选定文本起止一致、owned存活0/9111关闭、finalization_errors=[]。
+
+同账号compute v2零Goal短对照已读回：五个v6实录状态各200步，省略遗留laser/laser_ray原生rangefinder后，qpos/qvel/qacc/力/接触/IMU误差均0，实际360线scan和5760点云及命中ID逐点一致；完整几何/物理选项相同。原生步均值1.023–2.138ms→.198–.274ms；profile含Python的500步.772→.270秒。只证明有限状态等价与计算收益，不计运输或全栈实时成绩。compute v1因副本manifest仍指原world而在步进前拒绝，已保留失败；v2给副本自身清单，未绕过场景绑定。
+
+已接入显式--omit-unused-native-rangefinders，默认不变；manifest保存省略声明与实际scan/cloud producer，未减实际雷达射线或频率。14项prepare/物理/地图回归通过（14.988s），六脚本语法和diff检查通过。云端下一版本将显式附带两份源码overlay，保留v2基础commit和原文本，不假装数据集已含新代码。先零运动22墙秒实际ROS时钟/scan/16×360点云/IMU，再在计算余量满足时跑原B→A；原500Hz物理/50Hz观测、120/360/1000及全部评分不变。当前尚未派发该新完整回合；owner=root，不跨对话。knowledge_status=pending（本轮原生计算与完整任务继续验收）。
 
 当前kernel v6已提交，数据v2/核心源码634c6e6保持。v4实际进入CMake但缺KDL开发配置；v5补KDL/LTTng等后继续在class_loader的console_bridge配置处失败，均零ROS/零配送。XML公开依赖核对没有覆盖该安装包实际CMake导出，不能记为已完整解决。改用原生CMake配置轨迹和dpkg文件归属，补Console Bridge/OpenSSL及Boost atomic/serialization/system开发组件；本机两个安装包与OMPL的配置查询在明确Python3.12时通过（仅配置，无插件编译/ROS节点）。完整云编译、native-clock与原B→A仍待验收；若编译成功将保留native-install.tar.gz。
 
