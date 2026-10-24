@@ -1,5 +1,15 @@
 # 重构进度
 
+## 2026-10-24 — SO101 Carry接续入口收口
+
+Current：复核并接续原八个Carry在途文件，未改Drone离线工具或Mint。根读当前diff，原runtime五项测试新跑通过；既有56项Jest、生产构建和13项无运动浏览器QA所涉前端源码未变（a433d1e至59e5578无workbench源码改动），复用原证据，不与后台Blender抢渲染。
+
+Done：原5186服务已退出、无监听，原持久化SO10113／Drone25任务均终态；按原环境与入口新启node服务，没有kill旧PID。实际SO101 runtime ready=true/resume_carry=true，Drone ready=true/resume_carry=false；原全部任务ID保留，主页与main／Carry chunk按原构建实际服务。向原SO101终态任务接续返回409、Drone不支持返回405，均无新marker或任务。原件在apps/fishbot-control-station/workbench-review-tests/output/carry-handoff/live-api-readback.json。
+
+Evidence：SO101独立仓已固定d93d60f完成原物理resume pass、waiting取消与原timeout两fail保留；源码后续仅P0定位诊断改动，未改Carry／物理函数。这里的实际API检查只验就绪与拒绝，没有触发新抓放或证明浏览器按钮到物理的完整接续回合；不把fixture UI与云端输入标记拼成一次真实网页验收。
+
+Remaining：根接实际原任务的HTTP继续／取消与物理全过程，保留原90sim120wall／244／1mm及全部回退；六技能halt、同世界恢复、20＋20仍未完成。Drone三旧文件及native-session两新文件保持其原owner在途，不混入Carry提交。Knowledge=already_covered，沿用Wiki§20的交接／动作／晋级分列。
+
 ## Current
 
 2026-10-18：P0已交付，P1运行合同完成并通过隔离服务/浏览器验收。P2共享工作面开始拆分；P3–P6待实施。原ROS进程保留；5180/5181是共享源码的Vite开发服务，前端随源修改HMR。

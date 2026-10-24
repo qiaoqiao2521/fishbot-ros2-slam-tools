@@ -7,7 +7,9 @@
 import {
   Alert,
   Button,
+  Checkbox,
   Divider,
+  FormControlLabel,
   MenuItem,
   TextField,
   Typography,
@@ -27,6 +29,7 @@ import { SaveConfig } from "@lichtblick/suite-base/types/panels";
 
 import { clearDroneEditor, setDroneEditor } from "./droneEditor";
 import {
+  carryGateWaiting,
   graspEvidenceLabel,
   latestSimulationTask,
   requestSimulation,
@@ -58,6 +61,7 @@ import {
   stationActions,
   stationKindLabel,
   stationPlatform,
+  stationRequestsCarryGate,
   transformObstacle,
   worldPosition,
   workspaceStationSample,
@@ -295,6 +299,7 @@ function RobotStation({
   const [refresh, setRefresh] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [resumingCarry, setResumingCarry] = useState(false);
   const [sceneSource, setSceneSource] = useState<SceneMode>();
   const [sceneError, setSceneError] = useState("");
   const [sceneStatusError, setSceneStatusError] = useState("");
@@ -303,6 +308,7 @@ function RobotStation({
   const sceneRevision = useRef(0);
   const submissionController = useRef<AbortController>();
   const cancellationController = useRef<AbortController>();
+  const carryResumeController = useRef<AbortController>();
   const rejectedTaskId = useRef("");
   const fileInput = useRef<HTMLInputElement>(null);
   const latestTaskForImport = useRef({ taskId, task, checkingTask, submitting, cancelling });
@@ -679,6 +685,7 @@ function RobotStation({
     () => () => {
       submissionController.current?.abort();
       cancellationController.current?.abort();
+      carryResumeController.current?.abort();
       sceneController.current?.abort();
       planController.current?.abort();
     },
@@ -860,6 +867,43 @@ function RobotStation({
       cancellationController.current = undefined;
       if (!controller.signal.aborted) {
         setCancelling(false);
+        setRefresh((value) => value + 1);
+      }
+    }
+  };
+  const resumeCarry = async () => {
+    if (!taskId || carryResumeController.current || cancellationController.current || !carryGateWaiting(task)
+        || runtime?.resume_carry !== true) {
+      return;
+    }
+    const id = taskId;
+    const controller = new AbortController();
+    carryResumeController.current = controller;
+    setResumingCarry(true);
+    setExecutionError("");
+    try {
+      const result = await requestSimulation<SimulationTask>(
+        `/tasks/${encodeURIComponent(id)}/resume-carry`, controller.signal, {}, platform,
+      );
+      if (result.id !== id) {
+        throw new TaskRequestError("接续响应的任务 ID 不一致，请查询原任务。");
+      }
+      if (!controller.signal.aborted && latestTaskForImport.current.taskId === id) {
+        // A POST snapshot can arrive after a poll has observed cancellation or completion.
+        // Preserve that newer outcome; the original ID is queried again below.
+        setTask((previous) => previous?.id === id && taskIsActive(previous)
+          ? { ...previous, carryResumeRequested: previous.carryResumeRequested === true
+            || result.carryResumeRequested === true }
+          : previous);
+      }
+    } catch (error) {
+      if (!controller.signal.aborted && latestTaskForImport.current.taskId === id) {
+        setExecutionError(`接续结果未确认，请查询原任务；不会自动重发：${error instanceof Error ? error.message : String(error)}`);
+      }
+    } finally {
+      carryResumeController.current = undefined;
+      if (!controller.signal.aborted) {
+        setResumingCarry(false);
         setRefresh((value) => value + 1);
       }
     }
@@ -1958,6 +2002,23 @@ function RobotStation({
         <Typography variant="body2" color="text.secondary">
           运行使用提交时的草稿快照，并自动显示该任务的实时三维。后续编辑不会改变已提交任务；取消或结束后保留最后实际姿态。
         </Typography>
+        {!drone && (
+          <>
+            <FormControlLabel
+              control={<Checkbox checked={stationRequestsCarryGate(station)} onChange={(_event, checked) => {
+                const next = { ...station };
+                if (checked) { next.skillControl = { mode: "hold-before-carry" }; }
+                else { delete next.skillControl; }
+                commit(next);
+                setNotice("已修改下一份草稿；当前任务使用提交时的配置。");
+              }} />}
+              label="夹起后等待接续"
+            />
+            <Typography variant="caption" color="text.secondary">
+              仅改下一稿。原超时继续计时，逾时任务失败。
+            </Typography>
+          </>
+        )}
         <div className={classes.row}>
           <Button
             variant="contained"
@@ -1989,6 +2050,13 @@ function RobotStation({
                 ? "停止并安全返回降落"
                 : "取消任务"}
           </Button>
+          {!drone && carryGateWaiting(task) && (
+            <Button size="small" disabled={submitting || cancelling || resumingCarry
+              || task?.carryResumeRequested === true || runtime?.resume_carry !== true}
+              onClick={() => { void resumeCarry(); }}>
+              {resumingCarry ? "正在发送接续…" : task?.carryResumeRequested ? "接续已请求" : "接续搬运"}
+            </Button>
+          )}
           {drone && (
             <Button
               size="small"
@@ -2013,6 +2081,12 @@ function RobotStation({
             {taskId ? "查询原任务" : "刷新执行器"}
           </Button>
         </div>
+        {!drone && carryGateWaiting(task) && (
+          <Typography variant="body2" data-testid="carry-gate-status">
+            等待接续搬运。原超时继续计时，逾时任务失败。
+            {runtime?.resume_carry !== true ? "接续服务能力尚未确认，请查询原任务。" : ""}
+          </Typography>
+        )}
         {drone && (
           <>
             <Typography variant="body2">

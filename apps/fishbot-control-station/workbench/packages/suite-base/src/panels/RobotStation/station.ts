@@ -57,6 +57,8 @@ export type Station = {
   recipeDocument?: Record<string, unknown>;
   // Preserve editable execution intent, including unsupported values, for backend validation.
   execution?: unknown;
+  // Keep unknown declarations editable; the original executor validates their semantics.
+  skillControl?: unknown;
   flight?: {
     speed_m_s: number;
     planner: "waypoint" | "ego";
@@ -93,6 +95,10 @@ export const ACTION_LABELS: Record<Instruction["action"], string> = {
 
 export function stationPlatform(station: Station): Platform {
   return station.platform ?? "so101";
+}
+
+export function stationRequestsCarryGate(station: Station): boolean {
+  return record(station.skillControl)?.mode === "hold-before-carry";
 }
 
 export function stationActions(platform: Platform): Instruction["action"][] {
@@ -333,6 +339,9 @@ export function copyStation(station: Station): Station {
     ...(Object.hasOwn(station, "execution")
       ? { execution: copyExecution(station.execution) }
       : {}),
+    ...(Object.hasOwn(station, "skillControl")
+      ? { skillControl: copyExecution(station.skillControl) }
+      : {}),
     ...(station.recipeDocument
       ? { recipeDocument: copyExecution(station.recipeDocument) as Record<string, unknown> }
       : {}),
@@ -501,6 +510,12 @@ export function importStation(value: unknown): {
     throw new Error("请选择含 nodes 数组的工作站 JSON；当前草稿未改变。");
   }
   const warnings: string[] = [...(recipe?.warnings ?? [])];
+  if (Object.hasOwn(source, "skillControl")) {
+    const control = record(source.skillControl);
+    if (control?.mode !== "hold-before-carry" || Object.keys(control).some((key) => key !== "mode")) {
+      warnings.push("技能接续参数未知或无效，已原样保留；运行时由执行器校验。");
+    }
+  }
   if (Object.hasOwn(source, "execution")) {
     const execution = record(source.execution);
     const pair = (value: unknown): value is [number, number] =>
@@ -712,6 +727,9 @@ export function importStation(value: unknown): {
     ...(source.platform != undefined ? { platform } : {}),
     ...(Object.hasOwn(source, "execution")
       ? { execution: copyExecution(source.execution) }
+      : {}),
+    ...(Object.hasOwn(source, "skillControl")
+      ? { skillControl: copyExecution(source.skillControl) }
       : {}),
     ...(platform === "px4"
       ? {

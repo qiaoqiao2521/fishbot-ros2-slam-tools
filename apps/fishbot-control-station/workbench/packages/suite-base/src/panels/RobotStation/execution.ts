@@ -4,6 +4,7 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v2.0. https://mozilla.org/MPL/2.0/
 
+import { stationRequestsCarryGate } from "./station";
 import type { Platform, Station } from "./station";
 
 export type SimulationTask = {
@@ -15,6 +16,9 @@ export type SimulationTask = {
   simulation_s?: number;
   report?: Record<string, unknown>;
   skill_evidence?: Record<string, unknown>;
+  carry_gate?: Record<string, unknown>;
+  carryResumeRequested?: boolean;
+  cancelRequested?: boolean;
   artifacts?: { video?: string; report?: string; mcap?: string };
   error?: string;
   station?: Station;
@@ -25,6 +29,7 @@ export type SimulationRuntime = {
   message: string;
   capabilities?: string[];
   executor?: { planners?: string[] };
+  resume_carry?: boolean;
 };
 
 export type DronePlanTask = Omit<SimulationTask, "report"> & {
@@ -92,6 +97,12 @@ export function taskIsActive(task: SimulationTask | undefined): boolean {
     task != undefined &&
     !["succeeded", "failed", "cancelled"].includes(task.status)
   );
+}
+
+export function carryGateWaiting(task: SimulationTask | undefined): boolean {
+  return taskIsActive(task) && task?.cancelRequested !== true && task?.station != undefined
+    && stationRequestsCarryGate(task.station)
+    && task.carry_gate?.mode === "hold-before-carry" && task.carry_gate.state === "waiting";
 }
 
 /** Show original monitor evidence separately from controller phases and task success. */

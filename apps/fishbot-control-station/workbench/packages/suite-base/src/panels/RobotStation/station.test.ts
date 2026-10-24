@@ -22,10 +22,39 @@ import {
   stationActions,
   stationKindLabel,
   stationPlatform,
+  stationRequestsCarryGate,
   transformObstacle,
   workspaceStationSample,
   worldPosition,
 } from "./station";
+
+describe("optional SO101 carry handoff intent", () => {
+  it("keeps default behavior and round-trips opted-in intent through normal and recipe documents", () => {
+    expect(defaultStation()).not.toHaveProperty("skillControl");
+    expect(stationRequestsCarryGate(defaultStation())).toBe(false);
+    const original = { ...defaultStation(), skillControl: { mode: "hold-before-carry" } };
+    for (const serialized of [exportStation(original), exportStationRecipe(original)]) {
+      const imported = importStation(JSON.parse(serialized));
+      expect(imported.station.skillControl).toEqual(original.skillControl);
+      expect(stationRequestsCarryGate(imported.station)).toBe(true);
+      expect(imported.warnings).toEqual([]);
+    }
+  });
+
+  it.each([null, ["unknown"], "hold-before-carry", { mode: "unknown", source: ["editable"] },
+    { mode: "hold-before-carry", timeout: 999 }])("preserves invalid declaration %j for backend rejection", (skillControl) => {
+    const imported = importStation({ ...defaultStation(), skillControl });
+    expect(imported.station.skillControl).toEqual(skillControl);
+    expect(imported.warnings.join(" ")).toContain("已原样保留");
+    const copied = copyStation(imported.station);
+    expect(copied.skillControl).toEqual(skillControl);
+    expect(importStation(JSON.parse(exportStation(copied))).station.skillControl).toEqual(skillControl);
+    if (typeof skillControl === "object" && skillControl != undefined) {
+      expect(copied.skillControl).not.toBe(imported.station.skillControl);
+      expect(imported.station.skillControl).not.toBe(skillControl);
+    }
+  });
+});
 
 describe("SO101 recipe documents through the original Station editor", () => {
   it.each(["x-plus20", "x-minus20"] as const)("round-trips %s with document context and unchanged execution", (sample) => {

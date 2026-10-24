@@ -5,6 +5,7 @@
 // License, v2.0. https://mozilla.org/MPL/2.0/
 
 import {
+  carryGateWaiting,
   graspEvidenceLabel,
   latestSimulationTask,
   requestSimulation,
@@ -16,6 +17,21 @@ import {
 import { defaultDroneStation, defaultStation } from "./station";
 
 describe("SO101 simulation task transport", () => {
+  it("offers carry only for the original opted-in, waiting, nonterminal task", () => {
+    const original = { id: "same-task", status: "running", phase: "hold",
+      station: { ...defaultStation(), skillControl: { mode: "hold-before-carry" } },
+      carry_gate: { mode: "hold-before-carry", state: "waiting" } };
+    expect(carryGateWaiting(original)).toBe(true);
+    expect(carryGateWaiting(undefined)).toBe(false);
+    expect(carryGateWaiting({ ...original, station: defaultStation() })).toBe(false);
+    expect(carryGateWaiting({ ...original, cancelRequested: true })).toBe(false);
+    for (const state of ["pending", "released", "ended"]) {
+      expect(carryGateWaiting({ ...original, carry_gate: { ...original.carry_gate, state } })).toBe(false);
+    }
+    for (const status of ["succeeded", "failed", "cancelled"]) {
+      expect(carryGateWaiting({ ...original, status })).toBe(false);
+    }
+  });
   it("keeps grasp evidence separate from phase and cancelled attempt outcome", () => {
     const evidence = { schema: "so101.physical-skill-evidence.v1", scope: "observation_only",
       grasp: { postcondition_met: false, first_met_elapsed_s: null } };
@@ -80,6 +96,17 @@ describe("SO101 simulation task transport", () => {
       "/api/so101/tasks/saved-task",
       expect.objectContaining({ method: "GET", body: undefined }),
     );
+  });
+
+  it("sends one carry handoff to the same ID, then queries it without automatic POST retry", async () => {
+    const signal = new AbortController().signal;
+    fetchMock.mockResolvedValue(response({ id: "same-task", status: "running" }));
+    await requestSimulation("/tasks/same-task/resume-carry", signal, {});
+    await requestSimulation("/tasks/same-task", signal);
+    expect(fetchMock.mock.calls.map(([url, options]) => [url, options?.method])).toEqual([
+      ["/api/so101/tasks/same-task/resume-carry", "POST"],
+      ["/api/so101/tasks/same-task", "GET"],
+    ]);
   });
 
   it("routes PX4 submission, return-home and cancel to the drone service only", async () => {

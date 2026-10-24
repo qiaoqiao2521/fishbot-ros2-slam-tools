@@ -13,6 +13,7 @@ function createSo101Runtime(options = {}) {
     env:{MUJOCO_GL:'egl',MPLBACKEND:'agg'},
     message:'已连接 MuJoCo 抓放执行器；工位参数逐任务检查。',
     capabilities:['MuJoCo 仿真','RGB 定位与 IK/OMPL','抓取、放置、脱离与回位'],
+    resumeCarry:true,
     ...options,
   });
 }

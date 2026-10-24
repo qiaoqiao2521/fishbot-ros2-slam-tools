@@ -31,7 +31,7 @@ function createTaskRuntime(options) {
   const {sourceRoot, python, script, tasksRoot, apiPrefix, label} = options;
   const collection = options.collection ?? 'tasks';
   const collectionRoute = `/${collection}`;
-  const itemRoute = new RegExp(`^/${collection}/([^/]+)(?:/(cancel|return-home|artifacts/([a-z]+)(?:/([^/]+))?))?$`);
+  const itemRoute = new RegExp(`^/${collection}/([^/]+)(?:/(cancel|return-home|resume-carry|artifacts/([a-z]+)(?:/([^/]+))?))?$`);
   const artifactKinds = options.artifactKinds ?? ['report','video'];
   fs.mkdirSync(tasksRoot, {recursive:true});
   const instanceId = randomUUID(); const children = new Map();
@@ -44,7 +44,7 @@ function createTaskRuntime(options) {
       if (result.status === 0) { try { description = JSON.parse(result.stdout.trim().split('\n').at(-1)); } catch {} }
       if (!description) return {ready:false, instance_id:instanceId, mode:'simulation', message:`执行器预检未通过，请检查 ${label} 环境。`, error:result.error?.message ?? result.stderr?.slice(-1000)};
     }
-    return {ready:ready && description?.ready !== false, instance_id:instanceId, service:options.service ?? 'station', mode:'simulation', task_lookup:true, cancel:true,
+    return {ready:ready && description?.ready !== false, instance_id:instanceId, service:options.service ?? 'station', mode:'simulation', task_lookup:true, cancel:true, resume_carry:options.resumeCarry===true,
       message:ready ? description?.message ?? options.message : `未找到 ${label} 执行脚本或 Python 环境。`,
       capabilities:description?.capabilities ?? options.capabilities ?? [], limits:description?.limits, executor:description};
   }
@@ -73,7 +73,8 @@ function createTaskRuntime(options) {
     const reportFile = artifactPath(id,'report');
     const report = typeof rest.report === 'string' && reportFile ? readJSON(reportFile) ?? rest.result : rest.report ?? rest.result;
     return {...rest, report, id, submittedAt:request.submittedAt, station:request.station, artifacts,
-      cancelRequested:fs.existsSync(path.join(dir,'cancel.request'))};
+      cancelRequested:fs.existsSync(path.join(dir,'cancel.request')),
+      carryResumeRequested:fs.existsSync(path.join(dir,'carry-resume.request'))};
   }
   function listTasks() {
     return fs.readdirSync(tasksRoot, {withFileTypes:true}).filter(entry=>entry.isDirectory() && VALID_ID.test(entry.name))
@@ -130,6 +131,21 @@ function createTaskRuntime(options) {
     if (!TERMINAL.has(current.status)) fs.writeFileSync(path.join(taskDir(id),'return-home.request'),'return home requested\n');
     return {code:200,value:task(id)};
   }
+  function resumeCarry(id) {
+    const current=task(id); if (!current) return {code:404,value:{error:'未找到原任务。'}};
+    if (options.resumeCarry!==true) return {code:405,value:{error:'该执行器不支持搬运接续。'}};
+    if (TERMINAL.has(current.status)) return {code:409,value:{error:'原任务已结束，不能接续搬运。'}};
+    if (current.cancelRequested) return {code:409,value:{error:'原任务已请求取消，不能接续搬运。'}};
+    if (current.station?.skillControl?.mode!=='hold-before-carry') return {code:409,value:{error:'原任务未启用夹起后等待接续。'}};
+    const marker=path.join(taskDir(id),'carry-resume.request');
+    if (fs.existsSync(marker)) return {code:200,value:task(id)};
+    if (current.carry_gate?.mode!=='hold-before-carry' || current.carry_gate?.state!=='waiting') {
+      return {code:409,value:{error:'原任务尚未到达搬运接续点。'}};
+    }
+    try { fs.writeFileSync(marker,'carry resume requested\n',{flag:'wx'}); }
+    catch(error) { if(error.code!=='EEXIST') throw error; }
+    return {code:200,value:task(id)};
+  }
   async function handle(request,response,serveHandler) {
     const pathname=new URL(request.url,'http://localhost').pathname;
     if (!pathname.startsWith(`${apiPrefix}/`)) return false;
@@ -159,6 +175,7 @@ function createTaskRuntime(options) {
         }
         if (request.method==='POST' && match[2]==='cancel') {const result=cancel(id);send(response,result.code,result.value);return true;}
         if (request.method==='POST' && match[2]==='return-home') {const result=returnHome(id);send(response,result.code,result.value);return true;}
+        if (request.method==='POST' && match[2]==='resume-carry') {const result=resumeCarry(id);send(response,result.code,result.value);return true;}
         if (['GET','HEAD'].includes(request.method) && artifactKinds.includes(match[3])) {
           const file=artifactPath(id,match[3]);
           if (!file || (match[4] && decodeURIComponent(match[4]) !== path.basename(file))) {send(response,404,{error:'该任务尚未生成此产物。'});return true;}
@@ -170,6 +187,6 @@ function createTaskRuntime(options) {
     } catch(error) {send(response,request.method==='POST'?400:500,{error:error.message});}
     return true;
   }
-  return {handle,runtime,task,listTasks,submit,cancel,returnHome,paths:{sourceRoot,python,script,tasksRoot}};
+  return {handle,runtime,task,listTasks,submit,cancel,returnHome,resumeCarry,paths:{sourceRoot,python,script,tasksRoot}};
 }
 module.exports={createTaskRuntime};
