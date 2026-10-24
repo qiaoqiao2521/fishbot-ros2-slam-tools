@@ -62,6 +62,6 @@ python3 apps/fishbot-control-station/workbench-tools/drone-trajectory-primitives
 本轮JSON在忽略的`workbench-tools/output/drone-primitives/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/exact-windows.json`。
 两个局部夹具覆盖段内相位、非零初态、加速度拒绝、跨节点PVA及jerk跳变、空任务身份和缺占据资格。
 
-下一项若需候选旁路比较，应先给所选方法接上这个分段合同，并保留原判据、时钟与身份。
+现有MINCO已接成[离线刹停对照](DRONE_STOP_CANDIDATES.md)，保留原判据、时钟与身份。
 在线采用仍缺动态占据有效性、提交/执行回执和有效备份；本切片不解除冻结，不授权训练或飞行。
 验收及仓库交付见[现有进度](../plans/workbench-code-rebuild-20261018/progress.md)。

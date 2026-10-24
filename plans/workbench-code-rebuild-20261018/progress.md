@@ -183,3 +183,16 @@ Knowledge closeout：already_covered。沿用PIT-004依赖隔离和现有任务�
 数据层33项、任务服务3项通过；生产构建通过，仅原两项包体积警告。桌面／390px九项浏览器检查通过，零tasks写请求／pageerror；真实导出fixture经SO101准入检查通过。根查看两屏截图。5186以交付SO101_ROOT及planning-venv显式恢复，已有5187别人的服务未动。新网页完整物理待验，不使用此前开发CLI4/4替代。
 
 本轮只提交RobotStation、so101-runtime、样例浏览器检查和本记录/说明。DroneDiagnostics/drone-diagnostics/drone-candidates仍由原owner在途，保留不纳入本次提交；不停止它们的服务或任务。主FishBot dirty main未改。Knowledge=already_covered，项目状态回源SO101主计划。
+
+
+## 2026-10-24 N3组件对照/N4历史候选交付
+
+- 原生axis_stop/S4NU接N2参考前缀，固定停止时间3.5/1/.4；7条生成、4数学过、3A拒绝、1无任务身份未评分。切点PVAJ最大误差约2.30e-16，尾内J连接约4.77e-13，完整原前缀仍C2。动态占据/终端区域未知、未采用执行，保原V1.8/A1/Z2.2。
+- 新增离线drone-stop-candidates.py、只读drone-candidates.cjs和原生面板子节；/drone/candidates随原MCAP时间，紫候选/红拒绝与原报告分列，父曲线替换后不串用。未写飞控或另建播放器。
+- 3项原生Python检查＋17项Node定向检查、定向ESLint和生产构建通过（仍2项上游包体积警告）。可选null/坏行降级、缺原生程序、真实非零参考J、保原PVA/A拒绝和旧接口/双WS均覆盖。初始lint空值表达式已修复。
+- 隔离5187和常用5186最终各19项浏览器检查通过：#7红线/1.082 A拒绝、#6数学过/占据未知、#8无身份/旧尾清除、原稀疏/后退seek/原报告回归；桌面及390px，writes=0、live WS=0、pageerror=0。根目视核对正负候选、原父替换及手机。
+- QA：忽略的workbench-review-tests/output/drone-candidates-release/（含candidate-panel、math-pass、parent-replaced截图）；首轮toolbar颜色误判在drone-candidates-acceptance/保留，未算通过。JSON在原诊断缓存同ID的stop-candidates.json，首版stop-candidates-first-comparison.json保留。
+- 常用5186兼容后端已存在并复用；旧工具会话已失效，先核实际端口/工作目录/只读能力，不重复启动进程。构建在隔离输出验证后移入默认web/.webpack，上一版在忽略的drone-candidate-previous-build-20261024保留；5187已停。未改其他机器人运行环境；SO101 Python路径WARNING仍未修，未宣称其实际物理/3D回归。
+- agent-link qoder超时无活会话，CBC结束但无正文，均不当通过；内置只读审查提出可选坏JSON阻断原回放，已最小修复并原负例核对。根负责实际结果与串行整合。
+- [使用/参数/数字与边界](../../docs/DRONE_STOP_CANDIDATES.md)。本片完成N3组件基线与N4历史旁路，N3任务级比较、M2滚动提交、M3动态闭环及后续空地臂联动仍未完成；下一项M0源码/许可及CommittedTail差异，不自动训练、解冻或飞行。owner=本对话Codex，整体goal保持active。
+- Knowledge closeout: already_covered。沿用任务身份/源时钟、动作与物理资格分层及PIT-004；数值、可选输入降级和CLI兼容性留项目，未写共享知识或memory。

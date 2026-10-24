@@ -19,6 +19,7 @@ import Panel from "@lichtblick/suite-base/components/Panel";
 import PanelToolbar from "@lichtblick/suite-base/components/PanelToolbar";
 import Stack from "@lichtblick/suite-base/components/Stack";
 
+import { CandidateComparison } from "./CandidateComparison";
 import { SparseObservation } from "./SparseObservation";
 
 type Event = {
@@ -53,7 +54,7 @@ type Diagnostics = {
   warnings: string[];
   current?: { phase: string; pose_age_s?: number; nominal_id?: number; reference_age_s?: number };
 };
-const TOPICS = ["/drone/diagnostics", "/drone/sparse"];
+const TOPICS = ["/drone/diagnostics", "/drone/sparse", "/drone/candidates"];
 const selectId = (context: MessagePipelineContext) => context.playerState.playerId;
 const selectData = (context: MessagePipelineContext) => context.playerState.activeData;
 const selectSeek = (context: MessagePipelineContext) => context.seekPlayback;
@@ -91,6 +92,7 @@ function DiagnosticContent(): React.JSX.Element {
   const messages = useMessagesByTopic({ topics: TOPICS, historySize: 1 });
   const message = messages[TOPICS[0]!]?.at(-1);
   const sparseMessage = messages[TOPICS[1]!]?.at(-1);
+  const candidateMessage = messages[TOPICS[2]!]?.at(-1);
   const [filter, setFilter] = useState("all");
   const [history, setHistory] = useState<
     { id: string; name: string; status: string; url: string }[]
@@ -184,6 +186,11 @@ function DiagnosticContent(): React.JSX.Element {
         当前位姿样本年龄：{data.current.pose_age_s?.toFixed(3) ?? "未知"} s； 参考年龄：
         {data.current.reference_age_s?.toFixed(3) ?? "未知"} s。
       </Typography>
+      <Divider />
+      <CandidateComparison
+        value={candidateMessage?.schemaName === "drone.StopCandidates" ? candidateMessage.message : undefined}
+        taskId={data.task_id}
+      />
       <Divider />
       <SparseObservation
         value={

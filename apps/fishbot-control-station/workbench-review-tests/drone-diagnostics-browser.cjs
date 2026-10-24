@@ -9,6 +9,16 @@ const upstream = createRequire(path.join(__dirname, '../workbench/package.json')
 const { chromium, expect } = upstream('@playwright/test');
 const { PNG } = upstream('pngjs');
 const sparseExpected = process.env.DRONE_SPARSE_EXPECTED === '1';
+const candidatesExpected = process.env.DRONE_CANDIDATES_EXPECTED === '1';
+const redCandidatePixels = bytes => {
+  const png = PNG.sync.read(bytes); let count = 0;
+  // Ignore the native panel toolbar's persistent red log badge.
+  for (let i = 32 * png.width * 4; i < png.data.length; i += 4) {
+    const [r, g, b] = png.data.subarray(i, i + 3);
+    if (r > g + 35 && r > b + 15 && b > g + 10) count++;
+  }
+  return count;
+};
 const purplePixels = bytes => {
   const png = PNG.sync.read(bytes); let count = 0;
   for (let i = 0; i < png.data.length; i += 4) {
@@ -67,6 +77,34 @@ const checked = name => { result.checks.push(name); save(); console.log(name); }
       // Native Plot prefetch runs in a worker after range reads; allow the 26 MiB fixture to fill.
       await page.waitForTimeout(7000);
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      if (candidatesExpected) {
+        await expect(panel).toContainText('共 7 条；数学通过 4 条');
+        await expect(panel).toContainText('曲线 #7：数学拒绝');
+        await expect(panel).toContainText('峰加速度 1.082');
+        await panel.getByText('离线前缀＋MINCO刹停', { exact: true }).scrollIntoViewIfNeeded();
+        const rejectedShot = path.join(output, mobile ? 'mobile-candidate-rejected.png' : 'desktop-candidate-rejected.png');
+        const red = redCandidatePixels(await scene.screenshot({ path: rejectedShot }));
+        assert(red > 10, 'Rejected candidate must be visible in native 3D');
+        result.screenshots.push(rejectedShot); save();
+        const comparisonShot = path.join(output, mobile ? 'mobile-candidate-panel.png' : 'desktop-candidate-panel.png');
+        await page.screenshot({ path: comparisonShot, fullPage: true }); result.screenshots.push(comparisonShot); save();
+        checked(`${mobile ? 'mobile' : 'desktop'}-rejected-native-candidate-retains-original-failure`);
+        await timestamp.fill('32.920'); await timestamp.press('Enter'); await timestamp.blur();
+        await expect(panel).toContainText('曲线 #6：数学通过，占据未验证');
+        await expect(panel).toContainText('峰加速度 0.982');
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const positiveShot = path.join(output, mobile ? 'mobile-candidate-math-pass.png' : 'desktop-candidate-math-pass.png');
+        await scene.screenshot({ path: positiveShot }); result.screenshots.push(positiveShot); save();
+        checked(`${mobile ? 'mobile' : 'desktop'}-mathematical-pass-keeps-occupancy-unverified`);
+        await timestamp.fill('33.552'); await timestamp.press('Enter'); await timestamp.blur();
+        await expect(panel).toContainText('当前原曲线缺任务身份，不派生候选');
+        const replacedShot = path.join(output, mobile ? 'mobile-parent-replaced.png' : 'desktop-parent-replaced.png');
+        await expect.poll(async () => redCandidatePixels(await scene.screenshot({ path: replacedShot })), { timeout: 15000 }).toBe(0);
+        result.screenshots.push(replacedShot); save();
+        checked(`${mobile ? 'mobile' : 'desktop'}-parent-replacement-removes-previous-candidate`);
+        await jump.click();
+        await expect(panel).toContainText(`仿真时间 ${evidence.primary_failure.simulation_s.toFixed(3)}`);
+      }
       if (sparseExpected) {
         await expect(panel).toContainText(`已抽取 ${evidence.sparse.summary.frames} 帧`);
         await expect(panel.getByRole('table', { name: '前视稀疏测距' }).getByRole('row')).toHaveCount(5);

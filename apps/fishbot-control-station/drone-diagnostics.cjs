@@ -6,6 +6,7 @@ const path = require('node:path');
 const { sceneFor, schema, telemetrySchema, stamp } = require('./drone-scene.cjs');
 const { writeFrames } = require('./drone-recording.cjs');
 const { readSparse, sparseAt, sparseEntities } = require('./drone-sparse.cjs');
+const { readCandidates, candidateAt, candidateEntities, candidateMessage } = require('./drone-candidates.cjs');
 const VALID_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,79}$/;
 const TOPIC = '/drone/diagnostics';
 const SCHEMA = 'drone.Diagnostics';
@@ -140,6 +141,8 @@ function* diagnosticFrames(evidence, sceneOptions = {}) {
     scene.entities = scene.entities.filter(entity => entity.id !== 'planned-waypoints');
     const sparse = sparseAt(evidence.sparse, seconds);
     scene.entities.push(...sparseEntities(sparse, seconds));
+    const candidate = candidateAt(evidence.candidates, activeCurve ? currentCurve.trajectory_id : undefined, seconds);
+    scene.entities.push(...candidateEntities(candidate, seconds));
     const placeholder = scene.entities.find(entity => entity.id === 'x500-pose-marker');
     if (placeholder) placeholder.texts[0].text = 'X500 位姿示意（无网格）';
     if (trajectory.length > 1) scene.entities.push({ id: 'diagnostic-actual', frame_id: 'world', timestamp: stamp(seconds),
@@ -152,7 +155,8 @@ function* diagnosticFrames(evidence, sceneOptions = {}) {
       nominal_id: activeCurve ? currentCurve.trajectory_id : undefined,
       reference_age_s: finite(sample.reference?.simulation_s) ? seconds - sample.reference.simulation_s : undefined };
     yield { simulation_s: seconds, values: { scene, telemetry: { ...sample.telemetry,
-      truth_altitude_m: fresh ? poseSample.pose.position[2] : undefined }, diagnostics: { ...summary, current }, sparse } };
+      truth_altitude_m: fresh ? poseSample.pose.position[2] : undefined }, diagnostics: { ...summary, current }, sparse,
+      candidates: candidateMessage(candidate) } };
   }
 }
 function createDroneDiagnostics({ runtime, cacheRoot, archiveRoot = path.join(runtime.paths.sourceRoot, 'output'), sceneOptions = () => ({}) }) {
@@ -181,12 +185,14 @@ function createDroneDiagnostics({ runtime, cacheRoot, archiveRoot = path.join(ru
       const renderOptions = sceneOptions();
       const dir = path.join(cacheRoot, item.id), file = path.join(dir, 'diagnostics.mcap');
       const sparseFile = path.join(dir, 'sparse-observations.json');
-      const version = [...inputs.map(name => path.join(item.dir, name)), sparseFile].map(name => {
+      const candidateFile = path.join(dir, 'stop-candidates.json');
+      const version = [...inputs.map(name => path.join(item.dir, name)), sparseFile, candidateFile].map(name => {
         try { const s = fs.statSync(name); return `${name}:${s.size}:${s.mtimeMs}`; } catch { return name; }
       }).join('|') + JSON.stringify(renderOptions.models ?? []);
       if (cached.get(item.id) === version && fs.existsSync(file)) return file;
       const evidence = readEvidence(item.dir);
       evidence.sparse = readSparse(sparseFile, item.id);
+      evidence.candidates = readCandidates(candidateFile, item.id);
       if (!finite(evidence.summary.recording.start_s)) throw new Error('原记录没有可回放的带时刻位姿或遥测。');
       fs.mkdirSync(dir, { recursive: true });
       await writeFrames(file, {
@@ -195,6 +201,7 @@ function createDroneDiagnostics({ runtime, cacheRoot, archiveRoot = path.join(ru
           properties: { ...telemetrySchema.properties, truth_altitude_m: { type: 'number' } } } },
         diagnostics: { name: SCHEMA, topic: TOPIC, schema: { type: 'object', properties: {} } },
         sparse: { name: 'drone.SparseObservation', topic: '/drone/sparse', schema: { type: 'object', properties: {} } },
+        candidates: { name: 'drone.StopCandidates', topic: '/drone/candidates', schema: { type: 'object', properties: {} } },
       }, diagnosticFrames(evidence, renderOptions));
       cached.set(item.id, version); return file;
     })().finally(() => pending.delete(item.id));
@@ -228,6 +235,8 @@ function createDroneDiagnostics({ runtime, cacheRoot, archiveRoot = path.join(ru
         const summary = readEvidence(item.dir).summary;
         const data = readSparse(path.join(cacheRoot, item.id, 'sparse-observations.json'), item.id);
         summary.sparse = { available: data.available, reason: data.reason, summary: data.summary };
+        const comparison = readCandidates(path.join(cacheRoot, item.id, 'stop-candidates.json'), item.id);
+        summary.candidates = { available: comparison.available, reason: comparison.reason, summary: comparison.summary };
         send(200, summary); return true;
       }
       const file = await recording(item);
