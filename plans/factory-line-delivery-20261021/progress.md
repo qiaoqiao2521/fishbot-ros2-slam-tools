@@ -505,3 +505,21 @@ knowledge_status=updated(local)：已修订原`Wiki/ROS2 与 FishBot.md`第19节
 - 原生平滑分项两UUID4，119.157秒、末21.249mm/.01544rad，5733个载货样本0违例，原hold前/后各.7源秒、原源/记录完整性、恢复和清理通过。余量仅.843秒，未晋级稳定/完整业务；原理想K不拼接。
 - 显式native-entry JSON与FISHBOT_LATTICE_SMOOTH_PATH入口已补，11项定向检查通过。首次公开prepare漏FISHBOT_COOP_PYTHON而失败，未启动ROS；新prepared-b补明确现有规划解释器，旧失败保留。下一步核全物理数组/原生参数、提交冻结，再完整J B→A。
 - knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节“裁剪路径与嵌套到位状态”已追加主控制器的第三层到位记忆与期限内停稳，开发入口触发已同步并读回。知识仓其它未审变动保留，发布整合owner=本对话root；原profile/真值隔离/交接门槛经验继续采用。
+
+## Current — 2026-10-24 完整J完成执行，验收1/2
+
+B完整配送已过原独立物理评分，A仍未通过。全局额外缓冲5mm候选已备，但修改了本轮冻结的全局碰撞配置，等待用户选择后才能做该候选运动。当前无实验ROS进程/端口；不拼J的B与其它回合A，不称原整轮通过。
+
+### Done
+
+- 源码72864b8、run e2443838-758a-4067-8811-8a349fed2190、141/9111，原出生点与原A/B/箱体、速度/加减速/载货/物理评分保持。B252.676秒，路线112.277秒，末15.128mm/.01621rad、终点停稳2.62源秒，原K/交接/同货物运输/原UUID全部通过。
+- A137.733秒，原K/出站通过，配送目标e51c43e1…6/206，约.106秒拒绝；全轮437.028秒、完整执行2订单但任务1/2，2start/1reset/0cancel。两份独立原oracle与离线回算一致，源/记录通过；观测physics缺序号均0，guard介入B.76/A.82源秒单列。
+- 原生实际参数已读回，原15mm/35mrad与.01停稳门槛保留；模型14组数组/2ms步长与此前场景一致。选定源码起止不变，参数恢复、连续quiet、owned0/端口关闭、原受保护单元比较通过。
+- A近点进场与5mm定位图对照均未解锁原A；失败与代价图、实际Path尾点差异保留。全局附加缓冲5档零运动对照已完成：.025/.015/.010拒绝，.005/0规划和原实体扫掠通过；参数已恢复。5mm候选B两段也预检通过。
+
+### Next / Issues
+
+- 方案文件：本机cloud-jobs/kaggle-20261024/j100-global-extra-5mm-proposal/{proposal.json,nav2.yaml,scene-manifest.json}。只改全局footprint_padding .025→.005，完整多边形/局部.01/预测碰撞/物理评分保留；它仍改变了原冻结的全局碰撞配置，用户确认前不用于运动。
+- 用户若选择5mm：先以J的A重建状态验证原A单点，全部原物理门槛通过后，从原出生点同轮重跑B→A。若保持.025：保留A占用失败，不通过改目标、缩真实外廓或放宽评分伪造通过。owner=本对话root。
+- Kaggle账号仍muqiaoqiao，未切Chrome账号；本轮完整J是本机ROS2/MuJoCo实测，不能记为Kaggle成功。原private dataset 403与旧云失败保留。
+- knowledge_status=updated(local)：既有FishBot第19节的第三层到位记忆、声明目标/Path末端/真值分离、附加缓冲分层经验已更新并读回；开发入口同步。知识仓其它未审变动保留，发布整合pending，owner=本对话root。
