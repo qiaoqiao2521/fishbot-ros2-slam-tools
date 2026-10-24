@@ -269,6 +269,7 @@ def import_run(run_path: Path, output: Path) -> dict:
         case = {"id": f"{source.get('run_id', 'unknown')}:{order.get('id', index)}", "label": order.get("id", f"order-{index}"),
                 "source_run_id": source.get("run_id"), "task_id": order.get("task_id"), "episode_id": order.get("episode_id"),
                 "vehicle": profile.get("vehicle", "unknown"), "sensor": profile.get("sensors", "unknown"),
+                "scene_id": declaration.get("scene_id", "unknown"),
                 "observation_mode": obj(manifest.get("station_perception")).get("mode", "unknown"),
                 "start_wall_s": number(start), "end_wall_s": number(end),
                 "task_budget_s": number(declaration.get("task_timeout_wall_s")),
@@ -301,7 +302,10 @@ def import_run(run_path: Path, output: Path) -> dict:
     timing = read_json(run_path / "runtime/loop-timing.json", warnings)
     loop_stages = {name: {key: obj(value).get(key) for key in ("count", "total_s", "max_s", "slow_count")}
                    for name, value in obj(timing.get("stages")).items()}
-    report = {"schema": SCHEMA, "scope": "historical_simulation_import", "label": "完整 K · J100 B→A",
+    vehicle = {"jackal_j100": "J100", "fishbot": "FishBot", "robot_base_mecanum": "麦克纳姆"}.get(str(profile.get("vehicle")), "未确认车型")
+    route_label = "→".join(str(case["label"]).removeprefix("order-").upper()
+                           if re.fullmatch(r"[A-Za-z0-9_-]{1,40}", str(case["label"])) else "未命名订单" for case in cases)
+    report = {"schema": SCHEMA, "scope": "historical_simulation_import", "label": f"配送记录 · {vehicle} {route_label}",
               "source_run_id": source.get("run_id"), "original_run_passed": source.get("passed"),
               "new_execution": False, "rescored": False, "cases": cases, "warnings": warnings,
               "loop_diagnostics": {"scope": "whole_world_session; not attributed to a Nav2 goal", "stages": loop_stages},
@@ -326,7 +330,7 @@ def public_report(report: dict) -> dict:
     for case in report["cases"]:
         exported = {key: case[key] for key in ("start_wall_s", "end_wall_s", "task_budget_s", "task_elapsed_s", "route", "physical",
                     "sampling", "guard", "unavailable", "warnings", "import_status", "evidence_refs", "trajectory")}
-        for key in ("id", "label", "source_run_id", "task_id", "episode_id", "vehicle", "sensor", "observation_mode"):
+        for key in ("id", "label", "source_run_id", "task_id", "episode_id", "vehicle", "sensor", "scene_id", "observation_mode"):
             exported[key] = identifier(case.get(key))
         exported["route"] = {k: identifier(v) if k in ("clock", "boundary") else v for k, v in case["route"].items()}
         exported["sampling"] = {**case["sampling"], "gaps": [

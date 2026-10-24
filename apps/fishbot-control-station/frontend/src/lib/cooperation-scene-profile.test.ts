@@ -22,6 +22,16 @@ describe('cooperation scene profile contract', () => {
     }
   })
 
+  it('retains the mecanum vehicle and selected sensors through draft export and service readback', () => {
+    const profile = { schema: 1, vehicle: 'robot_base_mecanum', sensors: 'lidar3d', task: 'transport' } as const
+    expect(parseCooperationSceneProfile(JSON.parse(cooperationSceneProfileDocument(profile)))).toEqual(profile)
+    const live = cooperationLiveProfile({ scene_profile: profile, vehicle_profile: { id: 'robot_base_mecanum', label: 'robot_base Mecanum' } })
+    expect(live.reported).toBe(true)
+    expect(live.vehicleName).toBe('robot_base Mecanum')
+    expect(live.sensorsLabel).toContain('3D')
+    expect(live.note).not.toContain('不一致')
+  })
+
   it('uses actual vehicle metadata and reports conflicts without granting browser workflow ownership', () => {
     const live = cooperationLiveProfile({
       scene_profile: { ...DEFAULT_COOPERATION_SCENE_PROFILE, task: 'three_batch_transport' },

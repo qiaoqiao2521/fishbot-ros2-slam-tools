@@ -47,4 +47,17 @@ describe('scene configuration draft panel', () => {
     expect(legacy).toContain('旧接口未上报场景组合')
     expect(legacy).toContain('不代表已应用配置草稿')
   })
+
+  it('offers mecanum without silently applying the browser draft to the running vehicle', () => {
+    let draft: CooperationSceneProfile = { ...DEFAULT_COOPERATION_SCENE_PROFILE }
+    const tree = () => CooperationSceneProfileView({ state: { scene_profile: DEFAULT_COOPERATION_SCENE_PROFILE }, draft, onDraftChange: (next) => { draft = next } })
+    select(tree(), 'cooperation-draft-vehicle')!.onChange({ target: { value: 'robot_base_mecanum' } })
+    const html = renderToStaticMarkup(tree())
+    expect(draft.vehicle).toBe('robot_base_mecanum')
+    expect(html).toContain('<option value="robot_base_mecanum" selected="">麦克纳姆 robot_base</option>')
+    expect(html).toContain('不会热替换当前实验')
+    const live = html.split('data-scene-profile-kind="live"')[1].split('data-scene-profile-kind="draft"')[0]
+    expect(live).toContain('FishBot')
+    expect(live).not.toContain('robot_base')
+  })
 })

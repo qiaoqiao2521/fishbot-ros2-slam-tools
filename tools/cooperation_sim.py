@@ -354,15 +354,18 @@ class CallbackInbox:
 
 class WheelCommands:
     """Steady-time watchdog remains active while arm references are held."""
-    def __init__(self, *, radius=WHEEL_RADIUS, separation=WHEEL_SEPARATION):
+    def __init__(self, *, radius=WHEEL_RADIUS, separation=WHEEL_SEPARATION, mecanum_k=None):
         self.radius, self.separation = radius, separation
+        self.mecanum_k = mecanum_k
+        self.lateral = 0.
         self.hold = True
         self.last_received = None
         self.linear = self.angular = 0.
         self.source_floor = None
 
-    def accept(self, linear, angular, now, *, source_stamp=None, sim_now=None):
+    def accept(self, linear, angular, now, *, source_stamp=None, sim_now=None, lateral=0.):
         linear, angular, now = finite_vector((linear, angular, now), 3, 'car command')
+        lateral, = finite_vector((lateral,), 1, 'lateral command')
         if self.source_floor is not None and (source_stamp is None or source_stamp <= self.source_floor):
             self.stop()
             raise ValueError('car command belongs to a previous episode')
@@ -373,10 +376,11 @@ class WheelCommands:
                 raise ValueError('stamped car command is stale or in the future')
         self.linear = max(-.25, min(.25, linear))
         self.angular = max(-1.5, min(1.5, angular))
+        self.lateral = max(-.25, min(.25, lateral))
         self.last_received = now
 
     def stop(self):
-        self.linear = self.angular = 0.
+        self.linear = self.angular = self.lateral = 0.
         self.last_received = None
 
     def set_hold(self, hold):
@@ -389,6 +393,11 @@ class WheelCommands:
         self.set_hold(True)
 
     def velocities(self, now):
+        if self.mecanum_k is not None:
+            from cooperation_mecanum import inverse
+            if self.hold or self.last_received is None or not 0 <= now-self.last_received <= COMMAND_TIMEOUT:
+                return (0.,)*4
+            return inverse(self.linear, self.lateral, self.angular, self.radius, self.mecanum_k)
         if self.hold or self.last_received is None or not 0 <= now-self.last_received <= COMMAND_TIMEOUT:
             return 0., 0.
         return ((self.linear-self.angular*self.separation/2)/self.radius,
@@ -513,6 +522,8 @@ class Physics:
         self.wheel_radius = float(profile.get('wheel_radius_m', WHEEL_RADIUS))
         self.wheel_separation = float(profile.get('wheel_separation_m', WHEEL_SEPARATION))
         self.track_multiplier = float(profile.get('drive', {}).get('effective_track_multiplier', 1.))
+        self.mecanum_k = (float(profile['drive']['kinematic_k_m'])
+                          if profile.get('drive', {}).get('type') == 'mecanum_x' else None)
         self.effective_wheel_separation = self.wheel_separation*self.track_multiplier
         self.localization_enabled = profile.get('localization', {}).get('enabled', False) is True
         if abs(self.model.opt.timestep-.002) > 1e-12:
@@ -582,10 +593,14 @@ class Physics:
         mujoco.mj_forward(self.model, self.data)
         self.initial_qpos = self.data.qpos.copy()
         self.initial_reference = self.reference
-        self.wheels = WheelCommands(radius=self.wheel_radius, separation=self.effective_wheel_separation)
+        self.wheels = WheelCommands(radius=self.wheel_radius, separation=self.effective_wheel_separation, mecanum_k=self.mecanum_k)
         self.encoder_axle_offset = compiled_axle_offset(self.model, self.left_wheel_names, self.right_wheel_names)
-        self.odom = EncoderOdometry(*self.wheel_encoder_positions(), axle_offset=self.encoder_axle_offset[:2],
-                                    radius=self.wheel_radius, separation=self.effective_wheel_separation)
+        if self.mecanum_k is not None:
+            from cooperation_mecanum import MecanumOdometry
+            self.odom = MecanumOdometry(*self.wheel_encoder_positions(), radius=self.wheel_radius, k=self.mecanum_k)
+        else:
+            self.odom = EncoderOdometry(*self.wheel_encoder_positions(), axle_offset=self.encoder_axle_offset[:2],
+                                        radius=self.wheel_radius, separation=self.effective_wheel_separation)
         self.odom_linear = self.odom_angular = 0.
         self.total_forbidden_steps = self.total_forbidden_contacts = 0
         self.total_car_forbidden_steps = self.total_car_forbidden_contacts = 0
@@ -654,7 +669,10 @@ class Physics:
         self.docking_guard.set_enabled(False)
         # Wheel positions restart with the model. Rebase only the encoder's
         # wheel-reading baseline; preserve its independent integrated pose.
-        self.odom.left, self.odom.right = self.wheel_encoder_positions()
+        if self.mecanum_k is not None:
+            self.odom.rebase(self.wheel_encoder_positions())
+        else:
+            self.odom.left, self.odom.right = self.wheel_encoder_positions()
         self.odom.lateral_velocity = self.odom_linear = self.odom_angular = 0.
         self.total_forbidden_steps = self.total_forbidden_contacts = 0
         self.total_car_forbidden_steps = self.total_car_forbidden_contacts = 0
@@ -674,8 +692,9 @@ class Physics:
 
     def step(self):
         self.data.ctrl[self.arm_a] = self.reference
-        left, right = self.wheels.velocities(time.monotonic())
-        self.data.ctrl[self.wheel_a] = [left]*len(self.left_wheel_q) + [right]*len(self.right_wheel_q)
+        velocities = self.wheels.velocities(time.monotonic())
+        self.data.ctrl[self.wheel_a] = (velocities if self.mecanum_k is not None else
+                                      [velocities[0]]*len(self.left_wheel_q) + [velocities[1]]*len(self.right_wheel_q))
         for actuator in self.wheel_a:
             low, high = self.model.actuator_ctrlrange[actuator]
             self.data.ctrl[actuator] = max(low, min(high, self.data.ctrl[actuator]))
@@ -698,7 +717,9 @@ class Physics:
         self.observe_reset_quiet()
 
     def wheel_encoder_positions(self):
-        """Two side readings average actual independent wheel hinge encoders."""
+        """Mecanum keeps four readings; differential/skid averages each side."""
+        if getattr(self, 'mecanum_k', None) is not None:
+            return tuple(float(self.data.qpos[i]) for i in self.wheel_q)
         return tuple(sum(float(self.data.qpos[i]) for i in group)/len(group)
                      for group in (self.left_wheel_q, self.right_wheel_q))
 
@@ -803,6 +824,8 @@ class Physics:
                    'car_hold': self.wheels.hold,
                    'docking_guard': self.docking_guard.state(),
                    'encoder_odometry_geometry': {'child_frame_id': 'base_footprint',
+                       'drive_type': 'mecanum_x' if self.mecanum_k is not None else 'differential_or_skid',
+                       'mecanum_k_m': self.mecanum_k,
                        'axle_offset_in_foot': list(self.encoder_axle_offset),
                        'source': 'compiled reset wheel hinge anchors; runtime wheel encoders only',
                        'wheel_radius_m': self.wheel_radius, 'wheel_separation_m': self.wheel_separation,
@@ -1124,9 +1147,11 @@ def run_ros(args):
                     twist = message.twist
                     source_stamp = message.header.stamp.sec + message.header.stamp.nanosec*1e-9
                     physics.wheels.accept(twist.linear.x, twist.angular.z, received,
-                                          source_stamp=source_stamp, sim_now=physics.data.time)
+                                          source_stamp=source_stamp, sim_now=physics.data.time,
+                                          **({'lateral': twist.linear.y} if getattr(physics, 'mecanum_k', None) is not None else {}))
                 else:
-                    physics.wheels.accept(message.linear.x, message.angular.z, received)
+                    physics.wheels.accept(message.linear.x, message.angular.z, received,
+                                          **({'lateral': message.linear.y} if getattr(physics, 'mecanum_k', None) is not None else {}))
             except (ValueError, TypeError, OverflowError) as error:
                 physics.wheels.stop()
                 self.reject('car', error)

@@ -20,6 +20,8 @@ class MecanumIntegrationTests(unittest.TestCase):
         self.assertIn('Twist vx/vy/wz', info['interfaces'])
         self.assertEqual(info['legacy_nav_lateral_velocity_limit_m_s'], 0.)
         self.assertIn('not accepted', info['status'])
+        self.assertEqual(info['simulation']['scene_profile']['vehicle'], info['vehicle'])
+        self.assertEqual(info['simulation']['cli'], './fishbot.sh cooperation')
 
     def test_packaging_has_provenance_and_no_nested_checkout_or_historical_map(self):
         self.assertEqual(ET.parse(PACKAGE/'package.xml').getroot().findtext('name'), 'robot_base')

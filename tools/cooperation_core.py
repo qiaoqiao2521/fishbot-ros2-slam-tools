@@ -308,6 +308,18 @@ def settled_cargo(raw):
             and math.sqrt(sum(v*v for v in velocity)) < .002)
 
 
+def release_ready_for_retreat(raw):
+    """The open moving jaw clears first; the fixed tip leaves on retreat.
+
+    Match SO101's source release transition. Final handover still calls
+    settled_cargo and requires both tip forces below the original threshold.
+    """
+    return (cargo_footprint_inside(raw) and raw['cargo_tray_floor_contact']
+            and raw['q6'][5] > .45
+            and raw['finger_normal_forces_n']['pad_moving_jaw'] < .02
+            and math.sqrt(sum(v*v for v in raw['cargo']['velocity_relative_tray'])) < .002)
+
+
 def cargo_retained(raw):
     p = raw['cargo']['position_relative_tray']
     return (abs(p[0]) <= .047 and abs(p[1]) <= .047 and -.002 <= p[2] <= .04

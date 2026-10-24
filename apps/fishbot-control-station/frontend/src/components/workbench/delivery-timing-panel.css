@@ -3,6 +3,8 @@
 .delivery-timing-heading p, .delivery-timing-chart-heading p, .delivery-timing-footnote { color: #61748b; font-size: 13px; line-height: 1.6; margin: 8px 0; }
 .delivery-timing-eyebrow { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #2563eb; margin-bottom: 10px; }
 .delivery-timing-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.delivery-timing-actions > label:not(.delivery-timing-upload) { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.delivery-timing-actions select { max-width: 100%; border: 1px solid #dbe4ef; border-radius: 7px; padding: 8px; background: #fff; color: inherit; }
 .delivery-timing-upload { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #dbe4ef; border-radius: 7px; padding: 8px 10px; cursor: pointer; font-size: 12px; }
 .delivery-timing-upload input { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; }
 .delivery-timing-upload:focus-within { outline: 2px solid #2563eb; outline-offset: 3px; }

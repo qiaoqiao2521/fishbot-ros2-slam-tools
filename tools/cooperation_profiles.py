@@ -24,7 +24,7 @@ def normalize_scene_profile(value=None):
               **{key: value[key] for key in DEFAULT_SCENE_PROFILE if key in value}}
     if type(result['schema']) is not int or result['schema'] != 1:
         raise ValueError('scene_profile schema must be 1')
-    for field, choices in (('vehicle', ('fishbot', 'jackal_j100')),
+    for field, choices in (('vehicle', ('fishbot', 'jackal_j100', 'robot_base_mecanum')),
                            ('sensors', ('planar', 'lidar3d')),
                            ('task', ('transport', 'three_batch_transport'))):
         if result[field] not in choices:
@@ -37,6 +37,9 @@ def vehicle_profile(selected=None):
     scene = normalize_scene_profile(selected)
     common = {'spawn_free_z_m': .002,
               'localization': {'enabled': False}, 'tray_mount': None}
+    if scene['vehicle'] == 'robot_base_mecanum':
+        from cooperation_mecanum import vehicle_profile as mecanum_profile
+        return mecanum_profile()
     if scene['vehicle'] == 'fishbot':
         return {**common, 'id': 'fishbot', 'label': 'FishBot', 'wheel_radius_m': .032,
                 'wheel_separation_m': .20, 'left_wheel_joints': ['left_wheel_joint'],
@@ -151,6 +154,9 @@ def vehicle_element(path, spawn, spawn_yaw, selected=None):
     if profile['id'] == 'fishbot':
         root = original
         car = root.find('worldbody/body')
+    elif profile['id'] == 'robot_base_mecanum':
+        from cooperation_mecanum import vehicle_element as mecanum_element
+        root, car = mecanum_element()
     else:
         import yaml
         from fishbot_base_profile import DEFAULT_PROFILE, ASSETS, WHEELS, _robot

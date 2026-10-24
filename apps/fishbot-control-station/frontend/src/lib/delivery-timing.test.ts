@@ -39,6 +39,8 @@ describe('delivery timing evidence boundaries', () => {
     await readDeliveryTiming(undefined, fetcher)
     expect(fetcher).toHaveBeenCalledExactlyOnceWith('/workbench/delivery-timing.json', { method: 'GET', cache: 'no-store', signal: undefined })
     await expect(readDeliveryTiming(undefined, vi.fn().mockResolvedValue({ ok: false, status: 404 }))).rejects.toThrow('HTTP 404')
+    await readDeliveryTiming(undefined, fetcher, 'mecanum')
+    expect(fetcher).toHaveBeenLastCalledWith('/workbench/mecanum-delivery-timing.json', { method: 'GET', cache: 'no-store', signal: undefined })
   })
 
   it('accepts locally edited summaries and refuses raw logs without parsing them', async () => {

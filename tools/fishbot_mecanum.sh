@@ -20,7 +20,10 @@ print(json.dumps({'vehicle': 'robot_base_mecanum', 'ros_package': 'robot_base',
     'source': str(package), 'install': str(output/'install'), 'drive': 'mecanum_x',
     'interfaces': ['Twist vx/vy/wz', 'Odometry', 'odom->base_link TF', 'scan/map', 'Nav2 actions'],
     'serial': {'protocol': '$pwm:m1,m2,m3,m4# / $MSPD:mm_s1,mm_s2,mm_s3,mm_s4#'},
-    'status': 'source integrated; hardware and MuJoCo transport not accepted',
+    'status': 'source integrated; hardware not accepted; simulation evidence tracked separately',
+    'simulation': {'cli': './fishbot.sh cooperation',
+        'scene_profile': {'schema': 1, 'vehicle': 'robot_base_mecanum', 'sensors': 'planar', 'task': 'transport'},
+        'report': '/results#workbench-delivery-timing'},
     'legacy_nav_lateral_velocity_limit_m_s': 0.0}, ensure_ascii=False, indent=2))
 INFO
     exit 0 ;;

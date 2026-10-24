@@ -69,6 +69,15 @@ class TimingImportTest(unittest.TestCase):
         self.assertFalse(native[1]["consumption_ack"])
         self.assertEqual(sum(s["duration_s"] for s in case["spans"] if s.get("parent_id") == "route"), 11)
 
+    def test_report_label_comes_from_selected_chassis_and_executed_orders(self):
+        self.rows([])
+        self.write('declaration.json', {'scene_id': 'f1-line-side-open', 'scene_profile': {'vehicle': 'robot_base_mecanum', 'sensors': 'planar'}})
+        report = import_run(self.run, self.output)
+        self.assertEqual(report['label'], '配送记录 · 麦克纳姆 B')
+        self.assertFalse(report['original_run_passed'])
+        self.assertNotIn('J100', public_report(report)['label'])
+        self.assertEqual(public_report(report)['cases'][0]['scene_id'], 'f1-line-side-open')
+
     def test_http_boundaries_are_uncertain_and_last_span_censored(self):
         self.rows([self.http(100, "load"), self.http(104, "load"), self.http(105, "egress"),
                    self.http(109, "egress"), self.http(108, "wrong_out_of_order"), self.http(110, "other", task="other")])

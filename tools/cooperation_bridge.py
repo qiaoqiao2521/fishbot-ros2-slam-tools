@@ -19,7 +19,7 @@ from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, arm_home_qui
                               physical_quiet, quaternion, request_identity,
                               task_scope, task_delivery_pose, task_delivery_approaches,
                               reset_request_identity,
-                              settled_cargo, stopped, tip_forces, transport_handoff_ready, validate_physics)
+                              release_ready_for_retreat, stopped, tip_forces, transport_handoff_ready, validate_physics)
 from cooperation_core import station_robot_pose, within_station_capture
 from cooperation_perception import (map_covariance, messages_to_observation,
                                     normalize_config, validate_observation)
@@ -1296,9 +1296,9 @@ def run(args):
                 released=False
                 for segment in transport['segments']:
                     if segment['stage']=='retreat':
-                        raw=self.wait_condition(settled_cargo,duration=1.,timeout=6.)
+                        raw=self.wait_condition(release_ready_for_retreat,duration=1.,timeout=6.)
                         released=True
-                        self.event('arm','retreat','托盘支撑与松爪落稳已确认，正在退出。')
+                        self.event('arm','retreat','托盘已接住货物、活动指已张开，正在退出固定指。')
                     else:
                         message={'transport':'正在把货物放入车载托盘。','lower':'正在下降到托盘。',
                             'release':'正在松开夹爪，等待货物落稳。','settle':'正在确认机械臂回位。'}[segment['stage']]

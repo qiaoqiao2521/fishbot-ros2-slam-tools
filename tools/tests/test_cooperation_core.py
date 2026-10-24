@@ -91,6 +91,20 @@ class CooperationEvidenceTests(unittest.TestCase):
         raw['cargo_tray_floor_contact']=True;raw['finger_normal_forces_n']['left']=.03;self.assertFalse(core.settled_cargo(raw))
         raw['finger_normal_forces_n']['left']=0.;raw['cargo']['velocity_relative_tray'][0]=.003;self.assertFalse(core.settled_cargo(raw))
 
+    def test_supported_release_can_withdraw_fixed_tip_without_granting_handover(self):
+        raw=measurement();raw['q6'][5]=.5
+        raw['finger_normal_forces_n']['pad_gripper']=.18
+        self.assertTrue(core.release_ready_for_retreat(raw))
+        self.assertFalse(core.settled_cargo(raw))
+        self.assertFalse(core.transport_handoff_ready(raw,[0.]*6))
+        for mutate in (lambda r:r['q6'].__setitem__(5,.4),
+                       lambda r:r['finger_normal_forces_n'].__setitem__('pad_moving_jaw',.03),
+                       lambda r:r.update(cargo_tray_floor_contact=False),
+                       lambda r:r['cargo']['position_relative_tray'].__setitem__(0,.06),
+                       lambda r:r['cargo']['velocity_relative_tray'].__setitem__(0,.003)):
+            bad=copy.deepcopy(raw);mutate(bad)
+            self.assertFalse(core.release_ready_for_retreat(bad))
+
 
 def measurement():
     car={'position':[0.,0.,0.], 'quaternion_wxyz':[1.,0.,0.,0.], 'velocity_world_angular_linear':[0.]*6,
@@ -1194,7 +1208,7 @@ class BridgeRaceTests(unittest.TestCase):
 
     def execution_handoff_probe(self, *, before_transfer=None, after_delivery=None, delivery_distance=1., delivery_pose=None,
                                 egress_pose=None, on_navigate=None, egress_motion=None, on_drive=None,
-                                delivery_approach_poses=None):
+                                delivery_approach_poses=None, residual_fixed_contact=False):
         """Exercise current execute ordering; controlled samples are not physical acceptance."""
         p=self.bridge;p.station_capture_ready=lambda:True;p.align_station_map=lambda:None
         if delivery_pose is not None:p.task['delivery_pose']=copy.deepcopy(delivery_pose)
@@ -1218,6 +1232,12 @@ class BridgeRaceTests(unittest.TestCase):
             if item['stage']=='release':
                 p.raw['cargo']['position'][2]=p.raw['qpos22'][8]=.03
                 p.raw['finger_normal_forces_n']={key:0. for key in p.raw['finger_normal_forces_n']}
+                p.raw['q6'][5]=p.raw['qpos22'][5]=.5
+                if residual_fixed_contact:p.raw['finger_normal_forces_n']['pad_gripper']=.18
+            if item['stage']=='retreat':
+                p.raw['finger_normal_forces_n']['pad_gripper']=0.
+            if item['stage']=='settle':
+                p.raw['q6'][5]=p.raw['qpos22'][5]=self.namespace['manifest']['arm_home_qpos6'][5]
             if item['stage']=='settle' and before_transfer:before_transfer(p.raw)
             return p.check()
         p.segment=segment;deliveries=[]
@@ -1234,6 +1254,12 @@ class BridgeRaceTests(unittest.TestCase):
         p.hold_pub=NS(publish=hold)
         p.execute(p.execution_token)
         return p,deliveries
+
+    def test_execute_releases_moving_jaw_before_retreat_and_requires_both_clear_before_delivery(self):
+        p,deliveries=self.execution_handoff_probe(residual_fixed_contact=True)
+        self.assertEqual(p.task['status'],'succeeded')
+        self.assertEqual(len(deliveries),1)
+        self.assertEqual(p.raw['finger_normal_forces_n']['pad_gripper'],0.)
 
     def test_execute_transport_uses_frozen_alternate_delivery_in_original_owner(self):
         selected={'x':.7,'y':-2.,'yaw':0.}

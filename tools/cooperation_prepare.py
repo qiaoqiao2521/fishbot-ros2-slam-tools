@@ -240,6 +240,7 @@ def composition_navigation(params, manifest, output):
             'wheel_odom_topic': '/wheel/odom', 'imu_topic': '/imu',
             'implementation': 'robot_localization/ekf_node',
             'absolute_yaw_or_truth_input': False}
+    if vehicle.get('id') in ('jackal_j100', 'robot_base_mecanum'):
         radius = max(math.hypot(*point) for point in manifest['car_footprint_xy'])
         for name in ('global_costmap','local_costmap'):
             config = params[name][name]['ros__parameters']
@@ -360,7 +361,10 @@ def prepare(args):
         'max_beams':180,'z_hit':.95,'z_rand':.05,'update_min_d':.01,
         'update_min_a':.01,'do_beamskip':False}
     params['amcl']['ros__parameters'].update(localization_parameters)
-    motion_profile=amcl_motion_model(params,getattr(args,'amcl_motion_model','source'))
+    motion_choice = getattr(args,'amcl_motion_model','source')
+    if manifest.get('vehicle_profile', {}).get('id') == 'robot_base_mecanum' and motion_choice == 'source':
+        motion_choice = 'omni'
+    motion_profile=amcl_motion_model(params,motion_choice)
     controller=params['controller_server']['ros__parameters']
     # Reuse the installed Nav2 checker also used by the passage profile. A
     # short transit after cancellation can require turning before translating;

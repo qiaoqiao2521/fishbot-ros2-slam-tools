@@ -1,6 +1,6 @@
 export type CooperationSceneProfile = {
   schema: 1
-  vehicle: 'fishbot' | 'jackal_j100'
+  vehicle: 'fishbot' | 'jackal_j100' | 'robot_base_mecanum'
   sensors: 'planar' | 'lidar3d'
   task: 'transport' | 'three_batch_transport'
 }
@@ -8,14 +8,14 @@ export type CooperationSceneProfile = {
 export const DEFAULT_COOPERATION_SCENE_PROFILE: CooperationSceneProfile = {
   schema: 1, vehicle: 'fishbot', sensors: 'planar', task: 'transport',
 }
-export const SCENE_VEHICLE_LABELS = { fishbot: 'FishBot', jackal_j100: 'Jackal J100' }
+export const SCENE_VEHICLE_LABELS = { fishbot: 'FishBot', jackal_j100: 'Jackal J100', robot_base_mecanum: '麦克纳姆 robot_base' }
 export const SCENE_SENSOR_LABELS = { planar: '2D 平面雷达', lidar3d: '2D + 16线 3D 雷达' }
 export const SCENE_TASK_LABELS = { transport: '单次装货运输', three_batch_transport: '三批运输（A / A / B）' }
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
 
 export function parseCooperationSceneProfile(value: unknown): CooperationSceneProfile | null {
   if (!record(value) || Object.keys(value).length !== 4 || value.schema !== 1
-    || typeof value.vehicle !== 'string' || !['fishbot', 'jackal_j100'].includes(value.vehicle)
+    || typeof value.vehicle !== 'string' || !['fishbot', 'jackal_j100', 'robot_base_mecanum'].includes(value.vehicle)
     || typeof value.sensors !== 'string' || !['planar', 'lidar3d'].includes(value.sensors)
     || typeof value.task !== 'string' || !['transport', 'three_batch_transport'].includes(value.task)) return null
   return { schema: 1, vehicle: value.vehicle as CooperationSceneProfile['vehicle'],
@@ -41,7 +41,7 @@ export type CooperationProfileState = { scene_profile?: unknown; vehicle_profile
 export function cooperationLiveProfile(state: CooperationProfileState | null | undefined) {
   const profile = parseCooperationSceneProfile(state?.scene_profile)
   const vehicle = record(state?.vehicle_profile) ? state.vehicle_profile : null
-  const vehicleId = vehicle && (vehicle.id === 'fishbot' || vehicle.id === 'jackal_j100') ? vehicle.id : null
+  const vehicleId = vehicle && (vehicle.id === 'fishbot' || vehicle.id === 'jackal_j100' || vehicle.id === 'robot_base_mecanum') ? vehicle.id : null
   const vehicleName = vehicleId ? (typeof vehicle?.label === 'string' && vehicle.label.trim()
     ? vehicle.label : SCENE_VEHICLE_LABELS[vehicleId]) : profile ? SCENE_VEHICLE_LABELS[profile.vehicle] : 'FishBot'
   const missing = state?.scene_profile === undefined || state.scene_profile === null

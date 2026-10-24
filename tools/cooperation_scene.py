@@ -147,6 +147,7 @@ def frozen_car_geoms(common_model, car_pose, station):
             car_bodies.add(body)
     kinds = {int(mujoco.mjtGeom.mjGEOM_BOX): ("box", 3),
              int(mujoco.mjtGeom.mjGEOM_CYLINDER): ("cylinder", 2),
+             int(mujoco.mjtGeom.mjGEOM_CAPSULE): ("capsule", 2),
              int(mujoco.mjtGeom.mjGEOM_SPHERE): ("sphere", 1)}
     geoms = []
     for index in range(common_model.ngeom):
@@ -284,10 +285,13 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
     model = mujoco.MjModel.from_xml_path(str(world_path))
     wheel_names = vehicle['left_wheel_joints']+vehicle['right_wheel_joints']
     wheel_count = len(wheel_names)
-    if (model.nq, model.nv, model.nu) != (20+wheel_count, 18+wheel_count, 6+wheel_count):
+    passive_names = vehicle.get('passive_joints', [])
+    if (model.nq, model.nv, model.nu) != (20+wheel_count+len(passive_names), 18+wheel_count+len(passive_names), 6+wheel_count):
         raise RuntimeError(f"Unexpected arm/target/car layout: {model.nq}/{model.nv}/{model.nu}")
     expected = (*ARM_JOINT_NAMES, "target_free", "base_free_joint", *wheel_names)
-    if tuple(model.joint(index).name for index in range(model.njnt)) != expected:
+    actual = tuple(model.joint(index).name for index in range(model.njnt))
+    if (actual[:8] != expected[:8] or set(actual[8:]) != set(wheel_names+passive_names)
+            or (not passive_names and actual != expected)):
         raise RuntimeError("Common scene must preserve arm, target, car joint order")
     arena = ET.parse(arena_xml).getroot()
     for child in arena.find("worldbody").findall("geom"):
@@ -350,6 +354,8 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
                            "car_qpos": [13, 20], "wheel_qpos": [20, model.nq],
                            "arm_qvel": [0, 6], "target_qvel": [6, 12],
                            "car_qvel": [12, 18], "wheel_qvel": [18, model.nv]},
+                "actuated_wheel_qpos_indices": [int(model.jnt_qposadr[model.joint(name).id]) for name in wheel_names],
+                "passive_joint_names": passive_names,
                 "nq": model.nq, "nv": model.nv, "nu": model.nu,
                 "source_sha256": {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in source_files},
                 "arm_collision_exclusions": checker.excluded_pairs,

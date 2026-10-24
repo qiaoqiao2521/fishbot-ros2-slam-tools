@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { FileDown, FileUp, RefreshCw, Timer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardTitle } from '@/components/ui/card'
-import { parseDeliveryTiming, readDeliveryTiming, readLocalDeliveryTiming, timingWindow, type TimingSpan } from '@/lib/delivery-timing'
+import { parseDeliveryTiming, readDeliveryTiming, readLocalDeliveryTiming, timingWindow, type DeliveryTimingSource, type TimingSpan } from '@/lib/delivery-timing'
 import './delivery-timing-panel.css'
 
 const seconds = (value: number | null, decimals = 3) => value === null ? '未知' : `${value.toFixed(decimals)} s`
@@ -24,17 +24,18 @@ export function DeliveryTimingPanel({ initialReport }: { initialReport?: unknown
   const [selected, setSelected] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(initialReport === undefined)
+  const [source, setSource] = useState<DeliveryTimingSource>('j100')
   const request = useRef<AbortController | null>(null)
   const generation = useRef(0)
 
-  async function load(local?: File) {
+  async function load(local?: File, selectedSource = source) {
     const current = ++generation.current
     request.current?.abort()
     const controller = new AbortController()
     request.current = controller
     setLoading(true); setError('')
     try {
-      const next = local ? await readLocalDeliveryTiming(local) : await readDeliveryTiming(controller.signal)
+      const next = local ? await readLocalDeliveryTiming(local) : await readDeliveryTiming(controller.signal, fetch, selectedSource)
       if (current !== generation.current) return
       setReport(next); setCaseIndex(0); setSelected(null)
     } catch (cause) {
@@ -68,7 +69,8 @@ export function DeliveryTimingPanel({ initialReport }: { initialReport?: unknown
   return <Card className="delivery-timing-panel" id="workbench-delivery-timing" aria-labelledby="delivery-timing-heading">
     <div className="delivery-timing-heading"><div><span className="delivery-timing-eyebrow"><Timer size={14} aria-hidden="true" />F1 配送 · 时间分析</span>
       <CardTitle id="delivery-timing-heading">120 秒，花在了哪里</CardTitle><p>原生动作、阶段采样与独立物理结果放在同一时间轴，保留各自含义。</p></div>
-      <div className="delivery-timing-actions"><Button size="sm" variant="outline" disabled={loading} onClick={() => void load()}><RefreshCw size={14} aria-hidden="true" />{loading ? '读取中' : '刷新报告'}</Button>
+      <div className="delivery-timing-actions"><label>配送记录<select aria-label="选择配送记录" value={source} disabled={loading} onChange={event => { const value = event.target.value as DeliveryTimingSource; setSource(value); void load(undefined, value) }}><option value="j100">J100 · 原完整 K</option><option value="mecanum">麦克纳姆 · 配送验收</option></select></label>
+        <Button size="sm" variant="outline" disabled={loading} onClick={() => void load()}><RefreshCw size={14} aria-hidden="true" />{loading ? '读取中' : '刷新报告'}</Button>
         <label className="delivery-timing-upload"><FileUp size={14} aria-hidden="true" />导入 JSON<input type="file" accept=".json,application/json" aria-label="导入配送耗时 JSON" onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void load(file) }} /></label></div>
     </div>
     {error && <p role="alert" className="delivery-timing-warning">{error}</p>}
@@ -105,7 +107,7 @@ export function DeliveryTimingPanel({ initialReport }: { initialReport?: unknown
           <div><dt>连续停稳（源时间）</dt><dd>{seconds(item.physical.continuous_final_stop_source_s, 2)}</dd></div><div><dt>保护介入（源时间）</dt><dd>{seconds(item.guard_seconds, 2)}<small>理想保护辅助，单列保留</small></dd></div>
           <div><dt>物理样本 / 缺失序号</dt><dd>{item.sampling.physics_records ?? '未知'} / {item.sampling.missing_samples ?? '未知'}<small>任务窗口内 {item.sampling.task_physics_records ?? '未知'} 条；缺口未插值</small></dd></div></dl>
           <details><summary>采样缺口、原任务与未观测项</summary>
-            <p>车型 {item.vehicle} · {item.sensor} · 观测 {item.observation_mode}</p><p>原任务 <code>{item.task_id}</code><br />Episode <code>{item.episode_id}</code></p>
+            <p>场景 {item.scene_id} · 车型 {item.vehicle} · {item.sensor} · 观测 {item.observation_mode}</p><p>原任务 <code>{item.task_id}</code><br />Episode <code>{item.episode_id}</code></p>
             <ul>{item.sampling.gaps.map((g, i) => <li key={i}>缺 {g.missing ?? '未知'} 帧；源时间 {seconds(g.before_source_s)} → {seconds(g.after_source_s)}；{g.stage_before} → {g.stage_after}</li>)}</ul>
             <p>未观测：规划 CPU 分项、控制器计算 / 消费回执、阶段精确切换时间。图中的区间不能替代这些证据。</p>
             <p>10Hz 展示摘要 {item.trajectory.sample_count ?? '未知'} 点；独立评分仍使用原始采样。</p>
@@ -114,7 +116,7 @@ export function DeliveryTimingPanel({ initialReport }: { initialReport?: unknown
         </div>
         {item.warnings.length > 0 && <ul className="delivery-timing-warning">{item.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>}
       </>}
-      <p className="delivery-timing-footnote">历史 K 的结果与旧失败分别保留。本页只读，不启动任务；本轮仿真证据不外推真机或 sim-to-real。</p>
+      <p className="delivery-timing-footnote">历史 K 的结果与旧失败分别保留。场景、车型或参数不同的记录不能直接当作 A/B 性能对照。本页只读，不启动任务；本轮仿真证据不外推真机或 sim-to-real。</p>
       <Button size="sm" variant="ghost" onClick={download}><FileDown size={14} aria-hidden="true" />下载原始摘要 JSON</Button>
     </>}
   </Card>

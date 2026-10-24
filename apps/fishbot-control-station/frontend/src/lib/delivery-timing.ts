@@ -10,7 +10,7 @@ export interface TimingGap {
   before_wall_s: number | null; after_wall_s: number | null; stage_before: string; stage_after: string
 }
 export interface TimingCase {
-  id: string; label: string; task_id: string; episode_id: string; vehicle: string; sensor: string; observation_mode: string
+  id: string; label: string; task_id: string; episode_id: string; vehicle: string; sensor: string; scene_id: string; observation_mode: string
   start_wall_s: number | null; end_wall_s: number | null; task_budget_s: number | null; task_elapsed_s: number | null
   route: { start_wall_s: number | null; end_wall_s: number | null; elapsed_s: number | null; budget_s: number | null; remaining_s: number | null; boundary: string }
   physical: { final_position_error_m: number | null; final_yaw_error_rad: number | null; continuous_final_stop_source_s: number | null }
@@ -44,7 +44,7 @@ export function parseDeliveryTiming(input: unknown): TimingReport {
     const guardValues = list(c.guard).map(item => numeric(record(item).tripped_observed_contiguous_source_duration_s))
     return [{
       id: text(c.id, `case-${index}`), label: text(c.label, `案例 ${index + 1}`), task_id: text(c.task_id), episode_id: text(c.episode_id),
-      vehicle: text(c.vehicle), sensor: text(c.sensor), observation_mode: text(c.observation_mode),
+      vehicle: text(c.vehicle), sensor: text(c.sensor), scene_id: text(c.scene_id), observation_mode: text(c.observation_mode),
       start_wall_s: numeric(c.start_wall_s), end_wall_s: numeric(c.end_wall_s), task_budget_s: numeric(c.task_budget_s), task_elapsed_s: numeric(c.task_elapsed_s),
       route: { start_wall_s: numeric(route.start_wall_s), end_wall_s: numeric(route.end_wall_s), elapsed_s: numeric(route.elapsed_s), budget_s: numeric(route.budget_s), remaining_s: numeric(route.remaining_s), boundary: text(route.boundary) },
       physical: { final_position_error_m: numeric(physical.final_position_error_m), final_yaw_error_rad: numeric(physical.final_yaw_error_rad), continuous_final_stop_source_s: numeric(physical.continuous_final_stop_source_s) },
@@ -77,8 +77,13 @@ export function timingWindow(item: TimingCase, mode: 'route' | 'task') {
   return { origin, budget, elapsed, limit, spans }
 }
 
-export async function readDeliveryTiming(signal?: AbortSignal, fetcher: typeof fetch = fetch) {
-  const response = await fetcher('/workbench/delivery-timing.json', { method: 'GET', cache: 'no-store', signal })
+export type DeliveryTimingSource = 'j100' | 'mecanum'
+const TIMING_SOURCES: Record<DeliveryTimingSource, string> = {
+  j100: '/workbench/delivery-timing.json', mecanum: '/workbench/mecanum-delivery-timing.json',
+}
+
+export async function readDeliveryTiming(signal?: AbortSignal, fetcher: typeof fetch = fetch, source: DeliveryTimingSource = 'j100') {
+  const response = await fetcher(TIMING_SOURCES[source], { method: 'GET', cache: 'no-store', signal })
   if (!response.ok) throw new Error(`耗时报告读取失败（HTTP ${response.status}）。可重试或导入本地 JSON。`)
   return parseDeliveryTiming(await response.json())
 }
