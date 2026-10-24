@@ -7,6 +7,7 @@
 - 实际运行：浏览器new-recipe.json与首轮副本及云输入逐字节相同，交SO101固定fd20512原evaluate_station，10f9c86e…原pass（77.96sim/55.544episode-wall），真实抓放／释放／脱离／回位、244、自由物体与双worker清理通过。另0181e8f1…运输worker运行中真实取消，原fail/exit1保持、taskcancelled、joined/closed及无活线程确认；不是第二次抓放成功。详见SO101 plans/workcell-productization-20261024/m4-recipe-results.md。
 - 发现与修正：配方负时长原被普通草稿容错修成1；仅配方路径改为明确拒绝，自定义执行语义不静默替换，普通Station容错保持。独立审查与最终浏览器负例均覆盖。
 - 边界：米制平移、SO101固定尺寸静态几何、独立episode；不是六技能恢复或FishBot同世界卸货，完整50Hz仍未过。本轮由根Codex串行整合，其他Drone在途成果已由原owner提交7fc5695，无覆盖／混入；Mint未改。
+- 交付末次回读：Drone原owner继续出现drone-recorded-tracking.py（10增3删）及新drone-stop-geometry.py；后者为MINCO离线停止位置／时间比较，源码仍在变化，未按SO101验收或代交。现场保留；接续owner=无人机当前根Codex，最短入口为该CLI与本计划必要刹停节，结束后再独立审查其原始CDR／硬审计结果。本轮仅交付已冻结的RobotStation配方，不宣称共享树干净。
 - Next：SO101主计划继续M2原物理技能证据及安全恢复，连续卸货另接FishBot单一Physics。Knowledge=already_covered，沿用Wiki《ROS2 与FishBot》§20；本轮项目事实不写共享知识或memory。
 
 ## 2026-10-24 M2必要刹停条件与旧曲线适用域
