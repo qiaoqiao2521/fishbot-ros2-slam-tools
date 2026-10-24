@@ -10,6 +10,7 @@
 
 ## Why / User Intent
 一台FishBot一个项目，以本机代码和实测证据为准，包含控制台、ROS、雷达驱动、固件和运维。
+2026-10-24 用户要求将“连续流式数字孪生＋混沌工程”和“可视化CI/CD＋A/B回归”整理为SpecMesh计划。共同方向是保留连续业务世界、按恢复等级捕获快照、隔离分支做回归，并复用原任务owner与独立Oracle。本轮仅完成规划；实施从旧K只读阶段耗时报告开始，见[新计划](plans/continuous-twin-regression-20261024/task_plan.md)。
 2026-10-20 用户确认以“车型＋传感器配置＋任务”验证算法复用：同一任务owner与算法跨FishBot/J100、不同雷达配置组合；车型切换同步真实几何、运动学、托盘和工位交接，不只换显示模型。当前实施入口为cooperation-workflow计划P8。
 2026-10-18 用户授权工作台大范围重构，允许修改底层；先建立SpecMesh。范围包括场景工作面、编辑域、连接/数据/命令合同、网关和ROS桥内部结构。商业研究与开源组件按证据采纳；必须保留行为合同和验收事实，现有类与技术栈不构成不可替换边界。
 2026-10-11 用户要求将反馈复盘后的改进落在本项目：复用已有连续导航与测试，补齐 Goal 确认反馈、停止原因保留和统一离线回归入口。
@@ -61,6 +62,7 @@ Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。
 历史记录：2026-10-05 已修正两块板的服务器地址，雷达约7 Hz、odom/imu约20 Hz上线；雷达接收定时器泄漏、断线重连和扫描点数变化导致的SLAM丢帧已修复。已实测低速短段直行、转向和主动零速停车，当时地图约6.725平方米自由区域及续建数据已保存。2026-10-05检查点的实车RViz实时视图曾保持打开，此处不代表当前在线状态。用户当时要求保持当前方向前进1米，实际仅前进约4.9厘米后触发前方保护，续试无新增位移；该检查点为零速、无排队动作，但续试的连续新鲜停车反馈未通过，原始时间戳偶发超限。底盘复位后恢复续建，轮式转角与点云实测转角不一致；后续修复与验收见Current Priority及plans/fishbot-real-autonomy-20261005/。
 2026-10-05：网页三点巡逻、物理箱体移入、减速转向绕障、继续巡航和返航已通过MuJoCo实测；三个巡逻点加返航共四点，约90.94秒，最终位置误差11.64cm且已停稳。取消任务、过期请求、仿真暂停和启动就绪门禁也已验证。入口为tools/fishbot_mujoco.sh web，证据见plans/fishbot-web-patrol-20261004/。此前RPP单点导航、断流停车和旧时间戳命令拒绝基线保留。2026-09-15原样迁移和旧路径兼容保留；本机Git历史未压平。历史实车建图和保存通过；最新固定图导航结果见Current State。私有成果未新增上传。
 ## Current Priority
+2026-10-24 [连续业务世界与可视化回归计划](plans/continuous-twin-regression-20261024/task_plan.md)已建立，D0文档完成、M1–M4未实施。首片M1a只读导入旧K，明确360秒全任务与120秒路线边界，再推进分级快照、无重置卸货、混沌与矩阵。50ms热恢复、7×24、100秒稳定目标均未验收；不因此启动新实验或重写旧成功。状态见[新进度](plans/continuous-twin-regression-20261024/progress.md)。
 2026-10-24 同任务换J100＋3D雷达的原出生点B→A已完成本轮2/2验收，实验已清理。后续优先处理B路线仅.206秒余量与A入站初期采样间隙；本轮没有派发额外稳定性面板。默认25mm、显式5mm候选和原FishBot成功分别保留，入口[F1进度](plans/factory-line-delivery-20261021/progress.md)。
 2026-10-20 正在接入车型/传感器配置组合，优先复用已有J100模型、原生射线/标准ROS消息及三批运输编排。先核对独立MuJoCo环境边界，再声明有限组合面板；真实运行通过前不把模型存在计作组合成功。见[当前计划P8](plans/cooperation-workflow-20261014/task_plan.md)。
 2026-10-20 三批＋第二目的地本轮已交付。下一个同模板任务先改batch与目标映射，不再复制控制代码；不同工位、货物、底盘或视觉资格另行定面板。使用[输入示例](tools/config/cooperation_delivery_poses.example.json)和[多作业入口](docs/COOPERATION_WORKFLOW.md)。
@@ -92,6 +94,7 @@ Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。
 2026-10-07 用户确认先在虚拟环境实现三点视觉巡检，现已完成：MuJoCo车载RGB→三点导航拍摄→绿灯/红灯/空位像素识别→图文报告→返航。最终整轮73.703秒，九帧带拍摄位姿证据，返航误差12.29cm且停稳；独立超时取消通过。入口tools/fishbot_inspection.sh，仅domain97；见docs/VISUAL_INSPECTION.md。识别限定合成工位，实车相机与巡检尚未验收。
 2026-10-06 用户确认直接采用FishBot开源模型，不以现场测量作为前置步骤；连续本地控制、分级限速/停车、触发记录与回放已实现。新入口 tools/fishbot_passage.launch.py 在隔离MuJoCo domain 96完成整段过门、硬停车及取消测试，74项聚焦测试通过；见docs/PASSAGE_CONTROL.md。当前小车充电，本次未操作实车。原domain 93仿真与旧实车脚本保留。接续使用新入口验收实际过门和建图；实车源时间戳、转角反馈、板端断流停车和旧命令拒绝仍需实际反馈验证。
 ## Knowledge Map
+[连续业务世界、混沌与可视化回归计划](plans/continuous-twin-regression-20261024/task_plan.md)；[快照/时间/索引技术修正](plans/continuous-twin-regression-20261024/findings.md)；[当前进度](plans/continuous-twin-regression-20261024/progress.md)。
 [真实地图、新底盘与负压实验入口](docs/HARDWARE_LAB.md)；[计划](plans/scene-hardware-lab-20261020/task_plan.md)；[验收进度](plans/scene-hardware-lab-20261020/progress.md)。
 [场景、三维雷达与路线验证](docs/SCENE_VALIDATION.md)；[实施计划](plans/scene-business-validation-20261020/task_plan.md)；[当前进度](plans/scene-business-validation-20261020/progress.md)。
 [工作台大范围重构计划](plans/workbench-rebuild-20261018/task_plan.md)；[商业/开源采纳与底层审查](plans/workbench-rebuild-20261018/findings.md)；[当前重构进度](plans/workbench-rebuild-20261018/progress.md)。

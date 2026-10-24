@@ -7,7 +7,9 @@ micro-ROS Agent sources, firmware source and staged runtime tools.
 
 ## Start here
 
-Current development: [workbench rebuild](plans/workbench-rebuild-20261018/task_plan.md), including UI, runtime contracts, rendering, and backend adapters.
+Current planning: [continuous-world operation and visual regression](plans/continuous-twin-regression-20261024/task_plan.md).
+The SpecMesh plan is written; implementation has not started. Its first slice imports existing delivery records into a read-only timing report.
+The [workbench rebuild](plans/workbench-rebuild-20261018/task_plan.md) remains the UI, runtime-contract, rendering, and adapter baseline.
 
 Read [PROJECT](PROJECT.md) for current priorities, then follow the relevant plan.
 Open the [results workbench](docs/WORKBENCH.md) at `/workbench` for six capability entrances and frozen acceptance evidence.
