@@ -225,15 +225,20 @@ def axis_stop_fixture(pv, box, limits, executable, audit, handoff):
     return audit_axis_request(request, box, limits, executable, audit)
 
 
-def audit_axis_request(request, box, limits, executable, audit, perform_audit=True):
+def audit_axis_request(request, box, limits, executable, audit, perform_audit=True, exchange=None):
     """Reuse native generation; an optimizer may request generation-only probes."""
     try:
-        result = subprocess.run([str(executable)], input=json.dumps(request)+"\n", text=True,
-                                capture_output=True, timeout=10)
-        outputs = [json.loads(line.split(" ", 1)[1]) for line in result.stdout.splitlines() if line.startswith("MincoResult ")]
-        native = outputs[-1] if outputs else {"native_success": False}
-        if result.returncode or not native.get("native_success"):
-            raise ValueError(f"native axis brake unavailable, exit={result.returncode}")
+        if exchange is None:
+            result = subprocess.run([str(executable)], input=json.dumps(request)+"\n", text=True,
+                                    capture_output=True, timeout=10)
+            outputs = [json.loads(line.split(" ", 1)[1]) for line in result.stdout.splitlines() if line.startswith("MincoResult ")]
+            native = outputs[-1] if outputs else {"native_success": False}
+            code = result.returncode
+        else:
+            native = exchange(request)
+            code = 0
+        if code or not native.get("native_success"):
+            raise ValueError(f"native axis brake unavailable, exit={code}: {native.get('error', 'no successful reply')}")
         return {"status": "audited" if perform_audit else "generated",
             "assumption": request.get("initial_condition_scope", "supplied input A/J, measurement provenance unqualified"),
             "axis_stop_durations_xyz": request["axis_stop_durations_xyz"], "request": request, "native": native,

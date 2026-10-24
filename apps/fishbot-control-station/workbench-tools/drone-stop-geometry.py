@@ -118,7 +118,7 @@ def extrema(native, audit):
 
 
 def search(base, box, limits, executable, audit, *, planning_inset=.002, max_iterations=60, y_inner=False,
-           z_time_bounds=None):
+           z_time_bounds=None, exchange=None):
     """Bounded recorded +Y profile, not a generic planner or feasibility proof."""
     try:
         head = np.asarray(base["initial_pva"], dtype=float)
@@ -149,7 +149,8 @@ def search(base, box, limits, executable, audit, *, planning_inset=.002, max_ite
     @lru_cache(maxsize=512)
     def evaluate(values):
         request = geometry_request(base, values, y_inner=y_inner)
-        result = tracking.audit_axis_request(request, box, limits, executable, audit, perform_audit=False)
+        result = tracking.audit_axis_request(request, box, limits, executable, audit, perform_audit=False,
+            **({"exchange":exchange} if exchange is not None else {}))
         if result["status"] != "generated":
             raise ValueError(result.get("reason", "native generation unavailable"))
         if y_inner and (result["native"].get("generator") != "official_MINCO_S4NU_axis_inner_points"
@@ -167,7 +168,8 @@ def search(base, box, limits, executable, audit, *, planning_inset=.002, max_ite
         result, metrics, margins = evaluate(tuple(optimizer.x))
         # An optimizer status and polynomial-root diagnostics cannot replace
         # the original conservative Bernstein and boundary audit.
-        final = tracking.audit_axis_request(result["request"], box, limits, executable, audit)
+        final = tracking.audit_axis_request(result["request"], box, limits, executable, audit,
+            **({"exchange":exchange} if exchange is not None else {}))
         if final["status"] != "audited":
             return final
         if y_inner:

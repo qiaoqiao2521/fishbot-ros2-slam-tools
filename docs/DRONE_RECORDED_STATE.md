@@ -602,3 +602,90 @@ python3 -m unittest test_drone_handoff_reanchor test_drone_handoff_pv test_drone
 ```
 
 根Codex以最紧的#7为切片，剖析现有生成、连续审计和回放链的耗时，核状态传播与提交截止；不把离线尾段从cut起算当作已按时采用，不盲增画像网格。实际A/J、时间有效地图、终端及跟踪仍未获资格，c866441冻结，M2部分完成、M3不启动。
+
+
+## 原生进程复用与迟交时效（2026-10-24）
+
+本片仅选上轮最紧的#7 h=.05、zero_A_J画像。先profile现有搜索，再复用现成JSON行接口；未修改MINCO求解器、原硬阈值或冻结drone源码。
+`drone-minco-s4-knots.cpp`原本支持getline逐行请求/响应和flush；每次generate的solver与数组都是局部变量。
+项目工具中没有现成可复用的常驻MINCO会话，新增`drone-native-session.py`仅作一次search内的管道薄适配，不建服务或第二套调度器。
+
+### 先量原因，再修传输
+
+一次原路径测得search总wall2.998076s。下表是同一次带轻量分段计时的调用；原生内部耗时包含于进程调用，不能重复相加。
+
+| 阶段 | 调用次数 | 累计wall秒 |
+| --- | ---: | ---: |
+| Python连续极值诊断 | 467 | 1.773172 |
+| subprocess调用，含启动/通信/等待 | 468 | 1.085069 |
+| 其中native内部求解/重构 | 468 | .066160 |
+| 最终独立连续硬审计 | 1 | .010609 |
+| axis_knots | 1 | .005399 |
+
+第二次cProfile仅辅助定位调用树，带插桩开销，不用其3.859s作为运行基准。最大成本仍是每候选的Python极值计算，进程复用只能解决其中一部分。
+最终硬审计不是本次瓶颈，本轮保留全部硬审计及axis_knots。
+
+`audit_axis_request`及`geometry.search`只新增可选exchange回调，默认仍为每评估一次进程。
+`drone-handoff-reanchor.py --reuse-native`才启用每画像/每search一个进程，退出search后关闭，不跨任务共享状态。
+单请求/单响应按顺序关联；原生错误对象即使无ID也消费一条响应，可继续后续请求。
+管道用原始非阻塞I/O，共享单请求monotonic截止；EOF、坏帧、坏JSON或读写超时关闭当前会话，不重试或错配下一条。
+只回收自己创建的Popen；错误信息保留stderr尾部，正常关闭还核对退出码。
+审查发现“完整成功响应后exit7”会与原oneshot语义不同，已修为正常context关闭时拒绝；已有body/I/O异常保留原原因。
+
+### 三组成对结果
+
+计时包住整个search及进程创建/关闭，不能直接拿不含session生命周期的geometry.offline_wall_s比较。
+同一请求、60次迭代域、原门限与连续审计均保持。
+
+| 传输方式 | 样本数 | 最小wall秒 | 中位wall秒 | 最大wall秒 |
+| --- | ---: | ---: | ---: | ---: |
+| 每候选重启进程 | 3 | 2.860506 | 2.891142 | 5.536436 |
+| 每search复用进程 | 3 | 1.742207 | 1.824805 | 2.271113 |
+
+三组分别核request、全部pieces、hard_audit和axis_knots，均逐字相同；复用进程全部确认退出。
+样本中位少36.88%，只是本机三组成对数据，范围显示运行波动，不是稳定加速比或实时deadline通过。
+原#7优化状态仍为60次迭代上限false，A峰.962272；没有用减少迭代、缓存passed或取消审计换速度。
+
+### 提交时间与传播状态分别核
+
+复用原Replay，用显式sim时间核11个fixture，保留原start=33.046、end=38.046。
+所有输入PVA及快照完整保留，快照明确为静态配置空间fixture；没有借空voxels宣称原地图已知自由。
+
+| 情景 | 结果 |
+| --- | --- |
+| cut时刻提交 | 条件接纳 |
+| 晚.2sim秒，仍给旧首态 | handoff_state_mismatch |
+| 晚.2sim秒，给匹配原曲线当前相位的理想PVA | 条件接纳，原start不变 |
+| 晚.2sim秒，CV传播PV且模型A=0 | handoff_state_mismatch；不是实测A |
+| 原end前一可表示sim时刻 | 条件接纳 |
+| 原end恰好/之后 | trajectory_not_current |
+| wall100秒但sim不动 | 不推进相位，可条件接纳 |
+| A未知、图过期、缺末端覆盖 | 分别拒绝，不补值 |
+
+CV传播从cut初始PV沿恒速模型到显式提交时刻，不用参考曲线生成预测PV；模型A=0不作为真实状态证据。
+理想相位匹配只验证既有选择合同，不证明飞机在计算期间已沿这条新轨迹飞行。
+wall测时与sim fixture独立保存，没有将1.825wall秒加到历史cut、重设start或伪造消费ACK。
+若另选未来新起点，须从该时刻的有来源状态重新求解，不能给旧系数换时间标签。
+
+### 验证与复验
+
+14项会话测试覆盖真实A→B→A、原生拒绝后正常请求、同系数/全审计等价、分片、读写超时、EOF、坏JSON/类型/帧、exit7、body异常和所属进程清理。
+8项时效测试含CV传播、原end的相邻浮点时刻、完整生命周期计时与局部降级；加原64、geometry11和S4NU11，共108项通过、无跳过。
+根独立核三对结果、归档输入/系数、实际多项式相位、11个时间分支及统计，共86项读回通过，图已目视。
+内置只读复核确认退出状态修补、时间口径及固定start；agent-link此前已有实调用失败，沿用内置备选，未联系其他已有聊天。
+
+真实CLI另用原MCAP/clock和early05报告启用--reuse-native：#7四画像均过原门，输入/request/pieces/audit/axis_knots四组逐字相同。
+结果另存`recorder-PV-reanchored-early05-reuse-native.json`和`early05-reuse-native-readback.json`；原24组报告保留，未覆盖。
+
+原忽略目录保留`search-timing-probe.json`，新增`native-transport-and-late-submission.json`、`native-transport-and-late-readback.json`及`native-transport-and-late-comparison.png`。
+不提交原遥测、运行日志或这些生成产物。没有Web/服务改动、训练、ROS节点、仿真、控制、新飞行或落地证据。
+
+```sh
+STOP_REPORT_ROOT=apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6
+python3 apps/fishbot-control-station/workbench-tools/drone-handoff-timing.py --reanchor-report "$STOP_REPORT_ROOT/recorder-PV-reanchored-stopping-tails.json" --output "$STOP_REPORT_ROOT/native-transport-and-late-submission.json"
+# 原reanchor命令追加 --reuse-native 可验证显式复用路径，另存输出以保留原报告。
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_handoff_timing test_drone_native_session test_drone_handoff_reanchor test_drone_handoff_pv test_drone_recorded_tracking test_drone_committed_replay test_drone_stop_geometry test_drone_s4_knots
+```
+
+根Codex核官方GCOPTER已有连续极值接口能否复用于每次候选评估，优先减少当前主耗时的重复求根；先核接口与同系数对照，不自写新求根器，不减少或跳过最终硬门。真实A/J、有效地图、终端及按时采用仍未获资格，c866441冻结，M2部分完成、M3不启动。

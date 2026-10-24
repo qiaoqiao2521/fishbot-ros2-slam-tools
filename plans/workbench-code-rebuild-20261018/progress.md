@@ -1,5 +1,17 @@
 # 实施进度
 
+## 2026-10-24 M2原生进程复用与迟交时效
+
+- Current：最紧#7/zeroAJ同输入三组成对的request/pieces/hard_audit/axis_knots完全相同；含完整进程生命周期的wall中位2.891142→1.824805s，少36.88%。仍非实时/实际接管资格，M2部分完成、M3冻结、goal active。
+- 原因：基线search2.998076wall秒中，467次Python极值1.773172s，468次subprocess1.085069s（含native内部.066160s）；最终硬审计.010609s、axis_knots.005399s。cProfile另跑有插桩开销，只定位；不是硬门太慢或MINCO内核算不动。
+- Done：原CLI已支持多JSON行，新增NativeSession薄适配及exchange可选参数，reanchor --reuse-native每search一个Popen，默认旧路径不变。原求解器/门限/迭代数/最终审计均保持；无ID错误按FIFO消费，协议/I/O失败只关当前会话，正常关闭检查非零exit，保body/原I/O异常。未建常驻服务或新调度器。
+- 时效：11显式sim fixture保start33.046/end38.046。晚.2旧首态和CV模型传播均handoff_state_mismatch；理想当前相位条件可用且保start，end及之后trajectory_not_current；wall100秒sim停不推进，未知A/过期图/缺末端覆盖拒绝。不把wall变成sim，不冒称新尾已被飞机执行。
+- 验证：14会话＋8时效＋原64＋11几何＋11S4NU共108项过、无跳过；86项独立归档输入/实际系数/相位/统计读回过，PNG已目视。真实A→B→A含中间数学拒绝仍与oneshot等价；坏回复、分片、读写超时、exit7、原异常与owned PID回收有正反例。原#7仍opt=false/60limit，耗时范围旧2.861–5.536、新1.742–2.271wall秒，保留波动。
+- CLI：原MCAP/clock重新读入，--reuse-native的#7四画像全部原门通过，输入/request/pieces/audit/axis_knots四组逐字相同；原24组报告不覆盖，另存early05-reuse-native两份JSON。
+- 交接：方法/表格/复验在docs/DRONE_RECORDED_STATE.md末节。原忽略目录保留search-timing-probe.json，新增native-transport-and-late-submission.json、native-transport-and-late-readback.json与PNG。无Web/服务、训练、ROS节点、仿真、控制、新飞行/落地；drone c866441冻结。
+- Next/owner：根Codex核官方GCOPTER已有连续极值接口能否复用于每次候选评估，优先减少当前主耗时的重复求根；先核接口与同系数对照，不自写新求根器，不减少或跳过最终硬门。真实A/J、有效地图、终端及按时采用仍未获资格，c866441冻结，M2部分完成、M3不启动。
+- 仓库：期间原SO101八文件已由独立5a30c26提交，根读对应Carry进度并独立核远端同SHA；本轮未修改/重验SO101物理。当前无人机改动独立提交，保留该既有父提交，不再误报八文件dirty。knowledge_status=already_covered；沿用Wiki/ROS2与FishBot§20、原生时钟、CapMesh PIT-004，项目数值不写memory。
+
 ## 2026-10-24 M2可用PV重锚独立尾段
 
 - Current：六cut×四显式A/J画像24组均过原连续硬门与axis_knots；新尾由当时可用PV重新求解，不是平移或重标旧尾。实际完整机体接管资格0，M2部分完成、M3冻结、goal active。

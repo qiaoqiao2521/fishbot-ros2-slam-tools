@@ -53,7 +53,7 @@ def seed_request(position, velocity, profile, box, handoff):
     return qualification.hypothesis_request(base,profile)
 
 
-def run(reports, states, epochs, root, native, task_id, *, max_iterations=60):
+def run(reports, states, epochs, root, native, task_id, *, max_iterations=60, reuse_native=False):
     # Re-select from original state/clock evidence; cached predicted PV, exact
     # oracle branches and the nominal reference's A/J are never generator inputs.
     comparison=pv.run(reports,states,epochs,root,task_id)
@@ -94,8 +94,12 @@ def run(reports, states, epochs, root, native, task_id, *, max_iterations=60):
                 row["necessary"]=necessary
                 if necessary["status"]!="not_ruled_out":
                     row.update(status="not_searched",reason="optimistic_PV_necessary_bound_not_passed");continue
-                resolved=geometry.search(request,box,limits,native,audit,y_inner=True,
-                    z_time_bounds=Z_TIME_BOUNDS,max_iterations=max_iterations)
+                options={"y_inner":True,"z_time_bounds":Z_TIME_BOUNDS,"max_iterations":max_iterations}
+                if reuse_native:
+                    with load("drone-native-session").NativeSession(native) as session:
+                        resolved=geometry.search(request,box,limits,native,audit,exchange=session.exchange,**options)
+                else:
+                    resolved=geometry.search(request,box,limits,native,audit,**options)
                 row.update(status=resolved["status"],resolved=resolved)
                 if resolved["status"]!="audited":
                     continue
@@ -119,6 +123,7 @@ def run(reports, states, epochs, root, native, task_id, *, max_iterations=60):
         "kind":"offline_recorder_PV_reanchored_stopping_tails",
         "source_PV_comparison_summary":comparison["summary"],
         "search_configuration":{"y_inner":True,"z_time_bounds_s":list(Z_TIME_BOUNDS),
+            "native_transport":"one_process_per_search" if reuse_native else "one_process_per_evaluation",
             "max_iterations":max_iterations,"planning_inset_m":.002,
             "scope":"same explicit domain as narrow reference cuts; not default geometry.search domain"},
         "summary":{"variants":len(comparison["rows"]),"hypotheses":len(rows),"audited":len(audited),
@@ -138,6 +143,7 @@ def main():
     parser.add_argument("--drone-root",type=Path,default=Path.home()/"dev/ros2/projects/drone")
     parser.add_argument("--native",type=Path,default=Path.home()/".cache/ros2-drone/minco-s4-knots/minco_s4_knots")
     parser.add_argument("--max-iterations",type=int,default=60)
+    parser.add_argument("--reuse-native",action="store_true",help="Reuse existing JSON-line CLI for each offline search")
     parser.add_argument("--output",type=Path,required=True)
     args=parser.parse_args();reports=[]
     for path in args.candidates:
@@ -145,7 +151,8 @@ def main():
         except (OSError,ValueError) as error:print(f"WARNING: optional candidate report skipped: {path.name}: {error}")
     task_id=json.loads((args.run_dir/"request.json").read_text())["id"]
     states,_,epochs=pv.tracking.read_odometry(args.run_dir)
-    result=run(reports,states,epochs,args.drone_root,args.native,task_id,max_iterations=args.max_iterations)
+    result=run(reports,states,epochs,args.drone_root,args.native,task_id,max_iterations=args.max_iterations,
+        **({"reuse_native":True} if args.reuse_native else {}))
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(result,indent=2,allow_nan=False)+"\n")
     print(json.dumps(result["summary"]))
