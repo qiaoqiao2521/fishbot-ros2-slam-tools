@@ -1,5 +1,14 @@
 # 实施进度
 
+## 2026-10-24 M2官方S4NU内点薄适配
+
+- Current：同一33.428s的五个有限画像均过原连续硬界＋内点/逐轴停止合同，原三拒绝A峰降至.774606/.754274/.718300。只有静态手工box、A/J假设资格，不是动态成功率或任意初态可行证书。M2部分完成、M3冻结、goal active。
+- Done：复用官方GCOPTER e0444f6/MIT S4NU，新增外部drone-minco-s4-knots.cpp暴露分轴内部位置/时长；不改冻结wrapper/header。geometry.search只增Y比例r/q，初始PVA/J与旧域/硬界保持。raw/full Replay都新鲜核axis_knots，不信缓存passed。49项相关测试（10新＋11几何＋20资格＋8回放）通过；独立系数/同源/连续极值/内点/hold读回81项通过，图已目视核对。
+- Issues：全流程5.209–10.922wall秒，三组60次迭代上限仍保留false，独立审计通过仅是可行见证。native .108–.214ms不可替代总耗时；Z最高2.197736仍毫米余量，J峰7.256–12.636无对应物理界，实际状态/地图/终端/截止/跟踪采用均缺。实际总时长4.050–5.000sim，未来覆盖须按实际段长核。
+- 审查：内置只读核官方接口和CPP/局部合同，两P2（极短hold区间、累计时刻/重构/内点）已修并补负例；Replay由根原生测试覆盖raw和合成前缀＋尾段，不冒称历史实际前缀。首轮测试fixture混比mission target/backup endpoint失败，改正测试来源后重跑，未改实施硬界。沿用已记录agent-link启动故障的内置fallback，不联系旧聊天。
+- 产物/入口：原忽略目录stop-s4-inner-point-qualified.json、stop-s4-inner-readback.json、stop-s4-inner-comparison.png，首轮comparison保留；编译/运行/测试命令在docs/DRONE_RECORDED_STATE.md末节。二进制仅cache，无新依赖安装、Web改动、训练、ROS节点、仿真、控制或飞行。drone c866441与官方缓存保持清洁；SO101八文件在途继续保留，接续入口沿前轮，不混本提交。
+- Next/owner：根Codex复用原N2/N3名义前缀与切点PVA/J，核新S4NU尾段组成完整候选的适用域；实际完整状态、时间有效已知图、终端/截止与物理跟踪/采用继续分列，不晋级实时。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟和CapMesh PIT-004；新事实留项目，未写memory。
+
 ## 2026-10-24 M2提前交接对照
 
 - Current：原三个拒绝画像＋两PV零A/J控制，在预定33.248/33.388/33.428s共15组，8过7拒。提前180ms只解除事后Jy画像拒绝，两个外向Ay仍拒；本族结果不能当ICS或飞行成功率。

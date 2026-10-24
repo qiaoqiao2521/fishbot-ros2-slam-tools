@@ -244,11 +244,11 @@ def acceleration_peak(native, audit):
     return best
 
 
-def compare_handoffs(source, root, executable, past=None, times=(33.248, 33.388, 33.428)):
+def compare_handoffs(source, root, executable, past=None, times=(33.248, 33.388, 33.428), y_inner=False):
     """Predeclared finite timing comparison, with the existing search unchanged."""
     original = json.loads(source.read_text())
     result = {"schema_version": 1, "archive_task_id": original["archive_task_id"], "source": str(source),
-        "kind": "offline_earlier_stop_handoff_comparison", "boundary_times_sim_s": [],
+        "kind": "offline_C3_Y_inner_point_comparison" if y_inner else "offline_earlier_stop_handoff_comparison", "boundary_times_sim_s": [],
         "hard_box": original["hard_box"], "hard_limits": original["hard_limits"],
         "scope": "same recorded pair, finite A/J profiles and search bounds; not an online handoff or ICS proof",
         "actual_qualification": {"measured_A_J": "unrecorded", "current_known_map": "unqualified", "future_free_volume": "unqualified",
@@ -288,7 +288,8 @@ def compare_handoffs(source, root, executable, past=None, times=(33.248, 33.388,
             for axis in range(3):
                 request["initial_pva"][axis][:2] = [evidence["position"][axis], evidence["velocity"][axis]]
             try:
-                resolved = geometry.search(request, original["hard_box"], original["hard_limits"], executable, audit)
+                resolved = geometry.search(request, original["hard_box"], original["hard_limits"], executable, audit,
+                    **({"y_inner": True} if y_inner else {}))
                 row.update(status=resolved["status"], resolved=resolved)
                 if "candidate" in resolved:
                     row["acceleration_peak"] = acceleration_peak(resolved["candidate"]["native"], audit)
@@ -305,6 +306,7 @@ if __name__ == "__main__":
     parser.add_argument("--stopping-report", type=Path, help="Optional original forecast evidence for past-A hypothesis")
     parser.add_argument("--earlier-handoff", action="store_true", help="Compare fixed earlier boundaries using recorder-available inputs")
     parser.add_argument("--handoff-times", type=float, nargs="+", default=[33.248, 33.388, 33.428])
+    parser.add_argument("--y-inner", action="store_true", help="Use the external S4 inner-point native interface in handoff comparisons")
     parser.add_argument("--drone-root", type=Path, default=Path.home()/"dev/ros2/projects/drone")
     parser.add_argument("--native", type=Path, default=Path.home()/".cache/ros2-drone/minco-probe/minco_probe")
     parser.add_argument("--output", type=Path, required=True)
@@ -314,8 +316,10 @@ if __name__ == "__main__":
         try: past = json.loads(args.stopping_report.read_text())
         except (OSError, ValueError) as error: print(f"WARNING: optional past-A evidence unavailable: {error}")
     operation = compare_handoffs if args.earlier_handoff else run
+    if args.y_inner and not args.earlier_handoff:
+        print("WARNING: --y-inner applies only to --earlier-handoff; original qualification mode retained")
     result = operation(args.geometry_report, args.drone_root, args.native, past,
-        **({"times": args.handoff_times} if args.earlier_handoff else {}))
+        **({"times": args.handoff_times, "y_inner": args.y_inner} if args.earlier_handoff else {}))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False)+"\n")
     print(json.dumps({"profiles": len(result["rows"]), ("comparison_passes" if args.earlier_handoff else "fixed_passes"): sum(r.get("resolved", {}).get("candidate", {}).get("audit", {}).get("passed", False)

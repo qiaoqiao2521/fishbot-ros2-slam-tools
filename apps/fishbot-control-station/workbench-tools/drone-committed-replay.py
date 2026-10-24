@@ -4,6 +4,7 @@
 """Offline complete-trajectory selection replay. No ROS or control transport."""
 import argparse
 import copy
+from functools import lru_cache
 import importlib.util
 import json
 from pathlib import Path
@@ -23,6 +24,15 @@ def reuse(root):
 def complete(row):
     return {"native_success": row["native"]["native_success"],
             "pieces": row["prefix_pieces"] + row["native"]["pieces"]}
+
+
+@lru_cache(maxsize=1)
+def knot_auditor():
+    path = Path(__file__).with_name("drone-stop-geometry.py")
+    spec = importlib.util.spec_from_file_location("stop_knot_contract", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.audit_axis_knots
 
 
 class Replay:
@@ -79,6 +89,11 @@ class Replay:
                     or duration <= 0 or np.max(abs(terminal[:, 1:])) > 1e-8 or np.max(abs(jerk)) > 1e-8):
                 result["passed"] = False
                 result["failed_checks"].append("axis_stop_contract")
+            if "axis_inner_positions_xyz" in request or "axis_segment_durations_xyz" in request:
+                result["axis_knot_contract"] = knot_auditor()(native, request, self.audit)
+                if not result["axis_knot_contract"]["passed"]:
+                    result["passed"] = False
+                    result["failed_checks"].append("axis_knots")
             return native, result
         native = complete(row)
         # Re-audit mutable input; never trust a cached 'passed' boolean.
@@ -90,6 +105,11 @@ class Replay:
         result = self.audit.audit_trajectory(native, request, [], self.limits, box)
         tail = self.audit.audit_trajectory(row["native"], {**request, **row["request"],
             "integral_resolution": 16, "corridor": request["corridor"]}, [], self.limits, box)
+        if "axis_inner_positions_xyz" in row["request"] or "axis_segment_durations_xyz" in row["request"]:
+            tail["axis_knot_contract"] = knot_auditor()(row["native"], row["request"], self.audit)
+            if not tail["axis_knot_contract"]["passed"]:
+                tail["passed"] = False
+                tail["failed_checks"].append("axis_knots")
         prefix, first = row["prefix_pieces"][-1], row["native"]["pieces"][0]
         left = poly.polyval(1., self.audit.derivative(self.audit.normalized_power(prefix), prefix["duration"], 3))
         right = poly.polyval(0., self.audit.derivative(self.audit.normalized_power(first), first["duration"], 3))

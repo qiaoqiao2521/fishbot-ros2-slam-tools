@@ -404,3 +404,61 @@ python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-te
 原忽略目录保留stop-earlier-handoff-probe.json，并新增stop-earlier-handoff-comparison.json、stop-earlier-handoff-readback.json和stop-earlier-handoff-comparison.png。
 下一项核当前Y单轴C3生成族的几何/末端边界与可复用分段自由度；不继续盲增同类时刻搜索，不改冻结算法或放宽硬界。
 真实完整A/J、时间有效已知自由图、终端区域和跟踪/采用仍未获资格。无训练、ROS节点、仿真、控制或新飞行，drone c866441清洁冻结；M2部分完成、M3及动态闭环未通过。
+
+## 官方S4NU内点薄适配（2026-10-24接续）
+
+复用本机GCOPTER e0444f6d47b84f972ced91746b05feb36ce1fd4f的`MINCO_S4NU`，MIT版权/许可保留在原checkout。
+官方接口原本就支持3×4首尾PVAJ、3×(N−1)内点和N段时长；冻结wrapper只暴露每轴N=1，旧piecewise_boundary/fixed_times使用S3NU，不能作为C3替代。
+新增`workbench-tools/drone-minco-s4-knots.cpp`只暴露该已有接口，不修改冻结drone、上游求解器或重写系数求解。
+它按各轴内部位置/时长调用S4NU，取累计节点精确并集，再用端点PVAJ重构统一七次段；各轴停止后明确保持位置及零VAJ，不使用原轨迹的尾外推。
+不合并真实不同节点、不拉伸时长。累计时间不推进、非法维数/时长、非有限系数或重构PVAJ误差超1e−8，仅拒绝当前输入行，后续JSON行继续。
+
+现有外部SLSQP在[Tx,Ty,Tz,dy]外仅加Y节点时间比例r∈[.15,.85]、位移比例q∈[0,1]；原四维范围、2mm内部规划目标和硬界不变。
+Y内点只固定位置，不人为锁定内部VAJ；初始PVA/J和终端VAJ=0保持，原任务target元数据保留。
+新native必须回执正确generator和各轴[1,2,1]段数；冻结旧程序会忽略新增字段，因此只能标unscored，不能伪称内点优化已生效。
+
+### 同一33.428s输入的五个有限见证
+
+| 输入PV与初始A/J假设 | 原单段轴A峰m/s² | 新Y内点A峰m/s² | 原连续硬审计＋内点/停止合同 |
+| --- | ---: | ---: | --- |
+| 因果预测，A=J=0 | .898199 | .720009 | 通过 |
+| 因果预测，Ay=+.2、J=0 | 1.035868 | .774606 | 通过 |
+| 事后PV，A=J=0 | .990466 | .710838 | 通过 |
+| 事后PV，Ay=+.2、J=0 | 1.128389 | .754274 | 通过 |
+| 事后PV，A=0、Jy=+1 | 1.027612 | .718300 | 通过 |
+
+这只解除所列三个原拒绝画像在静态手工box中的本族拒绝，不是动态成功率或任意初态备份证书。
+新曲线最高Z为2.197736m，仍只有毫米级高度余量；J峰7.256–12.636m/s³，没有对应原J硬界或推力/角速度资格。
+内点位置误差≤2.22e−16m，统一段C3误差≤5.40e−14；这证明所给数学PVAJ合同，不证明实际飞机状态或跟踪成立。
+Y反向速度仅约0–1.06e−15m/s，属于数值量级；全段仍由原连续判据验收，不用采样点代替连续检查。
+
+新增局部`audit_axis_knots`检查声明内点在其时刻命中，并检查每轴停止后的全部PVAJ区间。
+跨停止时刻的段只检查后半区间，未以1ns时间容差跳过短区间；原全局审计只核首尾/接缝，不能代替此合同。
+Replay在完整刹停及“前缀＋尾段”两入口都会重新核该合同；修改内点元数据，即使原全局数学审计仍过，也不能沿用缓存passed。
+完整前缀测试使用明确标注的合成恒速前缀，不冒称历史实际执行前缀；原记录切点组合仍待下一项。
+
+### 时效与验证边界
+
+完整离线搜索/生成/审计耗时5.209–10.922wall秒；三组达到60次迭代上限，保留optimizer_success=false，但独立连续审计通过。
+因此只记可行见证，不记已收敛最优解或实时求解通过。单次native内部约.108–.214ms，不能代替全流程耗时，也不能直接加到sim时刻。
+实际总曲线时长约4.050–5.000sim秒，仍需按真实段长核未来自由体积与终端窗口，不能按固定标签认定安全。
+
+49项相关检查通过：10项新native/内点/停止/回放检查、11几何、20资格及8原回放。
+独立降幂系数/根求极值、同源旧输入、初末PVAJ、逐段C3、内点、逐轴hold与原硬界读回81项通过，科学图已目视核对。
+内置只读审查所指“极短hold区间漏检”和“累计时间/内点/重构缺口”已修；根测试另覆盖raw/full两种回放的缓存元数据变更。
+首次测试仅因fixture把历史mission target与当前backup endpoint混比而失败，改正测试来源后重跑；未为该测试更改实施行为或硬界。
+
+复用现有编译器、Eigen和JSON头文件，二进制只留cache；在实现仓运行：
+
+```sh
+STOP_REPORT_ROOT=apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6
+DRONE_S4_BUILD="$HOME/.cache/ros2-drone/minco-s4-knots"
+mkdir -p "$DRONE_S4_BUILD"
+c++ -std=c++14 -O2 -Wall -Wextra -isystem /usr/include/eigen3 -isystem "$HOME/.cache/ros2-drone/reuse/GCOPTER/gcopter/include" apps/fishbot-control-station/workbench-tools/drone-minco-s4-knots.cpp -o "$DRONE_S4_BUILD/minco_s4_knots"
+python3 apps/fishbot-control-station/workbench-tools/drone-stop-qualification.py --geometry-report "$STOP_REPORT_ROOT/stop-position-time-comparison.json" --stopping-report "$STOP_REPORT_ROOT/stopping-viability-evaluation.json" --earlier-handoff --y-inner --handoff-times 33.428 --native "$DRONE_S4_BUILD/minco_s4_knots" --output "$STOP_REPORT_ROOT/stop-s4-inner-point-qualified.json"
+python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-tests -p test_drone_s4_knots.py
+```
+
+原忽略目录保留首轮stop-s4-inner-point-comparison.json；正式产物为stop-s4-inner-point-qualified.json、stop-s4-inner-readback.json、stop-s4-inner-comparison.png。
+下一项复用原N2参考前缀和N3切点PVA/J，核完整候选适用域；求解截止、实际状态/跟踪、未来自由图与终端区域仍分列未获资格。
+无Web改动、训练、ROS节点、仿真、控制或新飞行；drone c866441及官方缓存未改，M2部分完成、M3不解冻、动态闭环未通过。
