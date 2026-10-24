@@ -12,6 +12,7 @@
 - 最终既有反馈入口：control987项中7项仍因旧planning-venv/bin/python缺失失败；mission209、autonomy61、frontend入口460项通过。与M1a首轮同一组环境失败，没有新失败；没有将460称为全前端测试全集。单列定向18项与真实ROS/PTY证据，不称全仓全绿。
 - Playwright桌面/390px共10组行为通过，增加三车型入口与麦轮待接入边界检查；写请求0、页面未捕获错误0，测试浏览器已关闭，截图在`ui-b/`。只读Vite5191保留供查看。
 - 外层dev工作树有既有大规模迁移和独立Git，未整仓stage或发布；本次有效运行代码只交付FishBot既有远端。旧robot_base九月dirty保留历史，后续维护以新包和本PROJECT为准。
+- 功能提交fff8227连同耗时页4ebb08c已推送qiaoqiao2521/fishbot-ros2-slam-tools的main，远端读回与本地完整提交一致。后续文档接续修订由Git历史保留；提交推送不替代上述验收。
 
 ## Knowledge Writeback
 

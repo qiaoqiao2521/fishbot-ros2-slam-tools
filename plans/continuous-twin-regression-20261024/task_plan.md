@@ -189,4 +189,4 @@ Wall-budget验收先按实际实时能力运行；2–4倍速只能另标吞吐�
 
 ## Next Step
 
-M1a已落地，见[配送耗时](../../docs/DELIVERY_TIMING.md)。接续M1b；用户新增麦克纳姆项目合并要求，由同一root先推进统一维护，原K和后续里程碑保持。
+M1a已落地，见[配送耗时](../../docs/DELIVERY_TIMING.md)。用户新增的[麦克纳姆源码合并](../mecanum-consolidation-20261024/progress.md)也已完成范围内验收与交付；接续M1b，原K和后续里程碑保持。
