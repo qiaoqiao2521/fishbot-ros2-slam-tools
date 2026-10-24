@@ -815,3 +815,80 @@ python3 -m unittest test_drone_extrema_search test_drone_native_extrema test_dro
 ```
 
 新后端保持显式可选，不晋级默认。真实A/J、时间有效地图、终端、跟踪及按时采用仍未获资格。drone c866441冻结，M2部分完成、M3不启动；没有无人机Web/服务改动、训练、ROS节点、仿真、控制、新飞行或落地证据。期间独立SO101导入修补与配方QA已提交3bce2c7，未混入本片验收。
+
+## 首次梯度分歧与显式加速度合同（2026-10-24）
+
+本片接上节外向Ay的三次拒绝。先追踪原配置，再做一个中心差分负对照及一个显式加速度可行性对照。全部在冻结drone外完成；默认Python、原搜索域和原V1.8/A1/Z2.2门保持。
+
+### 只读观察与真实差分
+
+`geometry.search(observer=None)`默认不传callback。显式观察时，深拷贝精确x、实际metrics/margins和本次原生系数，分别记录缓存未命中的evaluation、major-iteration callback和solver_exit。
+观察器错误warning并继续原求解/最终门；回调修改副本不能改搜索输入。major callback点不等同于线搜索接受点或物理状态，返回jac也不擅自归属到最终x。
+`drone-extrema-trace.py`先关闭主搜索进程，再用已存相同系数做影子诊断，不向优化器多送目标调用。追踪wall含观察开销，不作为性能成绩。
+
+本机SciPy1.11.4在jac=None时，对目标与约束使用绝对eps=1.4901161193847656e-8的二点差分；边界处可调整，除数以实际浮点dx为准。
+显式3-point沿用官方相对步长选择，没有新写差分器。[对应包装层](https://github.com/scipy/scipy/blob/v1.11.4/scipy/optimize/_slsqp_py.py#L288-L307)。
+公开返回的success只表示mode0，不记录命中的具体停止出口，也不代项目验A≤1。[对应返回与停止实现](https://github.com/scipy/scipy/blob/v1.11.4/scipy/optimize/slsqp/slsqp_optmz.f#L401-L498)。当前观察不证明具体Fortran停止分支。
+
+### 分歧发生在第一步
+
+两方前7个精确x及生成系数相同，A/XYZ上下界差最大1.11e-15；第8个唯一查询、即首个SQP候选开始不同。
+初始A梯度最大差4.470348e-8，实际margin Jacobian最大差1.192093e-7。保留的是实际margins差分，不能只把位置梯度取负后假定减法舍入相同。
+首Tx的实际位移与该后端负Tx梯度逐值吻合：
+
+| 后端 | 初始dA/dTx | 首候选Tx | Tx₁−(Tx₀−dA/dTx) |
+| --- | ---: | ---: | ---: |
+| Python | −.00020159780979156494 | 4.500201597809792 | 0 |
+| RootFinder | −.0002015829086303711 | 4.50020158290863 | 0 |
+
+Python462、Root429个唯一查询，共891个原生系数逐条影子对照，A/XYZ范围最大差2.842171e-13，未见明显漏峰。
+两方追踪后的全部终态pieces、optimizer和hard audit都与上节原结果逐字相同；观察没有换掉原失败。
+这定位了首次分歧，不能把最终局部停点归为唯一数值原因；未证明每个中间梯度都是精确导数。
+
+### 中心差分负对照保留
+
+同一#7/outward_y_A、同原seed/域/60iter，只启用官方3-point：两方均15次迭代后success=true，但Python A1.085846678、Root A1.085850115，均被原门拒绝。
+该配置不采用。原`native-extrema-central-pilot.json`保留，两次搜索不是成功样本，也不拿更快拒绝比较成功收益。
+
+### 把同一个A合同交给求解器
+
+原SLSQP只约束盒边界，A峰是目标。新增显式`constrain_acceleration=True`后，同一个cached evaluate提供`limits['acceleration']−A_peak≥0`，目标仍最小化合加速度峰。
+使用三维范数峰，不拆轴、不改初态PVA/J、不放缩已生成曲线，也不伪造GCOPTER未暴露的权重接口。
+此对照保留原二点差分；新增不等式会改变QP可行性和路径，仍不保证全局解。SLSQP容差不替代原Python/Bernstein最终门和axis_knots。
+参数在configuration和optimizer记录实际数值；优化选项误用于固定曲线比较时明确warning未应用，不静默声称生效。
+
+先做外向Ay单对，原门均过后再按原四画像各三组成对，共24次。输入仍只来自同一最紧#7切点；不是24个独立场景。
+
+| #7画像 | Python A峰 | Root A峰 | 原门过数Py/Root | 完整wall中位秒Py/Root |
+| --- | ---: | ---: | ---: | ---: |
+| A=J=0 | .962272 | .962426 | 3/3、3/3 | 3.097 / .628 |
+| Ay=+.2，J=0 | .953295 | .999999999998801 | 3/3、3/3 | 2.514 / .561 |
+| A=0，Jy=+1 | .966133 | .968314 | 3/3、3/3 | 2.711 / .520 |
+| A=0，Jy=−1 | .968077 | .968078 | 3/3、3/3 | 1.530 / .359 |
+
+两方均12/12数学过。Python只有3次optimizer.success，另9次仍达60iter上限；Root6次success、6次上限false，原状态保留。
+完整wall仍含会话创建/关闭，按同画像/数学结果分组；不同配置/路径的评价次数不同，不将全部耗时差归因于单次求根。
+Root外向Ay的原门A余量仅1.199041e-12m/s²。这是浮点数值见证，不能当作跟踪误差、状态预测或动态地图的预算。默认None/不加A约束的原路径保持，新配置仅显式试验。
+
+### 最终门、时效与交付边界
+
+原最终门仍使用浮点保守Bernstein凸包加数值guard，未决区间拒绝；本轮没有改动它，也不称精确算术证明。
+新Root四条不同画像尾轨迹各复用11个显式sim时效情景，共44情景：16理想条件接纳、28按预期拒绝，保原start/end，不把wall耗时加sim或换时间标签。
+当前相位理想PVA可条件接纳；旧首态、CV模型、未知A、图过期和缺终端覆盖继续拒绝。快照仍明确为声明静态配置空间fixture，不是观测到的未来自由区域。
+
+15项新检查含观察副本隔离/失败降级/None默认、同系数/同optimizer重放、实际dx/marginJac、公共前缀、shadow顺序、源缺口，以及显式差分/同源A合同真正消费与缓存共享。
+加原search10、extrema16、geometry11、session14及时效8，共74项过、无跳过。根926项追踪读回、337项新候选及时效读回通过；后者包含44情景，不表示44次飞行。
+
+忽略目录drone-committed/748…新增`native-extrema-optimizer-trace.json`、其derived/readback、central-pilot、cap-pilot、acceleration-constraint-search及acceleration-constraint-readback。原失败、原始事件及生成报告全部保留且不入Git。
+复验使用独立文件名，保留已有成绩：
+
+```sh
+STOP_REPORT_ROOT=apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6
+python3 apps/fishbot-control-station/workbench-tools/drone-extrema-trace.py --reanchor-report "$STOP_REPORT_ROOT/recorder-PV-reanchored-stopping-tails.json" --output "$STOP_REPORT_ROOT/native-extrema-trace-rerun.json"
+python3 apps/fishbot-control-station/workbench-tools/drone-extrema-qualification.py --compare-search --profiles zero_A_J outward_y_A outward_y_J inward_y_J --constrain-acceleration --repetitions 3 --reanchor-report "$STOP_REPORT_ROOT/recorder-PV-reanchored-stopping-tails.json" --output "$STOP_REPORT_ROOT/native-extrema-cap-rerun.json"
+# 负对照：同一个compare-search命令仅使用 --profiles outward_y_A --derivative-method 3-point --repetitions 1，不启用A约束。
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_extrema_trace test_drone_extrema_search test_drone_native_extrema test_drone_stop_geometry test_drone_native_session test_drone_handoff_timing
+```
+
+Next/owner：根Codex覆盖原六cut×四画像的24个独立重锚输入，保原门/来源和失败，先核新显式A合同在完整原矩阵的适用域；不新增eps或margin网格。真实A/J、时间有效地图、终端、跟踪及按时采用仍未获资格。drone c866441冻结，M2部分完成、M3不启动；本轮无无人机Web/服务、训练、ROS节点、仿真、控制、新飞行或落地证据。

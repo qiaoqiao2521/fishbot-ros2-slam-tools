@@ -8,6 +8,7 @@ from functools import lru_cache
 import json
 from pathlib import Path
 import time
+import warnings
 
 import numpy as np
 from scipy.optimize import minimize
@@ -118,7 +119,8 @@ def extrema(native, audit):
 
 
 def search(base, box, limits, executable, audit, *, planning_inset=.002, max_iterations=60, y_inner=False,
-           z_time_bounds=None, exchange=None, metrics_backend=None):
+           z_time_bounds=None, exchange=None, metrics_backend=None, observer=None, derivative_method=None,
+           constrain_acceleration=False):
     """Bounded recorded +Y profile, not a generic planner or feasibility proof."""
     try:
         head = np.asarray(base["initial_pva"], dtype=float)
@@ -145,6 +147,16 @@ def search(base, box, limits, executable, audit, *, planning_inset=.002, max_ite
         parameter_bounds += [(.15, .85), (0., 1.)]
         initial += [.5, .85]
     started = time.perf_counter()
+    observation_warnings = []
+
+    def observe(event):
+        if observer is not None:
+            try:
+                observer(copy.deepcopy(event))
+            except Exception as error:
+                message = f"offline search observer: {error}"
+                observation_warnings.append(message)
+                warnings.warn(message, RuntimeWarning)
 
     @lru_cache(maxsize=512)
     def evaluate(values):
@@ -158,13 +170,31 @@ def search(base, box, limits, executable, audit, *, planning_inset=.002, max_ite
             raise ValueError("native interface did not acknowledge the requested Y inner point")
         metrics = extrema(result["native"], audit) if metrics_backend is None else metrics_backend(result["native"], audit)
         margins = np.r_[planning_box[1]-metrics["upper"], np.asarray(metrics["lower"])-planning_box[0]]
+        if observer is not None:
+            observe({"kind": "evaluation", "values": list(values), "native": result["native"],
+                "metrics": metrics, "planning_margins": margins.tolist()})
         return result, metrics, margins
 
     try:
+        constraints = [{"type": "ineq", "fun": lambda x: evaluate(tuple(x))[2]}]
+        if constrain_acceleration:
+            acceleration_limit = float(limits["acceleration"])
+            if not np.isfinite(acceleration_limit) or acceleration_limit<=0:
+                raise ValueError("positive finite acceleration constraint required")
+            constraints.append({"type": "ineq", "fun": lambda x: acceleration_limit-evaluate(tuple(x))[1]["acceleration_peak_m_s2"]})
         optimizer = minimize(lambda x: evaluate(tuple(x))[1]["acceleration_peak_m_s2"], initial,
             method="SLSQP", bounds=parameter_bounds,
-            constraints=[{"type": "ineq", "fun": lambda x: evaluate(tuple(x))[2]}],
-            options={"maxiter": max_iterations, "ftol": 1e-9})
+            constraints=constraints,
+            options={"maxiter": max_iterations, "ftol": 1e-9},
+            **({"jac": derivative_method} if derivative_method is not None else {}),
+            **({"callback": lambda x: observe({"kind": "iteration", "values": np.asarray(x).tolist()})}
+                if observer is not None else {}))
+        if observer is not None:
+            jac = getattr(optimizer, "jac", None)
+            observe({"kind": "solver_exit", "values": np.asarray(optimizer.x).tolist(),
+                "status": getattr(optimizer, "status", None), "message": str(optimizer.message),
+                "reported_jac": np.asarray(jac).tolist() if jac is not None else None,
+                "jac_scope": "solver-reported array; evaluation point not implied by returned x"})
         result, metrics, margins = evaluate(tuple(optimizer.x))
         # An optimizer status and polynomial-root diagnostics cannot replace
         # the original conservative Bernstein and boundary audit.
@@ -178,7 +208,7 @@ def search(base, box, limits, executable, audit, *, planning_inset=.002, max_ite
                 final["audit"]["passed"] = False
                 final["audit"]["failed_checks"].append("axis_knots")
         target = np.asarray(final["request"]["stop_positions"])
-        return {"status": "audited", "optimizer": {"method": "SLSQP bounded external search, not native GCOPTER weights",
+        output = {"status": "audited", "optimizer": {"method": "SLSQP bounded external search, not native GCOPTER weights",
             "success": bool(optimizer.success), "message": str(optimizer.message), "evaluations": int(optimizer.nfev),
             "iterations": int(optimizer.nit), "parameter_order": ["tx", "ty", "tz", "dy"]+(["y_time_ratio", "y_displacement_fraction"] if y_inner else []), "values": optimizer.x.tolist(),
             "parameter_bounds": parameter_bounds, "planning_inset_m": planning_inset,
@@ -188,6 +218,13 @@ def search(base, box, limits, executable, audit, *, planning_inset=.002, max_ite
             "candidate": final, "offline_wall_s": time.perf_counter()-started,
             "scope": "conditional recorded-state +Y static-box experiment; no global feasibility or optimality proof",
             "execution_admission": "not_performed"}
+        if observation_warnings:
+            output["observation_warnings"] = observation_warnings
+        if derivative_method is not None:
+            output["optimizer"]["derivative_method"] = derivative_method
+        if constrain_acceleration:
+            output["optimizer"]["acceleration_constraint_m_s2"] = acceleration_limit
+        return output
     except (ValueError, KeyError, TypeError, np.linalg.LinAlgError) as error:
         return {"status": "unscored", "reason": str(error), "execution_admission": "not_performed"}
 

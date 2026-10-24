@@ -10,6 +10,14 @@ Evidence：workbench-review-tests/output/fixed-x-import/的before-fix-result.jso
 
 Remaining/owner：根继续新固定盘文档的真实HTTP→原物理链和Carry活动任务接续；完整50Hz、同世界恢复、20＋20仍未过。Drone极值工具与其测试保持原owner在途，本轮不混入提交；最短入口为对应drone-extrema计划和当前工具测试。Knowledge=already_covered，沿用Wiki§20的观测／动作／交接分列。
 
+## 2026-10-24 — 无人机首次梯度分歧与显式A合同
+
+Current：前7查询同，首个SQP候选分叉；只读trace的两方终态与原报告逐字一致。891查询的同系数A/XYZ范围差≤2.85e-13。中心差分单对仍拒绝；新增显式可选A不等式后，最紧#7四画像×三对共24搜索，两方各12/12过原门。默认仍原Python/无新增约束，不晋级实际采用。
+
+Done：observer深拷贝、缓存未命中/major callback/solver_exit分列，错误仅warning；复用原RootFinder/SLSQP/最终门，不改物理限值。实际首stencil的A梯度差4.47e-8、marginJac差1.19e-7；首Tx位移与负Tx梯度逐值吻合，只定位首次分歧，不推断唯一全程根因。74相关检查、926追踪及337候选/时效读回过，后者含44理想时效情景16条件接纳28预期拒绝。方法/CLI在[接续记录](../../docs/DRONE_RECORDED_STATE.md#首次梯度分歧与显式加速度合同2026-10-24)。
+
+Remaining/Next：Root外向Ay的A峰.999999999998801，仅约1.20e-12余量，不能当跟踪误差预算。根先覆盖原六cut×四画像的24个独立重锚输入，保原门/来源和失败；不增eps或margin网格。实际AJ/地图/终端/跟踪/按时采用仍缺，drone c866441冻结、M2部分完成、M3不启动。无无人机Web/服务、训练、ROS节点、仿真或新落地。knowledge_status=already_covered，数值兼容事实留项目，沿用Wiki§20/CapMesh PIT-004。
+
 ## 2026-10-24 — 无人机极值后端完整搜索对照
 
 Current：新增显式metrics_backend回调及--compare-search离线入口，默认None保持Python。最紧#7的四画像×三成对共24次完整搜索，Python12/12过原门，RootFinder9/12过；外向Ay三次均A1.038609981拒绝，即使optimizer.success=true。新后端不晋级默认。

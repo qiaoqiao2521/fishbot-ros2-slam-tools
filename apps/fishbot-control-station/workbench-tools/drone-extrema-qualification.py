@@ -149,7 +149,7 @@ def search_summary(rows):
 
 
 def run_search(source,root,executable,*,variant_id="reference-7-h0.05",profile_names=("zero_A_J",),
-               repetitions=3,max_iterations=60):
+               repetitions=3,max_iterations=60,derivative_method=None,constrain_acceleration=False):
     """Complete paired offline searches; keep failures and lifecycle costs."""
     audit,_=geometry.tracking.load("stop_candidates",Path(__file__).with_name("drone-stop-candidates.py")).load_modules(root)
     result={"kind":"offline_extrema_backend_search_comparison","archive_task_id":source.get("archive_task_id"),
@@ -159,6 +159,10 @@ def run_search(source,root,executable,*,variant_id="reference-7-h0.05",profile_n
         "timing_scope":"complete search including owned process creation and close; serial pairs alternate backend order",
         "execution_admission":"not_performed","dynamic_closed_loop":"not_passed"}
     if repetitions<1:raise ValueError("positive repetitions required")
+    if derivative_method is not None:
+        result["configuration"]["derivative_method"]=derivative_method
+    if constrain_acceleration:
+        result["configuration"]["constrain_acceleration"]=True
     for profile in profile_names:
         try:
             matches=[r for r in source["rows"] if isinstance(r,dict) and r.get("variant_id")==variant_id
@@ -225,11 +229,20 @@ def main():
     parser.add_argument("--compare-search",action="store_true")
     parser.add_argument("--variant-id",default="reference-7-h0.05")
     parser.add_argument("--profiles",nargs="+",default=["zero_A_J"])
+    parser.add_argument("--derivative-method",choices=["3-point"],default=None,
+        help="Explicit SciPy central-difference experiment; default retains the original absolute-step path")
+    parser.add_argument("--constrain-acceleration",action="store_true",
+        help="Explicitly pass the existing acceleration limit as an optimizer inequality; final gate remains independent")
     parser.add_argument("--output",type=Path,required=True)
     args=parser.parse_args()
     source=json.loads(args.reanchor_report.read_text())
     result=(run_search(source,args.drone_root,args.native,variant_id=args.variant_id,profile_names=args.profiles,
-        repetitions=args.repetitions) if args.compare_search else run(source,args.drone_root,args.native,repetitions=args.repetitions))
+        repetitions=args.repetitions,derivative_method=args.derivative_method,constrain_acceleration=args.constrain_acceleration)
+        if args.compare_search else run(source,args.drone_root,args.native,repetitions=args.repetitions))
+    if not args.compare_search and (args.derivative_method is not None or args.constrain_acceleration):
+        message="optimization options were not applied: fixed-coefficient comparison has no optimizer; use --compare-search"
+        result["warnings"].append(message)
+        print("WARNING: "+message)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(result,ensure_ascii=False,indent=2,allow_nan=False)+"\n")
     print(json.dumps(result["summary"],ensure_ascii=False))
