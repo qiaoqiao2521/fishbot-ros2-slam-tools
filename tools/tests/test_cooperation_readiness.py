@@ -1,5 +1,6 @@
 """Exercise the reused production GetState method without ROS imports."""
 import ast
+from concurrent.futures import Future
 import importlib.util
 import math
 from pathlib import Path
@@ -49,6 +50,92 @@ class NativeReadinessTests(unittest.TestCase):
         for state in ([1,100.],[3,96.],[True,100.],None):
             changed={**snapshot,'lifecycle':{**snapshot['lifecycle'],'docking_server':state}}
             with self.subTest(state=state):self.assertFalse(readiness.snapshot_active(changed,100.1))
+
+
+class StaticLocalizationWarmupTests(unittest.TestCase):
+    def gate(self, updates=1):
+        client=Mock();client.service_is_ready.return_value=True
+        client.call_async.side_effect=lambda request:Future()
+        return readiness.StaticLocalizationWarmup(client,object,updates)
+
+    def observe(self,gate,stamp=100.1,**changes):
+        values={'stamp':stamp,'pose':{'x':-.88,'y':-1.68,'yaw':.02},
+                'covariance':[.001 if i in (0,7,35) else 0. for i in range(36)],
+                'frame_id':'map','source_now':stamp+.05}
+        gate.observe(**(values|changes))
+
+    def tick(self,gate,source=100.,**changes):
+        gate.update(source,**({'held':True,'native_active':True}|changes))
+
+    def test_service_ack_is_not_a_pose_and_repeated_old_frame_cannot_complete(self):
+        gate=self.gate();self.tick(gate)
+        gate.pending['future'].set_result(object());self.tick(gate,100.1)
+        self.assertFalse(gate.snapshot()['ready'])
+        self.observe(gate,100.);self.tick(gate,100.1)
+        self.assertFalse(gate.snapshot()['ready'])
+        self.observe(gate);self.tick(gate,100.2)
+        state=gate.snapshot();self.assertTrue(state['ready'])
+        self.assertEqual(state['records'][0]['pose_source_s'],100.1)
+        self.assertEqual(len(state['records'][0]['covariance']),36)
+        self.assertFalse(state['service_response_is_pose_consumption_ack'])
+
+    def test_pose_before_service_response_waits_for_original_response(self):
+        gate=self.gate();self.tick(gate);self.observe(gate)
+        self.tick(gate,100.2);self.assertFalse(gate.snapshot()['ready'])
+        gate.pending['future'].set_result(object());self.tick(gate,100.3)
+        self.assertTrue(gate.snapshot()['ready'])
+
+    def test_ros_fixed_array_numpy_double_is_accepted_without_changing_values(self):
+        import numpy as np
+        gate=self.gate();self.tick(gate);gate.pending['future'].set_result(object())
+        covariance=np.array([.001 if i in (0,7,35) else 0. for i in range(36)],dtype=np.float64)
+        self.observe(gate,covariance=list(covariance));self.tick(gate,100.2)
+        self.assertTrue(gate.snapshot()['ready'])
+        self.assertEqual(gate.snapshot()['records'][0]['covariance'],covariance.tolist())
+
+    def test_wrong_frame_and_stale_pose_are_skipped_then_new_frame_recovers(self):
+        gate=self.gate();self.tick(gate);gate.pending['future'].set_result(object())
+        for changes in ({'frame_id':'odom'},{'source_now':102.}):
+            self.observe(gate,**changes);self.tick(gate,100.2)
+            self.assertFalse(gate.snapshot()['ready'])
+        self.observe(gate);self.tick(gate,100.2)
+        self.assertTrue(gate.snapshot()['ready'])
+
+    def test_covariance_is_diagnostic_and_does_not_block_the_fresh_pose(self):
+        for covariance in ([float('nan')]*36,[0.]*35,[-1e-13]+[0.]*35):
+            gate=self.gate();self.tick(gate);gate.pending['future'].set_result(object())
+            with self.assertLogs(level='WARNING'):
+                self.observe(gate,covariance=covariance)
+            self.tick(gate,100.2);state=gate.snapshot()
+            self.assertTrue(state['ready'])
+            item=state['records'][0];self.assertTrue(item['covariance_warning'])
+            self.assertEqual(item['pose'],{'x':-.88,'y':-1.68,'yaw':.02})
+            self.assertEqual(item['covariance'],covariance if len(covariance)==36 and covariance[0]<0 else None)
+
+    def test_three_distinct_post_request_frames_required_while_held(self):
+        gate=self.gate(updates=3)
+        self.tick(gate,held=False);self.tick(gate,native_active=False)
+        gate.client.call_async.assert_not_called()
+        for i in range(3):
+            source=100.+i
+            self.tick(gate,source);gate.pending['future'].set_result(object())
+            if i:self.observe(gate,source-.9)
+            self.observe(gate,source+.1);self.tick(gate,source+.2)
+            self.assertEqual(gate.snapshot()['completed_updates'],i+1)
+            self.assertEqual(gate.snapshot()['ready'],i==2)
+        self.assertEqual(gate.client.call_async.call_count,3)
+
+    def test_service_timeout_or_exception_does_not_prevent_a_later_attempt(self):
+        gate=self.gate()
+        with patch.object(readiness.time,'monotonic',return_value=10.):self.tick(gate)
+        first=gate.pending['future']
+        with patch.object(readiness.time,'monotonic',return_value=14.):self.tick(gate,100.2)
+        self.assertTrue(first.cancelled());self.assertFalse(gate.snapshot()['ready'])
+        self.tick(gate,100.3);gate.pending['future'].set_exception(RuntimeError('temporary'))
+        self.tick(gate,100.4);self.assertFalse(gate.snapshot()['ready'])
+        self.tick(gate,100.5);gate.pending['future'].set_result(object())
+        self.observe(gate,100.6);self.tick(gate,100.7)
+        self.assertTrue(gate.snapshot()['ready'])
 
 
 if __name__=='__main__':unittest.main()

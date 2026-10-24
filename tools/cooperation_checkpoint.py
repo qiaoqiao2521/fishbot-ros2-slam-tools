@@ -75,6 +75,7 @@ def prepare_ros_branch(checkpoint_path, output):
     os.chmod(params_path,0o600)
     manifest.update(nav2_yaml=str(params_path),restore_checkpoint=str(checkpoint_path),
                     capture_before_delivery=False,checkpoint_directory=str(output/'checkpoints'),
+                    checkpoint_warmup={'nomotion_updates':3},
                     checkpoint_parent={'snapshot_id':value['snapshot_id'],
                         'world_session_id':value['world_session_id'],
                         'episode_id':value['application']['episode_id'],
@@ -85,7 +86,7 @@ def prepare_ros_branch(checkpoint_path, output):
                         'branch_initial_covariance':{k:amcl.get(k) for k in
                             ('initial_cov_xx','initial_cov_yy','initial_cov_aa')},
                         'external_components_restored':False,
-                        'warmup':'new native lifecycle, localization TF and loaded hold readiness'})
+                        'warmup':'new native lifecycle, held world and 3 fresh post-request AMCL frames'})
     _write_json(output/'manifest.json',manifest,64*1024*1024)
     return manifest
 

@@ -24,7 +24,7 @@ from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, arm_home_qui
 from cooperation_core import station_robot_pose, within_station_capture
 from cooperation_perception import (map_covariance, messages_to_observation,
                                     normalize_config, validate_observation)
-from cooperation_readiness import NativeReadiness
+from cooperation_readiness import NativeReadiness, StaticLocalizationWarmup
 from cooperation_sim import LoopTiming
 from cooperation_geometry_check import SceneGeometry
 from cooperation_loaded_limits import LoadedVelocityLimits, LoadedRppLimits
@@ -181,6 +181,7 @@ def run(args):
     from sensor_msgs.msg import JointState
     from rosgraph_msgs.msg import Clock
     from std_msgs.msg import Bool, String
+    from std_srvs.srv import Empty
     from tf2_ros import Buffer, TransformListener
     from cooperation_arm import ArmPlanner, query_approach
 
@@ -250,6 +251,20 @@ def run(args):
             self.egress_client = (ActionClient(self, DriveOnHeading, '/drive_on_heading')
                                   if manifest.get('egress_motion') is not None else None)
             self.native_readiness = NativeReadiness(self)
+            self.localization_warmup = None
+            if manifest.get('restore_checkpoint') and manifest.get('checkpoint_warmup'):
+                warmup_config = manifest['checkpoint_warmup']
+                if not isinstance(warmup_config,dict):
+                    self.get_logger().warning('R2 warmup config invalid; using 3 fresh AMCL frames')
+                    warmup_config = {}
+                updates = warmup_config.get('nomotion_updates',3)
+                if type(updates) is not int or updates < 1:
+                    self.get_logger().warning('R2 warmup count invalid; using 3 fresh AMCL frames')
+                    updates = 3
+                self.localization_warmup = StaticLocalizationWarmup(
+                    self.create_client(Empty,'/request_nomotion_update'),Empty.Request,updates)
+                self.create_subscription(PoseWithCovarianceStamped,'/amcl_pose',
+                                         self.observe_warmup_pose,qos_profile_sensor_data)
             self.physics_callbacks = MutuallyExclusiveCallbackGroup()
             self.perception_callbacks = MutuallyExclusiveCallbackGroup()
             self.last_freshness_failure = None
@@ -450,6 +465,10 @@ def run(args):
                     committed_end = time.monotonic()
                 self.timing_record('physics_lock_wait', waiting_at, context, end=committed_at)
                 self.timing_record('physics_cache_commit', committed_at, context, end=committed_end)
+                if context.get('outcome') == 'cache_committed' and self.localization_warmup is not None:
+                    self.localization_warmup.update(value['stamp'],
+                        held=value['car_hold'] is True and stopped(value),
+                        native_active=self.native_readiness.active())
             except (ValueError, KeyError, TypeError, IndexError) as error:
                 reason = f'共享物理反馈无效：{error}'
                 with self.lock:
@@ -463,6 +482,16 @@ def run(args):
                 self.get_logger().warning(reason)
             finally:
                 self.timing_record('physics_callback', started, context)
+
+        def observe_warmup_pose(self, message):
+            if self.localization_warmup is None:
+                return
+            p,q = message.pose.pose.position,message.pose.pose.orientation
+            self.localization_warmup.observe(
+                stamp=message.header.stamp.sec+message.header.stamp.nanosec*1e-9,
+                pose={'x':p.x,'y':p.y,'yaw':math.atan2(2*(q.w*q.z+q.x*q.y),1-2*(q.y*q.y+q.z*q.z))},
+                covariance=list(message.pose.covariance),frame_id=message.header.frame_id,
+                source_now=self.get_clock().now().nanoseconds*1e-9)
 
         def fresh(self):
             with self.lock:
@@ -1860,6 +1889,8 @@ def run(args):
                                 or branch.get('episode_id')!=raw.get('episode_id')
                                 or not transport_handoff_ready(raw, manifest['arm_home_qpos6'])):
                             ready=False;reason='R2分支来源或载货停稳条件尚未就绪'
+                        elif self.localization_warmup is not None and not self.localization_warmup.snapshot()['ready']:
+                            ready=False;reason='等待R2静止定位预热：'+self.localization_warmup.snapshot()['reason']
                     elif math.hypot(target[0]-station[0]-.24,target[1]-station[1]+.13)>.035:
                         ready=False; reason='物体已离开取货盘；本回合完成后需重置合成场景'
                     if any(raw[f'{body}_forbidden_contact_{kind}']
@@ -1879,6 +1910,8 @@ def run(args):
                     'source':{'scene_sha':scene_sha,'origin':'manifest_world_xml','observed':raw is not None},
                     'nav':{'ready':nav_ready,'pose':pose},'stations':self.stations(),
                     'native_lifecycle':self.native_readiness.snapshot(),
+                    'checkpoint_initialization':(self.localization_warmup.snapshot()
+                                                 if self.localization_warmup is not None else None),
                     'freshness_failure':copy.deepcopy(getattr(self,'last_freshness_failure',None)),
                     'station_perception':{'mode':self.perception_config['mode'],
                         'publisher':self.perception_config['publisher'],

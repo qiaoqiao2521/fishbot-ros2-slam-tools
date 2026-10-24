@@ -94,9 +94,11 @@ manifest设置`checkpoint_directory`后，原bridge的`POST /coop-api/checkpoint
 
 `tools/cooperation_checkpoint.prepare_ros_branch`从检查点准备新分支。只用父回合记录的map到base TF均值初始化AMCL，缺失时不借真值补齐；粒子、EKF/Nav2/DDS历史明确未恢复。新launch读取`restore_checkpoint`，分配新world/episode身份、保持车辆并清除旧移动命令。
 
+新准备的分支显式设置`checkpoint_warmup.nomotion_updates=3`，沿AMCL原服务请求静止更新；旧manifest缺该配置时保持原行为。`checkpoint_initialization`分别记录服务回执、请求后新源帧及原协方差，协方差异常只作诊断，不称三帧收敛。服务缺失或没有新帧时，沿原readiness时限结束该案例；默认非R2任务不新增预热。
+
 显式`scope=route`仅允许合格R2载货分支，复用原加载参数事务、Nav2路线、货物保持和清理。Workflow在发包前持久保存该scope。默认请求仍为完整transport；route没有本回合装货，不继承原K完整抓放成绩。任务总预算仍为360秒，出站后配送路线独立保持120秒，不把初始化误计入这120秒。
 
-factory增加`--scope route --select-order order-b`用于单个恢复切片；`--checkpoint-samples 5`在原清理确认后测量只读捕获RPC。标签不加载策略，原物理评分不变。当前R1四类通过、R2两次载货路线超时，完整验收状态见[计划进度](../plans/continuous-twin-regression-20261024/progress.md)。
+factory增加`--scope route --select-order order-b`用于单个恢复切片；`--checkpoint-samples 5`在原清理确认后测量只读捕获RPC。标签不加载策略，原物理评分不变。当前R1四类与R2静止预热通过，原基线及预热开发轮载货路线仍超时，完整验收状态见[计划进度](../plans/continuous-twin-regression-20261024/progress.md)。
 
 ## CPU 验收
 

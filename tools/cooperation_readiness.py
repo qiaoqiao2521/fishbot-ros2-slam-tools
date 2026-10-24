@@ -1,11 +1,15 @@
-"""Share existing read-only lifecycle queries between the bridge and runner.
+"""Native lifecycle readiness and opt-in static AMCL branch initialization.
 
 Readiness.update_lifecycle owns query cadence, pending requests and timeouts.
-This adapter adds no thread, timer, transition call or action dispatch.
+The R2 adapter requests no-motion updates; neither adapter dispatches motion.
 """
 import importlib.util
+import copy
+import logging
 import math
+from numbers import Real
 from pathlib import Path
+import threading
 import time
 
 
@@ -58,3 +62,102 @@ class NativeReadiness:
 
     def active(self):
         return self.snapshot()['ready']
+
+
+class StaticLocalizationWarmup:
+    """R2-only no-motion requests with separate fresh AMCL pose evidence.
+
+    No true pose, initial-pose publication, motion command or action is accepted.
+    A service response sets an update flag; it is not a pose-consumption ACK.
+    """
+    def __init__(self, client, request, updates=3):
+        self.client, self.request, self.required = client, request, updates
+        self.lock = threading.RLock()
+        self.records = []
+        self.pending = self.candidate = None
+        self.source = None
+        self.held = False
+        self.reason = 'waiting_for_held_native_world'
+        self.started_wall = self.finished_wall = None
+
+    def update(self, source, *, held, native_active):
+        with self.lock:
+            self.source, self.held = source, held
+            if len(self.records) >= self.required:
+                return
+            if not held or not native_active:
+                self.candidate = None
+                self.reason = 'waiting_for_held_native_world'
+                return
+            now = time.monotonic()
+            if self.pending is not None:
+                item = self.pending
+                if item['future'].done() and item.get('response_wall') is None:
+                    try:
+                        item['future'].result()
+                        item['response_wall'] = time.time()
+                    except Exception as error:
+                        self.reason = 'nomotion_service_error: '+str(error)
+                        self.pending = self.candidate = None
+                        return
+                if item.get('response_wall') is not None and self.candidate is not None:
+                    self.records.append({k:v for k,v in item.items() if k not in ('future','monotonic')}
+                                        | self.candidate)
+                    self.pending = self.candidate = None
+                    self.reason = 'ready' if len(self.records) >= self.required else 'warming'
+                    if self.reason == 'ready':
+                        self.finished_wall = time.time()
+                elif now-item['monotonic'] > 3.:
+                    self.reason = 'nomotion_response_or_fresh_pose_timeout'
+                    item['future'].cancel()
+                    self.pending = self.candidate = None
+                return
+            if not self.client.service_is_ready():
+                self.reason = 'waiting_for_nomotion_service'
+                return
+            self.started_wall = self.started_wall or time.time()
+            try:
+                self.pending = {'future':self.client.call_async(self.request()),
+                                'requested_source_s':source,'requested_wall':time.time(),
+                                'monotonic':now}
+            except Exception as error:
+                self.reason = 'nomotion_service_error: '+str(error)
+            self.reason = 'waiting_for_service_and_new_amcl_pose'
+
+    def observe(self, *, stamp, pose, covariance, frame_id, source_now):
+        with self.lock:
+            if self.pending is None or not self.held:
+                return
+            try:
+                values = [stamp, source_now, *(pose[k] for k in ('x','y','yaw'))]
+                if (frame_id != 'map'
+                        or any(isinstance(v,bool) or not isinstance(v,Real) or not math.isfinite(v) for v in values)):
+                    raise ValueError('invalid AMCL frame or pose')
+                if stamp <= self.pending['requested_source_s'] or not -1.2 <= source_now-stamp <= .8:
+                    raise ValueError('AMCL source stamp is not a fresh post-request frame')
+                # Covariance is diagnostic here, never a convergence or dispatch threshold.
+                valid_covariance = (isinstance(covariance,(list,tuple)) and len(covariance)==36
+                    and all(not isinstance(v,bool) and isinstance(v,Real) and math.isfinite(v)
+                            for v in covariance))
+                warning = None
+                if not valid_covariance:
+                    warning = 'AMCL covariance unavailable; original fresh pose retained'
+                elif any(covariance[i]<0 for i in (0,7,35)):
+                    warning = 'AMCL negative covariance diagonal recorded without clamping'
+                if warning:
+                    logging.warning(warning)
+                self.candidate = {'pose_source_s':float(stamp),'pose_received_wall':time.time(),
+                                  'pose':{k:float(pose[k]) for k in ('x','y','yaw')},
+                                  'covariance':[float(v) for v in covariance] if valid_covariance else None,
+                                  'covariance_warning':warning}
+            except (KeyError, TypeError, ValueError) as error:
+                self.reason = str(error)
+
+    def snapshot(self):
+        with self.lock:
+            return {'enabled':True,'ready':len(self.records)>=self.required,
+                    'reason':self.reason,'required_updates':self.required,
+                    'completed_updates':len(self.records),'started_wall':self.started_wall,
+                    'finished_wall':self.finished_wall,'records':copy.deepcopy(self.records),
+                    'service_response_is_pose_consumption_ack':False,
+                    'truth_used_for_localization':False,'convergence_claimed':False}

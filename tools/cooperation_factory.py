@@ -135,7 +135,7 @@ def loaded_code_reference(extra_paths=()):
                cooperation_factory_scene, cooperation_workflow)
     module_files = {module.__name__: str(Path(module.__file__).resolve()) for module in modules}
     runtime_files = [ROOT/'tools'/name for name in
-                     ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_checkpoint.py', 'cooperation_mecanum.py', 'cooperation_lidar.py', 'cooperation_geometry_check.py', 'cooperation_oracle.py',
+                     ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_checkpoint.py', 'cooperation_readiness.py', 'cooperation_mecanum.py', 'cooperation_lidar.py', 'cooperation_geometry_check.py', 'cooperation_oracle.py',
                       'cooperation_oracle_base.py', 'cooperation_core.py', 'cooperation_arm.py',
                       'cooperation_factory_policy.py', 'cooperation_delivery_route.py')]
     runtime_files.extend(Path(path).resolve() for path in extra_paths)
@@ -426,6 +426,8 @@ def run(args, manifest, declaration):
             state = bridge.state()
         except RuntimeError:
             return None
+        if state.get('checkpoint_initialization') is not None:
+            result['execution']['checkpoint_initialization'] = state['checkpoint_initialization']
         return state if (state.get('ready') is True and state.get('domain') == args.domain
                          and state.get('scene_profile') == declaration['scene_profile']
                          and lifecycle_active(state.get('native_lifecycle', {}))) else None
@@ -517,6 +519,7 @@ def run(args, manifest, declaration):
         monitor = ReadOnlyMonitor()
         initial = wait_until(ready, 65, description='Original native readiness unavailable')
         result['execution']['actual_initial_source'] = initial.get('source')
+        result['execution']['checkpoint_initialization'] = initial.get('checkpoint_initialization')
         declared = declaration['orders']
         workflow('create', [item['batch_id'] for item in declared], 'factory-pickup',
                  {item['batch_id']: item['delivery_pose'] for item in declared},
