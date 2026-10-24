@@ -66,6 +66,6 @@ python3 apps/fishbot-control-station/workbench-review-tests/audit-drone-sparse-r
 - 合成细柱负例证明射线之间的盲区：中心深度4.7m、四束无回波。它是单元夹具，不是新飞行或真实障碍检测成绩。
 - 6项Python检查、14项Node检查、定向ESLint与生产构建通过。页面验收与提交状态见[进度](../plans/workbench-code-rebuild-20261018/progress.md)。
 - 代码目录：`workbench-tools/drone-sparse-observations.py`抽取；`drone-sparse.cjs`按可用时刻取观测；`DroneDiagnostics/SparseObservation.tsx`显示年龄与测距；`audit-drone-sparse-recording.py`独立回读原包。
-- 后续可做N2轨迹接口旁路比较；本切片没有24维状态向量、教师训练、策略推理或飞控写入口。drone保持c866441冻结，动态闭环仍未通过。
+- N2已有[精确分段接口](DRONE_TRAJECTORY_PRIMITIVES.md)离线资格；本切片没有24维状态向量、教师训练、策略推理或飞控写入口。drone保持c866441冻结，动态闭环仍未通过。
 
 当前页面：`http://127.0.0.1:5186/drone-diagnostics?taskId=748f910e-f0f8-4ecf-b2d5-22b7b15d57e6`；手机追加`&mobile=1`。接续owner为当前对话Codex。

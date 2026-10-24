@@ -165,3 +165,13 @@ Knowledge closeout：already_covered。沿用PIT-004依赖隔离和现有任务�
 - 内置只读复核未发现核心P1/P2问题，.25s标签/射线边界差异已统一并局部复验；agent-link工具未加载，已如实告知，未联系其他已有对话。原SO101模型Python路径WARNING保持，未宣称SO101实际三维/物理回归。
 - drone始终c866441且清洁；未改算法、未启动PX4/Gazebo、未训练。动态闭环仍失败、在线备份未接入。下一切片为N2轨迹接口旁路资格，不能把本片当控制成功。owner=本对话Codex。
 - Knowledge closeout: already_covered。沿用任务身份/回放、原生时钟与PIT-004；数值与兼容性发现留项目，未改共享知识或个人memory。
+
+
+## 2026-10-24 N2精确分段接口交付
+
+- 离线新增drone-trajectory-primitives.py，复用原audit_retiming.curve、SciPy PPoly、audit_minco证书，不新增求解器、传感器或控制owner。8条记录在收到相位起取0.8s，共23段；三次多项式高阶补零复用原3×6容器。原首尾PVA/J、绝对sim时间和空身份保留。
+- 8窗conversion通过、8窗V/A/Z证书clear（原离线候选1.8m/s、1m/s²、2.2m）；PVA拼接误差≤1.48e-15。最大J跳变2.268873m/s³原样保留，只声称C2。occupancy=unverified，execution_admission=not_performed。不是新飞行、动态通过或在线MINCO接管。
+- 两个局部Python检查通过：段内相位、初态PVA/J、A超界拒绝、跨节点PVA/J、常量轴和空身份。独立只读审查核对相位/Taylor/补零/身份/资格，无核心阻断；确认.8s为本次值而非CLI硬上限。没有改UI、服务或运行依赖，不重复Web构建和浏览器检查。
+- 忽略产物：workbench-tools/output/drone-primitives/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/exact-windows.json。初次constant-axis-error报告保留（当时仅7窗），修复后8窗warnings为空。原记录、drone c866441和5186只读页面保持。
+- [方法、结果表与命令](../../docs/DRONE_TRAJECTORY_PRIMITIVES.md)为最短接续入口；N2仅精确分段资格，单段压缩/教师/模型比较未做。后续选定实际候选再接旁路，不自动训练、启动飞行或解冻。owner=本对话Codex。
+- Knowledge closeout: already_covered。采用Wiki/ROS2与FishBot原生源时间、参考/实际分层及既有连续审计；数值、C2合同与代码适配留项目，不写memory。
