@@ -462,3 +462,72 @@ python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-te
 原忽略目录保留首轮stop-s4-inner-point-comparison.json；正式产物为stop-s4-inner-point-qualified.json、stop-s4-inner-readback.json、stop-s4-inner-comparison.png。
 下一项复用原N2参考前缀和N3切点PVA/J，核完整候选适用域；求解截止、实际状态/跟踪、未来自由图与终端区域仍分列未获资格。
 无Web改动、训练、ROS节点、仿真、控制或新飞行；drone c866441及官方缓存未改，M2部分完成、M3不解冻、动态闭环未通过。
+
+
+## 候选切点的原记录PV比较（2026-10-24）
+
+本片接续[窄盒更早切点](DRONE_STOP_CANDIDATES.md#窄盒更早切点与历史时序2026-10-24)，只核六条已过原数学门与窄盒门的参考候选。
+新增`workbench-tools/drone-handoff-pv.py`复用原CDR/clock、恒速预测、逐面必要界和连续多项式求值，不生成新曲线或执行控制。
+原源码c866441及原硬阈值保持，M2仍部分完成、M3未启动。
+
+### 同刻事后测量与历史可用预测
+
+切点明确定义为原cut秒值舍入至整数纳秒。只按`source_stamp_ns`精确匹配；不以最近帧、浮点近似或插值冒充同刻测量。
+1926条源PV中，六个切点均无同stamp帧，因此六个同刻事后分支均未评分。
+若存在同stamp晚到帧，它只可事后比较；不能进入当时可用分支。
+
+历史分支先核world坐标/单epoch/有限PV，再核source≤录制器可用上界≤cut，最后选最新source stamp。
+同源stamp的PV冲突不任取；晚到冲突副本不污染已可用历史分支。可用上界未知时排除，不等同planner消费ACK。
+恒速外推从源时刻积分，模型A=0仅是预测假设；实际A/J保持未知。
+名义PV直接从实际前缀系数求值，未取缓存request里的声明首态。
+
+| 候选 | cut sim秒 | 源年龄ms | 较早源时刻实录P差m | cut恒速预测P差m | cut预测V差m/s | 名义全段上方Z余量mm |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| #4 h=.1 | 31.804 | 24 | .178110 | .181674 | .214954 | 386.528 |
+| #4 h=.2 | 31.904 | 28 | .191724 | .196040 | .207252 | 378.123 |
+| #4 h=.4 | 32.104 | 28 | .220316 | .224946 | .194700 | 296.200 |
+| #4 h=.6 | 32.304 | 12 | .253537 | .255155 | .145794 | 193.253 |
+| #4 h=.8 | 32.504 | 12 | .276303 | .277444 | .128241 | 90.273 |
+| #7 h=.05 | 33.046 | 18 | .156498 | .156912 | .070584 | 2.000 |
+
+表中实录列将较早源PV与同源时刻参考比较；预测列将恒速外推与cut参考比较。后者不是cut测量，也不是预测对真实cut状态的误差。
+六组PV均未匹配既有1e−7离线数值合同；该数值只用于回归，不是新物理跟踪容差。
+全部cut早于33.452s首条故障记录，但历史时序成立不证明在线可计算、可下发或已采用。
+
+### 余量与必要界的解释
+
+#7选源33.028s、录制可用上界33.032s，外推至33.046s。
+预测相对名义cut的XYZ位置差为[−.101736,−.096072,+.071003]m；向上差71.003mm，而名义全曲线顶部余量仅2mm。
+Y差为向内，不能将位置误差范数统一扣到Y上界，也不能把cut偏差平移到整条尾段并宣称必然碰撞。
+这只证明原名义尾段不能直接继承该PV下的交接资格；当前仍缺实际A/J、未来跟踪包络和时间有效地图。
+
+六组恒速PV均未被原A≤1的逐面最乐观必要界排除，`joint_viability=not_proven`。
+该界允许每个面单独瞬时使用全部加速度预算，忽略A/J连续性；它既不是可行制动证明，也不是飞机ICS判定。
+完整状态交接通过数为0，执行采用`not_performed`，动态闭环`not_passed`。
+
+### 验证、产物与下一项
+
+14项新测试与31项状态/预测、8项原Replay共53项通过，无跳过。
+覆盖±时间资格、late exact、未知可用性/frame/epoch、未来离群值隔离、冲突重复、零PV差但A/J未知、逐面方向、源越前缀域、坏报告/行和空PV汇总。
+内置只读审查指出外层null/rows:null中断与空PV误计compared两项，已修并加负例；agent-link沿用已知失败的内置备选，不联系其他聊天。
+
+根独立从原MCAP CDR/clock及原JSONL的BSpline/系数实根读回154项通过，图已目视。
+首轮独立脚本因旧NumPy的Polynomial不接受Python list而中止；改为数组后重跑，未修改生产结果或门限。
+原忽略目录`workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/`保存：
+`reference-handoff-pv-comparison.json`、`reference-handoff-pv-readback.json`、`reference-handoff-pv-comparison.png`。
+这些产物是本机可重生成的离线报告，不提交原遥测或运行日志。
+
+在仓库根复验：
+
+```sh
+. /opt/ros/jazzy/setup.bash
+DRONE_RUN="$HOME/dev/ros2/projects/drone/output/measured-state-reanchor-flight-748f910e"
+STOP_REPORT_ROOT=apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6
+python3 apps/fishbot-control-station/workbench-tools/drone-handoff-pv.py --run-dir "$DRONE_RUN" --candidates "$STOP_REPORT_ROOT/reference-narrow-handoff-comparison.json" "$STOP_REPORT_ROOT/reference-narrow-handoff-early05.json" --output "$STOP_REPORT_ROOT/reference-handoff-pv-comparison.json"
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_handoff_pv test_drone_recorded_tracking test_drone_committed_replay
+```
+
+下一项复用既有stop-qualification状态重锚与S4NU入口，从这六个cut的可用PV重解候选；A/J按显式假设分列，不补成实测状态。
+先核新首态和完整尾段，不把参考前缀拼到不同PV上继承合同；原硬界、地图/终端/截止未知与冻结边界保持。
+owner=当前对话根Codex，无训练、ROS节点、仿真、控制、新飞行或新落地证据。

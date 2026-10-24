@@ -1,5 +1,16 @@
 # 实施进度
 
+## 2026-10-24 M2参考切点与原记录PV资格
+
+- Current：六个数学/窄盒正例在原1926条PV中均无同cut源stamp；历史可用恒速预测均与参考PV不符。完整状态交接0、执行采用未做、动态闭环未通过，M2部分完成/M3冻结。
+- Done：新增drone-handoff-pv.py，复用原CDR/clock/预测/必要界/系数极值。精确纳秒事后分支与当时可用分支独立；latest source筛选在可用性之后，恒速从source积分，不补A/J，不做最近帧吸附、插值或参考向前/后外推。
+- 结果：六组源龄12–28ms，cut预测P差.156912–.277444m、V差.070584–.214954m/s；较早源同刻实录P差.156498–.276303m。#7源33.028/可用33.032/cut33.046，向上预测差71.003mm对照名义全段Z余量2mm。负Y差向内，不将范数扣每面或将一次偏差当未来碰撞；六PV逐面乐观必要界均not_ruled_out、joint viability未证。
+- 验证：14新＋31原状态/预测＋8Replay共53检查过，无跳过；154项独立原MCAP CDR/clock、原JSONL BSpline和系数实根/逐面差读回过，PNG已目视。首轮独立脚本旧NumPy/list类型错误改数组后重跑；生产结果/硬界未改。
+- Review：内置只读审查所指null/rows:null报告中断和空PV误计compared两项已修/补负例；agent-link沿用此前已知失败的内置备选，不联系其他聊天。原参考数值合同1e−7只用于回归，未改物理容差。
+- 交接：方法/完整六行表/CLI在docs/DRONE_RECORDED_STATE.md末节，docs/DRONE_STOP_CANDIDATES.md已回链。忽略目录drone-committed/748…新增reference-handoff-pv-comparison.json、reference-handoff-pv-readback.json、reference-handoff-pv-comparison.png。不改服务/前端，不重跑构建或浏览器；无训练、ROS节点、仿真、控制、新飞行/落地，drone c866441清洁冻结。
+- Next/owner：根Codex复用既有stop-qualification状态重锚与S4NU入口，从六cut可用PV重解候选，A/J按显式假设分列；先核新首态与完整尾段，不把不同PV接到原参考前缀上继承合同。保持原硬界及c866441冻结，地图/终端/截止/跟踪仍未知，M2部分完成、M3不启动。
+- 保留：SO101原八个在途文件仍未纳入无人机提交；接续owner=根Codex，按原runtime/execution/station测试与无运动UI QA入口审阅，物理消费/期限回产品化计划。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟、CapMesh PIT-004；数字留项目，未写memory。
+
 ## 2026-10-24 M2窄盒更早切点与历史时序
 
 - Current：正式十组7生成/5窄盒过/2A拒/3逐面必要界拒；5正例均为#4。另显式#7 h=.05独立报告得到A=.926514窄盒见证。所有结果只属于参考PVA/J＋声明静态盒；M2部分完成、M3冻结、goal active。

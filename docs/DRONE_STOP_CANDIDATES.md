@@ -222,3 +222,6 @@ python3 -m unittest test_drone_narrow_handoff test_drone_primitives test_drone_r
 原忽略drone-committed/748…目录保留reference-narrow-cut-probe.json、reference-narrow-handoff-comparison.json、reference-narrow-handoff-early05.json、reference-narrow-handoff-readback.json和PNG。
 下一项根Codex将这些候选切点与原记录实测PV及可用时刻比对，核交接误差与毫米级余量；不继续以参考数学证书替代状态/地图/截止资格。
 drone c866441仍冻结；没有Web改动、训练、ROS节点、仿真、控制、新飞行或新落地证据。M2部分完成、M3不启动，真实动态闭环未通过。
+
+
+后续原记录PV比较已完成：六切点无同stamp测量，历史可用恒速PV与名义P差.156912–.277444m；#7向上差71.003mm对照名义2mm顶部余量，不构成未来碰撞证明。完整A/J仍未知，未采用。表格、精确时间规则、53测试及154项原始读回见[状态比较](DRONE_RECORDED_STATE.md#候选切点的原记录pv比较2026-10-24)。下一项按实际可用PV重锚并显式分列A/J假设，冻结保持。
