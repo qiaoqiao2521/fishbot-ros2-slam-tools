@@ -1,5 +1,6 @@
 {
   "id": "f1-continuous-b-entities",
+  "budgets_wall_s": {"load_and_delivery": 360, "unload": 180},
   "unload_stations": [
     {
       "id": "line_b",
@@ -7,6 +8,10 @@
       "delivery_pose": {"x": 0.7, "y": -2.0, "yaw": 0.0},
       "arm_yaw_rad": 1.5707963267948966,
       "shelf_xy_m": [0.05, -0.22],
+      "cargo_shelf_slots": {
+        "cargo_1": {"center_xy_m": [0.02, -0.22], "half_size_xy_m": [0.028, 0.058]},
+        "cargo_2": {"center_xy_m": [0.08, -0.22], "half_size_xy_m": [0.028, 0.058]}
+      },
       "bridge_center_xy_m": [0.033, -0.145]
     }
   ],

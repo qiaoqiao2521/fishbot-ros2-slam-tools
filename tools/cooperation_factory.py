@@ -96,7 +96,7 @@ def checkpoint_measurements(bridge,count,*,check=lambda:None):
         'scope':'held native physics capture and durable file receipt; not ROS restoration latency'}
 
 
-def reference(manifest, *, candidate, order=None):
+def reference(manifest, *, candidate, order=None, continuous_deliveries=None):
     """Resolve scene business data; candidate is a display label, not a loader."""
     from cooperation_factory_scene import factory_template_jobs, normalize_factory_config
     batches, targets, profile = factory_template_jobs(manifest)
@@ -110,15 +110,44 @@ def reference(manifest, *, candidate, order=None):
     if len(selected) != len(declared) or set(selected) != set(declared):
         raise ValueError('--order must be a permutation of all declared order IDs')
     by_id = {item['id']: (item, batch) for item, batch in zip(orders, batches)}
+    bindings = None
+    if continuous_deliveries is not None:
+        from cooperation_business import normalize_delivery, validate_delivery
+        if not isinstance(continuous_deliveries, dict) or set(continuous_deliveries) != set(declared):
+            raise ValueError('continuous deliveries must bind every original order ID')
+        bindings = {name: normalize_delivery(value) for name, value in continuous_deliveries.items()}
+        if len({value['cargo_id'] for value in bindings.values()}) != len(bindings):
+            raise ValueError('continuous orders must select distinct physical cargo')
+        budgets = manifest.get('business_entities', {}).get('configuration', {}).get('budgets_wall_s', {})
+        unload = budgets.get('unload')
+        if (budgets.get('load_and_delivery') != TASK_TIMEOUT_S or type(unload) not in (int, float)
+                or not math.isfinite(unload) or unload <= 0):
+            raise ValueError('continuous delivery requires original 360s load budget and declared unload budget')
     resolved = []
     for name in selected:
         item, batch = by_id[name]
-        resolved.append({**item, 'batch_id': batch, 'delivery_pose': targets[batch],
-                         'delivery_approach_poses': copy.deepcopy(
-                             destinations[item['destination_id']].get('approach_poses', []))})
+        destination = destinations[item['destination_id']]
+        if bindings is not None:
+            binding = bindings[name]
+            station = manifest['business_entities']['unload_stations'].get(binding['unload_station_id'])
+            if not isinstance(station, dict):
+                raise ValueError('Unknown configured unload station')
+            goal = copy.deepcopy(station['delivery_pose'])
+            validate_delivery(manifest, binding, goal)
+            destination = destinations.get(binding['unload_station_id'])
+            if destination is None or destination['pose'] != goal:
+                raise ValueError('Unload station must match a declared factory destination')
+        else:
+            goal = targets[batch]
+        resolved.append({**item, 'batch_id': batch, 'delivery_pose': goal,
+                         'delivery_approach_poses': copy.deepcopy(destination.get('approach_poses', [])),
+                         **({'destination_id': binding['unload_station_id'],
+                             'business_delivery': copy.deepcopy(binding),
+                             'task_timeout_wall_s': TASK_TIMEOUT_S+unload}
+                            if bindings is not None else {})})
     entities = manifest.get('business_entities')
     scene_id = (entities.get('world_id') if isinstance(entities, dict) else None) or factory['id']
-    return {'scene_id': scene_id, 'candidate_label': candidate,
+    result = {'scene_id': scene_id, 'candidate_label': candidate,
             'scene_profile': profile, 'orders': resolved,
             'task_timeout_wall_s': TASK_TIMEOUT_S,
             'delivery_route_budget_wall_s': DELIVERY_ROUTE_WALL_S,
@@ -126,6 +155,14 @@ def reference(manifest, *, candidate, order=None):
             'total_timeout_wall_s': TOTAL_TIMEOUT_S,
             'budget_semantics': 'Acceptance limits; safe cleanup and scoring may extend execution',
             'candidate_label_loads_code': False}
+    if bindings is not None:
+        allowance = TOTAL_TIMEOUT_S-2*TASK_TIMEOUT_S
+        result.update(execution_mode='continuous', task_timeout_wall_s=TASK_TIMEOUT_S+unload,
+                      load_and_delivery_timeout_wall_s=TASK_TIMEOUT_S,
+                      unload_timeout_wall_s=unload, startup_and_cleanup_allowance_wall_s=allowance,
+                      total_timeout_wall_s=len(resolved)*(TASK_TIMEOUT_S+unload)+allowance,
+                      finite_stock_replenishment=False)
+    return result
 
 
 def loaded_code_reference(extra_paths=()):
@@ -139,7 +176,7 @@ def loaded_code_reference(extra_paths=()):
     runtime_files = [ROOT/'tools'/name for name in
                      ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_checkpoint.py', 'cooperation_readiness.py', 'cooperation_mecanum.py', 'cooperation_lidar.py', 'cooperation_geometry_check.py', 'cooperation_oracle.py',
                       'cooperation_oracle_base.py', 'cooperation_core.py', 'cooperation_arm.py',
-                      'cooperation_arm_entities.py', 'cooperation_business_scene.py',
+                      'cooperation_arm_entities.py', 'cooperation_business_scene.py', 'cooperation_business.py',
                       'cooperation_factory_policy.py', 'cooperation_delivery_route.py')]
     runtime_files.extend(Path(path).resolve() for path in extra_paths)
     paths = [Path(path) for path in module_files.values()]+runtime_files
@@ -196,7 +233,21 @@ def order_report(order, *, task_id, episode_id, terminal, score, score_file,
     status = terminal.get('task', {}).get('status') if terminal else None
     valid_elapsed = (type(elapsed_wall_s) in (int, float)
                      and math.isfinite(elapsed_wall_s) and elapsed_wall_s >= 0.)
-    task_limit = TASK_TIMEOUT_S
+    task_limit = order.get('task_timeout_wall_s', TASK_TIMEOUT_S)
+    business = order.get('business_delivery')
+    named = score.get('business_delivery_acceptance', {}) if score else {}
+    named_attempts = [value for value in named.get('attempts', []) if value.get('task_id') == task_id]
+    named_bound = (business is not None and len(named_attempts) == 1
+                   and named_attempts[0].get('business_delivery') == business)
+    if business is not None:
+        # Original K is applied to the selected cargo by the independent named
+        # oracle. The primary-cargo alias score cannot prove this order.
+        verdict = 'unknown' if score is None else 'passed' if (
+            score.get('passed') is True and named.get('required') is True
+            and named.get('passed') is True and named_bound
+            and named_attempts[0].get('passed') is True and bound
+            and delivery.get('required') is True and delivery.get('passed') is True
+            and attempt.get('passed') is True) else 'failed'
     return {**copy.deepcopy(order), 'task_id': task_id, 'episode_id': episode_id,
             'scope':scope, 'full_transport_acceptance_claimed':scope=='transport',
             'execution': {'task_status': status,
@@ -204,7 +255,9 @@ def order_report(order, *, task_id, episode_id, terminal, score, score_file,
                           'within_task_budget': elapsed_wall_s <= task_limit if valid_elapsed else None},
             'task_verdict': verdict, 'original_score_passed': None if score is None else score.get('passed'),
             'original_k_passed': None if score is None else score.get('original_k_oracle_passed'),
-            'destination_bound': bound, 'carrying_nav_uuid': attempt.get('carrying_nav_uuid'),
+            'destination_bound': bound,
+            **({'named_binding_bound': named_bound, 'named_independent_score': named} if business is not None else {}),
+            'carrying_nav_uuid': attempt.get('carrying_nav_uuid'),
             'expected_egress_pose': attempt.get('expected_egress_pose'),
             'egress_required': attempt.get('egress_required', False),
             'native_route': attempt.get('carrying_nav_route', []),
@@ -225,9 +278,14 @@ def summarize(result):
     expected = len(result['declaration']['orders'])
     complete = (len(orders) == expected and {item['id'] for item in orders} ==
                 {item['id'] for item in result['declaration']['orders']})
+    continuous = result['declaration'].get('execution_mode') == 'continuous'
+    distinct = ('task_id', 'batch_id', 'carrying_nav_uuid') if continuous else (
+        'task_id', 'episode_id', 'batch_id', 'carrying_nav_uuid')
     identity = complete and all(len({item.get(key) for item in orders}) == expected
-                                and all(item.get(key) for item in orders)
-                                for key in ('task_id', 'episode_id', 'batch_id', 'carrying_nav_uuid'))
+                                and all(item.get(key) for item in orders) for key in distinct)
+    if continuous:
+        identity = identity and len({item.get('episode_id') for item in orders}) == 1 and all(
+            item.get('episode_id') for item in orders)
     verdicts = [item['task_verdict'] for item in orders]
     result['task_verdict'] = ('failed' if 'failed' in verdicts else 'passed'
                               if identity and all(v == 'passed' for v in verdicts) else 'unknown')
@@ -239,7 +297,12 @@ def summarize(result):
                            or execution.get('retained_observer_pid')
                            or execution.get('retained_non_motion_pids') else
                            'failed' if result['errors'] else 'completed' if complete else 'incomplete')
-    result['passed'] = (result['task_verdict'] == 'passed'
+    continuous_ok = (not continuous or (
+        execution.get('continuous_physics', {}).get('passed') is True
+        and execution.get('mutation_posts', {}).get('reset') == 0
+        and len(execution.get('continuous_transitions', [])) == max(0, expected-1)
+        and all(value.get('passed') is True for value in execution.get('continuous_transitions', []))))
+    result['passed'] = (continuous_ok and result['task_verdict'] == 'passed'
                         and execution['status'] == 'completed'
                         and all(execution.get(key) is True for key in
                                 ('cleanup_complete', 'owned_launch_stopped', 'owned_port_closed',
@@ -292,6 +355,39 @@ def protection_observation(before, after):
                 'a nonzero MainPID; does not claim all historical ROS instances were running'}
 
 
+def measured_world(raw):
+    """Keep native source identity and pose; never substitute HTTP state."""
+    car = raw['car']
+    w,x,y,z = car['quaternion_wxyz']
+    yaw = math.atan2(2*(w*z+x*y), 1-2*(y*y+z*z))
+    return {'world_session_id': raw['world_session_id'], 'episode_id': raw['episode_id'],
+            'stamp': raw['stamp'], 'sequence': raw['sequence'],
+            'reset_count': raw['episode_reset']['count'],
+            'car_position': copy.deepcopy(car['position']), 'car_yaw': yaw}
+
+
+def continuous_transition(previous, records, world, episode):
+    """Prove the held gap continued in the same measured world and pose."""
+    physics = [value['payload'] for value in records if value['topic'] == 'physics']
+    frames = [raw for raw in physics if raw['sequence'] >= previous['sequence']]
+    last = measured_world(frames[-1]) if frames else None
+    same = bool(frames and frames[0]['sequence'] == previous['sequence'] and all(raw.get('world_session_id') == world
+        and raw.get('episode_id') == episode and raw.get('episode_reset', {}).get('count') == 0
+        for raw in frames))
+    monotonic = all(b['sequence'] > a['sequence'] and b['stamp'] > a['stamp']
+                    for a,b in zip(frames, frames[1:]))
+    drift = math.dist(previous['car_position'][:2], last['car_position'][:2]) if last else None
+    yaw = abs(math.atan2(math.sin(last['car_yaw']-previous['car_yaw']),
+                        math.cos(last['car_yaw']-previous['car_yaw']))) if last else None
+    held = bool(frames and all(raw.get('car_hold') is True
+        and raw['car']['speed'] < .01 and abs(raw['car']['yaw_rate']) < .01 for raw in frames))
+    return {'passed': bool(same and monotonic and held and drift <= .04 and yaw <= .05),
+            'same_world_episode_reset_zero': same, 'strict_source_progress': monotonic,
+            'held_gap': held, 'sample_count': len(frames), 'previous_end': previous,
+            'next_start': last, 'position_drift_m': drift, 'yaw_drift_rad': yaw,
+            'source': 'independent /cooperation/physics_state'}
+
+
 class ReadOnlyMonitor:
     """Existing private-runner monitor reduced to reset/quiet evidence only."""
     def __init__(self):
@@ -305,6 +401,8 @@ class ReadOnlyMonitor:
         from std_msgs.msg import String
         self.rclpy, self.convert = rclpy, message_to_ordereddict
         self.lock = threading.Lock()
+        self.continuity = {'sample_count': 0, 'worlds': set(), 'episodes': set(),
+                           'reset_count_zero': True, 'strict_source_progress': True, 'last': None}
         self.tail = EvidenceTail(Path('/unused-factory-live-monitor'))
         rclpy.init()
         self.node = rclpy.create_node('factory_independent_reset_quiet')
@@ -330,12 +428,32 @@ class ReadOnlyMonitor:
                  if topic == 'physics' else message.clock.sec+message.clock.nanosec*1e-9
                  if topic == 'clock' else message.header.stamp.sec+message.header.stamp.nanosec*1e-9)
         with self.lock:
+            if topic == 'physics':
+                observed = self.continuity
+                observed['sample_count'] += 1
+                observed['worlds'].add(value.get('world_session_id'))
+                observed['episodes'].add(value.get('episode_id'))
+                observed['reset_count_zero'] &= value.get('episode_reset', {}).get('count') == 0
+                previous = observed['last']
+                if previous is not None:
+                    observed['strict_source_progress'] &= (value['sequence'] > previous['sequence']
+                                                          and value['stamp'] > previous['stamp'])
+                observed['last'] = measured_world(value)
             self.tail.records.append({'topic': topic, 'source_stamp': stamp,
                                       'received_wall_time': time.time(), 'payload': value})
 
     def records(self):
         with self.lock:
             return list(self.tail.records)
+
+    def continuity_proof(self, world, episode):
+        with self.lock:
+            value = copy.deepcopy(self.continuity)
+        value['passed'] = bool(value['sample_count'] and value['worlds'] == {world}
+            and value['episodes'] == {episode} and value['reset_count_zero'] and value['strict_source_progress'])
+        value['worlds'], value['episodes'] = sorted(value['worlds'], key=str), sorted(value['episodes'], key=str)
+        value['proof_source'] = 'independent /cooperation/physics_state; all received frames'
+        return value
 
     def quiet(self, episode):
         records = self.records()
@@ -379,7 +497,9 @@ class ReadOnlyMonitor:
 def run(args, manifest, declaration):
     from fishbot_simulation_suite import domain_is_empty
     scope = getattr(args,'scope','transport')
-    task_limit = TASK_TIMEOUT_S
+    continuous = declaration.get('execution_mode') == 'continuous'
+    task_limit = declaration.get('task_timeout_wall_s', TASK_TIMEOUT_S)
+    total_limit = declaration.get('total_timeout_wall_s', TOTAL_TIMEOUT_S)
     marker_prefix = 'route' if scope=='route' else 'full'
     output = args.output.resolve()
     if output.exists() or output.is_relative_to(ROOT):
@@ -419,6 +539,7 @@ def run(args, manifest, declaration):
     task_rejected = False
     order_started = task_elapsed = None
     mutation_posts = []
+    continuous_world = continuous_episode = previous_end = None
 
     def spawn(command, name):
         stream = (output/(name+'.log')).open('x')
@@ -428,8 +549,8 @@ def run(args, manifest, declaration):
                                 stderr=subprocess.STDOUT, start_new_session=True)
 
     def checkpoint():
-        if time.monotonic()-started > TOTAL_TIMEOUT_S:
-            raise TimeoutError('Original declared 1000s F1 run budget exceeded')
+        if time.monotonic()-started > total_limit:
+            raise TimeoutError(f'Declared {total_limit:g}s F1 run budget exceeded')
 
     def ready():
         checkpoint()
@@ -469,7 +590,8 @@ def run(args, manifest, declaration):
                    expected_delivery_pose=current_order['delivery_pose'],
                    requested_delivery_pose=body.get('delivery_pose'),
                    expected_delivery_approach_poses=current_order.get('delivery_approach_poses', []),
-                   requested_delivery_approach_poses=body.get('delivery_approach_poses', []))
+                   requested_delivery_approach_poses=body.get('delivery_approach_poses', []),
+                   **({'business_delivery': copy.deepcopy(body['business_delivery'])} if continuous else {}))
 
     bridge = MarkedBridge('http://127.0.0.1:'+str(args.port), before_post)
 
@@ -539,7 +661,9 @@ def run(args, manifest, declaration):
                  {item['batch_id']: item['delivery_pose'] for item in declared},
                  scene_profile=declaration['scene_profile'],
                  scope=scope,
-                 delivery_approach_poses={item['batch_id']: item['delivery_approach_poses'] for item in declared})
+                 delivery_approach_poses={item['batch_id']: item['delivery_approach_poses'] for item in declared},
+                 **({'continuous_deliveries': {item['batch_id']: item['business_delivery'] for item in declared}}
+                    if continuous else {}))
         reset_receipt = None
         for index, order in enumerate(declared):
             current_order = order
@@ -547,6 +671,18 @@ def run(args, manifest, declaration):
             task_rejected = False
             state = wait_until(ready, 20, description='New episode not ready')
             episode, task_id = state['episode_id'], None
+            if continuous:
+                def measured_ready():
+                    records = [record for record in monitor.records() if record['topic'] == 'physics']
+                    return records[-1]['payload'] if records and 0 <= time.time()-records[-1]['received_wall_time'] <= .5 else None
+                raw = wait_until(measured_ready, 10, description='Independent current world measurement unavailable')
+                measured = measured_world(raw)
+                if continuous_world is None:
+                    continuous_world, continuous_episode = measured['world_session_id'], measured['episode_id']
+                if (episode != continuous_episode or measured['world_session_id'] != continuous_world
+                        or measured['episode_id'] != continuous_episode or measured['reset_count'] != 0
+                        or state.get('business_inventory', {}).get('world_id') != continuous_world):
+                    raise RuntimeError('Continuous physical world/episode identity changed; no replay')
             current_folder = output/('order-'+str(index+1))
             current_folder.mkdir(mode=0o700)
             save(current_folder/'markers.json', {'events': []})
@@ -555,6 +691,8 @@ def run(args, manifest, declaration):
                          '--scope', scope, '--expected-outcome', 'success',
                          '--markers', str(current_folder/'markers.json'),
                          '--output', str(current_folder/'observer')]
+            if continuous:
+                arguments += ['--business-manifest', str(runtime_manifest)]
             arguments += (['--reset-receipt', str(reset_receipt)] if reset_receipt
                           else ['--allow-initial-episode'])
             observer = spawn(arguments, 'order-'+str(index+1)+'-oracle')
@@ -571,6 +709,12 @@ def run(args, manifest, declaration):
                                'machine_id': 'factory-pickup', 'version': index+1, 'ready': True})
             # Workflow persists the UUID, then MarkedBridge records its marker
             # before the original one POST. Sampling never starts retrospectively.
+            if continuous and previous_end is not None:
+                transition = continuous_transition(previous_end, monitor.records(), continuous_world, continuous_episode)
+                result['execution'].setdefault('continuous_transitions', []).append(transition)
+                save(current_folder/'continuous-transition.json', transition)
+                if not transition['passed']:
+                    raise RuntimeError('Next order did not continue from the last measured held car pose')
             order_started = time.monotonic()
             value = workflow('dispatch')
             task_id = value['jobs'][index]['attempts'][-1]['task_id']
@@ -604,6 +748,10 @@ def run(args, manifest, declaration):
                 return tail.quiet_proof(minimum_source_s=1.)
             capture = wait_until(captured_stop, 20, description='Observer trailing one-second stop incomplete')
             save(current_folder/'capture-stop.json', capture)
+            if continuous:
+                previous_end = measured_world([record['payload'] for record in monitor.records()
+                                               if record['topic'] == 'physics'][-1])
+                save(current_folder/'last-measured-world.json', previous_end)
             marker(marker_prefix+'_finished', scope=scope)
             task_elapsed = time.monotonic()-order_started
             marker('cleanup_checked')
@@ -623,7 +771,7 @@ def run(args, manifest, declaration):
             observer = None
             if item['task_verdict'] != 'passed':
                 break  # Retain this failure; never reset/retry an unknown outcome.
-            if index < len(declared)-1:
+            if index < len(declared)-1 and not continuous:
                 old_episode = episode
                 reset = workflow('reset')
                 request_id = reset['resets'][-1]['request_id']
@@ -694,7 +842,7 @@ def run(args, manifest, declaration):
         result['execution']['protected_snapshots'] = {
             'before': str(output/'protected-before.json'), 'after': str(output/'protected-after.json')}
         result['execution']['elapsed_wall_s'] = time.monotonic()-started
-        result['execution']['within_total_budget'] = result['execution']['elapsed_wall_s'] <= TOTAL_TIMEOUT_S
+        result['execution']['within_total_budget'] = result['execution']['elapsed_wall_s'] <= total_limit
         result['execution']['ended_wall_time'] = time.time()
         result['execution']['host_load_end'] = host_load_observation()
         result['execution']['mutation_posts'] = {
@@ -710,6 +858,9 @@ def run(args, manifest, declaration):
                 current_order, task_id=task_id, episode_id=episode, terminal=terminal,
                 score=read_json(score_file) if score_file else None, score_file=score_file,
                 elapsed_wall_s=task_elapsed,scope=scope))
+        if continuous:
+            result['execution']['continuous_physics'] = (monitor.continuity_proof(continuous_world, continuous_episode)
+                if monitor is not None else {'passed': False, 'reason': 'independent monitor not available'})
         source_end = loaded_code_reference()
         save(output/'loaded-code-end.json', source_end)
         result['code_observation'] = {'start': str(output/'loaded-code-start.json'),
@@ -739,6 +890,8 @@ def main(argv=None):
                          help='Fast DDS publication candidate for simulator and task bridge only')
     execute.add_argument('--policy-config', type=Path,
                          help='Explicit trusted local policy JSON; loads only during run')
+    execute.add_argument('--continuous-deliveries', type=Path,
+                         help='Explicit original order ID to cargo/pickup-arm/unload-station bindings')
     execute.add_argument('--order', action='append', help='Explicit permutation of all order IDs')
     execute.add_argument('--select-order',action='append',
                          help='Explicit finite subset for a snapshot or route experiment')
@@ -766,7 +919,10 @@ def main(argv=None):
             manifest = read_json(args.manifest)
             if args.checkpoint_samples<0:
                 raise ValueError('--checkpoint-samples must be nonnegative')
-            declaration = reference(manifest, candidate=args.candidate, order=args.order)
+            declaration = reference(manifest, candidate=args.candidate, order=args.order,
+                continuous_deliveries=read_json(args.continuous_deliveries) if args.continuous_deliveries else None)
+            if args.continuous_deliveries and args.scope != 'transport':
+                raise ValueError('continuous delivery requires complete transport and unload scope')
             if args.select_order is not None:
                 by_id={item['id']:item for item in declaration['orders']}
                 if (not args.select_order or len(set(args.select_order))!=len(args.select_order)

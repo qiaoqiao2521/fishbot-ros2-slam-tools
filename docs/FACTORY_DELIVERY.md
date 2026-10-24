@@ -344,3 +344,27 @@ Graceful 主控制器自身也保留到位记忆。显式 J100 候选另外选�
 只改全局附加余量，默认25mm、完整车体、局部10mm及原时间/载货/评分保持。
 B余量仅.206秒，采样缺1/50序号与理想守卫辅助仍记录，不称生产稳定或纯视觉。
 源码、UUID、范围与清理见[完整K验收](../plans/factory-line-delivery-20261021/progress.md)。
+
+## 有限库存与连续配送（M2 实施中）
+
+新模式沿用原 Workflow、Bridge、Nav2 和 SO101。每单显式绑定 `cargo_id`、`pickup_arm_id`、`unload_station_id`；重复任务 UUID 不能改绑另一件货物。两单之间保留同一物理世界、episode、时钟及车辆末位姿，不自动调用 reset。货物耗尽后结束派单，失败货物记为 unknown，不自动重新生成库存。
+
+场景配置为 `tools/config/factory_delivery/continuous-b-entities.json`，B/B 订单映射为同目录 `continuous-b-orders.json`。B/A 使用 `continuous-ba-entities.json` 和 `continuous-ba-orders.json`。两者都按 `order-b`、`order-a` 顺序选择两件独立自由货物。B/B 为每件货物分配独立货位；货位必须落在原货架内且互不重叠，已送达货物继续参与碰撞检查。
+
+先用 `prepare --continuous-delivery CONFIG` 生成新场景，再检查派发声明：
+
+```bash
+python tools/cooperation_factory.py run \
+  --manifest /absolute/path/scene-manifest.json \
+  --output /absolute/path/new-private-run \
+  --continuous-deliveries tools/config/factory_delivery/continuous-b-orders.json \
+  --order order-b --order order-a --dry-run
+```
+
+去掉 `--dry-run` 才执行原 owner。执行时按原入口配置独占 domain、端口和规划 Python。上述场景配置本身不代表载货路线已验收；新增工位影响地图与可通行空间，仍需完整原生验证。
+
+原装运预算为 360 墙秒，出站后路线仍为 120 墙秒。新配置另声明 180 墙秒卸货预算；单单总计 540 秒，两单总计 1360 秒，包含原 280 秒启动/清理余量。默认旧模式仍为 360/1000 秒。新增预算不扩大旧路线预算，也不能把新任务成绩写成旧完整 K 成功。
+
+原生卸货使用实际双指抓取、抬升、搬运、释放、货架支撑与机械臂回位。清理完成后还要以新物理帧连续复核 0.7 源秒，才将该 cargo 库存记为 delivered。`unload_receipt` 保存实际源时间、序号、世界、episode 与分配货位。
+
+独立 Oracle 使用 `--business-manifest PATH` 订阅 `/cooperation/cargo/<cargo_id>/pose`，旧 `/cooperation/cargo_pose` 保留。评分分别检查原装运、完整货物足迹、卸货抬升、落稳、全部夹指释放、回位和清理；HTTP 成功与库存回执只作身份对账。命名位姿的发布端 GID 核验尚未加入。当前原生分项不替代 B/B、B/A 无重置双订单验收，最新状态见[计划进度](../plans/continuous-twin-regression-20261024/progress.md)。

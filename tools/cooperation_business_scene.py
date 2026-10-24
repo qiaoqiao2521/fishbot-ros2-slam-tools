@@ -104,6 +104,8 @@ def compose_business_world(manifest, configuration, output):
         supports[station_id] = floor_name
         unload[station_id] = {'arm_id': arm_id, 'delivery_pose': dict(zip(('x', 'y', 'yaw'), (x, y, yaw))),
                               'shelf_floor_geom': floor_name, 'shelf_xy_in_station_m': shelf}
+        if 'cargo_shelf_slots' in station:
+            unload[station_id]['cargo_shelf_slots'] = copy.deepcopy(station['cargo_shelf_slots'])
 
     cargo = {}
     ET.SubElement(assets, 'model', name='business_cargo_asset', file=source_world)
@@ -125,6 +127,23 @@ def compose_business_world(manifest, configuration, output):
         cargo[cargo_id] = {'body': prefix+'grasp_target', 'geom': prefix+'target_collision',
                            'free_joint': prefix+'target_free', 'pickup_offset_m': offset,
                            'pickup_support': 'pickup'}
+
+    # Validate declared physical shelf cells before creating a live world.
+    from cooperation_business import placement_slot
+    description = {'business_entities': {'unload_stations': unload}}
+    for station_id, station in unload.items():
+        cells = station.get('cargo_shelf_slots')
+        if cells is None:
+            continue
+        if not isinstance(cells, dict) or set(cells) != set(cargo):
+            raise ValueError('Shelf cells must identify every configured cargo')
+        resolved = [placement_slot(description, station_id, key) for key in cells]
+        for i, first in enumerate(resolved):
+            for second in resolved[i+1:]:
+                if all(abs(first['center_xy_m'][axis]-second['center_xy_m'][axis])
+                       < first['half_size_xy_m'][axis]+second['half_size_xy_m'][axis]
+                       for axis in range(2)):
+                    raise ValueError('Shelf cells overlap; assign distinct physical destinations')
 
     path = Path(output)/'continuous-world.xml'
     ET.ElementTree(root).write(path, encoding='utf-8', xml_declaration=True)

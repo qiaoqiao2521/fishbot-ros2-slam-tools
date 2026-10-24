@@ -1106,6 +1106,9 @@ def run_ros(args):
             self.odom_pub = self.create_publisher(Odometry, '/wheel/odom' if physics.localization_enabled else '/odom', 10)
             self.truth_pub = self.create_publisher(Odometry, '/ground_truth/odom', 10)
             self.cargo_pub = self.create_publisher(PoseStamped, '/cooperation/cargo_pose', 10)
+            self.business_cargo_pubs = {cargo_id:self.create_publisher(
+                PoseStamped, '/cooperation/cargo/'+cargo_id+'/pose', 10)
+                for cargo_id in physics.business_cargo}
             self.lidar = None
             lidar_config = lidar_configuration(physics.identity['manifest'])
             if lidar_config is not None:
@@ -1383,6 +1386,11 @@ def run_ros(args):
             cargo.header.stamp, cargo.header.frame_id = current_stamp, 'world'
             fill_pose(cargo.pose, physics.cargo_body)
             timing.measure('cargo_publish', self.cargo_pub.publish, cargo)
+            for cargo_id, publisher in self.business_cargo_pubs.items():
+                named_cargo = PoseStamped()
+                named_cargo.header.stamp, named_cargo.header.frame_id = current_stamp, 'world'
+                fill_pose(named_cargo.pose, physics.business_cargo[cargo_id]['body'])
+                timing.measure('cargo_publish', publisher.publish, named_cargo)
             imu = Imu()
             imu.header.stamp, imu.header.frame_id = current_stamp, 'imu_link'
             for sensor_name, field in [('imu_quat', 'orientation'), ('imu_gyro', 'angular_velocity'), ('imu_accel', 'linear_acceleration')]:

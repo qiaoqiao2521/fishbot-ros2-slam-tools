@@ -174,6 +174,11 @@ def request_identity(body, *, cancel=False, now=None, episode_id=None):
     if not cancel and isinstance(body, dict) and 'delivery_approach_poses' in body:
         expected.add('delivery_approach_poses')
         task_delivery_approaches(body)
+    if not cancel and isinstance(body, dict) and 'business_delivery' in body:
+        expected.add('business_delivery')
+        if task_scope(body) != 'transport':
+            raise Rejected('实体配送仅支持完整 transport 任务')
+        task_business_delivery(body)
     if not isinstance(body, dict) or set(body) != expected:
         raise Rejected('请求须包含 task_id 和 issued_at')
     if episode_id is not None and body['episode_id'] != episode_id:
@@ -197,6 +202,16 @@ def task_scope(body):
     if value not in ('dock', 'transport', 'route'):
         raise Rejected('任务范围须为 dock、transport 或已恢复分支的 route')
     return value
+
+
+def task_business_delivery(body):
+    if 'business_delivery' not in body:
+        return None
+    from cooperation_business import normalize_delivery
+    try:
+        return normalize_delivery(body['business_delivery'])
+    except ValueError as error:
+        raise Rejected(str(error), getattr(error,'status',400)) from error
 
 
 def task_delivery_pose(body, default=None):

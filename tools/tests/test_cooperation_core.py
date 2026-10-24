@@ -20,6 +20,18 @@ core=importlib.util.module_from_spec(spec);spec.loader.exec_module(core)
 
 
 class CooperationEvidenceTests(unittest.TestCase):
+    def test_business_binding_is_explicit_and_cannot_leak_into_dock_or_cancel(self):
+        binding = {'cargo_id': 'cargo_2', 'pickup_arm_id': 'load', 'unload_station_id': 'line_b'}
+        body = {'task_id': str(uuid.uuid4()), 'issued_at': 10, 'business_delivery': binding}
+        self.assertEqual(core.request_identity(body, now=10), body['task_id'])
+        self.assertEqual(core.task_business_delivery(body), binding)
+        self.assertIsNone(core.task_business_delivery({}))
+        for invalid in (None, {}, {**binding, 'cargo_id': ''}, {**binding, 'extra': 1}):
+            with self.subTest(invalid=invalid), self.assertRaises(core.Rejected):
+                core.request_identity({**body, 'business_delivery': invalid}, now=10)
+        with self.assertRaises(core.Rejected):core.request_identity({**body, 'scope': 'dock'}, now=10)
+        with self.assertRaises(core.Rejected):core.request_identity(body, cancel=True, now=10)
+
     def test_no_duration_from_duplicate_or_missing_source_samples(self):
         gate=core.ContinuousEvidence(.3,.12)
         self.assertFalse(gate.update(1.,True))

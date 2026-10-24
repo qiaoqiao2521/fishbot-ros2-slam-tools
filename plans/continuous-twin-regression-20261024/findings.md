@@ -217,3 +217,17 @@ CBC只读子任务cbc-2c3839返回done但result为空，没有可采用产物，
 - 模型网格描述约18MB，不能每个物理周期复制/序列化。复用同一已编译模型的固定描述，启动时准备；状态文件引用同目录的可编辑模型定义，积分/应用状态与IO分开。兼容性核对实际名字、拓扑、网格、质量/惯量等结构字段，不用内容hash或计划revision门禁。
 - R1-b四类各10000步的两分支均无观测差异；只证明该有限同构模型/源控制序列。需再通过加强兼容后的同面板、真实R2分支和旧默认回归；不可由此称ROS历史或旧Goal已恢复。
 - R2须保存父实例原生map→base_footprint定位输入及缺失协方差说明。新分支从冻结定位均值初始化并预热，原生载货Goal/物理评分单列；原世界不回滚、旧指令不重放。原K的实际XML步长仍.002s，不能从旧报告physics_hz字段推断新的积分频率。
+
+
+## M2 原 owner、独立货位和命名 Oracle（2026-10-25）
+
+- 原 Bridge/Workflow 已接显式三字段 business_delivery、按 cargo/arm 选择实测视图和原执行器参考。库存由原 owner 持有，同 UUID 不能改绑；只有物理托盘交接后记 on_tray，清理后以新源帧再次连续核验 .7 秒才记 delivered。失败归 unknown，不自动补货；连续 Workflow 的显式恢复入口也不能调用 reset。默认单实体和显式 reset 流程保留。
+- 独立审查复现同一货位问题：第二货物瞄准原货架中心时，夹爪与已送达第一货物碰撞，约 -4.066mm。新增配置将同一原货架划为两个不重叠 cell，中心 (.02,-.22)/(.08,-.22)、半尺寸 (.028,.058)。两者均在原 .058m 货架内，不移动已送达货物、不删碰撞几何。生成器拒绝重叠/越界/错 ID，仅拒绝该配置；多货物配送缺货位时拒绝该任务。
+- 第一货位 a 实际完成抓放，但运行期发生源码变动，source_unchanged=false；保留为开发证据。冻结后的第一货位 b 为 52440 步/5144 帧，第二货位占用 fixture a 为 57230 步/5623 帧，两者独立原门槛分项评分通过，源码起止一致。两轮都是新 B 托盘初态，不是同一订单链。第二轮的第一货物初态来自前开发轮实测末位姿，第二货物在创建 Physics 前置于托盘；明确不是返回取货或连续导航，不将它们拼成无 reset 双订单。
+- 第二货位 fixture 抬升最小40.857mm、保持双指1.529768N/1.5源秒，搬运最小1.550056N/无支撑；最终完整足迹在自己的 cell 内，货架支撑/双指0/静止持续1.52源秒。回位误差 .000581rad、逐帧原生臂速度最大1.792e-5rad/s，禁碰/reset=0，最大采样间隙 .02s。第一货物全样本在原 cell 且有货架支撑。额外端点查询中重新指向已占第一 cell 仍被 -2.760mm 拒绝，第二 cell 通过；2mm 是原查询距离饱和值，不当精确净距。
+- 新逐货物 PoseStamped 发布沿原单一 Physics owner 与50Hz周期，旧话题保留。165 原生静止烟测实际接收194组同步帧，两 named pose 与对应物理位姿/四元数差0，world/episode固定、reset0、hold、禁碰0，进程/context关闭；只验 ROS 发布/订阅，不验任务。退出后的发布端清单为空，不能用该清单追认活动发布端 GID；新 Oracle 也明确标注该核验缺口。
+- 原独立 Oracle 只订阅旧 cargo_1 话题会误评 cargo_2。新增 --business-manifest 和只读命名订阅适配，仍使用原独立车体/Clock/选中货物 ROS 位姿，原 load/transport评分和额外卸货/完整 cell 足迹/全实体静止分列。HTTP 成功和库存回执只作身份对账，不代替物理评分。缺第二货物独立观测、清理末端失去支撑/home、错误/旧库存回执均有拒绝反例。
+- 原 Factory 增加可选 --continuous-deliveries，按原订单 ID 映射 cargo/工位，再传原 Workflow。B/B 不再派 reset，B/A 新增第三台臂配置。原360装运/120路线不变，独立声明180卸货，单单540、两单1360（包含原280启动清理余量）；旧360/1000不变。连续帧汇总跨有界缓存保存 world/episode/reset证据，订单间另核原停车位。原 runner+真实 Workflow 的模拟 IO 双订单通过不能计原生配送。
+- B/A 配置公开 prepare 得到43qpos/40qvel/22ctrl；1000原生静止步的禁碰/reset0，原完整几何 A/B 点预检通过。初次私有静态脚本误导入 SceneGeometry，在创建 Physics 前失败；正确入口 cooperation_geometry_check 后通过。未验 A 卸货臂实际抓放或 B/A 路线。
+- 最新 m2-feedback-owner-a 完整反馈1855项通过：control1098/checkpoint22/mission209/autonomy61/frontend465，0失败/跳过。定向25/26项早期 fixture 错误及漏声明 slot 失败保留；125旧计数曾含导入 TestCase 重复收集，已改模块别名，不当125个独立新用例。
+- CLI 子 Agent 本批 AGY 90s、额度预检 usable=true 的 Qoder 180s 均超时，未据此称交付；Qoder get_status sessions=0、无残留进程，未产生源码改动。根与内部子 Agent 实施并独立核验。原 GitHub run40111818800 本轮再次读回 queued/conclusion=null；未重复派发。

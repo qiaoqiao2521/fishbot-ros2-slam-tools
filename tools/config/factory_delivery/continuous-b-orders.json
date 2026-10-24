@@ -1,0 +1,12 @@
+{
+  "order-b": {
+    "cargo_id": "cargo_1",
+    "pickup_arm_id": "load",
+    "unload_station_id": "line_b"
+  },
+  "order-a": {
+    "cargo_id": "cargo_2",
+    "pickup_arm_id": "load",
+    "unload_station_id": "line_b"
+  }
+}

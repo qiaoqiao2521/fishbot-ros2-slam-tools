@@ -66,6 +66,23 @@ class BusinessSceneTests(unittest.TestCase):
             for field in ('actuator_gainprm', 'actuator_biasprm', 'actuator_ctrlrange', 'actuator_forcerange'):
                 self.assertTrue((getattr(original, field)[i] == getattr(compound, field)[j]).all(), field)
 
+    def test_declared_shelf_cells_are_distinct_and_inside_the_original_shelf(self):
+        configuration=copy.deepcopy(self.configuration)
+        cells={'cargo_1':{'center_xy_m':[.02,-.22],'half_size_xy_m':[.028,.058]},
+               'cargo_2':{'center_xy_m':[.08,-.22],'half_size_xy_m':[.028,.058]}}
+        configuration['unload_stations'][0]['cargo_shelf_slots']=cells
+        with tempfile.TemporaryDirectory() as output:
+            result=compose_business_world(self.base,configuration,output)
+            self.assertEqual(result['business_entities']['unload_stations']['line_b']['cargo_shelf_slots'],cells)
+        for bad in ('overlap','outside','unknown'):
+            item=copy.deepcopy(configuration)
+            slots=item['unload_stations'][0]['cargo_shelf_slots']
+            if bad=='overlap':slots['cargo_2']['center_xy_m']=[.02,-.22]
+            elif bad=='outside':slots['cargo_2']['center_xy_m']=[.12,-.22]
+            else:slots['unknown']=slots.pop('cargo_2')
+            with self.subTest(bad=bad),tempfile.TemporaryDirectory() as output,self.assertRaises(ValueError):
+                compose_business_world(self.base,item,output)
+
     def test_delivery_pose_is_physically_clear_in_a_fresh_initial_world(self):
         import xml.etree.ElementTree as ET
         manifest = copy.deepcopy(self.manifest)

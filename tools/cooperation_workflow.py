@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from cooperation_core import Rejected, task_delivery_pose, task_delivery_approaches
+from cooperation_business import normalize_delivery
 from fishbot_simulation_suite import write_json
 
 
@@ -138,6 +139,7 @@ class Workflow:
     def _validate_ledger(self):
         value = self.data
         scope=value.get('scope','transport') if isinstance(value,dict) else None
+        continuous = value.get('execution_mode') == 'continuous' if isinstance(value,dict) else False
         if (not isinstance(value, dict) or type(value.get('schema')) is not int or value['schema'] != 1
                 or value.get('endpoint') != self.bridge.endpoint
                 or type(value.get('revision')) is not int or value['revision'] < 1
@@ -147,6 +149,8 @@ class Workflow:
             raise ContractError('invalid ledger or different bridge endpoint')
         identity(value['workflow_id'])
         identity(value['episode_id'])
+        if continuous and (not isinstance(value.get('world_session_id'),str) or not value['world_session_id']):
+            raise ContractError('continuous ledger requires its original physical world identity')
         if (not isinstance(value.get('jobs'), list) or not value['jobs']
                 or type(value.get('index')) is not int or not 0 <= value['index'] < len(value['jobs'])):
             raise ContractError('ledger must contain a nonempty sequential job list')
@@ -171,9 +175,12 @@ class Workflow:
                         or attempt['dispatch']['body']['episode_id'] != attempt['episode_id']
                         or set(attempt['dispatch']['body']) != ({'task_id', 'episode_id', 'issued_at'}
                             | ({'scope'} if 'scope' in value else set())
+                            | ({'business_delivery'} if continuous else set())
                             | ({'delivery_pose'} if target is not None else set())
                             | ({'delivery_approach_poses'} if approaches is not None else set()))
                         or ('scope' in value and attempt['dispatch']['body'].get('scope')!=scope)
+                        or (continuous and normalize_delivery(attempt['dispatch']['body']['business_delivery'])
+                            != normalize_delivery(job['business_delivery']))
                         or ('delivery_pose' in attempt) != (target is not None)
                         or (target is not None and (delivery_pose(attempt['delivery_pose']) != target
                             or delivery_pose(attempt['dispatch']['body']['delivery_pose']) != target))
@@ -217,7 +224,7 @@ class Workflow:
             os.close(descriptor)
 
     def create(self, batches, machine='laundry-machine-1', delivery_poses=None, scene_profile=None,
-               delivery_approach_poses=None, scope='transport'):
+               delivery_approach_poses=None, scope='transport', continuous_deliveries=None):
         if self.data is not None:
             raise ContractError('ledger already exists; it cannot be reinitialized')
         if scope not in ('transport','route'):
@@ -237,6 +244,14 @@ class Workflow:
         if not isinstance(approaches, dict) or set(approaches)-set(batches):
             raise ContractError('delivery-approach-poses must map selected batch UUIDs to ordered poses')
         approaches = {batch: delivery_approaches(poses) for batch, poses in approaches.items()}
+        selected = None
+        if continuous_deliveries is not None:
+            if (scope != 'transport' or not isinstance(continuous_deliveries,dict)
+                    or set(continuous_deliveries) != set(batches) or set(targets) != set(batches)):
+                raise ContractError('continuous deliveries require explicit cargo binding and goal for every batch')
+            selected = {batch:normalize_delivery(binding) for batch,binding in continuous_deliveries.items()}
+            if len({binding['cargo_id'] for binding in selected.values()}) != len(selected):
+                raise ContractError('finite continuous orders must use distinct physical cargo')
         state = self.bridge.state()
         if scene_profile is not None and state.get('scene_profile') != scene_profile:
             raise ContractError('selected scene profile does not match the actual bridge instance')
@@ -244,10 +259,11 @@ class Workflow:
         source, task = state.get('source'), state.get('task')
         scene = source.get('scene_sha') if isinstance(source, dict) else None
         if (state.get('mode') != 'mujoco' or state.get('ready') is not True
-                or not isinstance(task, dict) or task.get('id') is not None
-                or state['task'].get('status') != 'idle'
-                or not isinstance(scene, str) or len(scene) != 64
-                or any(c not in '0123456789abcdef' for c in scene)):
+                or not isinstance(task, dict)
+                or (selected is None and (task.get('id') is not None or task.get('status') != 'idle'))
+                or (selected is not None and task.get('status') not in ('idle','succeeded'))
+                or (selected is None and (not isinstance(scene, str) or len(scene) != 64
+                    or any(c not in '0123456789abcdef' for c in scene)))):
             raise ContractError('create requires a fresh idle ready synthetic episode')
         self.data = {'schema': 1, 'workflow_id': str(uuid.uuid4()), 'revision': 0,
                      'endpoint': self.bridge.endpoint, 'scene_sha256': scene,
@@ -258,10 +274,22 @@ class Workflow:
                                'status': 'waiting', 'attempts': [],
                                **({'delivery_pose': copy.deepcopy(targets[batch])} if batch in targets else {}),
                                **({'delivery_approach_poses': copy.deepcopy(approaches[batch])}
-                                  if batch in approaches else {})}
+                                  if batch in approaches else {}),
+                               **({'business_delivery':copy.deepcopy(selected[batch])} if selected else {})}
                               for batch in batches]}
         if scope!='transport':
             self.data['scope']=scope
+        if selected is not None:
+            inventory = state.get('business_inventory') or {}
+            world = inventory.get('world_id')
+            if not isinstance(world,str) or not world:
+                self.data=None
+                raise ContractError('continuous delivery requires measured world inventory')
+            if any(inventory.get('cargo',{}).get(binding['cargo_id'],{}).get('state')!='available'
+                   for binding in selected.values()):
+                self.data=None
+                raise ContractError('selected physical stock is unavailable; no reset requested')
+            self.data.update(execution_mode='continuous',world_session_id=world)
         self._save()
         return self.snapshot()
 
@@ -276,13 +304,17 @@ class Workflow:
     def _state(self):
         state = self.bridge.state()
         source, reset = state.get('source'), state.get('reset')
-        if (state.get('mode') != 'mujoco' or not isinstance(source, dict)
-                or source.get('scene_sha') != self.data['scene_sha256']
+        if (state.get('mode') != 'mujoco'
+                or (self.data.get('execution_mode') != 'continuous'
+                    and (not isinstance(source,dict) or source.get('scene_sha') != self.data['scene_sha256']))
                 or not isinstance(state.get('task'), dict) or not isinstance(state.get('history'), list)
                 or not isinstance(reset, dict) or type(reset.get('available')) is not bool
                 or type(reset.get('pending')) is not bool):
             raise ContractError('bridge scene or state contract changed')
         identity(state.get('episode_id'))
+        if (self.data.get('execution_mode')=='continuous'
+                and (state.get('business_inventory') or {}).get('world_id')!=self.data['world_session_id']):
+            raise ContractError('continuous physical world changed; original order was not replayed')
         return state
 
     def _find_task(self, state, attempt):
@@ -306,11 +338,29 @@ class Workflow:
         if ('delivery_approach_poses' in attempt
                 and delivery_approaches(task.get('delivery_approach_poses')) != attempt['delivery_approach_poses']):
             raise ContractError('original task ID has different delivery_approach_poses')
+        if self.data.get('execution_mode')=='continuous':
+            try:
+                matched = normalize_delivery(task.get('business_delivery'))==attempt['dispatch']['body']['business_delivery']
+            except Rejected as error:
+                raise ContractError('original task has no usable named delivery binding') from error
+            if not matched:
+                raise ContractError('original task ID has a different physical cargo binding')
         if task.get('status') not in TERMINAL | {'running', 'canceling', 'unknown'}:
             raise ContractError('original task has no usable state')
         return copy.deepcopy(task)
 
     def _quiet(self, state, attempt):
+        if self.data.get('execution_mode')=='continuous':
+            cleanup=state.get('cleanup',{})
+            binding=attempt['dispatch']['body']['business_delivery']
+            cargo=(state.get('business_inventory') or {}).get('cargo',{}).get(binding['cargo_id'],{})
+            delivered=(cargo.get('state')=='delivered' and cargo.get('task_id')==attempt['task_id'])
+            return (state['episode_id']==attempt['episode_id']
+                    and state['task'].get('id')==attempt['task_id']
+                    and state.get('reset',{}).get('pending') is False
+                    and cleanup.get('state')=='verified'
+                    and all(cleanup.get(key) is True for key in ('native_terminal','quiet','hold','guard_disabled'))
+                    and (state['task'].get('status')!='succeeded' or delivered))
         return (state['episode_id'] == attempt['episode_id']
                 and state['task'].get('id') in (None, attempt['task_id'])
                 and state.get('reset', {}).get('available') is True
@@ -364,8 +414,10 @@ class Workflow:
                 or event['batch_id'] != job['batch_id']):
             raise ContractError('matching machine-ready event is required')
         state = self._state()
+        legacy = self.data.get('execution_mode') != 'continuous'
         if (state['episode_id'] != self.data['episode_id'] or state.get('ready') is not True
-                or state['task'].get('id') is not None or state['task'].get('status') != 'idle'):
+                or (legacy and (state['task'].get('id') is not None or state['task'].get('status') != 'idle'))
+                or (not legacy and state['task'].get('status') not in ('idle','succeeded'))):
             raise ContractError('current episode is not idle and ready')
         if before_dispatch is not None:
             before_dispatch()
@@ -375,6 +427,8 @@ class Workflow:
                   'outcome': 'attempted', 'receipt': None}
         if 'scope' in self.data:
             record['body']['scope']=self.data['scope']
+        if 'business_delivery' in job:
+            record['body']['business_delivery']=copy.deepcopy(job['business_delivery'])
         attempt = {'task_id': task_id, 'episode_id': self.data['episode_id'], 'status': 'unknown',
                    'ready_event_id': event['event_id'], 'dispatch': record, 'cancel': None, 'task': None}
         if 'delivery_pose' in job:
@@ -421,9 +475,15 @@ class Workflow:
                         elif task['status'] == 'succeeded':
                             self._job()['status'] = 'succeeded'
                             last = self.data['index'] == len(self.data['jobs'])-1
-                            self.data.update(status='succeeded' if last else 'waiting_reset', reason=None)
+                            continuous = self.data.get('execution_mode')=='continuous'
+                            self.data.update(status='succeeded' if last else ('waiting_ready' if continuous else 'waiting_reset'), reason=None)
                             if last:
                                 self.data['machines'][self._job()['machine_id']]['occupant'] = None
+                            elif continuous:
+                                machine=self.data['machines'][self._job()['machine_id']]
+                                machine.update(occupant=None,event=None)
+                                self.data['index']+=1
+                                self.data['operation']=None
                         else:
                             self._job()['status'] = 'fault'
                             self.data.update(status='fault', reason=task['status'])
@@ -452,6 +512,9 @@ class Workflow:
         return self.snapshot()
 
     def reset(self, recover=False, before_dispatch=None):
+        self.snapshot()
+        if self.data.get('execution_mode')=='continuous':
+            raise ContractError('continuous workflow never resets or manufactures stock; inspect the original world')
         self.tick()
         if before_dispatch is not None:
             before_dispatch()
@@ -604,6 +667,8 @@ def main(argv=None):
     init.add_argument('--delivery-poses', type=Path, help='JSON object mapping batch UUIDs to {x,y,yaw}')
     init.add_argument('--delivery-approach-poses', type=Path,
                       help='JSON object mapping batch UUIDs to ordered approach pose lists')
+    init.add_argument('--continuous-deliveries', type=Path,
+                      help='JSON batch UUID to cargo/pickup arm/unload station binding; no world reset')
     init.add_argument('--machine', default='laundry-machine-1')
     event = sub.add_parser('event')
     event.add_argument('--file', type=Path, required=True)
@@ -621,7 +686,7 @@ def main(argv=None):
         with Workflow(args.ledger, LocalBridge(args.bridge)) as workflow:
             if args.command == 'init':
                 if args.from_scene:
-                    if args.delivery_poses or args.delivery_approach_poses:
+                    if args.delivery_poses or args.delivery_approach_poses or args.continuous_deliveries:
                         raise ContractError('--from-scene uses its task template; use explicit batches for custom goals')
                     from cooperation_factory_scene import factory_template_approaches
                     scene = read_json(args.from_scene)
@@ -631,7 +696,8 @@ def main(argv=None):
                 else:
                     result = workflow.create(args.batches if args.batches is not None else args.batch,
                                              args.machine, read_json(args.delivery_poses) if args.delivery_poses else None,
-                        delivery_approach_poses=read_json(args.delivery_approach_poses) if args.delivery_approach_poses else None)
+                        delivery_approach_poses=read_json(args.delivery_approach_poses) if args.delivery_approach_poses else None,
+                        continuous_deliveries=read_json(args.continuous_deliveries) if args.continuous_deliveries else None)
             elif args.command == 'event':
                 result = workflow.event(read_json(args.file))
             elif args.command in ('reset', 'recover'):

@@ -14,6 +14,7 @@ import math
 from pathlib import Path
 import sys
 import os
+import re
 import struct
 import time
 
@@ -23,12 +24,59 @@ oracle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(oracle)
 original_audit = oracle.driver_audit
 original_score = oracle.score
+original_topic_stamp = oracle.topic_stamp
 options = None
 STATUS_KINDS = {'nav_status': 'nav', 'dock_status': 'dock',
                 'drive_on_heading_status': 'drive_on_heading'}
 FEEDBACK_KINDS = {'nav_feedback': 'nav', 'dock_feedback': 'dock',
                   'drive_on_heading_feedback': 'drive_on_heading'}
 LABEL_KINDS = {'Nav2': 'nav', 'Nav2停靠': 'dock', 'DriveOnHeading': 'drive_on_heading'}
+
+
+def cargo_topic(cargo_id):
+    if not isinstance(cargo_id, str) or re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', cargo_id) is None:
+        raise ValueError('Named cargo IDs must be valid ROS topic components')
+    return f'/cooperation/cargo/{cargo_id}/pose'
+
+
+def topic_stamp(topic, payload):
+    if topic.startswith('cargo:'):
+        return oracle.stamp(payload['header']['stamp'])
+    return original_topic_stamp(topic, payload)
+
+
+def named_observer_node(base, cargo_ids):
+    """Extend the existing read-only observer node and its recording callback."""
+    class NamedObserver(base):
+        def create_subscription(self, msg_type, topic, callback, qos, **kwargs):
+            result = super().create_subscription(msg_type, topic, callback, qos, **kwargs)
+            if topic == '/cooperation/cargo_pose':
+                self.named_cargo_subscriptions = []
+                for cargo_id in cargo_ids:
+                    def named_callback(message, cargo_id=cargo_id):
+                        return callback(message, name='cargo:'+cargo_id)
+                    self.named_cargo_subscriptions.append(super().create_subscription(
+                        msg_type, cargo_topic(cargo_id), named_callback, qos, **kwargs))
+            return result
+    return NamedObserver
+
+
+def observe(args):
+    """Reuse the original recorder, adding only configured independent poses."""
+    path = getattr(args, 'business_manifest', None)
+    if path is None:
+        return oracle.observe(args)
+    manifest = json.loads(Path(path).read_text())
+    cargo_ids = list(manifest['business_entities']['cargo'])
+    for cargo_id in cargo_ids:
+        cargo_topic(cargo_id)
+    import rclpy.node as node_module
+    original_node = node_module.Node
+    node_module.Node = named_observer_node(original_node, cargo_ids)
+    try:
+        return oracle.observe(args)
+    finally:
+        node_module.Node = original_node
 
 
 def driver_audit():
@@ -953,6 +1001,275 @@ def route_checks(records, samples, audit, events):
             'full_transport_acceptance_claimed':False,'grasp_or_release_in_this_episode_claimed':False}
 
 
+def _business_vector(values, length):
+    if (not isinstance(values, (list, tuple)) or len(values) != length
+            or not all(finite(value) for value in values)):
+        raise ValueError('Incomplete finite named-entity measurement')
+    return list(values)
+
+
+def _business_quaternion(value):
+    value = _business_vector(value, 4)
+    if abs(sum(v*v for v in value)-1.) > .002:
+        raise ValueError('Named cargo quaternion is not a unit quaternion')
+    return value
+
+
+def _business_binding(value):
+    keys = {'cargo_id', 'pickup_arm_id', 'unload_station_id'}
+    if (not isinstance(value, dict) or set(value) != keys
+            or not all(isinstance(value[key], str) and value[key].strip() for key in keys)):
+        raise ValueError('Missing explicit business_delivery selection')
+    return dict(value)
+
+
+def _business_project(raw, manifest, binding, arm_id):
+    """Independent scoring projection; never import owner predicates or rewrite qpos."""
+    description = manifest['business_entities']
+    arm = raw['business_entities']['arms'][arm_id]
+    cargo = raw['business_entities']['cargo'][binding['cargo_id']]
+    point = _business_vector(cargo['position'], 3)
+    quat = _business_quaternion(cargo['quaternion_wxyz'])
+    velocity = _business_vector(cargo['velocity_world_angular_linear'], 6)
+    tray = raw['tray']
+    rotation = oracle.quat_matrix(_business_quaternion(tray['quaternion_wxyz']))
+    inverse = oracle.transpose(rotation)
+    offset = [a-b for a, b in zip(point, _business_vector(tray['position'], 3))]
+    tray_velocity = _business_vector(tray['velocity_world_angular_linear'], 6)
+    a, b, c = tray_velocity[:3];x, y, z = offset
+    rotating = [b*z-c*y, c*x-a*z, a*y-b*x]
+    relative_velocity = oracle.matvec(inverse, [velocity[i+3]-tray_velocity[i+3]-rotating[i] for i in range(3)])
+    contacts = cargo['contacts']
+    forces = {'pad_gripper': 0., 'pad_moving_jaw': 0.}
+    for name in description['arms'][arm_id]['pad_geoms']:
+        force = contacts['pads'].get(arm_id, {}).get(name, {}).get('normal_force_n', 0.)
+        if not finite(force) or force < 0:
+            raise ValueError('Invalid named pad force')
+        canonical = name.rsplit('__', 1)[-1]
+        if canonical in forces:
+            forces[canonical] += force
+    support = contacts['supports'].get('tray', {})
+    count = support.get('contact_count', 0)
+    if type(count) is not int or count < 0:
+        raise ValueError('Invalid named tray support count')
+    view = dict(raw)
+    view.update(q6=_business_vector(arm['qpos6'], 6), qvel6=_business_vector(arm['qvel6'], 6),
+                cargo={'position': point, 'quaternion_wxyz': quat, 'velocity_world_angular_linear': velocity,
+                       'position_relative_tray': oracle.matvec(inverse, offset),
+                       'velocity_relative_tray': relative_velocity},
+                finger_normal_forces_n=forces, cargo_tray_floor_contact=count > 0)
+    return view
+
+
+def business_samples(records, manifest, binding, arm_id):
+    """Use the corresponding independently subscribed pose; legacy cargo_1 may fall back."""
+    cargo_id = binding['cargo_id']
+    poses = oracle.records_by_topic(records, 'cargo:'+cargo_id)
+    description = manifest['business_entities']['cargo'][cargo_id]
+    if not poses and description.get('body') == 'grasp_target':
+        poses = oracle.records_by_topic(records, 'cargo')
+    truth = oracle.records_by_topic(records, 'truth')
+    clocks = oracle.records_by_topic(records, 'clock')
+    samples, errors = [], []
+    audit = oracle.scene_audit(next(r['payload'] for r in records if r['topic'] == 'physics'))
+    for record in records:
+        if record['topic'] != 'physics':
+            continue
+        try:
+            raw = _business_project(record['payload'], manifest, binding, arm_id)
+            item = oracle.physical_sample({**record, 'payload': raw}, truth, poses, clocks,
+                audit['tray_offset_from_base_footprint'], audit['half_extents'])
+            if item is None:
+                errors.append({'stamp': record['source_stamp'], 'wall_time':record['received_wall_time'],
+                               'reason': 'Missing independent cargo, car or clock pose'})
+                continue
+            pose = oracle.nearest(poses, item['stamp'])
+            item['cargo_quaternion_wxyz'] = _business_quaternion(oracle.quaternion(pose['payload']['pose']))
+            item['full_raw'] = record['payload']
+            samples.append(item)
+        except (KeyError, TypeError, ValueError, IndexError) as error:
+            errors.append({'stamp': record.get('source_stamp'), 'wall_time':record['received_wall_time'], 'reason': str(error)})
+    return samples, errors
+
+
+def _business_shelf(item, previous, manifest, binding, unload_arm):
+    """Recompute footprint and rest from independent poses and measured contacts."""
+    raw = item['raw'];cargo = item['full_raw']['business_entities']['cargo'][binding['cargo_id']]
+    entities = manifest['business_entities']
+    station = entities['unload_stations'][binding['unload_station_id']]
+    arm = entities['arms'][unload_arm]
+    yaw = arm['station_yaw_rad'];c, s = math.cos(yaw), math.sin(yaw)
+    inverse = [[c, s, 0.], [-s, c, 0.], [0., 0., 1.]]
+    position = oracle.matvec(inverse, [a-b for a, b in zip(item['cargo'], arm['station_position_m'])])
+    rotation = oracle.quat_matrix(item['cargo_quaternion_wxyz'])
+    half = (.009, .009, .008)
+    extent = [sum(abs(sum(inverse[i][k]*rotation[k][j] for k in range(3)))*half[j]
+                  for j in range(3)) for i in range(2)]
+    shelf = _business_vector(station['shelf_xy_in_station_m'], 2)
+    footprint = all(abs(position[i]-shelf[i])+extent[i] <= .058 for i in range(2))
+    slots = station.get('cargo_shelf_slots')
+    if slots is not None:
+        slot = slots[binding['cargo_id']]
+        center, size = _business_vector(slot['center_xy_m'], 2), _business_vector(slot['half_size_xy_m'], 2)
+        footprint &= all(size[i] > 0 and abs(position[i]-center[i])+extent[i] <= size[i] for i in range(2))
+    contacts = cargo['contacts']
+    support = contacts['supports'].get(binding['unload_station_id'], {})
+    supported = (type(support.get('contact_count')) is int and support['contact_count'] > 0
+                 and finite(support.get('normal_force_n')) and support['normal_force_n'] > 0)
+    pad_forces = [record['normal_force_n'] for pads in contacts['pads'].values() for record in pads.values()]
+    released = all(finite(force) and 0 <= force < .02 for force in pad_forces)
+    velocity = _business_vector(cargo['velocity_world_angular_linear'], 6)
+    speed = math.inf
+    if previous and 0 < item['stamp']-previous['stamp'] <= .1:
+        speed = oracle.norm([a-b for a, b in zip(item['cargo'], previous['cargo'])])/(item['stamp']-previous['stamp'])
+    home = _business_vector(arm['home_qpos6'], 6)
+    home_quiet = max(abs(a-b) for a, b in zip(raw['q6'], home)) < .02 and oracle.norm(raw['qvel6']) < .05
+    entities_quiet = (all(oracle.norm(_business_vector(a['qvel6'], 6)) < .05
+                          for a in item['full_raw']['business_entities']['arms'].values())
+                      and all(oracle.norm(_business_vector(cargo['velocity_world_angular_linear'], 6)[3:]) < .03
+                              for cargo in item['full_raw']['business_entities']['cargo'].values()))
+    valid = (item['independent_crosscheck'] and raw.get('finite') is True and raw.get('car_hold') is True
+             and item['car_speed'] < .01 and abs(item['yaw_rate']) < .01 and footprint and supported
+             and released and home_quiet and entities_quiet and speed < .002 and oracle.norm(velocity[3:]) < .002
+             and raw['cargo_tray_floor_contact'] is False)
+    return bool(valid), {'full_shelf_and_slot_footprint': bool(footprint), 'shelf_supported': bool(supported),
+                         'all_pads_released': bool(released), 'unload_arm_home_quiet': bool(home_quiet),
+                         'all_entities_quiet': bool(entities_quiet), 'independent_world_speed_m_s': speed}
+
+
+def business_delivery_checks(records, events, audit):
+    """Score named load/transport, then physical unload through final cleanup."""
+    states = [r for r in records if r['topic'] == 'http_state']
+    declared = any('business_delivery' in e for e in events if e.get('kind') == 'full_started')
+    declared |= any('business_delivery' in r['payload'].get('task', {}) for r in states)
+    if not declared:
+        return {'required': False, 'passed': True, 'attempts': []}
+    manifests = [r['payload'].get('source', {}).get('manifest') for r in records if r['topic'] == 'physics']
+    manifest = next((m for m in manifests if isinstance(m, dict) and 'business_entities' in m), None)
+    results = []
+    for event in (e for e in events if e.get('kind') == 'full_started'):
+        task_id, start = event['task_id'], event['wall_time']
+        ends = [e['wall_time'] for e in events if e.get('kind') == 'full_finished'
+                and e.get('task_id') == task_id and e['wall_time'] >= start]
+        end = min(ends, default=math.inf)
+        task_states = [r for r in states if start <= r['received_wall_time'] <= end+1.
+                       and r['payload'].get('task', {}).get('id') == task_id]
+        declarations = ([event['business_delivery']] if 'business_delivery' in event else [])
+        declarations += [r['payload']['task']['business_delivery'] for r in task_states
+                         if 'business_delivery' in r['payload']['task']]
+        if not declarations:
+            continue
+        result = {'task_id': task_id, 'passed': False, 'physical_proof_source': 'independent_named_ROS_poses_and_measured_contacts',
+                  'inventory_receipt_is_physical_proof': False, 'controller_helpers_imported': False}
+        try:
+            binding = _business_binding(declarations[0]);result['business_delivery'] = binding
+            if manifest is None or any(_business_binding(value) != binding for value in declarations):
+                raise ValueError('Missing manifest or changing named cargo binding')
+            entities = manifest['business_entities'];station = entities['unload_stations'][binding['unload_station_id']]
+            unload_arm = station['arm_id'];entities['cargo'][binding['cargo_id']]
+            selected_audit = dict(audit, home_q6=entities['arms'][binding['pickup_arm_id']]['home_qpos6'])
+            selected, missing = business_samples(records, manifest, binding, binding['pickup_arm_id'])
+            selected = [s for s in selected if start <= s['wall_time'] <= end]
+            window_missing = [e for e in missing if start <= e['wall_time'] <= end]
+            preliminary = oracle.full_score(selected, selected_audit)
+            arrival_gate = oracle.Gate(1.)
+            placed = preliminary['released_full_footprint_supported_and_relative_rest']['first_pass_stamp']
+            destination = station['delivery_pose']
+            previous = None
+            for item in selected:
+                raw = item['raw'];speed = math.inf
+                if previous and 0 < item['stamp']-previous['stamp'] <= .1:
+                    speed = oracle.norm([a-b for a,b in zip(item['cargo'],previous['cargo'])])/(item['stamp']-previous['stamp'])
+                valid = (placed is not None and item['stamp'] >= placed and item['independent_crosscheck']
+                    and raw.get('finite') is True and raw.get('car_hold') is True
+                    and math.hypot(item['car'][0]-destination['x'],item['car'][1]-destination['y']) <= .04
+                    and oracle.yaw_error(item['car_yaw'],destination['yaw']) <= .05
+                    and item['car_speed'] < .01 and abs(item['yaw_rate']) < .01
+                    and raw['cargo_tray_floor_contact'] and max(item['forces']) < .02
+                    and all(abs(item['relative'][i])+item['extents'][i] <= .058 for i in range(2))
+                    and oracle.norm(raw['cargo']['velocity_relative_tray']) < .002 and speed < .005
+                    and max(abs(a-b) for a,b in zip(raw['q6'],selected_audit['home_q6'])) < .02
+                    and oracle.norm(raw['qvel6']) < .05)
+                arrival_gate.update(item['stamp'],bool(valid));previous = item
+            arrival = arrival_gate.first_pass
+            prefix = [s for s in selected if arrival is not None and s['stamp'] <= arrival]
+            load = {'task_id': task_id, 'started_wall_time': start, **oracle.full_score(prefix, selected_audit)}
+            prefix_end = prefix[-1]['wall_time'] if prefix else start
+            prefix_events = [e for e in events if not (e.get('kind') == 'full_finished' and e.get('task_id') == task_id)]
+            prefix_events.append({'kind': 'full_finished', 'task_id': task_id, 'wall_time': prefix_end})
+            handoff = transport_checks(prefix, selected_audit, [load], prefix_events)
+            delivery = delivery_checks(records, prefix, selected_audit, [load], events)
+            unload, missing_unload = business_samples(records, manifest, binding, unload_arm)
+            unload = [s for s in unload if start <= s['wall_time'] <= end]
+            lift, settled = oracle.Gate(1.), oracle.Gate(1.)
+            baseline = prefix[-1]['cargo'][2] if prefix else math.inf
+            previous = last = None;last_valid = False;details = {}
+            for item in unload:
+                if arrival is None or item['stamp'] <= arrival:
+                    previous = item;continue
+                raw = item['raw']
+                lift.update(item['stamp'], bool(item['independent_crosscheck'] and raw.get('finite') is True
+                    and item['cargo'][2]-baseline >= .025 and min(item['forces']) > .02
+                    and raw.get('cargo_tray_floor_contact') is False and raw.get('car_hold') is True
+                    and item['car_speed'] < .01 and abs(item['yaw_rate']) < .01))
+                last_valid, details = _business_shelf(item, previous, manifest, binding, unload_arm)
+                settled.update(item['stamp'], lift.first_pass is not None and last_valid)
+                previous = last = item
+            cleanup = cleanup_checks(records, unload, events, task_id)
+            final_state = task_states[-1]['payload'] if task_states else {}
+            stock = final_state.get('business_inventory') or {}
+            entry = stock.get('cargo', {}).get(binding['cargo_id'], {})
+            receipt = final_state.get('task', {}).get('unload_receipt') or {}
+            receipt_ok = (entry.get('state') == 'delivered' and entry.get('task_id') == task_id
+                          and final_state.get('task', {}).get('status') == 'succeeded'
+                          and stock.get('episode_id') == event.get('episode_id')
+                          and receipt.get('cargo_id') == binding['cargo_id']
+                          and receipt.get('unload_station_id') == binding['unload_station_id']
+                          and receipt.get('episode_id') == event.get('episode_id')
+                          and receipt.get('world_session_id') == stock.get('world_id')
+                          and last is not None and last['full_raw'].get('world_session_id') == stock.get('world_id')
+                          and finite(receipt.get('source_stamp')) and settled.first_pass is not None
+                          and settled.first_pass <= receipt['source_stamp'] <= last['stamp']+.1)
+            fresh = bool(last and finite(end) and 0 <= end-last['wall_time'] <= .5)
+            continuously_settled = bool(last_valid and last and settled.started is not None
+                                       and last['stamp']-settled.started >= 1.)
+            all_contacts_clear = all(s['raw'].get('arm_forbidden_contact_total') == 0
+                                     and s['raw'].get('car_forbidden_contact_total') == 0
+                                     and s['independent_crosscheck']
+                                     and episode_id(s['full_raw']) == event.get('episode_id')
+                                     and s['full_raw'].get('world_session_id') == stock.get('world_id')
+                                     for s in selected)
+            declared_budget = entities.get('configuration', {}).get('budgets_wall_s')
+            budget_ok = prefix_end-start <= 360
+            if declared_budget is not None:
+                unload_budget = declared_budget.get('unload')
+                budget_ok = bool(declared_budget.get('load_and_delivery') == 360
+                    and finite(unload_budget) and unload_budget > 0 and finite(end)
+                    and prefix_end-start <= 360
+                    and end-start <= 360+unload_budget)
+            result.update(original_k_load_and_transport=load, continuous_handoff_and_transport=handoff,
+                          task_delivery_acceptance=delivery, physical_unload_lift=lift.result(),
+                          shelf_home_rest_through_cleanup=settled.result(), last_shelf_predicates=details,
+                          cleanup=cleanup, final_physical_evidence_fresh=fresh,
+                          inventory_and_receipt_bound=bool(receipt_ok),
+                          wall_budget={'required': declared_budget is not None, 'passed': budget_ok,
+                                       'load_and_delivery_limit_wall_s': 360.,
+                                       'declared': declared_budget, 'load_and_delivery_wall_s':prefix_end-start,
+                                       'full_task_wall_s':end-start},
+                          missing_independent_samples=len(window_missing),
+                          missing_independent_samples_preview=(missing+missing_unload)[:8])
+            result['passed'] = bool(len(ends) == 1 and selected and load['passed']
+                and handoff['passed'] and delivery['passed'] and lift.first_pass is not None
+                and continuously_settled and fresh and cleanup['passed'] and receipt_ok and all_contacts_clear and budget_ok)
+        except (KeyError, TypeError, ValueError, IndexError, StopIteration) as error:
+            result['reason'] = f'{type(error).__name__}: {error}'
+        results.append(result)
+    return {'required': True, 'attempts': results, 'passed': bool(results) and all(r['passed'] for r in results),
+            'independent_pose_topic_template': '/cooperation/cargo/<cargo_id>/pose',
+            'legacy_primary_pose_fallback': True, 'named_pose_publisher_identity_checked': False,
+            'original_thresholds_preserved': True}
+
+
 def augment_score(value, records, samples, audit, events):
     scope=getattr(options,'scope','transport'); outcome=getattr(options,'expected_outcome','success')
     extra = extra_checks(records, options.markers, options.expected_episode,
@@ -961,10 +1278,14 @@ def augment_score(value, records, samples, audit, events):
     handoff = transport_checks(samples, audit, value.get('full_attempts', []), events) if audit else {'passed': False, 'windows': []}
     delivery = (delivery_checks(records, samples, audit, value.get('full_attempts', []), events)
                 if audit and scope == 'transport' else {'required': False, 'passed': True, 'attempts': []})
+    business = (business_delivery_checks(records, events, audit) if audit and scope == 'transport'
+                else {'required': False, 'passed': True, 'attempts': []})
     value['original_k_oracle_passed'] = value['passed']
     value['repeated_episode_acceptance'] = extra
     value['continuous_handoff_and_transport'] = handoff
     value['task_delivery_acceptance'] = delivery
+    if business['required']:
+        value['business_delivery_acceptance'] = business
     value['evidence_mode'] = 'offline_replay' if options.score_only else 'live_observation'
     value['collection_directory'] = str(options.score_only or options.output)
     value['oracle_reuse'] = {
@@ -995,7 +1316,27 @@ def augment_score(value, records, samples, audit, events):
                                and value.get('recording_integrity',{}).get('passed') is True
                                and not callback_errors and current_ok)
     else:
-        value['passed'] = bool(value['passed'] and extra['passed'] and handoff['passed'] and delivery['passed'] and not callback_errors and current_ok)
+        if business['required']:
+            named = {attempt['task_id']: attempt for attempt in business['attempts']}
+            legacy = [attempt for attempt in value.get('full_attempts', []) if attempt['task_id'] not in named]
+            legacy_handoff = transport_checks(samples,audit,legacy,events) if legacy else {'passed':True,'windows':[]}
+            legacy_delivery = delivery_checks(records,samples,audit,legacy,events) if legacy else {'passed':True,'attempts':[]}
+            value['legacy_primary_full_attempts'] = value.get('full_attempts', [])
+            value['full_attempts'] = [dict(attempt.get('original_k_load_and_transport', {}),
+                task_id=attempt['task_id'],business_delivery=attempt.get('business_delivery'),passed=attempt['passed'])
+                for attempt in business['attempts']]+legacy
+            value['continuous_handoff_and_transport'] = {'passed':business['passed'] and legacy_handoff['passed'],
+                'windows':legacy_handoff['windows']+[window for attempt in business['attempts']
+                    for window in attempt.get('continuous_handoff_and_transport',{}).get('windows',[])]}
+            value['task_delivery_acceptance'] = {'required':True,'passed':business['passed'] and legacy_delivery['passed'],
+                'attempts':legacy_delivery['attempts']+[item for attempt in business['attempts']
+                    for item in attempt.get('task_delivery_acceptance',{}).get('attempts',[])]}
+            value['passed'] = bool(business['passed'] and all(attempt['passed'] for attempt in legacy)
+                and all(attempt['passed'] for attempt in value.get('cancellations', []))
+                and legacy_handoff['passed'] and legacy_delivery['passed'] and integrity.get('passed') is True
+                and extra['passed'] and not callback_errors and current_ok)
+        else:
+            value['passed'] = bool(value['passed'] and extra['passed'] and handoff['passed'] and delivery['passed'] and not callback_errors and current_ok)
     first_physics=next((r['payload'] for r in records if r['topic']=='physics'),{})
     mode=first_physics.get('source',{}).get('manifest',{}).get('station_perception',{}).get('mode','ideal')
     if mode=='vision':
@@ -1036,6 +1377,8 @@ def parse_options(argv=None):
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--score-only', type=Path)
     parser.add_argument('--scope',choices=('dock','transport','route'),default='transport')
+    parser.add_argument('--business-manifest',type=Path,
+                        help='Subscribe independent PoseStamped topics for every configured physical cargo')
     parser.add_argument('--expected-outcome',choices=('success','safe_cancel'),default='success')
     result = parser.parse_args(argv)
     if not result.expected_episode.strip():
@@ -1061,6 +1404,7 @@ def main(argv=None):
     oracle.DRIVER = options.driver.resolve()
     oracle.driver_audit = driver_audit
     oracle.score = score
+    oracle.topic_stamp = topic_stamp
     if options.score_only:
         options.output.mkdir(parents=True, exist_ok=False, mode=0o700)
         try:
@@ -1075,7 +1419,7 @@ def main(argv=None):
     os.environ['ROS_DOMAIN_ID'] = str(options.domain)
     os.environ['ROS_AUTOMATIC_DISCOVERY_RANGE'] = 'LOCALHOST'
     os.environ['ROS_LOCALHOST_ONLY'] = '1'
-    oracle.observe(options)
+    observe(options)
     files = list(options.output.glob('score-*.json'))
     return 0 if len(files) == 1 and json.loads(files[0].read_text()).get('passed') is True else 1
 

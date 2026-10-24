@@ -18,7 +18,7 @@ from urllib.parse import parse_qs
 from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, arm_home_quiet, car_pose,
                               cargo_retained, dispatch_terminal, finite_vector,
                               physical_quiet, quaternion, request_identity,
-                              task_scope, task_delivery_pose, task_delivery_approaches,
+                              task_scope, task_delivery_pose, task_delivery_approaches, task_business_delivery,
                               reset_request_identity,
                               release_ready_for_retreat, stopped, tip_forces, transport_handoff_ready, validate_physics)
 from cooperation_core import station_robot_pose, within_station_capture
@@ -220,6 +220,7 @@ def run(args):
             self.events = []
             self.known_ids = set()
             self.loaded = False
+            self.business_inventory = None
             self.loaded_limits = None
             self.loaded_controller = None
             for attribute, field, adapter_type, node_name in (
@@ -378,7 +379,8 @@ def run(args):
         def persist(self):
             path = self.ledger.with_suffix('.tmp')
             path.write_text(json.dumps({'task': self.task, 'events': self.events, 'known_ids': sorted(self.known_ids),
-                'episode_id': self.episode_id, 'reset_records': self.reset_records}, ensure_ascii=False, indent=2)+'\n')
+                'episode_id': self.episode_id, 'reset_records': self.reset_records,
+                'business_inventory': copy.deepcopy(getattr(self, 'business_inventory', None))}, ensure_ascii=False, indent=2)+'\n')
             path.replace(self.ledger)
 
         def timing_context(self, value=None, info=None):
@@ -586,17 +588,53 @@ def run(args):
             finite_vector([guard.get('along_m')],1,'停靠沿程')
             return guard['enabled']
 
+        def task_material(self, raw, arm_id=None):
+            binding = self.task.get('business_delivery')
+            if binding is None:
+                return raw
+            from cooperation_business import observe
+            selected = arm_id or self.task.get('active_arm_id', binding['pickup_arm_id'])
+            return observe(raw, manifest, binding['cargo_id'], selected)
+
+        def business_quiet(self, raw):
+            if not manifest.get('business_entities'):
+                return True
+            from cooperation_business import all_quiet
+            return all_quiet(raw)
+
+        def inventory(self, raw):
+            from cooperation_business import new_inventory
+            inventory = getattr(self, 'business_inventory', None)
+            world = raw.get('world_session_id', raw['episode_id'])
+            if inventory is None:
+                inventory = new_inventory(manifest, world, raw['episode_id'])
+                self.business_inventory = inventory
+            if inventory['world_id'] != world or inventory['episode_id'] != raw['episode_id']:
+                raise RuntimeError('库存所属物理世界已变化，不能沿用旧订单库存')
+            return inventory
+
+        def task_handoff(self, raw):
+            binding = self.task.get('business_delivery')
+            home = (manifest['business_entities']['arms'][binding['pickup_arm_id']]['home_qpos6']
+                    if binding else manifest['arm_home_qpos6'])
+            view = self.task_material(raw, binding['pickup_arm_id'] if binding else None)
+            return transport_handoff_ready(view, home) and self.business_quiet(raw)
+
         def reference(self, value, *, token=None, freeze=False):
             with self.lock:
                 self.owner(token, allow_abort=freeze)
                 values = finite_vector(list(value), 6, '机械臂参考')
                 if freeze:
-                    raw = self.fresh()
+                    raw = self.task_material(self.fresh())
                     if values[:5] != raw['q6'][:5] or values[5] != self.last_ref[5]:
                         raise RuntimeError('清理阶段只允许保持当前机械臂位置与原夹爪压力')
                 message = JointState()
                 message.header.stamp = self.get_clock().now().to_msg()
                 message.name = manifest['arm_joint_names']
+                binding = self.task.get('business_delivery')
+                if binding is not None:
+                    arm_id = self.task.get('active_arm_id', binding['pickup_arm_id'])
+                    message.name = manifest['business_entities']['arms'][arm_id]['joint_names']
                 message.position = values
                 self.arm_pub.publish(message)
                 self.last_ref = list(message.position)
@@ -605,7 +643,7 @@ def run(args):
             with self.lock:
                 self.owner(token, allow_abort=True)
                 try:
-                    frozen = list(self.fresh()['q6'])
+                    frozen = list(self.task_material(self.fresh())['q6'])
                     frozen[5] = self.last_ref[5]
                     self.reference(frozen, token=token, freeze=True)
                 except (RuntimeError, ValueError, KeyError, TypeError):
@@ -659,10 +697,19 @@ def run(args):
                 if any(raw[f'{body}_forbidden_contact_{kind}']
                        for body in ('arm','car') for kind in ('count','total')):
                     raise RuntimeError('车体或机械臂发生非预期物理接触')
-                if carrying and not cargo_retained(raw):
+                material = self.task_material(raw)
+                if carrying and not cargo_retained(material):
                     raise RuntimeError('运输途中货物离开托盘支撑范围')
-                if carrying and not arm_home_quiet(raw, manifest['arm_home_qpos6']):
+                binding = self.task.get('business_delivery')
+                home = (manifest['business_entities']['arms'][binding['pickup_arm_id']]['home_qpos6']
+                        if binding else manifest['arm_home_qpos6'])
+                if carrying and not arm_home_quiet(material, home):
                     raise RuntimeError('运输期间机械臂未保持回位停稳状态')
+                if carrying and binding and any(not arm_home_quiet(
+                        {'q6':raw['business_entities']['arms'][name]['qpos6'],
+                         'qvel6':raw['business_entities']['arms'][name]['qvel6']},record['home_qpos6'])
+                        for name,record in manifest['business_entities']['arms'].items()):
+                    raise RuntimeError('运输期间其他工位机械臂未保持回位停稳')
                 return raw
 
         def terminal_stop(self, dispatch, raw):
@@ -1057,7 +1104,7 @@ def run(args):
                     gate = ContinuousEvidence(.7)
                     time.sleep(.01)
                     continue
-                quiet = gate.update(raw['stamp'], physical_quiet(raw))
+                quiet = gate.update(raw['stamp'], physical_quiet(raw) and self.business_quiet(raw))
                 self.cleanup_summary.update(native_terminal=native_terminal, quiet=quiet,
                     hold=raw['car_hold'] is True, source_stamp=raw['stamp'])
                 if quiet and native_terminal and raw['car_hold'] is True:
@@ -1280,12 +1327,15 @@ def run(args):
                     alpha = (value-cumulative[i])/max(cumulative[i+1]-cumulative[i],1e-12)
                     q = points[i]+alpha*(points[i+1]-points[i])
                 self.reference(np.r_[q,jaw])
-                if not planner.evaluate(raw['q6'])['valid']:
+                view = self.task_material(raw)
+                if self.task.get('business_delivery') and (not raw['car_hold'] or not stopped(raw)):
+                    raise RuntimeError('实体抓放期间车辆未保持停车')
+                if not planner.evaluate(view['q6'])['valid']:
                     raise RuntimeError('实际机械臂位姿失去原碰撞余量')
-                if age >= duration+dwell and np.max(np.abs(np.asarray(raw['q6'])[:5]-points[-1]))<.012 and np.linalg.norm(raw['qvel6'][:5])<.05:
+                if age >= duration+dwell and np.max(np.abs(np.asarray(view['q6'])[:5]-points[-1]))<.012 and np.linalg.norm(view['qvel6'][:5])<.05:
                     return raw
                 if age > source_limit:
-                    errors=np.abs(np.asarray(raw['q6'])[:5]-points[-1])
+                    errors=np.abs(np.asarray(view['q6'])[:5]-points[-1])
                     joint=int(np.argmax(errors))
                     raise RuntimeError(f'机械臂 {stage} 段未收敛：关节 {manifest["arm_joint_names"][joint]} '
                         f'误差 {errors[joint]:.4f}rad，仿真时间 {age:.2f}/{source_limit:.2f}s')
@@ -1336,11 +1386,80 @@ def run(args):
                 time.sleep(.02)
             raise RuntimeError('出站检查点回执未知；保留原请求，不自动重发')
 
+        def unload_ready(self, raw):
+            from cooperation_business import shelf_settled
+            binding = self.task['business_delivery']
+            station = manifest['business_entities']['unload_stations'][binding['unload_station_id']]
+            view = self.task_material(raw, arm_id=station['arm_id'])
+            home = manifest['business_entities']['arms'][station['arm_id']]['home_qpos6']
+            return (shelf_settled(view, manifest, binding['unload_station_id'])
+                    and arm_home_quiet(view, home) and self.business_quiet(raw)
+                    and not view['cargo_tray_floor_contact'])
+
+        def unload_evidence(self, raw):
+            from cooperation_business import placement_slot
+            if not self.unload_ready(raw):
+                raise RuntimeError('卸货最终物理条件已失效，库存不记为送达')
+            binding = self.task['business_delivery']
+            return {'cargo_id':binding['cargo_id'], 'unload_station_id':binding['unload_station_id'],
+                    'shelf_slot':placement_slot(manifest,binding['unload_station_id'],binding['cargo_id']),
+                    'source_stamp':raw['stamp'],'sequence':raw['sequence'],
+                    'world_session_id':raw['world_session_id'],'episode_id':raw['episode_id'],
+                    'shelf_settled':True,'arm_home_quiet':True,'tray_empty_for_cargo':True}
+
+        def execute_unload(self, token):
+            """Continue the same owned task/world after its original loaded route."""
+            from cooperation_business import shelf_settled, placement_slot
+            binding = self.task['business_delivery']
+            station_id = binding['unload_station_id']
+            station = manifest['business_entities']['unload_stations'][station_id]
+            arm_id = station['arm_id']
+            self.hold(True, token)
+            raw = self.wait_condition(self.task_handoff, duration=1., timeout=8., carrying=True)
+            budgets = self.task['business_budgets_wall_s']
+            self.wall_deadline = min(self.task_started_monotonic+sum(budgets.values()),
+                                     time.monotonic()+budgets['unload'])
+            self.loaded = False
+            with self.lock:
+                self.owner(token)
+                self.task['active_arm_id'] = arm_id
+                self.last_ref = list(self.task_material(raw)['q6'])
+            pose = raw['car']['position']+raw['car']['quaternion_wxyz']
+            options = {'arm_id': arm_id, 'cargo_id': binding['cargo_id'], 'snapshot': raw}
+            planner = ArmPlanner(manifest, car_pose=pose, **options)
+            baseline = self.task_material(raw)['cargo']['position'][2]
+            self.event('arm','unload_grasp','卸货臂按当前货物身份从托盘抓取。')
+            plan = query_approach(manifest, self.task_material(raw)['q6'], pose,
+                check=self.check, timeout_s=min(30., max(.001,self.wall_deadline-time.monotonic())), **options)
+            for segment in plan['segments']:
+                self.segment(segment, planner)
+            self.wait_condition(lambda value: self.task_material(value)['cargo']['position'][2]-baseline>=.025
+                and min(tip_forces(self.task_material(value)))>.02, duration=1., timeout=5.)
+            shelf = placement_slot(manifest,station_id,binding['cargo_id'])['center_xy_m']
+            centers = station.get('placement_centers_m', [[.18,.14,.06],[.18,0.,.06],
+                [.18,-.13,.06],[*shelf,.06],[*shelf,.023]])
+            transfer = planner.prepare_placement(self.check(), centers)
+            self.check()
+            self.event('arm','unload_transport','保持实际双指夹持，搬运到当前货架。')
+            for segment in transfer['segments']:
+                if segment['stage']=='retreat':
+                    self.wait_condition(lambda value: shelf_settled(self.task_material(value),manifest,station_id,before_retreat=True)
+                        and self.task_material(value)['q6'][5]>.45, duration=1., timeout=8.)
+                self.segment(segment, planner)
+            raw = self.wait_condition(self.unload_ready, duration=1., timeout=8.)
+            receipt = self.unload_evidence(raw)
+            with self.lock:
+                self.owner(token)
+                self.task['unload_receipt'] = receipt
+            self.event('arm','unloaded','同一货物已在货架落稳，卸货臂已回位；等待原任务清理。')
+            return receipt
+
         def execute(self, token):
             self.worker.token = token
             try:
                 scope = self.task.get('scope', 'transport')
-                self.wall_deadline = time.monotonic()+(60 if scope == 'dock' else 360)
+                self.task_started_monotonic = time.monotonic()
+                self.wall_deadline = self.task_started_monotonic+(60 if scope == 'dock' else 360)
                 if scope == 'route':
                     self.execute_route_branch(token)
                     return
@@ -1373,9 +1492,13 @@ def run(args):
                         self.task.update(status='succeeded', message='停靠完成')
                         self.persist()
                     return
-                planner = ArmPlanner(manifest, car_pose=raw['qpos22'][13:20])
-                plan = query_approach(manifest, raw['q6'], raw['qpos22'][13:20],
-                    check=self.check, timeout_s=min(30., max(.001, self.wall_deadline-time.monotonic())))
+                binding = self.task.get('business_delivery')
+                options = ({'arm_id':binding['pickup_arm_id'],'cargo_id':binding['cargo_id'],'snapshot':raw}
+                           if binding else {})
+                pose = raw['car']['position']+raw['car']['quaternion_wxyz']
+                planner = ArmPlanner(manifest, car_pose=pose, **options)
+                plan = query_approach(manifest, self.task_material(raw)['q6'], pose,
+                    check=self.check, timeout_s=min(30., max(.001, self.wall_deadline-time.monotonic())), **options)
                 self.check()
                 # Retain small planning evidence once per task. Full trajectories
                 # remain local planning data, not repeated telemetry payloads.
@@ -1390,21 +1513,23 @@ def run(args):
                             separators=(',', ':'), allow_nan=False).encode()).hexdigest(),
                         'execution': plan['planning']['execution'],
                     }
-                baseline = raw['cargo']['position'][2]
+                baseline = self.task_material(raw)['cargo']['position'][2]
                 for segment in plan['segments']:
                     self.event('arm',segment['stage'], {'approach':'正在靠近取货位置。','descend':'正在下降到夹取位置。',
                         'close':'正在闭合夹爪，等待接触反馈。','lift':'正在抬升货物。'}.get(segment['stage'],'正在执行已验证的机械臂轨迹。'))
                     raw = self.segment(segment, planner)
-                self.wait_condition(lambda value: value['cargo']['position'][2]-baseline>=.025 and min(tip_forces(value))>.02,
+                self.wait_condition(lambda value: self.task_material(value)['cargo']['position'][2]-baseline>=.025 and min(tip_forces(self.task_material(value)))>.02,
                                     duration=1., timeout=5.)
                 self.event('arm','holding','双指接触与抬升已确认，正在保持货物。')
                 raw = self.check()
-                transport = planner.prepare_transport(raw)
+                transport = (planner.prepare_placement(raw, [[.18,-.13,.06],[.18,0.,.06],
+                    [.18,.14,.06],[.24,.14,.06],[.24,.14,.023]])
+                    if binding else planner.prepare_transport(raw))
                 self.check()
                 released=False
                 for segment in transport['segments']:
                     if segment['stage']=='retreat':
-                        raw=self.wait_condition(release_ready_for_retreat,duration=1.,timeout=6.)
+                        raw=self.wait_condition(lambda value:release_ready_for_retreat(self.task_material(value)),duration=1.,timeout=6.)
                         released=True
                         self.event('arm','retreat','托盘已接住货物、活动指已张开，正在退出固定指。')
                     else:
@@ -1413,12 +1538,18 @@ def run(args):
                         self.event('arm',segment['stage'],message)
                     self.segment(segment,planner)
                 if not released:raise RuntimeError('规划缺少真实松爪与退出阶段')
-                self.wait_condition(lambda v: transport_handoff_ready(v, manifest['arm_home_qpos6']),
+                self.wait_condition(self.task_handoff,
                                     duration=1., timeout=8.)
+                if binding:
+                    from cooperation_business import advance
+                    with self.lock:
+                        self.owner(token)
+                        advance(self.business_inventory,binding['cargo_id'],token[0],'on_tray',
+                                {'source_stamp':self.check()['stamp'],'stage':'loaded'})
                 self.event('arm','loaded','货物已放稳，机械臂已退出，可以运输。')
                 self.loaded = True
                 raw = self.check(carrying=True)
-                start = raw['cargo']['position'][:2]
+                start = self.task_material(raw)['cargo']['position'][:2]
                 self.apply_loaded_parameters(token)
                 if self.task.get('egress_motion') is not None:
                     self.event('car','delivery','收到交接确认，沿当前车体方向直行出站，再前往交付点。')
@@ -1429,21 +1560,43 @@ def run(args):
                 self.capture_delivery_checkpoint()
                 self.event('car','delivery','收到交接确认，驶往交付点。')
                 self.delivery_route()
-                raw = self.wait_condition(lambda v: transport_handoff_ready(v, manifest['arm_home_qpos6']),
+                raw = self.wait_condition(self.task_handoff,
                                           duration=1., timeout=8., carrying=True)
-                if math.hypot(raw['cargo']['position'][0]-start[0],raw['cargo']['position'][1]-start[1])<.5:
+                carried = self.task_material(raw)['cargo']['position']
+                if math.hypot(carried[0]-start[0],carried[1]-start[1])<.5:
                     raise RuntimeError('货物实际运输位移不足0.5米')
                 self.event('car','delivered','已到交付点，货物仍在托盘，车辆与货物已停稳。')
+                receipt = self.execute_unload(token) if binding else None
                 if not self.cleanup(token):
                     raise RuntimeError('运输完成但清理证据未知')
+                if binding:
+                    # Cleanup may have changed the physical shelf/home state.
+                    # Only new source frames can confirm the inventory commit.
+                    previous_stamp = receipt['source_stamp']
+                    raw = self.wait_condition(lambda value: value['stamp']>previous_stamp
+                        and self.unload_ready(value), duration=.7, timeout=8.)
+                    receipt = self.unload_evidence(raw)
+                    receipt['after_cleanup'] = True
                 with self.lock:
                     self.owner(token)
-                    self.task.update(status='succeeded',message='装货运输完成')
+                    if binding:
+                        self.task['unload_receipt'] = receipt
+                        advance(self.business_inventory,binding['cargo_id'],token[0],'delivered',receipt)
+                    self.task.update(status='succeeded',message='装货、运输与实体卸货完成' if binding else '装货运输完成')
                     self.persist()
             except Exception as error:
                 if token != self.execution_token:
                     return
                 self.abort(token, error)
+                binding = self.task.get('business_delivery')
+                if binding:
+                    from cooperation_business import advance
+                    with self.lock:
+                        try:
+                            advance(self.business_inventory,binding['cargo_id'],token[0],'unknown',
+                                    {'reason':str(error),'stage':self.task.get('stage')})
+                        except (Rejected,ValueError,KeyError) as inventory_error:
+                            self.task['inventory_error'] = str(inventory_error)
                 terminal = 'canceled' if isinstance(error,Canceled) else 'failed'
                 try:
                     if not self.cleanup(token):
@@ -1495,7 +1648,8 @@ def run(args):
 
         def reset_quiet(self, raw):
             velocity = raw['cargo']['velocity_world_angular_linear']
-            return physical_quiet(raw) and math.sqrt(sum(value*value for value in velocity[3:])) < .03
+            return (physical_quiet(raw) and self.business_quiet(raw)
+                    and math.sqrt(sum(value*value for value in velocity[3:])) < .03)
 
         def reset_state(self, raw):
             reason = self.reset_admission(raw) if raw is not None else '等待有效物理反馈'
@@ -1524,6 +1678,9 @@ def run(args):
                     'localization_source':'parent map->base_footprint TF',
                     'localization_covariance':None,
                     'caller_context':body.get('context', {})}
+                if manifest.get('business_entities'):
+                    context['business_inventory'] = copy.deepcopy(self.inventory(raw))
+                    context['business_delivery'] = copy.deepcopy(self.task.get('business_delivery'))
                 try:
                     context['localized_pose'] = self.localized()
                 except Exception as error:
@@ -1689,6 +1846,7 @@ def run(args):
                 with self.lock:
                     with self.physics_cache_lock:
                         self.episode_id = ack['new_episode_id']
+                        self.business_inventory = None
                         self.raw, self.received = None, 0.
                         self.observation_error = None
                     self.execution_token = None
@@ -1913,6 +2071,10 @@ def run(args):
                             ready=False;reason='R2分支来源或载货停稳条件尚未就绪'
                         elif self.localization_warmup is not None and not self.localization_warmup.snapshot()['ready']:
                             ready=False;reason='等待R2静止定位预热：'+self.localization_warmup.snapshot()['reason']
+                    elif manifest.get('business_entities'):
+                        inventory = self.inventory(raw)
+                        if not any(item['state']=='available' for item in inventory['cargo'].values()):
+                            ready=False;reason='有限货源已耗尽或已被原任务预留，不重置生成库存'
                     elif math.hypot(target[0]-station[0]-.24,target[1]-station[1]+.13)>.035:
                         ready=False; reason='物体已离开取货盘；本回合完成后需重置合成场景'
                     if any(raw[f'{body}_forbidden_contact_{kind}']
@@ -1948,6 +2110,9 @@ def run(args):
                                           'url': '/coop-api/report' if (args.output.parent/'acceptance-report.json').is_file() else None},
                     **({'episode_id': self.episode_id} if self.episode_id else {}),
                     'reset': self.reset_state(raw), 'history': copy.deepcopy(self.history[-10:])}
+                if manifest.get('business_entities'):
+                    result['business_inventory'] = copy.deepcopy(getattr(self,'business_inventory',None))
+                    result['business_entities'] = copy.deepcopy(raw.get('business_entities')) if raw else None
                 route = result['task'].get('delivery_route')
                 route_started = getattr(self, 'delivery_route_started_monotonic', None)
                 if route and route['status'] == 'running' and route_started is not None:
@@ -1980,7 +2145,7 @@ def run(args):
                 raise ValueError('相机文件与当前回合不匹配')
             return args.frame_dir/info['image_file']
 
-        def existing_start(self, task_id, scope, delivery, approaches):
+        def existing_start(self, task_id, scope, delivery, approaches, business=None):
             """Called under the telemetry lock at both admission boundaries."""
             if task_id not in self.known_ids:
                 return None
@@ -1991,6 +2156,8 @@ def run(args):
                 raise Rejected('任务编号已绑定另一交付点；请读取原任务',409)
             if self.task.get('delivery_approach_poses', []) != approaches:
                 raise Rejected('任务编号已绑定另一进场路线；请读取原任务',409)
+            if self.task.get('business_delivery') != business:
+                raise Rejected('任务编号已绑定另一货物或卸货工位；请读取原任务',409)
             return {'task_id':task_id,'task':copy.deepcopy(self.task)}
 
         def start(self, body):
@@ -2000,11 +2167,25 @@ def run(args):
                 scope = task_scope(body)
                 delivery = task_delivery_pose(body, manifest.get('delivery_pose'))
                 approaches = task_delivery_approaches(body)
+                business = task_business_delivery(body)
+                if manifest.get('business_entities') and scope=='transport' and business is None:
+                    raise Rejected('多实体配送须明确货物、取货臂和卸货工位')
+                budgets = None
+                if business is not None:
+                    from cooperation_business import validate_delivery
+                    validate_delivery(manifest,business,delivery)
+                    declared = manifest['business_entities']['configuration'].get('budgets_wall_s', {})
+                    if declared.get('load_and_delivery') != 360:
+                        raise Rejected('连续配送须保留原360秒装运预算，并声明新增卸货预算')
+                    unload_budget, = finite_vector([declared.get('unload')],1,'新增卸货预算')
+                    if unload_budget <= 0:
+                        raise Rejected('新增卸货预算须为正数')
+                    budgets = {'load_and_delivery':360.,'unload':unload_budget}
                 egress = (task_delivery_pose({}, manifest['egress_pose'])
                           if scope == 'transport' and manifest.get('egress_pose') is not None else None)
                 motion = (normalize_egress_motion(manifest['egress_motion'])
                           if scope == 'transport' and manifest.get('egress_motion') is not None else None)
-                existing = self.existing_start(task_id, scope, delivery, approaches)
+                existing = self.existing_start(task_id, scope, delivery, approaches, business)
                 if existing is not None:
                     return existing
                 episode = self.episode_id
@@ -2022,11 +2203,17 @@ def run(args):
                 if self.episode_id != episode:
                     raise Rejected('场景回合已变化，请读取最新状态后重新开始',409)
                 request_identity(body, episode_id=self.episode_id)
-                existing = self.existing_start(task_id, scope, delivery, approaches)
+                existing = self.existing_start(task_id, scope, delivery, approaches, business)
                 if existing is not None:
                     return existing
                 current=self.state(scope=scope)
                 if not current['ready']: raise Rejected(current['reason'],409)
+                if business is not None:
+                    from cooperation_business import reserve, observe
+                    material = observe(self.fresh(),manifest,business['cargo_id'],business['pickup_arm_id'])
+                    if not material['entity_contacts']['supports'].get('pickup',{}).get('contact_count'):
+                        raise Rejected('所选货物尚未在真实取货位，未预留库存',409)
+                    reserve(self.inventory(self.fresh()),business,task_id)
                 self.archive_current()
                 self.known_ids.add(task_id)
                 self.cancel_event.clear();self.abort_event.clear();self.abort_reason=None;self.loaded=False
@@ -2040,6 +2227,11 @@ def run(args):
                            'delivery_pose':copy.deepcopy(delivery), 'delivery_goal_preflight':copy.deepcopy(preflight),
                            'delivery_approach_poses':copy.deepcopy(approaches),
                            'delivery_approach_preflight':copy.deepcopy(approach_preflight)}
+                if business is not None:
+                    self.task.update(business_delivery=copy.deepcopy(business),
+                                     active_arm_id=business['pickup_arm_id'],
+                                     business_budgets_wall_s=budgets)
+                    self.last_ref = list(self.task_material(self.fresh())['q6'])
                 for attribute in ('loaded_limits', 'loaded_controller'):
                     current = getattr(self, attribute, None)
                     if current is not None:
