@@ -99,6 +99,7 @@ python3 apps/fishbot-control-station/workbench-tools/drone-committed-replay.py -
 JSON保留输入、上下文、每事件的候选拒绝/选择、原审计和地图revision；原生采纳与dynamic_safety始终未验证。
 坏候选局部拒绝；坏场景项保留错误并继续其他情景，不通过异常退出伪装整体安全。
 
-下一项仍是M2：明确有来源的实际状态/预测、时间有效地图与终端区域，再做完整滚动替换资格；没有这些输入时保持unverified。
+实际原MCAP的PV、FSM源时刻和局部地图见证已另行核对，见[原记录状态资格](DRONE_RECORDED_STATE.md)。它不替换本片静态夹具。
+下一项仍是M2：补有来源的完整PVA/状态预测、时间有效地图与终端区域，再做完整滚动替换资格；没有这些输入时保持unverified。
 本片未改网页、服务或飞行源码，因此不重复Web构建、浏览器QA或机器人实验。
 验收与owner见[工作台进度](../plans/workbench-code-rebuild-20261018/progress.md)，由当前对话接续。

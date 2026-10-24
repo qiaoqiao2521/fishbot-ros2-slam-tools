@@ -109,3 +109,10 @@ agent-link现已加载，qoder同步调用180s超时且get_status确认无活会
 原CommittedTail的admit未设last_now，首次tick回退可仍track；tick的NaN会覆盖基点。新离线Replay在冻结源外统一检查admission/tick时钟有限高水位。候选拒绝保留旧start本来正确，未将它误列为缺陷。
 
 16个反事实静态情景使用原#6/#7真实系数，但观测/地图是明确fixture；连续重审不采信缓存passed。原#6数学过，#7 A拒绝后保旧相位；新占据使旧证书撤销。动态预测、终端不变集和真实跟踪/飞控采用仍缺，protect不构成安全恢复。
+
+
+## 2026-10-24 原记录状态来源补全
+
+仅查看truth/telemetry JSONL会遗漏MCAP的1926条原始Odometry。原PV可由CDR读取，来源是sidecar Gazebo pose＋因果差分V；A仍缺。N1 clock夹逼可直接复用来区分源时刻与录制可用上界，不以record ns减sim。
+
+7个FSM状态可同源回读；33.388s的参考与33.228s odom混比会产生.385835m差，同刻参考差为.166906m。#5/#6 odom早于当前新曲线，不反向外推。195个首发前样本的P峰.292422、正Z峰.073111m，均是采样对照，不是连续跟踪界或新判据。完整地图/未来终端区域仍缺，局部cell缺席不等于known-free。方法见docs/DRONE_RECORDED_STATE.md。
