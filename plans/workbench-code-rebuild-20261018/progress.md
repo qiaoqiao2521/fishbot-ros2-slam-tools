@@ -1,5 +1,15 @@
 # 实施进度
 
+## 2026-10-25 M2接管证据合同与历史关联
+
+- Current：最小字段/补录点已按冻结源码核对，新增离线只读关联器。原8曲线中7条关联38个post-await PVA reference快照，8号task/goal缺失仍未归属；PX4采用证据0，M2部分完成/M3冻结，goal active。
+- Done：复用recorded-tracking.json_rows，不新增控制/消息服务；按task/goal/int trajectory三元组及原receipt/command/reference/recorded sim数值关联，不补ID/最近时间/旧起点。263非空reference中的225条position引用缺对应身份，继续不归曲线；快照不等于调用次数，reference sim在await前采样。
+- 核源：drone c866441的sidecar按active_goal补标task/goal，HTTP202/ROS goal_ack仅接纳/门控；SDK await后更新reference再补身份。PX4 v1.17源码d6f12ad的MAVLink输入和TrajectorySetpoint无候选UUID，MC读取后仍可用旧输入/failsafe，控制输出无分支/原输入身份。只核源码，未验证历史二进制同版。
+- 合同：docs/DRONE_HANDOFF_EVIDENCE.md分已有/可派生/须新采集，列真实AJ、clock/frame/epoch、known-free revision/有效范围、terminal、逐RPC、PX4输入与控制器消费点。clock epoch在新legacy读取器中明确未验证；旁路payload/时序关联仍不称原生UUID ACK，不用空voxels/未来帧补资格。
+- 验证：17新＋原Replay8共25通过、无跳过；根137项实际源行/身份/时序/PVA读回通过，四份源前后逐字节相同。含错task/goal/重复键、坏时序/域外、NaN/超大整数、畸形PVA、伪ACK和坏行/缺文件/坏UTF-8流局部降级；审查复现的math.isfinite超大整数OverflowError已修/补负例，原任务failed/landed/disarmed不改。
+- 产物：原忽略目录handoff-evidence-inventory.json与handoff-evidence-readback.json。仅外部离线工具/测试/文档；无训练、ROS节点、仿真、控制、无人机Web/服务、新飞行/落地，drone/PX4/GCOPTER源码清洁保持。
+- Next/owner：根Codex在离线正反夹具核公共上下文、candidate版本、sample序号、clock epoch/跨域锚、map revision和消费分支关联，复用原Replay审计/拒绝；缺失/歧义局部报告，不新造控制通道或把fixture ACK当真实采用。knowledge_status=already_covered，沿用Wiki§20动作/输入消费分列、原生时钟及CapMesh PIT-004，事实留项目，不更新memory。
+
 ## 2026-10-25 M2显式A合同原矩阵覆盖
 
 - Current：原六cut×四有限AJ画像24个独立输入各两后端，共48搜索，Python24/24、Root24/24过原静态盒连续硬门，未执行/未评分0。仅本离线数值片完成；真实接管0，M2部分完成、M3冻结、goal active。
