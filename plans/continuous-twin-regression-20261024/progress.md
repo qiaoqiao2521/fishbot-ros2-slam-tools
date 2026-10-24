@@ -97,7 +97,7 @@ D0/M1a历史验证：97处文档链接，7项导入、17项前端、9组桌面/�
 
 ## Next
 
-继续查询GitHub原run40111818800，不重新派发。M2显式实体查询与第二货物真实抓取分项已通；新B初态卸货c分项已验，下一步将实体选择/卸货接入原owner并补逐帧臂速度，再推进无reset双订单/库存。M1继续补原Graceful预测碰撞前的原生轨迹/局部地图证据；probe-c已复现支撑波动，不重复低速阴性探针。原120秒/GoalChecker/独立评分保持，取得合格R2后跑正式5+5/留出/完整B→A。M2/M3及矩阵/原生CI范围不缩减，本目标保持active，root继续，不联系其他对话。
+继续查询GitHub原run40111818800，不重新派发。M2显式实体查询与第二货物真实抓取分项已通；独立货位卸货分项、原owner/Workflow/Factory/命名独立评分及逐帧臂速度已接；下一步核实新场景运输配置与算力，验A卸货臂，再跑无reset B/B与B/A。M1继续补原Graceful预测碰撞前的原生轨迹/局部地图证据；probe-c已复现支撑波动，不重复低速阴性探针。原120秒/GoalChecker/独立评分保持，取得合格R2后跑正式5+5/留出/完整B→A。M2/M3及矩阵/原生CI范围不缩减，本目标保持active，root继续，不联系其他对话。
 
 
 ## M2 owner 接续结果（2026-10-25）
@@ -116,3 +116,6 @@ D0/M1a历史验证：97处文档链接，7项导入、17项前端、9组桌面/�
 本轮知识回写 knowledge_status=updated：既有 Wiki/ROS2 与 FishBot.md 第20节补“连续配送的独立货位、命名独立观测及清理后新帧更新库存”；开发知识入口补货位占用/清理后回执触发词，原段落与入口各唯一读回。知识仓其它大量未审改动保留，未整库提交；后续整合 owner=root。
 
 本轮清理已执行 m2-owner-cleanup-a.json：开发 cell1-a 全目录归档并读回原 source_unchanged=false/物理判定，移除展开副本；采用 cell1-b、cell2-occupied-a 的原采样以 gzip 保存并读回帧数/末源时间，移除展开 samples.json。独立 scorer 已支持压缩原件，压缩后复算仍为两分项通过。选定模型/XML依赖、R1状态、当前源码和失败证据保留。目标分配空间218497024→136859648字节，释放81637376字节（77.86MiB）。恢复开发轮：`tar -xzf ~/.cache/fishbot/continuous-twin-20261024/archives/m2-cell1-development-a.tar.gz -C ~/.cache/fishbot/continuous-twin-20261024`；恢复单份原采样：`gzip -dk <fixture>/samples.json.gz`。原生165和全部本轮无ROS fixture进程/context已退出，未启动完整运输或GPU作业，未碰107/114和5191只读页。
+
+
+本轮有效代码/配置/测试/SpecMesh 已提交 d4e5d395d2b3d9860558738cbc1795daa4966afa 并推送既有 qiaoqiao2521/fishbot-ros2-slam-tools/main，原生 ls-remote 与本地精确 SHA 一致，推送后工作区干净。GitHub身份 qiaoqiao2521/238822818 与目标 owner 已验证；运行时JSONL、模型快照、私有场景/采样/日志和知识库其它变动未入该提交。91处当前文档本地链接检查无缺失。上述交付只覆盖本轮有效实施，不把 M1–M4 或原生双订单状态改为完成。
