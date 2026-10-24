@@ -88,6 +88,10 @@ def prepare_scene(fishbot, so101, python, data, runtime_env):
     if os.environ.get("FISHBOT_LATTICE_SMOOTH_PATH") == "1":
         candidate = fishbot/"experiments/kaggle/f1_candidate.py"
         controller_options.append("--lattice-smooth-path")
+    global_padding = os.environ.get("FISHBOT_GLOBAL_EXTRA_PADDING_M")
+    if global_padding is not None:
+        candidate = fishbot/"experiments/kaggle/f1_candidate.py"
+        controller_options.extend(["--global-extra-padding-m", global_padding])
     run("candidate-configuration", [python, str(candidate),
                                      str(scene/"scene-manifest.json"), *controller_options], env=runtime_env)
     if os.environ.get("FISHBOT_TERMINAL_STOP_HEARTBEAT") == "1":

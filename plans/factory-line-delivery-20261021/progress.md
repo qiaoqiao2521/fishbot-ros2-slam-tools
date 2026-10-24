@@ -523,3 +523,11 @@ B完整配送已过原独立物理评分，A仍未通过。全局额外缓冲5mm
 - 用户若选择5mm：先以J的A重建状态验证原A单点，全部原物理门槛通过后，从原出生点同轮重跑B→A。若保持.025：保留A占用失败，不通过改目标、缩真实外廓或放宽评分伪造通过。owner=本对话root。
 - Kaggle账号仍muqiaoqiao，未切Chrome账号；本轮完整J是本机ROS2/MuJoCo实测，不能记为Kaggle成功。原private dataset 403与旧云失败保留。
 - knowledge_status=updated(local)：既有FishBot第19节的第三层到位记忆、声明目标/Path末端/真值分离、附加缓冲分层经验已更新并读回；开发入口同步。知识仓其它未审变动保留，发布整合pending，owner=本对话root。
+
+## Current — 2026-10-24 5mm已获确认，A载货单点通过
+
+- 用户ok已授权5mm全局附加缓冲运动；不再等待重复确认。原25mm基线仍为默认，局部10mm与完整足迹、原控制/碰撞/载货/评分保持。
+- 原A单点：UUID c325d9c12f3a41c7a92fee6cbdd58dcf，原生4/error0，36.317秒，真值23.123mm/.02022rad，1738个载货样本0违例；参数恢复、连续quiet和owned清理通过。
+- 公共candidate/prepare已补显式5mm入口，14项相关测试通过。新原出生点场景已准备；下一步固定源码和输入，同轮完整B→A。完整验收当前仍只有历史J的1/2，不混用分项。
+- 证据根：本机cloud-jobs/kaggle-20261024/local-loaded-j-a-global-extra-5mm-entry-a；候选新场景public-j100-global-extra-5mm-prepared-a。owned0、9111关闭，受保护单元保持。
+- knowledge_status=already_covered：沿用已读回的FishBot第19节附加缓冲分层、声明目标/Path末端/真值分离经验；本次A分项状态仅记项目。知识仓其它未审修改保留，发布整合仍pending，owner=本对话root。

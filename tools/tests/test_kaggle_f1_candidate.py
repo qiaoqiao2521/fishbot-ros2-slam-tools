@@ -85,7 +85,29 @@ class NativeTransportSelectionTests(unittest.TestCase):
         self.assertEqual(controller['desired_linear_vel'], .06)
         self.assertEqual(controller['curvature_lookahead_dist'], .3)
         self.assertEqual(manifest['vehicle_profile']['loaded_controller']['FollowPath.desired_linear_vel'], .06)
+        self.assertEqual(nav['global_costmap']['global_costmap']['ros__parameters']['footprint_padding'], .025)
         self.assertNotIn('transport_controller', manifest)
+
+    def test_explicit_global_padding_preserves_full_footprint_and_local_contracts(self):
+        footprint = '[[-0.244,-0.24],[0.244,-0.24],[0.244,0.24],[-0.244,0.24]]'
+        for name in ('global_costmap', 'local_costmap'):
+            self.nav[name][name]['ros__parameters']['footprint'] = footprint
+        self.nav_path.write_text(yaml.safe_dump(self.nav))
+        CANDIDATE.configure(self.path, PRESET, global_extra_padding_m=.005)
+        manifest, nav = self.read()
+        self.assert_shared_contracts(manifest, nav)
+        self.assertEqual(manifest['global_extra_padding_m'], .005)
+        self.assertEqual(nav['global_costmap']['global_costmap']['ros__parameters']['footprint_padding'], .005)
+        for name in ('global_costmap', 'local_costmap'):
+            self.assertEqual(nav[name][name]['ros__parameters']['footprint'], footprint)
+
+    def test_global_padding_cli_reaches_generated_nav2_input(self):
+        subprocess.run([sys.executable, str(ROOT/'experiments/kaggle/f1_candidate.py'),
+                        str(self.path), '--global-extra-padding-m', '0.005'],
+                       check=True, capture_output=True, text=True)
+        _, nav = self.read()
+        self.assertEqual(nav['global_costmap']['global_costmap']['ros__parameters']['footprint_padding'], .005)
+        self.assertEqual(nav['local_costmap'], self.nav['local_costmap'])
 
     def test_graceful_is_native_transport_only_and_copies_input(self):
         CANDIDATE.configure(self.path, PRESET)
@@ -131,13 +153,15 @@ class NativeTransportSelectionTests(unittest.TestCase):
 
 
 class FactoryInputSelectionTests(unittest.TestCase):
-    def prepare(self, explicit=None, smoothing=None):
+    def prepare(self, explicit=None, smoothing=None, padding=None):
         with tempfile.TemporaryDirectory() as temp:
             folder = Path(temp)
             calls = []
             env = {'FISHBOT_F1_FACTORY_CONFIG': explicit} if explicit else {}
             if smoothing is not None:
                 env['FISHBOT_LATTICE_SMOOTH_PATH'] = smoothing
+            if padding is not None:
+                env['FISHBOT_GLOBAL_EXTRA_PADDING_M'] = padding
             with mock.patch.dict(os.environ, env, clear=True), \
                     mock.patch.object(RUNNER, 'ARTIFACTS', folder), \
                     mock.patch.object(RUNNER, 'run', side_effect=lambda label, args, **kw:
@@ -156,6 +180,14 @@ class FactoryInputSelectionTests(unittest.TestCase):
         self.assertIn(str(ROOT/'experiments/kaggle/f1_candidate.py'), self.candidate_args)
         self.prepare()
         self.assertNotIn('--lattice-smooth-path', self.candidate_args)
+
+    def test_global_padding_selection_reaches_current_candidate_entry(self):
+        self.prepare(padding='0.005')
+        args = self.candidate_args
+        self.assertEqual(args[args.index('--global-extra-padding-m')+1], '0.005')
+        self.assertIn(str(ROOT/'experiments/kaggle/f1_candidate.py'), args)
+        self.prepare()
+        self.assertNotIn('--global-extra-padding-m', self.candidate_args)
 
     def test_native_entry_only_changes_b_approach(self):
         candidate = self.prepare('tools/config/factory_delivery/line-side-j100-native-entry.json')

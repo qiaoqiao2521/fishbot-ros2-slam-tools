@@ -8,7 +8,8 @@ from pathlib import Path
 import yaml
 
 
-def configure(manifest_path, transport_controller_yaml=None, *, lattice_smooth_path=None):
+def configure(manifest_path, transport_controller_yaml=None, *, lattice_smooth_path=None,
+              global_extra_padding_m=.025):
     path = Path(manifest_path)
     manifest = json.loads(path.read_text())
     nav_path = Path(manifest["nav2_yaml"])
@@ -28,7 +29,8 @@ def configure(manifest_path, transport_controller_yaml=None, *, lattice_smooth_p
                    analytic_expansion_max_cost=252.)
     if lattice_smooth_path is not None:
         planner["smooth_path"] = lattice_smooth_path
-    nav["global_costmap"]["global_costmap"]["ros__parameters"]["footprint_padding"] = .025
+    nav["global_costmap"]["global_costmap"]["ros__parameters"]["footprint_padding"] = global_extra_padding_m
+    manifest["global_extra_padding_m"] = global_extra_padding_m
     nav["velocity_smoother"]["ros__parameters"].update(
         use_ros_time_for_smoothing=True, scale_velocities=True, smoothing_frequency=50.)
     limits = manifest["vehicle_profile"]["loaded_velocity_smoother"]
@@ -78,6 +80,9 @@ if __name__ == "__main__":
     parser.add_argument("--transport-controller-yaml", type=Path)
     parser.add_argument("--lattice-smooth-path", action=argparse.BooleanOptionalAction,
                         default=None, help="Explicit native HeadingAware path smoothing; otherwise preserve input")
+    parser.add_argument("--global-extra-padding-m", type=float, default=.025,
+                        help="Extra global footprint padding in metres; local costmap and body geometry remain unchanged")
     args = parser.parse_args()
     configure(args.manifest, args.transport_controller_yaml,
-              lattice_smooth_path=args.lattice_smooth_path)
+              lattice_smooth_path=args.lattice_smooth_path,
+              global_extra_padding_m=args.global_extra_padding_m)
