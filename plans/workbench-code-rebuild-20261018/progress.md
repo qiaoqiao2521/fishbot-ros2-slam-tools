@@ -1,5 +1,16 @@
 # 实施进度
 
+## 2026-10-24 M2可用PV重锚独立尾段
+
+- Current：六cut×四显式A/J画像24组均过原连续硬门与axis_knots；新尾由当时可用PV重新求解，不是平移或重标旧尾。实际完整机体接管资格0，M2部分完成、M3冻结、goal active。
+- Done：新增drone-handoff-reanchor.py复用原PV/clock选择、axis_stop_request、qualification画像、S4NU内点、geometry.search及temporal_replay。A/J为零、Ay+.2、Jy±1四点，既不借参考A/J，也不回退事后帧；缺PV/frame/epoch/重复ID只隔离当前源。新尾从cut开始，无原参考前缀，原V1.8/A1/Z2.2/窄盒/Y内点/Z域[.1,1.2]/2mm规划目标不变。
+- 结果：24尾A峰.486875–.968077，#7四画像.953297–.968077；候选V峰1.164216–1.487718，不是飞行实测。YZ部分仍2mm；最小Vy约−7.44e−15仅舍入量级，J峰1.354483–6.932417无原J/推力/角速度资格。
+- 时效：7优化success、17迭代60上限false，搜索/生成/硬审计wall1.505860–3.965739s，tail4.503775–5.000000sim。可行见证不称收敛/实时；wall不加sim、不以cut标签伪造采用。24×12声明静态/理想PVA情景共288，不是飞行成绩；末端.5sim仍非不变集，protect非物理制动。
+- 验证：11新含max_iterations=1真实native四画像边界/axis_knots，加旧53共64检查过、无跳过。1131项独立原MCAP CDR/clock输入与原生系数/连续极值/首尾C3/逐轴停止后区间及fixture读回过，图已目视。内置只读审查建议的temporal异常隔离已修/补负例，保已审math、fixture单列未评分；根独立验收。实际SciPy试探越界clipping警告保留，最终全部原门审计。
+- 交接：方法、六行四画像表和CLI在docs/DRONE_RECORDED_STATE.md末节；原忽略目录新增recorder-PV-reanchored-stopping-tails.json、recorder-PV-reanchored-readback.json、recorder-PV-reanchored-comparison.png。无Web/服务改动、训练、ROS节点、仿真、控制、新飞行/落地；drone c866441清洁冻结。
+- Next/owner：根Codex以最紧的#7为切片，剖析现有生成、连续审计和回放链的耗时，核状态传播与提交截止；不把离线尾段从cut起算当作已按时采用，不盲增画像网格。实际A/J、时间有效地图、终端及跟踪仍未获资格，c866441冻结，M2部分完成、M3不启动。
+- 保留：SO101原八个在途文件继续保留，不混无人机提交；接续owner=根Codex，沿原runtime/execution/station测试与无运动UI QA，物理消费/期限回产品化计划。knowledge_status=already_covered；沿用Wiki/ROS2与FishBot§20、原生时钟、CapMesh PIT-004，项目数值不写memory。
+
 ## 2026-10-24 M2参考切点与原记录PV资格
 
 - Current：六个数学/窄盒正例在原1926条PV中均无同cut源stamp；历史可用恒速预测均与参考PV不符。完整状态交接0、执行采用未做、动态闭环未通过，M2部分完成/M3冻结。

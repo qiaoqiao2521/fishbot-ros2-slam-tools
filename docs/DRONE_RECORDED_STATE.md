@@ -531,3 +531,74 @@ python3 -m unittest test_drone_handoff_pv test_drone_recorded_tracking test_dron
 下一项复用既有stop-qualification状态重锚与S4NU入口，从这六个cut的可用PV重解候选；A/J按显式假设分列，不补成实测状态。
 先核新首态和完整尾段，不把参考前缀拼到不同PV上继承合同；原硬界、地图/终端/截止未知与冻结边界保持。
 owner=当前对话根Codex，无训练、ROS节点、仿真、控制、新飞行或新落地证据。
+
+
+## 按可用PV重解独立尾段（2026-10-24）
+
+接续上节六个切点。`workbench-tools/drone-handoff-reanchor.py`重新读原MCAP/clock，并调用已有`drone-handoff-pv.run`选择因果PV。
+不消费缓存预测、事后exact/oracle或名义参考A/J。缺少可用PV时当前cut未评分，不回退到事后帧。
+新请求直接从预测PV构造，单独从cut开始；没有拼接不同PV的旧参考前缀，也没有平移或拉伸旧曲线。
+
+生成仍用现有`axis_stop_request`、`hypothesis_request`、官方S4NU内点适配及`geometry.search`。
+Y内点、Z时长域[.1,1.2]、2mm内部规划目标和60次迭代配置均沿用上一轮窄盒比较；默认search的[.1,.4]域未改。
+原V≤1.8、三维A≤1.0、Z≤2.2及窄盒Y≤2.03保持。实际动态占据仍未检查，手工配置空间盒不等于原GridMap。
+
+### 四个显式假设与实测边界
+
+同一个cut的PV固定，分别测试A=J=0、Ay=+.2/J=0、A=0/Jy=+1、A=0/Jy=−1。
+单位分别为m/s²和m/s³。这四点不是实测A/J、校准不确定集或任意初态的兜底证明。
+恒速模型的零加速度未被冒称实测量；新尾只保留当前指定的PVA/J数学边界，不证明它匹配真实机体。
+
+24组均由新曲线通过原连续审计及axis_knots。下面A峰值来自整条独立尾段，YZ余量取四画像中的最小值。
+
+| cut候选 | A=J=0峰值 | Ay+.2峰值 | Jy+1峰值 | Jy−1峰值 | 最小Y上界余量mm | 最小Z上界余量mm |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| #4-h0.1 | 0.487376 | 0.523499 | 0.486875 | 0.487112 | 702.071 | 335.775 |
+| #4-h0.2 | 0.515039 | 0.540698 | 0.518829 | 0.503212 | 574.086 | 334.724 |
+| #4-h0.4 | 0.582472 | 0.593243 | 0.574368 | 0.559534 | 334.784 | 303.553 |
+| #4-h0.6 | 0.701021 | 0.702950 | 0.691539 | 0.653619 | 13.852 | 146.725 |
+| #4-h0.8 | 0.736025 | 0.757074 | 0.791296 | 0.713678 | 2.000 | 49.122 |
+| #7-h0.05 | 0.962272 | 0.953297 | 0.966133 | 0.968077 | 2.000 | 2.000 |
+
+A峰值范围.486875–.968077m/s²，候选速度峰值1.164216–1.487718m/s；这是规划输出，不是新飞行实测速度。
+#7四画像A峰.953297–.968077，最高Z2.198m、Y2.028m；部分画像仍只有2mm余量，不能作为实际跟踪包络。
+最小Vy约−7.44e−15m/s，属于数值舍入量级；保留全段极值，没有仅凭终点在盒内判定通过。
+J峰1.354483–6.932417m/s³，原硬门没有J、推力或角速度资格，本轮没有补设或放宽这些门限。
+
+新尾与上轮名义尾的输入PV和A/J不同，不能据A峰下降单独宣称算法胜出、提前接管有效或原跟踪误差已修复。
+新尾数学通过24、实际完整状态接管资格0；无人机冻结保持，真实动态闭环仍未通过。
+
+### 求解与时间回放的边界
+
+只有7组optimizer_success=true；另17组达到60次迭代上限，保留false。独立硬审计给出有限可行见证，不证明收敛或全局最优。
+搜索/生成/硬审计耗时1.505860–3.965739wall秒，尾段持续4.503775–5.000000sim秒。
+不能把wall耗时直接加到历史sim时刻，也不能把尾段标成cut起始就冒称已经按时下发。
+
+通过候选各运行已有12个时间/状态/静态空间fixture，共288组，不是288次飞行。
+声明足够未来覆盖和理想PVA时可沿尾段到terminal_hold；当前快照、缺末端窗口、过期/未知图、未知A、旧首态晚提交、占据及错时钟均拒绝。
+终端窗口仍仅.5sim秒，不是终端不变集；protect仍只是离线撤销参考，不是已经完成物理制动。
+
+### 验证、复验与交接
+
+11项新测试含真实S4NU max_iterations=1的四画像首尾PVAJ/axis_knots检查；加旧14PV、31状态/预测及8Replay，共64项通过，无跳过。
+覆盖late exact/oracle隔离、参考A/J更改不影响请求、frame/epoch/未来输入、坏源/重复ID按项跳过、统一配置、独立尾时刻、新审计拒绝不继承旧passed，以及原MCAP入口。
+内置只读审查指出可选temporal fixture异常会覆盖已完成数学审计；现局部捕获，保留math结果并单列fixture unscored，负例通过。
+沿用agent-link此前已知失败的内置备选，不联系其他已有聊天；根独立跑最终64项。
+
+根从原MCAP CDR/clock重新选输入，并从原生降幂系数核首尾PVAJ、逐段C3、全部停止后区间、连续根极值、峰向量及静态fixture，共1131项读回通过，PNG已目视。
+实际批次出现一次SciPy越界试探后按参数域clipping的RuntimeWarning；最终结果仍逐条经过原连续门，未隐藏优化false状态或修改硬界。
+忽略目录drone-committed/748…新增`recorder-PV-reanchored-stopping-tails.json`、`recorder-PV-reanchored-readback.json`、`recorder-PV-reanchored-comparison.png`。
+原遥测、运行日志和生成产物不提交；没有Web/服务改动，不重跑构建或浏览器，没有训练、ROS节点、仿真、控制或新落地证据。
+
+在仓库根复验：
+
+```sh
+. /opt/ros/jazzy/setup.bash
+DRONE_RUN="$HOME/dev/ros2/projects/drone/output/measured-state-reanchor-flight-748f910e"
+STOP_REPORT_ROOT=apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6
+python3 apps/fishbot-control-station/workbench-tools/drone-handoff-reanchor.py --run-dir "$DRONE_RUN" --candidates "$STOP_REPORT_ROOT/reference-narrow-handoff-comparison.json" "$STOP_REPORT_ROOT/reference-narrow-handoff-early05.json" --output "$STOP_REPORT_ROOT/recorder-PV-reanchored-stopping-tails.json"
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_handoff_reanchor test_drone_handoff_pv test_drone_recorded_tracking test_drone_committed_replay
+```
+
+根Codex以最紧的#7为切片，剖析现有生成、连续审计和回放链的耗时，核状态传播与提交截止；不把离线尾段从cut起算当作已按时采用，不盲增画像网格。实际A/J、时间有效地图、终端及跟踪仍未获资格，c866441冻结，M2部分完成、M3不启动。
