@@ -14,6 +14,7 @@ import {
   defaultDroneStation,
   defaultStation,
   exportStation,
+  exportStationRecipe,
   importStation,
   programWarnings,
   removeNode,
@@ -25,6 +26,37 @@ import {
   workspaceStationSample,
   worldPosition,
 } from "./station";
+
+describe("SO101 recipe documents through the original Station editor", () => {
+  it.each(["x-plus20", "x-minus20"] as const)("round-trips %s with document context and unchanged execution", (sample) => {
+    const original = workspaceStationSample(sample);
+    const envelope = JSON.parse(exportStationRecipe(original));
+    envelope.vendorNotes = { labels: ["editable"] };
+    envelope.acceptanceReferences = [{ taskId: "old-run", historicalVerdict: "pass" }];
+    const imported = importStation(envelope);
+    const { recipeDocument, ...payload } = imported.station;
+    expect(payload).toEqual(original);
+    expect(recipeDocument?.vendorNotes).toEqual(envelope.vendorNotes);
+    expect(imported.warnings.join(" ")).toContain("历史验收");
+    const copy = copyStation(imported.station);
+    (copy.recipeDocument?.vendorNotes as { labels: string[] }).labels.push("copy edit");
+    expect((recipeDocument?.vendorNotes as { labels: string[] }).labels).toEqual(["editable"]);
+    const exported = JSON.parse(exportStation(copy));
+    expect(exported.format).toBe("station-recipe");
+    expect(exported.station).not.toHaveProperty("recipeDocument");
+    expect(exported.station.execution).toEqual(original.execution);
+    expect(exported.acceptanceReferences).toEqual(envelope.acceptanceReferences);
+    expect(copy).not.toHaveProperty("executionTaskId");
+    expect(copy).not.toHaveProperty("passed");
+  });
+
+  it("rejects unsupported recipe units before tolerant Station repairs", () => {
+    const envelope = JSON.parse(exportStationRecipe(defaultStation()));
+    envelope.units = "mm";
+    envelope.station.nodes = [];
+    expect(() => importStation(envelope)).toThrow("units");
+  });
+});
 
 describe("SO101 workspace development samples", () => {
   it.each([

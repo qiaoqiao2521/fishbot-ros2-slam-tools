@@ -4,6 +4,8 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v2.0. https://mozilla.org/MPL/2.0/
 
+import { parseRecipeEnvelope, wrapRecipeEnvelope } from "./stationRecipe";
+
 export type Vec3 = [number, number, number];
 export type Platform = "so101" | "px4";
 export type Kind =
@@ -51,6 +53,8 @@ export type Instruction = {
 };
 export type Station = {
   platform?: Platform;
+  // Document context only; the original executor still owns all motion parameters.
+  recipeDocument?: Record<string, unknown>;
   // Preserve editable execution intent, including unsupported values, for backend validation.
   execution?: unknown;
   flight?: {
@@ -329,6 +333,9 @@ export function copyStation(station: Station): Station {
     ...(Object.hasOwn(station, "execution")
       ? { execution: copyExecution(station.execution) }
       : {}),
+    ...(station.recipeDocument
+      ? { recipeDocument: copyExecution(station.recipeDocument) as Record<string, unknown> }
+      : {}),
     ...(station.flight
       ? {
           flight: {
@@ -488,11 +495,12 @@ export function importStation(value: unknown): {
   warnings: string[];
 } {
   const root = record(value);
-  const source = record(root?.station) ?? root;
+  const recipe = root?.format === "station-recipe" ? parseRecipeEnvelope(root) : undefined;
+  const source = record(recipe?.stationSource) ?? record(root?.station) ?? root;
   if (!source || !Array.isArray(source.nodes)) {
     throw new Error("请选择含 nodes 数组的工作站 JSON；当前草稿未改变。");
   }
-  const warnings: string[] = [];
+  const warnings: string[] = [...(recipe?.warnings ?? [])];
   if (Object.hasOwn(source, "execution")) {
     const execution = record(source.execution);
     const pair = (value: unknown): value is [number, number] =>
@@ -629,8 +637,13 @@ export function importStation(value: unknown): {
       warnings.push(`步骤 ${i + 1} 无法识别，已跳过。`);
       continue;
     }
+    let stepId = recipe && typeof step.id === "string" && step.id.length > 0
+      ? step.id : `import-step-${i}`;
+    while (program.some((existing) => existing.id === stepId)) {
+      stepId += "-copy";
+    }
     program.push({
-      id: `import-step-${i}`,
+      id: stepId,
       action: step.action as Instruction["action"],
       target: typeof step.target === "string" ? step.target : "",
       seconds:
@@ -695,6 +708,7 @@ export function importStation(value: unknown): {
     warnings.push("速度上限需在 1–5 m/s，使用 1 m/s。");
   }
   const station: Station = {
+    ...(recipe ? { recipeDocument: recipe.metadata } : {}),
     ...(source.platform != undefined ? { platform } : {}),
     ...(Object.hasOwn(source, "execution")
       ? { execution: copyExecution(source.execution) }
@@ -721,6 +735,9 @@ export function importStation(value: unknown): {
 }
 
 export function exportStation(station: Station): string {
+  if (station.recipeDocument) {
+    return exportStationRecipe(station);
+  }
   return (
     JSON.stringify(
       {
@@ -734,4 +751,9 @@ export function exportStation(station: Station): string {
       2,
     ) ?? "{}"
   );
+}
+
+export function exportStationRecipe(station: Station): string {
+  const { recipeDocument, ...payload } = station;
+  return JSON.stringify(wrapRecipeEnvelope(payload, recipeDocument), undefined, 2) ?? "{}";
 }

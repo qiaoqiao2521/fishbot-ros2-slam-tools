@@ -49,6 +49,7 @@ import {
   defaultStation,
   descendants,
   exportStation,
+  exportStationRecipe,
   importStation,
   programWarnings,
   removeNode,
@@ -303,6 +304,8 @@ function RobotStation({
   const cancellationController = useRef<AbortController>();
   const rejectedTaskId = useRef("");
   const fileInput = useRef<HTMLInputElement>(null);
+  const latestTaskForImport = useRef({ taskId, task, checkingTask, submitting, cancelling });
+  latestTaskForImport.current = { taskId, task, checkingTask, submitting, cancelling };
   const planCurrent =
     config.previewPlanId != undefined &&
     JSON.stringify(config.previewPlanStation) === JSON.stringify(station);
@@ -869,11 +872,17 @@ function RobotStation({
   const replayUrl = drone
     ? simulationReplayUrl(task?.artifacts?.mcap, window.location.origin)
     : undefined;
-  const commit = (next: Station) => {
+  const commit = (next: Station, detachTask = false) => {
     setNotice("");
     setPast((history) => [...history, station]);
     setFuture([]);
-    saveConfig({ station: next });
+    if (detachTask) {
+      setTaskId("");
+      setTask(undefined);
+      setExecutionError("");
+      rejectedTaskId.current = "";
+    }
+    saveConfig({ station: next, ...(detachTask ? { executionTaskId: "" } : {}) });
   };
   const copyTask = () => {
     if (checkingTask || submitting || cancelling || taskIsActive(task)) {
@@ -900,6 +909,20 @@ function RobotStation({
         : "已复制为独立草稿。修改放料坐标系 X/Y，再显式运行；原任务记录保持。",
     );
     void changeScene("draft", next);
+  };
+  const downloadDocument = (recipe: boolean) => {
+    try {
+      const content = recipe ? exportStationRecipe(station) : exportStation(station);
+      const url = URL.createObjectURL(new Blob([content], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = drone ? "drone-station.json"
+        : recipe || station.recipeDocument ? "so101-recipe.json" : "so101-station.json";
+      link.click();
+      setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "配方导出失败，当前草稿保留。");
+    }
   };
   const loadWorkspaceSample = (sample: "x-plus20" | "x-minus20") => {
     if (drone || checkingTask || submitting || cancelling || taskIsActive(task)) {
@@ -1151,6 +1174,11 @@ function RobotStation({
                 开发工位：红盘与取料高位随 JSON 保存。声明区域是定位先验，尚未证明整个区域都能抓放。
               </Alert>
             )}
+            {station.recipeDocument && (
+              <Alert severity="info" style={{ marginTop: 8 }}>
+                已载入可编辑工位配方。历史验收仅作来源引用；当前草稿须重新运行。
+              </Alert>
+            )}
           </div>
         )}
         <div className={classes.row}>
@@ -1189,25 +1217,19 @@ function RobotStation({
           <Button
             size="small"
             onClick={() => {
-              const url = URL.createObjectURL(
-                new Blob([exportStation(station)], {
-                  type: "application/json",
-                }),
-              );
-              const link = document.createElement("a");
-              link.href = url;
-              link.download = drone
-                ? "drone-station.json"
-                : "so101-station.json";
-              link.click();
-              setTimeout(() => {
-                URL.revokeObjectURL(url);
-              }, 1000);
+              downloadDocument(false);
             }}
           >
             导出 JSON
           </Button>
-          <Button size="small" onClick={() => fileInput.current?.click()}>
+          {!drone && (
+            <Button size="small" onClick={() => { downloadDocument(true); }}>
+              导出工位配方
+            </Button>
+          )}
+          <Button size="small"
+            disabled={checkingTask || submitting || cancelling || taskIsActive(task)}
+            onClick={() => fileInput.current?.click()}>
             导入 JSON
           </Button>
           <input
@@ -1221,14 +1243,26 @@ function RobotStation({
               if (!file) {
                 return;
               }
+              if (checkingTask || submitting || cancelling || taskIsActive(task)) {
+                setNotice("任务运行中，请结束或停止后再导入；原任务与取消入口保留。");
+                return;
+              }
               try {
-                const imported = importStation(JSON.parse(await file.text()));
+                const text = await file.text();
+                const latest = latestTaskForImport.current;
+                if (latest.taskId !== taskId || latest.checkingTask || latest.submitting
+                    || latest.cancelling || taskIsActive(latest.task)
+                    || submissionController.current || cancellationController.current) {
+                  setNotice("读取期间任务状态已变化，请结束任务后重新导入；原任务与取消入口保留。");
+                  return;
+                }
+                const imported = importStation(JSON.parse(text));
                 if (stationPlatform(imported.station) !== platform) {
                   throw new Error(
                     "文件与当前机器人类型不同，请在对应工作台入口导入；当前草稿未改变。",
                   );
                 }
-                commit(imported.station);
+                commit(imported.station, imported.station.recipeDocument !== undefined);
                 setSelected(imported.station.nodes[0]?.id ?? "");
                 setNotice(
                   imported.warnings.length > 0
