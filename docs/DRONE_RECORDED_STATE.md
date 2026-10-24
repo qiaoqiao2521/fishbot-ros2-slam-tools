@@ -273,3 +273,86 @@ python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-te
 原忽略目录新增stop-position-time-comparison.json、stop-geometry-readback-checks.json、stop-geometry-comparison.png；前轮探针和报告保留。
 下一步核非零A/J假设与5秒刹停所需的时间有效自由体积、终端窗口和求解截止条件。当前地图/跟踪管道仍未获资格，不能把静态几何构造晋级成在线备份。
 drone c866441继续清洁冻结；本轮未训练、启动ROS节点或飞行，也没有控制写入。M2仍部分完成，动态闭环未通过。
+
+## 非零边界与刹停时效资格（2026-10-24接续）
+
+新增`workbench-tools/drone-stop-qualification.py`，复用上一节的MINCO、连续审计和现有Replay。
+只改变明确列出的A/J假设，保留输入PV、原硬box和V≤1.8、A范数≤1.0、Z≤2.2；不存在新实测A/J。
+每条先按原停止位置/时间重解系数，只有失败项再运行相同有界Tx/Ty/Tz/dy搜索；不拉伸已生成曲线。
+
+### 十组有限假设
+
+| 输入PV | 初始A/J假设 | 固定几何/时间A峰m/s² | 有界重解A峰m/s² | 原连续审计 |
+| --- | --- | ---: | ---: | --- |
+| 因果预测 | 原边界A=J=0 | .898199 | — | 通过 |
+| 因果预测 | 过去V差分A保持、J=0 | .815136 | — | 通过 |
+| 因果预测 | Ay=+.2、J=0 | 1.039018 | 1.035868 | A拒绝 |
+| 因果预测 | A=0、Jy=+1 | .937582 | — | 通过 |
+| 因果预测 | A=0、Jy=−1 | .858847 | — | 通过 |
+| 事后PV反事实 | 原边界A=J=0 | .990466 | — | 通过 |
+| 事后PV反事实 | 过去V差分A保持、J=0 | .694153 | — | 通过 |
+| 事后PV反事实 | Ay=+.2、J=0 | 1.131267 | 1.128389 | A拒绝 |
+| 事后PV反事实 | A=0、Jy=+1 | 1.027946 | 1.027612 | A拒绝 |
+| 事后PV反事实 | A=0、Jy=−1 | .953011 | — | 通过 |
+
+7/10只是五个命名假设在两个相关输入上的有限结果，不是独立飞行成功率或鲁棒不确定集证书。
+三组失败说明当前搜索范围和生成族仍未找到合法候选，不证明全部刹停轨迹无解，更不证明ICS。
+当前事后PV始终标反事实输入；它不参与因果模型的预测或可用性判定。
+
+过去V差分A为[−.085237267,−.491086827,−.361582126]m/s²，源V在33.208/33.228s，FSM构造时刻33.388s。
+把它保持至33.428s时年龄为.2s；J=0也是附加假设，不能称交接时刻的测量A/J。
+每个父行独立筛选构造时刻≤min(事件时刻,边界时刻)的历史，且由原V重算并核对模型A。
+录制到达上界与`FSM logged consumed PV`明确消费证据分开；禁止只取全文件最后一条FSM倒灌早时刻。
+可选历史坏行或缺失只让该假设unscored，其他假设继续，原PV不变。
+
+### 完整刹停接入现有离线选择器
+
+Replay增加`axis_stop_geometry_candidate`入口，直接审计整个C3刹停，不把第一段伪装成历史名义前缀。
+外部传来的native、request和终点均重新连续审计，不信缓存passed。
+还要求mode=axis_stop、实际总时长有限且大于0、末端V/A/J=0；普通数学边界可通过但不是停稳合同的输入仍拒绝。
+原完整前缀＋尾段入口保持原行为。缺A不由参考补0，候选被拒时只沿用仍合法的旧绝对相位。
+
+两条原边界合格曲线各复验12个情景，共24个静态声明夹具；观测PVA为理想参考值，地图为空占据加手工box的声明，不是飞机传感器证据。
+实际总长均5s，从33.428s至38.428s；接纳还需有限.5s终端窗口，因此当拍需图有效至38.928s。
+`.6s`新鲜度只说明观察足够近，不代表已知未来5.5s无障碍。
+覆盖取native实际段长之和；测试中的6s曲线即使标记5s，仍需6.5s覆盖，不额外硬编码5s全局限长。
+
+| 情景 | 离线预期及已核结果 |
+| --- | --- |
+| 声明足够长覆盖＋理想PVA | track → braking_tail → terminal_hold |
+| 仅新鲜快照或仅覆盖曲线 | map_prediction_horizon_unverified，无参考 |
+| 仅覆盖至曲线结束＋.5s | 接纳当拍可过，后续悬停窗口滑动后过期，无参考 |
+| 未声明已知自由空间、图过期、地图时钟不符 | 相应资格拒绝，无参考 |
+| 实测A缺失 | invalid_clock_or_state，不从参考补造 |
+| 晚.2s提交却仍给旧头PVA | handoff_state_mismatch，无参考 |
+| 当拍A偏差+.2 | tracking_state_mismatch，无参考 |
+| 终点被占据 | remaining_voxel_violation，无参考 |
+| wall过去10s但sim暂停 | 相位与参考均不推进 |
+
+有限终端窗口不是终端不变安全集；后续仍需持续合格观测与覆盖。
+`protect`仅表示选择器撤销可执行参考，未证明物理控制器已制动、悬停、回退或落地。
+本轮没有采用回执，也没有把wall离线计算耗时直接加到sim交接时刻。
+
+### 验证与最短接续
+
+12项新资格测试＋8项提交回放＋11项几何＋31项状态/预测，共62项通过。
+覆盖过去A的逐父行因果性、坏项隔离、C3/末端合同、原生段长、未知A、时钟/地图失效、候选重审与旧合法相位。
+冻结审计器已有逐段正时长检查，负时长反例走原拒绝路径，没有再实现一套多项式审计器。
+独立从源报告和降幂系数读回初末PVA/J、实际时长及选择结果，共81项通过；图已目视核对。
+CBC返回done但正文为空，不算审查；内置只读审查所指来源、局部异常和末端合同问题已修并补负例。没有联系已有聊天。
+
+在实现仓运行，输入为前两节保留的产物；不启动ROS或飞行：
+
+```sh
+STOP_REPORT_ROOT=apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6
+python3 apps/fishbot-control-station/workbench-tools/drone-stop-qualification.py --geometry-report "$STOP_REPORT_ROOT/stop-position-time-comparison.json" --stopping-report "$STOP_REPORT_ROOT/stopping-viability-evaluation.json" --output "$STOP_REPORT_ROOT/stop-boundary-temporal-qualification.json"
+python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-tests -p test_drone_stop_qualification.py
+python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-tests -p test_drone_committed_replay.py
+python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-tests -p test_drone_stop_geometry.py
+python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-tests -p test_drone_recorded_tracking.py
+```
+
+原忽略产物新增stop-boundary-temporal-qualification.json、stop-qualification-readback-checks.json及stop-boundary-sensitivity.png。
+本轮无Web改动，不重跑构建或浏览器；drone c866441清洁冻结，无训练、ROS节点、仿真、控制或新落地证据。
+下一项由根Codex做三组拒绝输入的有界提前交接对照，保留同类A/J假设与原PV来源，不预设提前必然可行。
+真实A/J、当前/未来自由图、终端区域、实时截止及物理跟踪/采用仍未获资格，M2部分完成，M3与动态闭环未通过。

@@ -1,5 +1,16 @@
 # 实施进度
 
+## 2026-10-24 M2非零边界与刹停时效离线资格
+
+- Current：有限A/J敏感性与时效分支可复验；10组中7组过原连续界、3组有界重解仍A拒绝。不是鲁棒通过率；原硬界和drone c866441冻结保持，M2部分完成、M3未启动、goal active。
+- Done：新drone-stop-qualification.py复用原MINCO/连续审计/Replay。原PV保持，过去A按父行的可用FSM证据重算后作为保持假设，缺失只跳该项；Replay接完整C3刹停不编造已执行前缀，并核mode及末端VAJ为0。12新＋8回放＋11几何＋31状态，共62项通过；81项独立源、PVAJ、时长/选择结果读回通过，科学图已目视核对。
+- 时效：两条原零假设候选各12个理想PVA/声明静态图情景。实际5秒＋终端.5秒，使33.428s接纳需覆盖到38.928s；仅新鲜、仅曲线覆盖、未知A、旧头晚交、A漂移、终点占据、时钟不符均不给参考。暂停sim不因wall10秒推进；实际6秒曲线不会被metadata5秒缩短覆盖。有限终端窗口后续仍过期，不冒称不变集或真实保护动作。
+- Issues：3组重解A峰1.035868/1.128389/1.027612m/s²；当前搜索族不能解，不证明全部轨迹无解或ICS。实测A/J、当前已知自由体积、未来动态图、终端安全区域、实时截止和采用/跟踪仍未验证。protect只表示离线参考撤销，无落地或受控制动证明；原748失败保持。
+- 审查：agent-link CBC返回done空正文，未计有效审查；内置只读审查完成，来源可用时刻、局部坏行隔离、完整刹停末端合同已修且补负例。未联系已有聊天。期间SO101已交付92c2962/197e343，保留其变更，本无人机提交只含三个工具/测试、方法文档和本计划。
+- 进行中改动保留：收尾复核又出现SO101“夹起后等待/原任务接续搬运”八文件：so101-runtime.cjs、task-runtime.cjs、runtime.test.cjs及RobotStation的execution.ts/.test.ts、index.tsx、station.ts/.test.ts。差异已定向读回为resume-carry能力/原ID标记及文档意图保留，不是本轮已验收成果；当前仍在改，不混入本提交。接续整合owner=根Codex，最短入口为runtime.test.cjs、execution.test.ts、station.test.ts及原站点无运动QA；物理消费与超时结果须回SO101实施计划，不能凭按钮或HTTP标记宣称搬运完成。其余新增文件以后续实时status为准。
+- 产物：原忽略目录workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/下stop-boundary-temporal-qualification.json、stop-qualification-readback-checks.json、stop-boundary-sensitivity.png。命令及十组表见docs/DRONE_RECORDED_STATE.md末节。无Web改动，不重复构建/浏览器验收；无训练、ROS节点、仿真或控制写。
+- Next：根Codex对三组拒绝输入做有界提前交接对照，保留同类假设、原硬界与原PV来源；先区分时刻/几何与当前生成族的限制，不盲加margin或解冻。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟与CapMesh PIT-004；新数值留项目，未写memory。
+
 ## 2026-10-24 SO101 原物理抓取证据展示
 
 - Current：RobotStation读取原status／report.skill_evidence，单列“曾确认持续持物”，不由close/hold阶段推断成功、不覆盖task终态。旧记录没有新证据就不补造；无人机显示路径保持。

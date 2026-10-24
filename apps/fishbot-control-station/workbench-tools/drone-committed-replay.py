@@ -65,6 +65,21 @@ class Replay:
         return {**result, "required_until_sim_s": required_until}
 
     def score(self, row):
+        if row.get("kind") == "axis_stop_geometry_candidate":
+            # A complete brake has no historical nominal prefix. Re-audit its
+            # supplied full PVA/J boundary, without the C2-prefix conversion.
+            request = {**row["request"], "required_continuity_order": 3}
+            native = row["native"]
+            result = self.audit.audit_trajectory(native, request, [], self.limits, row["hard_box"])
+            terminal = np.asarray(request["terminal_pva"], dtype=float)
+            jerk = np.asarray(request.get("terminal_jerk", [0.]*3), dtype=float)
+            duration = self.handoff.duration(native)
+            if (request.get("mode") != "axis_stop" or terminal.shape != (3, 3) or jerk.shape != (3,)
+                    or not np.all(np.isfinite(np.r_[terminal.ravel(), jerk, duration]))
+                    or duration <= 0 or np.max(abs(terminal[:, 1:])) > 1e-8 or np.max(abs(jerk)) > 1e-8):
+                result["passed"] = False
+                result["failed_checks"].append("axis_stop_contract")
+            return native, result
         native = complete(row)
         # Re-audit mutable input; never trust a cached 'passed' boolean.
         request = {**row["request"], "required_continuity_order": 2,
