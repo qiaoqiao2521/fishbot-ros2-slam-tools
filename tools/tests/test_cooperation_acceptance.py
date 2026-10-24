@@ -28,6 +28,57 @@ def baseline_reports():
     return reports
 
 
+class ObserverStopTests(unittest.TestCase):
+    def test_deduplicated_manifest_survives_eviction_from_a_real_file_tail(self):
+        source=importlib.util.spec_from_file_location('tail_metadata_oracle',TOOLS/'cooperation_oracle_base.py')
+        oracle=importlib.util.module_from_spec(source);source.loader.exec_module(oracle)
+        first={'source':{'manifest':{'world_xml':'/fixture.xml'}}}
+        records=[{'topic':'physics','payload':first}]+[{'topic':'unused','payload':{}}]*20001
+        for i in range(62):
+            sample={'stamp':i*.02,'wall_time':99.9,'independent_crosscheck':True,
+                'car_speed':0.,'yaw_rate':0.,'raw':{'finite':True,'car_hold':True,
+                'qvel6':[0.]*6,'docking_guard':{'enabled':False,'tripped':False}}}
+            records.append({'topic':'physics','source_stamp':i*.02,'received_wall_time':99.9,'payload':sample})
+        records.append({'topic':'clock','source_stamp':1.22,'received_wall_time':99.9})
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'observer.jsonl'
+            path.write_text(''.join(json.dumps(row)+'\n' for row in records))
+            tail=acceptance.EvidenceTail(path);tail.oracle=oracle;tail.refresh()
+            audit={'tray_offset_from_base_footprint':[],'half_extents':[]}
+            with patch.object(oracle,'scene_audit',return_value=audit) as query, \
+                    patch.object(oracle,'physical_sample',side_effect=lambda row,*args:row['payload']), \
+                    patch.object(acceptance.time,'time',return_value=100.):
+                self.assertIsNotNone(tail.quiet_proof(minimum_source_s=1.))
+                query.assert_called_once_with(first)
+                tail.audit=None;tail.source_reference=None
+                self.assertIsNone(tail.quiet_proof(minimum_source_s=1.))
+
+    def test_late_gap_requires_a_new_full_stop_before_capture_can_close(self):
+        source=importlib.util.spec_from_file_location('stop_window_oracle',TOOLS/'cooperation_oracle_base.py')
+        oracle=importlib.util.module_from_spec(source);source.loader.exec_module(oracle)
+        tail=acceptance.EvidenceTail(Path('/unused-observer-stop'))
+        tail.oracle=oracle
+        tail.audit={'tray_offset_from_base_footprint':[], 'half_extents':[]}
+        def fill(stamps):
+            tail.records.clear()
+            for stamp in stamps:
+                sample={'stamp':stamp,'wall_time':99.9,'independent_crosscheck':True,
+                    'car_speed':0.,'yaw_rate':0.,'raw':{'finite':True,'car_hold':True,
+                    'qvel6':[0.]*6,'docking_guard':{'enabled':False,'tripped':False}}}
+                tail.records.append({'topic':'physics','source_stamp':stamp,'received_wall_time':99.9,'payload':sample})
+            tail.records.append({'topic':'clock','source_stamp':stamps[-1],'received_wall_time':99.9})
+        stamps=[i*.02 for i in range(101)]+[2.14+i*.02 for i in range(37)]
+        with patch.object(oracle,'physical_sample',side_effect=lambda row,*args:row['payload']), \
+                patch.object(acceptance.time,'time',return_value=100.):
+            fill(stamps)
+            self.assertIsNotNone(tail.quiet_proof())
+            self.assertIsNone(tail.quiet_proof(minimum_source_s=1.))
+            fill(stamps+[2.88+i*.02 for i in range(15)])
+            proof=tail.quiet_proof(minimum_source_s=1.)
+            self.assertIsNotNone(proof)
+            self.assertEqual(proof['continuous_quiet']['required_duration_s'],1.)
+
+
 class PanelTests(unittest.TestCase):
     def test_fixed_counts_capture_tube_seeds_and_original_full_spawn(self):
         panel=acceptance.validate_panel(acceptance.build_panel())

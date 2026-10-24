@@ -77,9 +77,11 @@ export function timingWindow(item: TimingCase, mode: 'route' | 'task') {
   return { origin, budget, elapsed, limit, spans }
 }
 
-export type DeliveryTimingSource = 'j100' | 'mecanum'
+export type DeliveryTimingSource = 'j100' | 'mecanum' | 'mecanum2d' | 'mecanum3d'
 const TIMING_SOURCES: Record<DeliveryTimingSource, string> = {
   j100: '/workbench/delivery-timing.json', mecanum: '/workbench/mecanum-delivery-timing.json',
+  mecanum2d: '/workbench/mecanum-planar-queued-delivery-timing.json',
+  mecanum3d: '/workbench/mecanum-lidar3d-delivery-timing.json',
 }
 
 export async function readDeliveryTiming(signal?: AbortSignal, fetcher: typeof fetch = fetch, source: DeliveryTimingSource = 'j100') {

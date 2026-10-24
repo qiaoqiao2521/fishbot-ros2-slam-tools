@@ -86,15 +86,19 @@ export FISHBOT_COOP_PYTHON="$HOME/.cache/so101-colab/planning-venv/bin/python"
 
 四轮编码器按关节名读取，避开中间48个被动自由度。里程计只积分编码器，真值仅评分；默认使用原生AMCL OmniMotionModel。配送继续复用RPP的vx/wz，横移运动面板与自主横移导航分别验收。原FishBot/J100默认与历史评分保持。
 
+独立载货查询复用项目已有`pair_clearance`：严格分离箱体使用保守分离下界，其余走原生查询。源placement路径算法、0.2mm载货净距和20mm查询上限保持，距离下界不称精确表面距离。载货源码以私有模块副本注入该查询接口，不修改SO101源或共享import；执行世界、查询模型和原臂检查器的flags均保持。原生`nativeccd`曾作为候选，但另一快照仍出现18.6mm分离报零，已撤回；不是已上线的修复。[官方3.3.7接口说明](https://mujoco.readthedocs.io/en/3.3.7/APIreference/APIfunctions.html#mj-geomdistance)与两份同帧重放/近接负例见[当前计划](../plans/mecanum-consolidation-20261024/progress.md)。
+
 2026-10-24原生运动面板16/16通过：空载/载货分别执行直行、倒行、左右横移、正反旋转、斜行与弧线。请求横移.06m/s，实际约.0507m/s；6秒编码器端点偏差约18.2mm。非地面碰撞与500Hz载货支撑缺失均0。载货初始摆放仅为接触测试，不代替机械臂交接。
 
 同日移动Nav2探针通过：两个25cm目标的原生Goal均status4，实际位移21.8/24.5cm，终点XY2.80/3.30cm。原生DDS见证器确认两阶段控制器各自消费计划，最终hold与连续.7源秒静止、实例清理通过。该探针对应初版安装；新安装另通过16项运动和原独立短停靠评分。
 
 完整E轮在同一146/9116实例完成开放通道B→A，原独立K与目的地评分2/2通过。B/A分别用时232.320/230.112墙秒，配送预算内35.241/22.042秒，最终XY误差2.064/2.246cm，yaw.00032/.00342rad；每单仍360秒、路线120秒，原.04m/.05rad与所有交接/载货条件保持。两次start、一次显式reset、零cancel，540.261秒收尾后实例关闭。
 
-本轮使用ideal工位观测，停车保护介入.88/.40源秒；原物理序号缺失38/28，采样不插值。它只证明本轮仿真，不能称纯视觉、生产稳定、真机或sim-to-real成功。3D配置的场景生成与5760射线查询通过，本次完整配送实际使用2D雷达。所有早期失败、源边界和清理证据见[接续进度](../plans/mecanum-consolidation-20261024/progress.md)。
+P2使用ideal工位观测，停车保护介入.88/.40源秒；原物理序号缺失38/28，采样不插值。它只证明该轮2D仿真，不能称纯视觉、生产稳定、真机或sim-to-real成功。P3的3D完整配送与同源码2D回归单独记录，不能把P2成功当作新配置验收。所有早期失败、源边界和清理证据见[接续进度](../plans/mecanum-consolidation-20261024/progress.md)。
 
-成果页的配送记录可切换“J100 · 原完整K”和“麦克纳姆 · 配送验收”，共用[耗时报告合同](DELIVERY_TIMING.md)。旧J100记录保持；其占用通道与本轮开放通道不同，不把这两份耗时当作车型A/B对照。
+成果页保留原J100与麦轮P2历史，另列本轮2D回归和3D雷达记录，共用[耗时报告合同](DELIVERY_TIMING.md)。旧J100的占用通道与本轮开放通道不同，不把两份耗时当作车型A/B对照。
+
+验收记录在同一observer文件的最新1源秒连续停稳后才关闭。曾经达到的最长停稳不能覆盖后续采样间隙，原评分器、时效与1秒要求保持；额外取证计入原360秒任务预算。文件尾单独缓存首份来源，避免去重manifest被环形缓冲淘汰后收尾失败。`capture-stop.json`单列该证明，不冒充控制器消费回执。
 
 复核接触面板和合同：
 
@@ -103,3 +107,19 @@ export FISHBOT_COOP_PYTHON="$HOME/.cache/so101-colab/planning-venv/bin/python"
 source /opt/ros/jazzy/setup.bash
 python3 -B -m unittest tools.tests.test_cooperation_mecanum
 ```
+
+### 3D 雷达配送
+
+复用现有16×360原生射线、PointCloud2、全局/局部costmap及Collision Monitor；AMCL继续使用`/scan`。这是混合2D定位与3D障碍感知，未标定某款实物雷达。
+
+```bash
+./fishbot.sh cooperation prepare \
+  --so101-project ../so101 \
+  --scene-profile tools/config/cooperation_profiles/robot_base_mecanum-lidar3d-transport.json \
+  --factory-config tools/config/factory_delivery/line-side-open.json \
+  --queued-ros-dispatch --output "$NEW_SCENE"
+```
+
+`--queued-ros-dispatch`显式启用项目已有的接收队列。接收线程不写物理状态，由主线程应用消息，保留原来源时间、接收时刻、看门狗和QoS；默认仍为inline。物理保持500Hz，实际scan与点云均10Hz；不省略传感器或关闭相机。原麦轮模型本来没有未消费的原生rangefinder声明，不能把该模型不存在的测距当作优化收益。
+
+H轮3D B→A原独立评分2/2通过：204.051/200.351墙秒，末XY2.386/2.281cm；原360/120秒、完整几何与交接门槛保持。实收4434帧点云及三个原生订阅端，证明生产与接入，不等于逐周期消费回执。guard启用但观察到介入0，ideal工位观测仍保留。同源码2D B→A也2/2通过：200.906/212.952墙秒，末XY1.475/2.353cm，guard介入.78/0源秒。四单原评分离线复算一致，3D缺失序号13/25、2D30/58；原失败与缺口均保留。1758项反馈、2项原生几何、生产构建与13项浏览器行为通过；最终交付见[当前进度](../plans/mecanum-consolidation-20261024/progress.md)。

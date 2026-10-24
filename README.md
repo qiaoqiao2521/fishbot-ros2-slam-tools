@@ -11,7 +11,7 @@ Current planning: [continuous-world operation and visual regression](plans/conti
 
 Read-only [delivery timing](docs/DELIVERY_TIMING.md) is available on `/results`: native intervals, original budgets, sampling gaps and a rebuildable SQLite index.
 
-The legacy [mecanum ROS base](docs/MECANUM.md) is maintained here. Use `./fishbot.sh mecanum info` or `build`; its MuJoCo transport model is not yet accepted.
+The [mecanum ROS base](docs/MECANUM.md) shares the MuJoCo, Nav2 and SO101 workflow. Native contact motion passed. Both 2D and 3D lidar configurations completed B→A delivery under the original scoring limits. Use `./fishbot.sh mecanum info` or `build`; these results cover simulation only.
 The SpecMesh plan is written; implementation has not started. Its first slice imports existing delivery records into a read-only timing report.
 The [workbench rebuild](plans/workbench-rebuild-20261018/task_plan.md) remains the UI, runtime-contract, rendering, and adapter baseline.
 

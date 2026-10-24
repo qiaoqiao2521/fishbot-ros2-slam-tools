@@ -1,6 +1,6 @@
 # 配送耗时报告
 
-成果页 `/results#workbench-delivery-timing` 共用一个面板，选择原J100完整K或麦克纳姆B→A记录。读取、切换、导入和下载只操作摘要，不执行ROS动作，也不重新评分。旧J100占用通道和麦轮开放通道不同，不能直接作为车型A/B性能对照。
+成果页 `/results#workbench-delivery-timing` 共用一个面板，选择原J100完整K、麦轮P2历史、本轮2D回归或3D雷达B→A记录。读取、切换、导入和下载只操作摘要，不执行ROS动作，也不重新评分。旧J100占用通道和麦轮开放通道不同，不能直接作为车型A/B性能对照。
 
 ## 只读导入
 
@@ -16,6 +16,8 @@ python3 -B tools/cooperation_timing.py \
 输入沿用原 runner：`result.json`、`declaration.json`、`manifest-used.json`、`order-N/markers.json`、`order-N/observer/observer.jsonl`，以及可选的 `runtime/loop-timing.json`。首版面向完整 K 的相同记录合同，尚未自动发现其他历史格式。
 
 麦轮沿用同一命令，把public-output改为`apps/fishbot-control-station/frontend/public/workbench/mecanum-delivery-timing.json`，不覆盖原J100文件。标题从实际车型与已执行订单生成，案例保留scene_id；未知字段不补成成功。
+
+P3两组另存`mecanum-planar-queued-delivery-timing.json`和`mecanum-lidar3d-delivery-timing.json`。它们共用修复源码与queued接收配置；P2旧摘要保持。车型、sensor、任务UUID与原裁决来自实际记录，不由菜单名称推定。
 
 导入器逐行处理 JSONL。坏记录被跳过并计数；缺项显示未知，案例导入标为 partial。原评分和失败不变。命令退出不等于导入完整，以 warnings 和每单 import_status 为准。
 

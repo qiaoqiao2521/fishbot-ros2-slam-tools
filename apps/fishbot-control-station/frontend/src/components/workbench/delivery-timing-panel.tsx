@@ -69,7 +69,7 @@ export function DeliveryTimingPanel({ initialReport }: { initialReport?: unknown
   return <Card className="delivery-timing-panel" id="workbench-delivery-timing" aria-labelledby="delivery-timing-heading">
     <div className="delivery-timing-heading"><div><span className="delivery-timing-eyebrow"><Timer size={14} aria-hidden="true" />F1 配送 · 时间分析</span>
       <CardTitle id="delivery-timing-heading">120 秒，花在了哪里</CardTitle><p>原生动作、阶段采样与独立物理结果放在同一时间轴，保留各自含义。</p></div>
-      <div className="delivery-timing-actions"><label>配送记录<select aria-label="选择配送记录" value={source} disabled={loading} onChange={event => { const value = event.target.value as DeliveryTimingSource; setSource(value); void load(undefined, value) }}><option value="j100">J100 · 原完整 K</option><option value="mecanum">麦克纳姆 · 配送验收</option></select></label>
+      <div className="delivery-timing-actions"><label>配送记录<select aria-label="选择配送记录" value={source} disabled={loading} onChange={event => { const value = event.target.value as DeliveryTimingSource; setSource(value); void load(undefined, value) }}><option value="j100">J100 · 原完整 K</option><option value="mecanum">麦克纳姆 · P2 历史</option><option value="mecanum2d">麦克纳姆 · 2D 回归</option><option value="mecanum3d">麦克纳姆 · 3D 雷达</option></select></label>
         <Button size="sm" variant="outline" disabled={loading} onClick={() => void load()}><RefreshCw size={14} aria-hidden="true" />{loading ? '读取中' : '刷新报告'}</Button>
         <label className="delivery-timing-upload"><FileUp size={14} aria-hidden="true" />导入 JSON<input type="file" accept=".json,application/json" aria-label="导入配送耗时 JSON" onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void load(file) }} /></label></div>
     </div>

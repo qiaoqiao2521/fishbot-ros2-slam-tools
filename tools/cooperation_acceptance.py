@@ -263,6 +263,7 @@ class EvidenceTail:
 
     def __init__(self,path):
         self.path=path;self.offset=0;self.partial=b'';self.records=deque(maxlen=20000);self.oracle=None;self.audit=None
+        self.source_reference=None
         self.native_statuses=OrderedDict()
 
     def remember_native(self,record):
@@ -282,6 +283,9 @@ class EvidenceTail:
         for line in lines:
             if line:
                 record=json.loads(line);self.records.append(record);self.remember_native(record)
+                if (self.source_reference is None and record.get('topic')=='physics'
+                        and isinstance(record.get('payload',{}).get('source',{}).get('manifest'),dict)):
+                    self.source_reference=record['payload']
     def native(self):
         for record in self.records:
             self.remember_native(record)
@@ -295,15 +299,18 @@ class EvidenceTail:
         pa=a['payload']['pose']['pose']['position'];pb=b['payload']['pose']['pose']['position']
         speed=math.sqrt(sum((pb[k]-pa[k])**2 for k in ('x','y','z')))/dt
         return active[0] if speed>.02 else None
-    def quiet_proof(self):
+    def quiet_proof(self, minimum_source_s=.7):
         if self.oracle is None:
             spec=importlib.util.spec_from_file_location('acceptance_independent_physics',Path(__file__).with_name('cooperation_oracle_base.py'))
             self.oracle=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.oracle)
         records=list(self.records);physics=self.oracle.records_by_topic(records,'physics')
         if not physics:return None
-        if self.audit is None:self.audit=self.oracle.scene_audit(physics[0]['payload'])
+        if self.audit is None:
+            reference=self.source_reference or physics[0]['payload']
+            if not isinstance(reference.get('source',{}).get('manifest'),dict):return None
+            self.audit=self.oracle.scene_audit(reference)
         truth=self.oracle.records_by_topic(records,'truth');cargo=self.oracle.records_by_topic(records,'cargo')
-        clocks=self.oracle.records_by_topic(records,'clock');gate=self.oracle.Gate(.7);last=None
+        clocks=self.oracle.records_by_topic(records,'clock');gate=self.oracle.Gate(minimum_source_s);last=None
         for record in physics[-150:]:
             sample=self.oracle.physical_sample(record,truth,cargo,clocks,
                 self.audit['tray_offset_from_base_footprint'],self.audit['half_extents'])
@@ -316,7 +323,7 @@ class EvidenceTail:
             gate.update(sample['stamp'],valid);last=sample
         fresh=bool(last and clocks and 0<=time.time()-last['wall_time']<=.5
                    and -.1<=clocks[-1]['source_stamp']-last['stamp']<=.25)
-        if fresh and gate.started is not None and last['stamp']-gate.started>=.7:
+        if fresh and gate.started is not None and last['stamp']-gate.started>=minimum_source_s:
             return {'continuous_quiet':gate.result(),'source_stamp':last['stamp'],'received_wall_time':last['wall_time']}
         return None
 

@@ -34,7 +34,7 @@ j100_profile=out/'j100-profile.json';j100_profile.write_text(json.dumps({'vehicl
 j100=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
     output=out/'j100',scene_profile=j100_profile))
 lean=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
-    output=out/'lean',scene_profile=j100_profile,omit_unused_native_rangefinders=True))
+    output=out/'lean',scene_profile=j100_profile,omit_unused_native_rangefinders=True,queued_ros_dispatch=True))
 reverse=prepare(SimpleNamespace(so101_project=project.parent/'so101',fishbot_project=project,
     output=out/'reverse',scene_profile=j100_profile,staging_reversing=True))
 reverse_nav=yaml.safe_load(Path(reverse['nav2_yaml']).read_text())
@@ -233,6 +233,9 @@ result={'egress':{'legacy_absent':'egress_pose' not in m, 'pose':j100.get('egres
         'installed_docking_version':ET.parse('/opt/ros/jazzy/share/opennav_docking/package.xml').getroot().findtext('version'),
         'registered_docking_plugins':[node.get('type') for node in ET.parse('/opt/ros/jazzy/share/opennav_docking/plugins.xml').getroot().iter('class')]}
 result['sensor_compute']=sensor_compute
+result['queued_dispatch']={'default':j100.get('queued_ros_dispatch',False),
+    'candidate':lean.get('queued_ros_dispatch'),
+    'persisted':json.loads((out/'lean/scene-manifest.json').read_text()).get('queued_ros_dispatch')}
 result['staging_reverse']=reverse_evidence
 print('RESULT_JSON:'+json.dumps(result))
 '''
@@ -344,6 +347,10 @@ print('RESULT_JSON:'+json.dumps(result))
                          self.evidence['passage_progress_checker']['required_movement_angle'])
         for name in ('required_movement_radius', 'movement_time_allowance'):
             self.assertEqual(checker[name], self.evidence['source_progress_checker'][name])
+
+    def test_queued_dispatch_is_explicit_and_reaches_the_saved_manifest(self):
+        self.assertEqual(self.evidence['queued_dispatch'],
+                         {'default':False,'candidate':True,'persisted':True})
 
     def test_native_path_validity_condition_preserves_default_actions_and_recoveries(self):
         behavior = self.evidence['behavior']

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.util
 import json
 import math
 from pathlib import Path
@@ -15,6 +16,21 @@ import time
 import xml.etree.ElementTree as ET
 
 from cooperation_scene import frozen_car_geoms, source_modules
+
+
+class _PayloadQueryBackend:
+    """Keep the source planner; reuse proven separation for box distances."""
+    def __init__(self, native):
+        self.native = native
+
+    def __getattr__(self, name):
+        return getattr(self.native, name)
+
+    def mj_geomDistance(self, model, data, a, b, cutoff, fromto):
+        if fromto is not None:
+            return self.native.mj_geomDistance(model, data, a, b, cutoff, fromto)
+        from cooperation_geometry_check import pair_clearance
+        return pair_clearance(model, data, a, b, cutoff)
 
 
 def query_approach(manifest, q6, car_pose, *, check, timeout_s=30.):
@@ -91,6 +107,13 @@ class ArmPlanner:
         import numpy as np
 
         self.mujoco, self.np = mujoco, np
+        # Source placement has no injectable distance API. Load a private copy
+        # of that same file, leaving its shared import and native module alone.
+        spec = importlib.util.spec_from_file_location(
+            '_fishbot_payload_placement', self.modules['placement'].__file__)
+        self.payload_placement = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.payload_placement)
+        self.payload_placement.mujoco = _PayloadQueryBackend(mujoco)
         self.common = mujoco.MjModel.from_xml_path(manifest["world_xml"])
         self.station = np.asarray(manifest["station_offset"], dtype=float)
         self.home = np.asarray(manifest["arm_home_qpos6"], dtype=float)
@@ -124,6 +147,10 @@ class ArmPlanner:
             "margin_m": self.closed_checker.margin_m,
             "distance_cap_m": self.closed_checker.distance_cap_m,
             "beyond_cap": "saturated_not_measured_clearance",
+            "payload_query_backend": "disjoint_box_projection_lower_bound_else_native",
+            "payload_source_isolated": True,
+            "payload_distance_semantics": "conservative_lower_bound_not_exact_distance",
+            "payload_margin_m": .0002, "payload_distance_cap_m": .02,
             "plant_flags_changed": False}
         self.car_pose = self.np.asarray(car_pose, dtype=float).tolist()
 
@@ -200,7 +227,7 @@ class ArmPlanner:
         forces = grasp.grasp_contacts(self.contact, execution)
         if min(forces.values()) <= .02:
             raise RuntimeError(f"Transport snapshot has no dual-finger contact: {forces}")
-        paths, report = self.modules["placement"].plan_transport(
+        paths, report = self.payload_placement.plan_transport(
             self.contact, self.rig, execution, self.closed_checker,
             solve_ik=grasp.solve_pinch_ik, pinch_point=grasp.PINCH_POINT)
         report["arm_query_clearance"] = self.query_clearance.copy()

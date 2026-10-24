@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "vehicle": "robot_base_mecanum",
+  "sensors": "lidar3d",
+  "task": "transport"
+}

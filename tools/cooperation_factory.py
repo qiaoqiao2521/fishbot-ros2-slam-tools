@@ -105,7 +105,7 @@ def loaded_code_reference():
                cooperation_factory_scene, cooperation_workflow)
     module_files = {module.__name__: str(Path(module.__file__).resolve()) for module in modules}
     runtime_files = [ROOT/'tools'/name for name in
-                     ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_mecanum.py', 'cooperation_lidar.py', 'cooperation_oracle.py',
+                     ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_mecanum.py', 'cooperation_lidar.py', 'cooperation_geometry_check.py', 'cooperation_oracle.py',
                       'cooperation_oracle_base.py', 'cooperation_core.py', 'cooperation_arm.py',
                       'cooperation_factory_policy.py', 'cooperation_delivery_route.py')]
     paths = [Path(path) for path in module_files.values()]+runtime_files
@@ -537,10 +537,16 @@ def run(args, manifest, declaration):
                 time.sleep(.1)
             if terminal is None:
                 raise TimeoutError('Original 360s task limit exceeded; no automatic resend')
-            marker('full_finished', scope='transport')
             save(current_folder/'terminal-state.json', terminal)
             proof = independent_cleanup()
             save(current_folder/'cleanup-quiet.json', proof)
+            def captured_stop():
+                tail.refresh()
+                return tail.quiet_proof(minimum_source_s=1.)
+            capture = wait_until(captured_stop, 20, description='Observer trailing one-second stop incomplete')
+            save(current_folder/'capture-stop.json', capture)
+            marker('full_finished', scope='transport')
+            task_elapsed = time.monotonic()-order_started
             marker('cleanup_checked')
             signal_observer_once(observer)
             code = finish_observer(observer, 120)
