@@ -1,5 +1,14 @@
 # 实施进度
 
+## 2026-10-25 M2显式A合同原矩阵覆盖
+
+- Current：原六cut×四有限AJ画像24个独立输入各两后端，共48搜索，Python24/24、Root24/24过原静态盒连续硬门，未执行/未评分0。仅本离线数值片完成；真实接管0，M2部分完成、M3冻结、goal active。
+- Done：直接复用7d94f5a的run_search与原boundary_request/因果PV，不改产品源码/默认；Y内点、Z域[.1,1.2]、inset2mm、二点差分、60iter、实际A=1不等式及原V1.8/A1/Z2.2保持。六组逐项落盘，原报告/负对照均保留。
+- 结果：A范围Py .486875–.968077、Root .485165–.999999999998801；最紧#7外Ay仍仅1.199041e-12余量。优化success6/8，其余18/16迭代上限保留。单次各格Python先，仅记完整wall范围2.663–7.603/.407–1.794s，不称稳定提速/实时；Root与Python最终同系数指标差≤9.992007e-16。
+- 验证：根580项原输入/48唯一格/实际A消费/系数初末PVA与初J/合A读回通过，最紧项重跑原硬审计和knots；全48原审计及knots另独立重算逐字段同，passed=true/errors=[]，ps无metrics残留。首PVA误差≤1.110223e-16、末≤3.858025e-15，会话退出48/48；V峰1.488018、Z最高2.198000000007，YZ余量仍约2mm。PNG目视，原独立审查关于固定顺序与漏格统计的边界已注明。
+- 交接：docs/DRONE_RECORDED_STATE.md末节保六行表和逐cut原CLI。原忽略目录新增native-extrema-original-matrix.json、root-readback、独立readback、PNG/SVG和一次性调用脚本；原始数据/生成报告不入Git。未改无人机执行器、Web/服务或上游；无训练、ROS节点、仿真、控制、新飞行或落地。
+- Next/owner：根Codex按已知缺失设计最小接管证据/事件合同，区分真实AJ、clock/frame、已知自由图revision/有效期、末端区域和实际采用ACK的已有/派生/新采集字段。停止扩同类数值网格，不借未来帧/空占据/wall→sim补资格。c866441/e0444f6保持清洁冻结；knowledge_status=already_covered，沿用Wiki§20和CapMesh PIT-004，数值留项目，不更新memory。
+
 ## 2026-10-24 M2原生进程复用与迟交时效
 
 - Current：最紧#7/zeroAJ同输入三组成对的request/pieces/hard_audit/axis_knots完全相同；含完整进程生命周期的wall中位2.891142→1.824805s，少36.88%。仍非实时/实际接管资格，M2部分完成、M3冻结、goal active。

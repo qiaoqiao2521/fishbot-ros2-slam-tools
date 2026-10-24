@@ -892,3 +892,43 @@ python3 -m unittest test_drone_extrema_trace test_drone_extrema_search test_dron
 ```
 
 Next/owner：根Codex覆盖原六cut×四画像的24个独立重锚输入，保原门/来源和失败，先核新显式A合同在完整原矩阵的适用域；不新增eps或margin网格。真实A/J、时间有效地图、终端、跟踪及按时采用仍未获资格。drone c866441冻结，M2部分完成、M3不启动；本轮无无人机Web/服务、训练、ROS节点、仿真、控制、新飞行或落地证据。
+
+## 显式A合同的原24输入覆盖（2026-10-25）
+
+本片直接复用已提交的`run_search`，依次读取原六cut、每cut四画像的全部24个唯一`boundary_request`。每个输入各做一次Python和RootFinder搜索，共48次。没有改产品源码、算法、默认后端或默认约束开关；只在忽略目录保存批量调用与读回产物。
+
+输入仍是原因果PV来源和有限A/J假设，使用原seed而不是此前优化结果。维持Y内点、Z时间域[.1,1.2]、2mm规划目标、60iter、原二点差分及显式A≤1不等式；硬V1.8/A1/Z2.2及原盒均未改。
+原报告24个键完整无重复。预期48格，实际启动48、最终审计48、未执行0、未评分0；没有筛掉原难例或增加eps/margin网格。
+
+| 原输入标识 | Python A峰范围 m/s² | RootFinder A峰范围 m/s² | 原门过数Py / Root |
+| --- | ---: | ---: | ---: |
+| reference-4-h0.1 | .486875–.523499 | .485165–.541638 | 4/4 / 4/4 |
+| reference-4-h0.2 | .503212–.540698 | .506150–.542549 | 4/4 / 4/4 |
+| reference-4-h0.4 | .559534–.593243 | .561711–.592997 | 4/4 / 4/4 |
+| reference-4-h0.6 | .653619–.702950 | .653613–.702456 | 4/4 / 4/4 |
+| reference-4-h0.8 | .713678–.791296 | .760734–.778810 | 4/4 / 4/4 |
+| reference-7-h0.05 | .953295–.968077 | .962426–.999999999998801 | 4/4 / 4/4 |
+
+Python和RootFinder各24/24通过原最终审计。优化success分别6/24与8/24，余下18/16均保留Iteration limit reached，不把可行候选改称收敛最优解。
+Root最紧项仍是#7/outward_y_A，A余量1.199041e-12m/s²；它不构成状态不确定性或跟踪误差预算，也不支持把四个A/J点扩称连续鲁棒域。
+
+本轮固定Python先、Root后，每格只跑一次。完整wall范围分别2.662528–7.603339s、.406520–1.793925s，仅作本次运行记录，不作重复运行稳定性、配对提速或实时性成绩。
+两方完整候选不同；Root每条最终诊断与原Python重算的量差最大9.992007e-16，不要求两方优化系数相同。会话退出48/48；metrics与exchange计时仍嵌套，不相加。
+
+根580项独立读回通过：48唯一格、原source字段和实际A=1消费、从原生系数核初末PVA/初J、合A极值，以及最紧项完整原审计和axis_knots。
+初态PVA最大误差1.110223e-16，末态3.858025e-15；合A重新求根与已存Python结果逐值相同。全48条原审计/axis_knots另有独立复核，逐字段相同，readback为passed=true/errors=[]；ps快照无metrics进程残留。
+独立连续V峰最高1.488018103m/s，Z全范围[1.861824890,2.198000000007]m；Y/Z上面最小余量分别.0019999999999993/.0019999999930476m，仍只有约2mm。没有给这些余量补入未测的机体跟踪包络。
+图`native-extrema-original-matrix.png`/`.svg`同时显示原无A不等式的Python结果和两方新结果；它是离线多项式比较，不是实际飞行曲线。
+
+原报告与本轮所有失败历史均保留。本轮文件为`native-extrema-original-matrix.json`、`native-extrema-original-matrix-root-readback.json`、`native-extrema-original-matrix-independent-readback.json`，位于原忽略目录；不将原数据、生成报告或运行状态提交入Git。
+复验逐cut调用现有CLI，使用新输出名以保留本轮成绩：
+
+```sh
+STOP_REPORT_ROOT=apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6
+for STOP_VARIANT in reference-4-h0.1 reference-4-h0.2 reference-4-h0.4 reference-4-h0.6 reference-4-h0.8 reference-7-h0.05; do
+  python3 apps/fishbot-control-station/workbench-tools/drone-extrema-qualification.py --compare-search --variant-id "$STOP_VARIANT" --profiles zero_A_J outward_y_A outward_y_J inward_y_J --constrain-acceleration --repetitions 1 --reanchor-report "$STOP_REPORT_ROOT/recorder-PV-reanchored-stopping-tails.json" --output "$STOP_REPORT_ROOT/original-matrix-rerun-$STOP_VARIANT.json"
+done
+```
+
+以上审计仍在声明静态盒和空占据夹具下执行，没有观测完整地图、未来自由空间或实际采用。默认None/原Python/不启用新约束保持；M2仅数值覆盖片完成，动态闭环仍未通过。
+Next/owner：根Codex停止扩同类数值网格，按已知缺失设计最小可补录接管事件合同：真实A/J的来源与有效性、原生clock/frame、已知自由图revision/有效期、末端区域，以及候选产生→审计→提交→实际采用回执。区分已有字段、可派生字段与必须新采集字段；不以未来帧、空占据或wall→sim换标补资格。冻结期只做离线协议和失效诊断，drone c866441及GCOPTER e0444f6保持，M3不启动，无Web/服务、训练、ROS节点、仿真、控制、新飞行或落地。
