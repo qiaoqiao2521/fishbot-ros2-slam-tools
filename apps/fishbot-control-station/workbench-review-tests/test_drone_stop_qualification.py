@@ -192,5 +192,125 @@ class StopTemporalTests(unittest.TestCase):
         self.assertEqual(result["actual_qualification"]["measured_A_J"], "unrecorded")
 
 
+class EarlierHandoffTests(unittest.TestCase):
+    def evidence(self):
+        case = past_case(1., .8, 1.3)
+        case["input_state"]["available_by_sim_s"] = 1.02
+        case["previous_available_state"]["available_by_sim_s"] = .82
+        oracles = [{"oracle_source_sim_s": t, "oracle_position": [2.+t, 1., 1.8],
+            "oracle_velocity": [1., .4, 0.]} for t in [1.1, 1.2]]
+        return {"archive_task_id": "fixture", "forecast": {"cases": [case, *oracles]}}
+
+    def source(self, directory):
+        original = {"archive_task_id": "fixture", "hard_box": fixture.BOX, "hard_limits": fixture.LIMITS,
+            "rows": [None, {"variant": "cached_source_pv", "pv_at_sim_s": 1.,
+                "baseline": {"request": fixture.boundary()}}]}
+        path = Path(directory)/"geometry.json"; path.write_text(json.dumps(original))
+        return path
+
+    def test_recorder_available_prediction_is_not_earlier_fsm_consumption(self):
+        data = self.evidence(); before = copy.deepcopy(data)
+        inputs = module.handoff_inputs(data, "fixture", 1., 1.1)
+        predicted = inputs["causal_acceleration"]
+        self.assertEqual(predicted["status"], "qualified_counterfactual")
+        self.assertEqual(predicted["available_by_sim_s"], 1.02)
+        self.assertEqual(predicted["pair_locator_fsm_sim_s"], 1.3)
+        self.assertIn("not earlier planner consumption", predicted["scope"])
+        self.assertEqual(data, before)
+
+    def test_future_wrong_frame_or_conflicting_pair_does_not_qualify_prediction(self):
+        original = self.evidence()
+        for change in ["future", "previous_future", "previous_missing", "frame", "epoch", "conflict"]:
+            data = copy.deepcopy(original); case = data["forecast"]["cases"][0]
+            if change == "future": case["input_state"]["available_by_sim_s"] = 1.2
+            elif change == "previous_future": case["previous_available_state"]["available_by_sim_s"] = 1.2
+            elif change == "previous_missing": case["previous_available_state"].pop("available_by_sim_s")
+            elif change == "frame": case["input_state"]["velocity_frame_id"] = "body"
+            elif change == "epoch": case["previous_available_state"]["epoch"] = 1
+            else:
+                other = copy.deepcopy(case); other["input_state"]["velocity"][1] += .1
+                data["forecast"]["cases"].append(other)
+            with self.subTest(change=change):
+                inputs = module.handoff_inputs(data, "fixture", 1., 1.1)
+                self.assertEqual(inputs["causal_acceleration"]["status"], "unscored")
+                self.assertEqual(inputs["retrospective_source_pv"]["status"], "qualified_counterfactual")
+
+    def test_oracle_edits_or_conflicts_never_change_prediction(self):
+        data = self.evidence(); first = module.handoff_inputs(data, "fixture", 1., 1.1)
+        data["forecast"]["cases"][1]["oracle_position"][0] += 10.
+        changed = module.handoff_inputs(data, "fixture", 1., 1.1)
+        self.assertEqual(first["causal_acceleration"], changed["causal_acceleration"])
+        self.assertNotEqual(first["retrospective_source_pv"]["position"], changed["retrospective_source_pv"]["position"])
+        duplicate = copy.deepcopy(data["forecast"]["cases"][1]); duplicate["oracle_velocity"][0] += .1
+        data["forecast"]["cases"].append(duplicate)
+        conflicted = module.handoff_inputs(data, "fixture", 1., 1.1)
+        self.assertEqual(conflicted["causal_acceleration"], first["causal_acceleration"])
+        self.assertEqual(conflicted["retrospective_source_pv"]["status"], "unscored")
+
+    def test_nearby_source_and_other_task_are_not_exact_counterfactual_inputs(self):
+        data = self.evidence(); data["forecast"]["cases"][1]["oracle_source_sim_s"] += .001
+        inputs = module.handoff_inputs(data, "fixture", 1., 1.1)
+        self.assertEqual(inputs["retrospective_source_pv"]["status"], "unscored")
+        self.assertEqual(inputs["causal_acceleration"]["status"], "qualified_counterfactual")
+        wrong = module.handoff_inputs(data, "other-task", 1., 1.1)
+        self.assertTrue(all(r["status"] == "unscored" for r in wrong.values()))
+
+    def test_each_boundary_is_resolved_from_its_pv_with_the_same_profile(self):
+        calls = []
+        def search(request, box, limits, executable, audit):
+            calls.append(copy.deepcopy(request))
+            self.assertEqual(box, fixture.BOX); self.assertEqual(limits, fixture.LIMITS)
+            return {"status": "unscored", "reason": "generation stub; not an audited curve"}
+        evidence = self.evidence()
+        with tempfile.TemporaryDirectory() as directory:
+            path = self.source(directory); before = path.read_text()
+            with patch.object(module.geometry, "search", side_effect=search):
+                result = module.compare_handoffs(path, fixture.ROOT, fixture.NATIVE, evidence, [1.1, 1.2])
+            self.assertEqual(path.read_text(), before)
+        self.assertEqual(len(calls), 10)
+        for i, at in enumerate([1.1, 1.2]):
+            inputs = module.handoff_inputs(evidence, "fixture", 1., at)
+            for j, (variant, profile) in enumerate(result["selected_profiles"]):
+                request = calls[i*5+j]; pv = np.asarray(request["initial_pva"])
+                np.testing.assert_array_equal(pv[:, :2], np.column_stack([inputs[variant]["position"], inputs[variant]["velocity"]]))
+                if profile == "outward_y_A": np.testing.assert_array_equal(pv[:, 2], [0., .2, 0.])
+                if profile == "outward_y_J": self.assertEqual(request["initial_jerk"], [0., 1., 0.])
+        self.assertNotEqual(calls[0]["initial_pva"], calls[5]["initial_pva"])
+        self.assertEqual(result["execution_admission"], "not_performed")
+
+    def test_missing_oracle_and_invalid_time_only_skip_affected_items(self):
+        evidence = self.evidence(); evidence["forecast"]["cases"] = evidence["forecast"]["cases"][:1]
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(module.geometry, "search", return_value={"status": "unscored"}) as search, patch('builtins.print'):
+                result = module.compare_handoffs(self.source(directory), fixture.ROOT, fixture.NATIVE,
+                    evidence, [float("nan"), 1.1])
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(len(result["rows"]), 5)
+        self.assertEqual(result["boundary_times_sim_s"], [1.1])
+        self.assertEqual(len(result["excluded"]), 1)
+        self.assertTrue(all(r["status"] == "unscored" for r in result["rows"] if r["variant"] == "retrospective_source_pv"))
+        json.dumps(result, allow_nan=False)
+
+    def test_missing_past_evidence_has_no_fabricated_comparisons(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(module.geometry, "search") as search, patch('builtins.print'):
+                result = module.compare_handoffs(self.source(directory), fixture.ROOT, fixture.NATIVE, None, [1.1])
+        search.assert_not_called()
+        self.assertEqual(len(result["rows"]), 5)
+        self.assertTrue(all(r["status"] == "unscored" for r in result["rows"]))
+
+    @unittest.skipUnless(fixture.NATIVE.exists(), "existing offline MINCO executable unavailable")
+    def test_late_curve_relabel_does_not_preserve_an_earlier_boundary(self):
+        audit, _ = module.committed.reuse(fixture.ROOT)
+        candidate = module.geometry.search(fixture.boundary(), fixture.BOX, fixture.LIMITS, fixture.NATIVE, audit)["candidate"]
+        peak = module.acceleration_peak(candidate["native"], audit)
+        self.assertAlmostEqual(np.linalg.norm(peak["vector_m_s2"]), peak["value"], places=10)
+        self.assertAlmostEqual(peak["value"], candidate["audit"]["acceleration_max"], places=10)
+        earlier = copy.deepcopy(candidate["request"]); earlier["initial_pva"][0][0] -= .1
+        gate = audit.audit_trajectory(candidate["native"], earlier, [], fixture.LIMITS, fixture.BOX)
+        self.assertFalse(gate["passed"])
+        self.assertGreater(gate["boundary_pva_error"], .09)
+
+
 if __name__ == "__main__":
     unittest.main()

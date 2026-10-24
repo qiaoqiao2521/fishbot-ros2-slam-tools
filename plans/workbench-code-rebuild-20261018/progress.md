@@ -1,5 +1,14 @@
 # 实施进度
 
+## 2026-10-24 M2提前交接对照
+
+- Current：原三个拒绝画像＋两PV零A/J控制，在预定33.248/33.388/33.428s共15组，8过7拒。提前180ms只解除事后Jy画像拒绝，两个外向Ay仍拒；本族结果不能当ICS或飞行成功率。
+- Done：drone-stop-qualification.py新增earlier-handoff模式，复用相同geometry.search/MINCO/硬审计。PV来自同一过去配对的逐时刻积分或精确源时刻事后对照，原A/J画像保持；输出初末合同、峰段号/时刻/向量和recorder/FSM身份。20项资格测试通过（8项新增），122项独立原CDR/录制时钟/多项式读回通过，图已目视核对。原CLI额外回归仍10组/7过/2时效集，regression报告独立保存、不覆盖原基准。
+- 结果：事后Jy峰.934342/.982959/1.027612；两个最早外向Ay范数1.028683/1.024262，Y分量−1.027311/−1.022883单轴已超1，不仅是XY预算挤占。原硬界、2mm内部规划目标和搜索域不变；没有新动态或执行资格。
+- 输入/审查：源V33.208/33.228，recorder upper33.212/33.232；33.388仅原FSM定位，不冒称33.248已消费。oracle改值不影响预测，缺/冲突分支隔离；旧曲线改标签不算新解。agent-link agy因--print启动参数错位失败，未计审查；内置只读审查已核，previous晚到/缺失负例落实。未联系其他已有聊天。
+- 产物与边界：原忽略目录下stop-earlier-handoff-comparison.json、stop-earlier-handoff-readback.json、stop-earlier-handoff-comparison.png及首轮probe保留。方法和CLI在docs/DRONE_RECORDED_STATE.md末节。只改离线工具/测试/文档，无Web改动、训练、ROS节点、仿真、控制或飞行；drone c866441冻结。SO101接续搬运八文件继续原位保留，接续入口沿前节，未混入本提交。
+- Next/owner：根Codex核当前Y单轴C3生成族的几何/末端合同与既有分段自由度，不继续盲扫同类时刻，不预设存在合法备份。完整M2仍缺真实A/J、时间有效自由图、终端/截止及跟踪/采用，M3不解冻、动态闭环未过，goal active。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟与CapMesh PIT-004；新数值留项目，未写memory。
+
 ## 2026-10-24 M2非零边界与刹停时效离线资格
 
 - Current：有限A/J敏感性与时效分支可复验；10组中7组过原连续界、3组有界重解仍A拒绝。不是鲁棒通过率；原硬界和drone c866441冻结保持，M2部分完成、M3未启动、goal active。

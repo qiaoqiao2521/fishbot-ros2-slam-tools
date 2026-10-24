@@ -180,10 +180,131 @@ def run(source, root, executable, past=None):
         "rows": rows, "execution_admission": "not_performed"}
 
 
+def handoff_inputs(past, task_id, anchor_s, boundary_s):
+    """Recorder-available prediction and exact-source retrospective PV stay separate."""
+    names = ("causal_acceleration", "retrospective_source_pv")
+    results = {name: {"status": "unscored", "reason": "past_report_unqualified"} for name in names}
+    if not isinstance(past, dict) or past.get("archive_task_id") != task_id:
+        return results
+    forecast = past.get("forecast")
+    cases = forecast.get("cases") if isinstance(forecast, dict) else None
+    if not isinstance(cases, list) or not np.all(np.isfinite([anchor_s, boundary_s])):
+        return results
+    pairs, oracles = [], []
+    for case in cases:
+        if not isinstance(case, dict):
+            continue
+        anchor, previous = case.get("input_state"), case.get("previous_available_state")
+        if (case.get("kind") == "fsm" and geometry.tracking.usable_pv(anchor)
+                and geometry.tracking.usable_pv(previous)
+                and anchor["source_sim_s"] == anchor_s
+                and previous["source_sim_s"] < anchor_s):
+            pairs.append((anchor, previous, case.get("forecast_at_sim_s")))
+        try:
+            pv = np.asarray([case["oracle_position"], case["oracle_velocity"]], dtype=float)
+            if (abs(case["oracle_source_sim_s"]-boundary_s) < 1e-9
+                    and pv.shape == (2, 3) and np.all(np.isfinite(pv))):
+                oracles.append(pv)
+        except (KeyError, TypeError, ValueError):
+            continue
+    if pairs:
+        anchor, previous, located_at = pairs[0]
+        same = all(a == anchor and p == previous for a, p, _ in pairs)
+        available = max(geometry.tracking.recorded_availability(anchor), geometry.tracking.recorded_availability(previous))
+        if not same:
+            results[names[0]]["reason"] = "ambiguous_past_pair"
+        elif available > boundary_s or anchor_s > boundary_s:
+            results[names[0]]["reason"] = "past_pair_unavailable_at_boundary"
+        else:
+            estimate = geometry.tracking.predict_pv(anchor, boundary_s, names[0], previous)
+            results[names[0]] = {"status": "qualified_counterfactual", **estimate,
+                "anchor_state": copy.deepcopy(anchor), "previous_state": copy.deepcopy(previous),
+                "available_by_sim_s": available, "pair_locator_fsm_sim_s": located_at,
+                "scope": "recorder-available counterfactual prediction; not earlier planner consumption or measured A"}
+    if oracles and all(np.array_equal(pv, oracles[0]) for pv in oracles):
+        results[names[1]] = {"status": "qualified_counterfactual", "source_sim_s": boundary_s,
+            "position": oracles[0][0].tolist(), "velocity": oracles[0][1].tolist(),
+            "scope": "exact-source retrospective PV only; not causal input or measured A/J"}
+    else:
+        results[names[1]]["reason"] = "exact_source_oracle_missing_or_conflicting"
+    return results
+
+
+def acceleration_peak(native, audit):
+    """Locate the existing continuous norm maximum; do not replace its gate."""
+    best = {"value": -1.}; elapsed = 0.
+    for index, piece in enumerate(native["pieces"]):
+        power = audit.derivative(audit.normalized_power(piece), piece["duration"], 2)
+        peak = audit.norm_maximum(power)
+        if peak["value"] > best["value"]:
+            best = {**peak, "piece_index": index, "local_sim_s": peak["u"]*piece["duration"],
+                "elapsed_sim_s": elapsed+peak["u"]*piece["duration"],
+                "vector_m_s2": np.polynomial.polynomial.polyval(peak["u"], power).tolist()}
+        elapsed += piece["duration"]
+    return best
+
+
+def compare_handoffs(source, root, executable, past=None, times=(33.248, 33.388, 33.428)):
+    """Predeclared finite timing comparison, with the existing search unchanged."""
+    original = json.loads(source.read_text())
+    result = {"schema_version": 1, "archive_task_id": original["archive_task_id"], "source": str(source),
+        "kind": "offline_earlier_stop_handoff_comparison", "boundary_times_sim_s": [],
+        "hard_box": original["hard_box"], "hard_limits": original["hard_limits"],
+        "scope": "same recorded pair, finite A/J profiles and search bounds; not an online handoff or ICS proof",
+        "actual_qualification": {"measured_A_J": "unrecorded", "current_known_map": "unqualified", "future_free_volume": "unqualified",
+            "terminal_region": "unqualified", "dynamic_closed_loop": "not_passed"},
+        "rows": [], "excluded": [], "execution_admission": "not_performed"}
+    try:
+        cached = next(r for r in original["rows"] if isinstance(r, dict) and r.get("variant") == "cached_source_pv")
+        baseline = cached["baseline"]["request"]
+        anchor_s = cached["pv_at_sim_s"]
+        head = np.asarray(baseline["initial_pva"], dtype=float)
+        if head.shape != (3, 3) or not np.all(np.isfinite(np.r_[head.ravel(), anchor_s])):
+            raise ValueError("finite source PVA and time required")
+    except (KeyError, TypeError, ValueError, StopIteration, IndexError) as error:
+        print(f"WARNING: earlier handoff template unavailable: {error}")
+        return {**result, "status": "unscored", "reason": "source_boundary_template_unavailable"}
+    audit, _ = committed.reuse(root)
+    declared = {p["name"]: p for p in profiles(None, original["archive_task_id"])}
+    selected = (("causal_acceleration", "source_boundary"), ("causal_acceleration", "outward_y_A"),
+        ("retrospective_source_pv", "source_boundary"), ("retrospective_source_pv", "outward_y_A"),
+        ("retrospective_source_pv", "outward_y_J"))
+    result.update(anchor_source_sim_s=anchor_s, selected_profiles=[list(p) for p in selected])
+    for at in times:
+        if not isinstance(at, (int, float)) or not np.isfinite(at):
+            print(f"WARNING: nonfinite or invalid handoff time skipped: {at}")
+            result["excluded"].append({"requested_time": str(at), "reason": "invalid_boundary_time"})
+            continue
+        result["boundary_times_sim_s"].append(at)
+        inputs = handoff_inputs(past, original["archive_task_id"], anchor_s, at)
+        for variant, name in selected:
+            evidence = inputs[variant]
+            row = {"boundary_sim_s": at, "variant": variant, "profile": declared[name], "input": evidence}
+            if evidence["status"] != "qualified_counterfactual":
+                print(f"WARNING: {at}/{variant}/{name}: {evidence['reason']}")
+                result["rows"].append({**row, "status": "unscored", "reason": evidence["reason"]})
+                continue
+            request = hypothesis_request(baseline, declared[name])
+            for axis in range(3):
+                request["initial_pva"][axis][:2] = [evidence["position"][axis], evidence["velocity"][axis]]
+            try:
+                resolved = geometry.search(request, original["hard_box"], original["hard_limits"], executable, audit)
+                row.update(status=resolved["status"], resolved=resolved)
+                if "candidate" in resolved:
+                    row["acceleration_peak"] = acceleration_peak(resolved["candidate"]["native"], audit)
+            except (KeyError, ValueError, TypeError, IndexError, AttributeError) as error:
+                print(f"WARNING: {at}/{variant}/{name}: this comparison skipped: {error}")
+                row.update(status="unscored", reason=str(error))
+            result["rows"].append(row)
+    return result
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--geometry-report", type=Path, required=True)
     parser.add_argument("--stopping-report", type=Path, help="Optional original forecast evidence for past-A hypothesis")
+    parser.add_argument("--earlier-handoff", action="store_true", help="Compare fixed earlier boundaries using recorder-available inputs")
+    parser.add_argument("--handoff-times", type=float, nargs="+", default=[33.248, 33.388, 33.428])
     parser.add_argument("--drone-root", type=Path, default=Path.home()/"dev/ros2/projects/drone")
     parser.add_argument("--native", type=Path, default=Path.home()/".cache/ros2-drone/minco-probe/minco_probe")
     parser.add_argument("--output", type=Path, required=True)
@@ -192,8 +313,11 @@ if __name__ == "__main__":
     if args.stopping_report:
         try: past = json.loads(args.stopping_report.read_text())
         except (OSError, ValueError) as error: print(f"WARNING: optional past-A evidence unavailable: {error}")
-    result = run(args.geometry_report, args.drone_root, args.native, past)
+    operation = compare_handoffs if args.earlier_handoff else run
+    result = operation(args.geometry_report, args.drone_root, args.native, past,
+        **({"times": args.handoff_times} if args.earlier_handoff else {}))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False)+"\n")
-    print(json.dumps({"profiles": len(result["rows"]), "fixed_passes": sum(r.get("fixed", {}).get("audit", {}).get("passed", False) for r in result["rows"]),
+    print(json.dumps({"profiles": len(result["rows"]), ("comparison_passes" if args.earlier_handoff else "fixed_passes"): sum(r.get("resolved", {}).get("candidate", {}).get("audit", {}).get("passed", False)
+        if args.earlier_handoff else r.get("fixed", {}).get("audit", {}).get("passed", False) for r in result["rows"]),
         "temporal_fixture_sets": sum("temporal" in r for r in result["rows"]), "execution_admission": "not_performed"}))

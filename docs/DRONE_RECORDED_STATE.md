@@ -356,3 +356,51 @@ python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-te
 本轮无Web改动，不重跑构建或浏览器；drone c866441清洁冻结，无训练、ROS节点、仿真、控制或新落地证据。
 下一项由根Codex做三组拒绝输入的有界提前交接对照，保留同类A/J假设与原PV来源，不预设提前必然可行。
 真实A/J、当前/未来自由图、终端区域、实时截止及物理跟踪/采用仍未获资格，M2部分完成，M3与动态闭环未通过。
+
+## 提前交接时刻对照（2026-10-24接续）
+
+同一`drone-stop-qualification.py`新增`--earlier-handoff`，复用原SLSQP搜索、MINCO与连续审计。
+预先固定33.248/33.388/33.428s三个边界，各比较原三组拒绝画像和两个零A/J控制，共15组。
+所有时刻沿用Tx[3.5,5]、Ty[.6,2]、Tz[.1,.4]与相同2mm内部规划余量；不改变原硬界，不拉伸旧系数。
+每组从对应新PV和同类A/J重新求系数；只给旧曲线改时间标签会因初始PVA不匹配被拒绝。
+
+### 输入时刻与角色
+
+预测固定使用33.208/33.228s源V配对，记录可用上界分别33.212/33.232s，均早于最早边界33.248s。
+各时刻重新积分PV，源对保持；模型A用于PV预测，初始A/J仍按各组明确假设给定，两者不混称测量。
+33.388s只是定位该对输入的原FSM消费记录；33.248s预测只具备recorder可用资格，不证明原规划器已提前消费。
+真实PV只在相同源时刻取事后反事实对照，不进入预测函数；缺精确源时刻或存在冲突时只跳该分支，不取邻近PV替代。
+两项历史可用上界取最大值；anchor或previous任一个晚到/缺失都不能凭另一项补齐资格。
+
+### 三个原拒绝画像的结果
+
+数值为原连续审计的三维加速度范数峰，单位m/s²，硬界仍为1.0。
+
+| 同类A/J画像 | 33.248s | 33.388s | 33.428s |
+| --- | ---: | ---: | ---: |
+| 预测PV，Ay=+.2、J=0 | 1.028683 拒绝 | 1.033810 拒绝 | 1.035868 拒绝 |
+| 事后PV，Ay=+.2、J=0 | 1.024262 拒绝 | 1.080840 拒绝 | 1.128389 拒绝 |
+| 事后PV，A=0、Jy=+1 | .934342 通过 | .982959 通过 | 1.027612 拒绝 |
+
+两PV的原零A/J控制在三个时刻均通过，因此总计8通过/7拒绝；不是独立飞行成功率或动态鲁棒证书。
+提前180ms可解除事后Jy画像的本族拒绝，不能解除两个外向Ay画像，不能将全部失败解释为接管太晚。
+33.248s预测外向Ay在曲线相对.461568s处，A=[−.053100,−1.027311,0]m/s²；事后PV为[−.053133,−1.022883,0]。
+Y单轴已超过1.0，因此这两例不能仅归因于X挤占三维加速度预算。只证明当前有界搜索/生成族失败，不证明所有轨迹无解或ICS。
+
+### 验收与接续
+
+资格文件共20项测试通过，其中本轮新增8项；覆盖recorder/FSM区别、前/后历史晚到或缺失、坐标/epoch错误、冲突源对、oracle编辑隔离、精确时刻、坏行跳过、逐时刻重解及旧曲线重标拒绝。
+独立从原MCAP CDR回读源PV/录制时钟，并从降幂系数重新求极值、初末PVA/J和峰向量，共122项检查通过；图已目视核对。
+agent-link agy因启动器`--print`参数错位而失败，未计有效审查；内置只读审查完成，建议的previous晚到/缺失负例已补。没有联系其他已有聊天。
+原常用模式保持`fixed_passes`输出；额外CLI回归读回10组/7过/2个时效集，另存stop-boundary-temporal-qualification-regression.json，不覆盖原报告。新增比较模式使用`comparison_passes`，不改变控制路径。
+
+在前节相同`STOP_REPORT_ROOT`下运行：
+
+```sh
+python3 apps/fishbot-control-station/workbench-tools/drone-stop-qualification.py --geometry-report "$STOP_REPORT_ROOT/stop-position-time-comparison.json" --stopping-report "$STOP_REPORT_ROOT/stopping-viability-evaluation.json" --earlier-handoff --handoff-times 33.248 33.388 33.428 --output "$STOP_REPORT_ROOT/stop-earlier-handoff-comparison.json"
+python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-tests -p test_drone_stop_qualification.py
+```
+
+原忽略目录保留stop-earlier-handoff-probe.json，并新增stop-earlier-handoff-comparison.json、stop-earlier-handoff-readback.json和stop-earlier-handoff-comparison.png。
+下一项核当前Y单轴C3生成族的几何/末端边界与可复用分段自由度；不继续盲增同类时刻搜索，不改冻结算法或放宽硬界。
+真实完整A/J、时间有效已知自由图、终端区域和跟踪/采用仍未获资格。无训练、ROS节点、仿真、控制或新飞行，drone c866441清洁冻结；M2部分完成、M3及动态闭环未通过。
