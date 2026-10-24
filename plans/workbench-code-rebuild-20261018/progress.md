@@ -196,3 +196,13 @@ Knowledge closeout：already_covered。沿用PIT-004依赖隔离和现有任务�
 - agent-link qoder超时无活会话，CBC结束但无正文，均不当通过；内置只读审查提出可选坏JSON阻断原回放，已最小修复并原负例核对。根负责实际结果与串行整合。
 - [使用/参数/数字与边界](../../docs/DRONE_STOP_CANDIDATES.md)。本片完成N3组件基线与N4历史旁路，N3任务级比较、M2滚动提交、M3动态闭环及后续空地臂联动仍未完成；下一项M0源码/许可及CommittedTail差异，不自动训练、解冻或飞行。owner=本对话Codex，整体goal保持active。
 - Knowledge closeout: already_covered。沿用任务身份/源时钟、动作与物理资格分层及PIT-004；数值、可选输入降级和CLI兼容性留项目，未写共享知识或memory。
+
+## 2026-10-24 — SO101 网页开发布局2/2原物理通过
+
+沿原5186样例按钮→task-runtime→Station执行器完整新跑，右task6e86ec73-db38-4d19-b48d-56dec4c1006c、左taskf7c265d5-5668-4643-a2f0-b7db2bc05d83均原passed/grasp/place/done=true。78.02/78.08sim、59.131/58.445episode-wall；planned/measured各244，free/weld0/mocap0，无无效轨迹、障碍接触或安全停机。释放/脱离/回位、双worker清理及两份488帧录像由根与独立reader核实，warnings=0。
+
+浏览器每例一次POST，原harness刷新同ID/无重发、报告与视频Range206断言通过；仅checks标签保存在结果，独立JSON核查不外推完整网络时序重建。前述九项无运动检查、33数据/50Python/3服务及构建通过保持。实际SO101运行采用显式交付ROOT/planning-venv，已独立核ready及完整物理；不据此改写无人机诊断页自身历史WARNING或N3/N4的验收范围。
+
+SO101来源084cc7f，工作台本轮abc0ac7/2b9fd90；并行Drone源码已由原owner提交并推送de94a6d，原成绩保留，本轮未改其模块。主FishBot dirty main及Mint未触碰。5186继续可用；5187原owner自行收尾，本轮未停止他人进程。原件在station-tasks/<ID>、浏览器output/workspace-execution-20261024[-left]-v1/，均不提交。
+
+本轮未采EpisodeTiming或精确process CPU，unknown保留；旧Kaggle计时不填此空缺。SO101连续包络、恢复、20+20、50Hz与同世界卸货仍未完成，继续回源SO101主计划推进M1b。Knowledge=already_covered，领域事实只写原计划。

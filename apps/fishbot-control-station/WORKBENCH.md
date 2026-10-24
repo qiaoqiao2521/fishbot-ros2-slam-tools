@@ -98,7 +98,7 @@ SO101_PYTHON=/home/muqiao/.cache/so101-colab/planning-venv/bin/python \
 node workbench-preview.cjs
 ```
 
-无运动浏览器检查：`node workbench-review-tests/workspace-samples.cjs`。它验证桌面／390px、保存刷新、复制、两布局导出和零任务写请求，不把该结果当抓放成功。本轮新的网页物理回合由SO101原计划记录。
+无运动浏览器检查：`node workbench-review-tests/workspace-samples.cjs`。它验证桌面／390px、保存刷新、复制、两布局导出和零任务写请求，不把该结果当抓放成功。新网页左右两例已分别完成原完整抓放、释放、脱离和回位（2/2），各一次任务POST、488帧录像。精确输入与剩余边界见SO101的 `plans/workcell-productization-20261024/m1a-station-entry.md`；未宣称50Hz或20+20通过。
 
 
 在场景面板下方点击“规划并运行仿真”。网页将当前草稿保存为该任务输入快照，调用 SO101 既有视觉定位、IK/OMPL 和抓放控制器；原报告决定成功。执行时可继续编辑下一份草稿，当前任务不受影响。
