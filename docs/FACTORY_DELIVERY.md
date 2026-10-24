@@ -10,6 +10,28 @@
 
 同一场景只有一个自由刚性货物。订单之间用原显式 reset 生成新回合并重新初始化它。交付是载货到指定停车点并停稳；不包含目的地下货、PLC 签收、多货物库存或整套 ARIAC 工厂。reset 也会把车复位，因此本切片可核对订单消费与目的地结果，尚不能据此宣称连续订单排序节省了行驶里程；这需要后续保留车位的补货回合。
 
+### 连续配送实体场景（M2实施中）
+
+新增可选`--continuous-delivery tools/config/factory_delivery/continuous-b-entities.json`，复用原prepare和Physics。配置增加B卸货SO101和两件独立自由货物；原单臂配置不变。该入口目前验证实体、接触与快照，不代表已完成卸货或无reset订单执行。原factory runner的单货物/reset流程仍保持，不能用它冒充M2连续业务。
+
+```bash
+FISHBOT_COOP_PYTHON=/home/muqiao/.cache/so101-colab/planning-venv/bin/python \
+./fishbot.sh cooperation prepare \
+  --so101-project /home/muqiao/dev/ros2/projects/so101 \
+  --scene-profile tools/config/cooperation_profiles/jackal_j100-lidar3d.json \
+  --factory-config tools/config/factory_delivery/line-side-occupied.json \
+  --continuous-delivery tools/config/factory_delivery/continuous-b-entities.json \
+  --output "$HOME/.cache/fishbot/continuous-b/scene"
+```
+
+`business_entities`保存world/arm/cargo ID、实际关节/执行器名称及索引、独立自由关节、工位和支撑面。索引是诊断提示；运行时按编译模型的名称绑定，人工修改索引不会重绑另一台臂。两件货物都由物理求解器自由演化，Physics状态分别显示位姿、速度、逐物料的支撑接触与各臂指夹力；不会把货物重命名、传送或凭状态标记算作送达。
+
+新增臂复用原碰撞网格、指夹和力矩限制，通过原生MJCF attach拼装。B示例将卸货臂转90°、货架置于本臂坐标(.05,-.22)，保留原占道箱体；几何预检和实际接触仍需分别验证。附加臂保持目标进入R1快照，reset静止检查也覆盖第二件货物；无reset双订单与库存评分仍待实现。
+
+显式规划查询使用`ArmPlanner(manifest, arm_id=..., cargo_id=..., snapshot=...)`或原`query_approach`的同名可选参数。snapshot来自同一公共世界的完整状态；返回关节名称绑定选中实体，其他臂/货物按实测状态冻结。`prepare_placement`接受工位局部路点并要求当前执行器参考；它复用原载荷检查与IK，尚未接入连续订单owner。多实体场景缺实体身份时只拒绝该查询，不自动改用第一件货物或legacy模型；原单臂场景调用保持。
+
+示例连接台增加`bridge_center_xy_m=(.033,-.145)`以避免与固定底座相交，不删减几何。第二货物真实抓取、多实体规划反例与新B初态真实卸货已分项验证；端到端卸货、原owner连续quiet与库存仍按[连续世界进度](../plans/continuous-twin-regression-20261024/progress.md)接续。
+
 ## 首个运行入口
 
 条件：在 FishBot 根目录操作，使用已有规划 Python，选择新的私有输出目录。运行前检查新 ROS 域与端口可用，保留 107/114 和旧网页。以下示例准备开放通道，换成 occupied 配置即可生成实体占用变体。

@@ -297,6 +297,8 @@ def prepare(args):
     from cooperation_scene import build_scene
     profile_path = getattr(args, 'scene_profile', None)
     scene_profile = json.loads(Path(profile_path).read_text()) if profile_path else None
+    business_path = getattr(args, 'continuous_delivery', None)
+    business = json.loads(Path(business_path).read_text()) if business_path else None
     spawn=getattr(args,'spawn',(0.,-2.))
     spawn_yaw=getattr(args,'spawn_yaw',0.)
     manifest=build_scene(args.so101_project,args.fishbot_project,args.output,
@@ -304,7 +306,8 @@ def prepare(args):
                          camera_light_scale=getattr(args,'camera_light_scale',1.),
                          tag_lateral_offset=getattr(args,'tag_lateral_offset',.03),
                          scene_profile=scene_profile,
-                         omit_unused_native_rangefinders=getattr(args,'omit_unused_native_rangefinders',False))
+                         omit_unused_native_rangefinders=getattr(args,'omit_unused_native_rangefinders',False),
+                         continuous_delivery=business)
     if getattr(args,'queued_ros_dispatch',False):
         manifest['queued_ros_dispatch']=True
     factory_path = getattr(args, 'factory_config', None)
@@ -499,6 +502,8 @@ def main():
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--scene-profile',type=Path,
                         help='Editable vehicle/sensors/task JSON; creates a new independent scene')
+    parser.add_argument('--continuous-delivery',type=Path,
+                        help='Finite cargo slots and physical unload stations JSON')
     parser.add_argument('--factory-config',type=Path,
                         help='Editable delivery stations, orders and physical channel occupancy')
     parser.add_argument('--omit-unused-native-rangefinders',action='store_true',

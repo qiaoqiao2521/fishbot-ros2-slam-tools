@@ -555,6 +555,23 @@ class Physics:
         self.tray_floor = self.model.geom('place_floor').id
         self.tray_body = self.model.body('cargo_tray').id
         self.arm_bodies = descendants(self.model, self.model.body('base').id)
+        self.business_description = self.identity.get('manifest', {}).get('business_entities')
+        self.business_arms, self.business_cargo = {}, {}
+        if self.business_description is not None:
+            from cooperation_business_scene import bind_entities
+            self.business_arms, self.business_cargo = bind_entities(self.model, self.business_description)
+            for arm in self.business_arms.values():
+                self.arm_bodies.update(descendants(self.model, arm['body']))
+        self.cargo_geoms = {self.cargo_geom} | {c['geom'] for c in self.business_cargo.values()}
+        self.allowed_pad_geoms = set(self.finger_geoms.values())
+        self.business_pad_names = {}
+        for arm_id, arm in self.business_arms.items():
+            self.allowed_pad_geoms.update(arm['pads'].values())
+            self.business_pad_names.update({geom: (arm_id, name) for name, geom in arm['pads'].items()})
+        self.business_cargo_geom_ids = {item['geom']: name for name, item in self.business_cargo.items()}
+        self.business_support_ids = ({self.model.geom(name).id: support
+                                      for support, name in self.business_description['support_geoms'].items()}
+                                     if self.business_description is not None else {})
         self.car_bodies = descendants(self.model, self.car_body)
         self.arm_geoms = {i for i in range(self.model.ngeom) if int(self.model.geom_bodyid[i]) in self.arm_bodies}
         self.excluded = set()
@@ -594,6 +611,14 @@ class Physics:
             self.data.qpos[self.arm_q] = arm_reference(ARM_JOINTS, initial, self.arm_limits)
         self.reference = tuple(float(self.data.qpos[i]) for i in self.arm_q)
         self.data.ctrl[self.arm_a] = self.reference
+        for arm_id, arm in self.business_arms.items():
+            if arm_id != 'load':
+                limits = [tuple(self.model.jnt_range[self.model.joint(name).id])
+                          for name in arm['joint_names']]
+                arm['reference'] = tuple(arm_reference(ARM_JOINTS, arm['reference'], limits))
+                arm['initial_reference'] = arm['reference']
+                self.data.qpos[arm['qpos']] = arm['reference']
+                self.data.ctrl[arm['actuators']] = arm['reference']
         mujoco.mj_forward(self.model, self.data)
         self.initial_qpos = self.data.qpos.copy()
         self.initial_reference = self.reference
@@ -626,6 +651,12 @@ class Physics:
                     or source_stamp <= self.reset_stamp
                     or not -.1 <= float(self.data.time)-source_stamp <= COMMAND_TIMEOUT):
                 raise ValueError('arm reference belongs to a previous episode or has an invalid stamp')
+        for arm_id, arm in getattr(self, 'business_arms', {}).items():
+            if arm_id != 'load' and len(names) == 6 and set(names) == set(arm['joint_names']):
+                canonical = [ARM_JOINTS[arm['joint_names'].index(name)] for name in names]
+                validated = arm_reference(canonical, positions, arm['limits'])
+                arm['reference'] = validated
+                return
         validated = arm_reference(names, positions, self.arm_limits)
         self.reference = validated
 
@@ -637,6 +668,12 @@ class Physics:
                  and self.np.linalg.norm(self.data.qvel[self.arm_v]) < .05
                  and self.np.linalg.norm(cargo[3:]) < .005 and self.np.linalg.norm(cargo[:3]) < .05
                  and self.np.max(self.np.abs(self.data.ctrl[self.wheel_a])) < 1e-9)
+        if self.business_description is not None:
+            quiet = quiet and all(self.np.linalg.norm(self.data.qvel[a['qvel']]) < .05
+                                  for a in self.business_arms.values())
+            for item in self.business_cargo.values():
+                velocity = self.body_velocity(item['body'])
+                quiet = quiet and self.np.linalg.norm(velocity[3:]) < .005 and self.np.linalg.norm(velocity[:3]) < .05
         return bool(quiet)
 
     def observe_reset_quiet(self):
@@ -668,6 +705,10 @@ class Physics:
         self.data.time = preserved_time
         self.reference = self.initial_reference
         self.data.ctrl[self.arm_a] = self.reference
+        for arm_id, arm in self.business_arms.items():
+            if arm_id != 'load':
+                arm['reference'] = arm['initial_reference']
+                self.data.ctrl[arm['actuators']] = arm['reference']
         self.data.ctrl[self.wheel_a] = 0.
         self.wheels.begin_episode(preserved_time)
         self.docking_guard.set_enabled(False)
@@ -696,6 +737,9 @@ class Physics:
 
     def step(self):
         self.data.ctrl[self.arm_a] = self.reference
+        for arm_id, arm in self.business_arms.items():
+            if arm_id != 'load':
+                self.data.ctrl[arm['actuators']] = arm['reference']
         velocities = self.wheels.velocities(time.monotonic())
         self.data.ctrl[self.wheel_a] = (velocities if self.mecanum_k is not None else
                                       [velocities[0]]*len(self.left_wheel_q) + [velocities[1]]*len(self.right_wheel_q))
@@ -747,6 +791,8 @@ class Physics:
     def contact_state(self, *, accumulate=True):
         normals = {name: 0. for name in self.finger_geoms}
         forbidden, car_forbidden, floor_count, floor_normal = [], [], 0, 0.
+        business = {name: {'supports': {}, 'pads': {}, 'other_cargo': {}}
+                    for name in self.business_cargo}
         force = self.np.zeros(6)
         for index in range(self.data.ncon):
             contact = self.data.contact[index]
@@ -757,6 +803,24 @@ class Physics:
                 self.wheels.set_hold(True)
                 raise RuntimeError('nonfinite contact evidence; car hold latched')
             normal = max(0., float(force[0]))
+            if business:
+                for cargo_geom, other_geom in ((g1, g2), (g2, g1)):
+                    cargo_id = self.business_cargo_geom_ids.get(cargo_geom)
+                    if cargo_id is None:
+                        continue
+                    entry = business[cargo_id]
+                    if other_geom in self.business_support_ids:
+                        group, name = entry['supports'], self.business_support_ids[other_geom]
+                    elif other_geom in self.business_pad_names:
+                        arm_id, name = self.business_pad_names[other_geom]
+                        group = entry['pads'].setdefault(arm_id, {})
+                    elif other_geom in self.business_cargo_geom_ids:
+                        group, name = entry['other_cargo'], self.business_cargo_geom_ids[other_geom]
+                    else:
+                        continue
+                    contact_evidence = group.setdefault(name, {'contact_count': 0, 'normal_force_n': 0.})
+                    contact_evidence['contact_count'] += 1
+                    contact_evidence['normal_force_n'] += normal
             if self.cargo_geom in pair:
                 for name, geom in self.finger_geoms.items():
                     if geom in pair:
@@ -769,14 +833,14 @@ class Physics:
             # The car may touch the arena floor and carry cargo. Any other
             # external collision remains independent evidence, including bench.
             car_external = (b1 in self.car_bodies) != (b2 in self.car_bodies)
-            if (car_external and self.cargo_geom not in pair and normal > 1e-8
+            if (car_external and not pair & self.cargo_geoms and normal > 1e-8
                     and not any(self.contact_planes[g] for g in pair)):
                 car_forbidden.append({'geom1': geom_names[0], 'geom2': geom_names[1],
                                       'normal_force_n': normal, 'distance_m': float(contact.dist)})
             if not pair & self.arm_geoms:
                 continue
             # Only the pads may touch the cargo. Other arm/cargo contact fails.
-            if self.cargo_geom in pair and pair & set(self.finger_geoms.values()):
+            if pair & self.cargo_geoms and pair & self.allowed_pad_geoms:
                 continue
             body_names = self.contact_body_names[b1], self.contact_body_names[b2]
             if frozenset(body_names) in self.excluded:
@@ -794,7 +858,7 @@ class Physics:
             self.total_car_forbidden_steps += bool(car_forbidden)
             for name, normal in normals.items():
                 self.max_normal_forces[name] = max(self.max_normal_forces[name], normal)
-        return {'finger_normal_forces_n': normals, 'finger_peak_normal_forces_n': dict(self.max_normal_forces),
+        result = {'finger_normal_forces_n': normals, 'finger_peak_normal_forces_n': dict(self.max_normal_forces),
                 'cargo_tray_floor_contact': floor_count > 0, 'cargo_tray_floor_contacts': floor_count,
                 'cargo_tray_floor_normal_force_n': floor_normal, 'arm_forbidden_contacts': forbidden,
                 'arm_forbidden_contact_count': len(forbidden),
@@ -804,6 +868,9 @@ class Physics:
                 'car_forbidden_contact_count': len(car_forbidden),
                 'car_forbidden_contact_total': self.total_car_forbidden_contacts,
                 'car_forbidden_contact_steps': self.total_car_forbidden_steps}
+        if self.business_description is not None:
+            result['business_contacts'] = business
+        return result
 
     def state(self):
         car_velocity, cargo_velocity = self.body_velocity(self.car_body), self.body_velocity(self.cargo_body)
@@ -864,6 +931,9 @@ class Physics:
                    'finite': True, 'source': self.identity,
                    'dock_beacon': self.station_beacon.status()}
         payload.update(self.contacts)
+        if self.business_description is not None:
+            from cooperation_business_scene import measured_entities
+            payload['business_entities'] = measured_entities(self)
         self.state_sequence += 1
         return payload
 

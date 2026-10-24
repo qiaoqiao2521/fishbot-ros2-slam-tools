@@ -25,6 +25,7 @@ request,response=map(Path,sys.argv[-2:]); payload=json.loads(request.read_text()
 mode='''+repr(mode)+'''
 if mode=='timeout': time.sleep(5)
 result={'query_id':payload['query_id'],'plan':{'planning':{'status':'solved'},'segments':[{}]*5}}
+if mode=='selection': result['plan'].update({k:payload[k] for k in ('arm_id','cargo_id','snapshot')})
 if mode=='identity': result['query_id']='other-query'
 if mode=='error': result['error']='original collision query failed'
 if mode=='malformed': result['plan']['segments']=[]
@@ -57,6 +58,15 @@ if mode=='error': sys.exit(1)
         with self.worker('timeout'), self.assertRaisesRegex(RuntimeError, 'original owner canceled'):
             self.query(check=canceled)
         self.assertEqual(len(self.children), 1); self.assertIsNotNone(self.children[0].poll())
+
+    def test_owned_query_carries_named_selection_and_the_measured_snapshot(self):
+        snapshot = {'qpos': [1., 2.], 'qvel': [3.]}
+        with self.worker('selection'):
+            result = self.query(arm_id='unload_line_b', cargo_id='cargo_2', snapshot=snapshot)
+        self.assertEqual(result['arm_id'], 'unload_line_b')
+        self.assertEqual(result['cargo_id'], 'cargo_2')
+        self.assertEqual(result['snapshot'], snapshot)
+        self.assertEqual(self.children[0].poll(), 0)
 
     def test_deadline_terminates_owned_child_without_accepting_late_result(self):
         with self.worker('timeout'), self.assertRaises(TimeoutError): self.query(timeout_s=.08)

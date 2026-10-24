@@ -185,6 +185,10 @@ def capture(physics, *, context=None, now=None):
     if truth:
         truth = _ages(truth, ['received'], now)
     app = {key: plain(getattr(physics, key)) for key in APP_FIELDS}
+    additional = {name: plain(arm['reference'])
+                  for name, arm in getattr(physics, 'business_arms', {}).items() if name != 'load'}
+    if additional:
+        app['additional_arm_references'] = additional
     app.update(odom=plain(vars(physics.odom)),
                wheels=plain(_ages(vars(physics.wheels), ['last_received'], now)),
                docking_guard=plain(vars(physics.docking_guard)),
@@ -242,6 +246,11 @@ def compatibility(physics, value):
         try:
             from cooperation_sim import ARM_JOINTS, arm_reference
             arm_reference(ARM_JOINTS, app['reference'], physics.arm_limits)
+            for name, arm in getattr(physics, 'business_arms', {}).items():
+                if name != 'load':
+                    limits = [tuple(physics.model.jnt_range[physics.model.joint(joint).id])
+                              for joint in arm['joint_names']]
+                    arm_reference(ARM_JOINTS, app['additional_arm_references'][name], limits)
             for key in ('odom', 'wheels', 'docking_guard', 'reset_quiet', 'observation_faults'):
                 if not isinstance(app[key], dict):
                     raise ValueError('application '+key+' must be an object')
@@ -285,6 +294,9 @@ def restore(physics, value, *, level='R1', now=None):
     for key in APP_FIELDS:
         setattr(physics, key, copy.deepcopy(app[key]))
     physics.reference = tuple(physics.reference)
+    for name, arm in getattr(physics, 'business_arms', {}).items():
+        if name != 'load':
+            arm['reference'] = tuple(app['additional_arm_references'][name])
     physics.odom.__dict__.update(copy.deepcopy(app['odom']))
     physics.wheels.__dict__.update(_unage(app['wheels'], ['last_received'], now))
     physics.docking_guard.__dict__.update(copy.deepcopy(app['docking_guard']))

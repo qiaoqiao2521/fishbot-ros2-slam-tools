@@ -116,7 +116,9 @@ def reference(manifest, *, candidate, order=None):
         resolved.append({**item, 'batch_id': batch, 'delivery_pose': targets[batch],
                          'delivery_approach_poses': copy.deepcopy(
                              destinations[item['destination_id']].get('approach_poses', []))})
-    return {'scene_id': factory['id'], 'candidate_label': candidate,
+    entities = manifest.get('business_entities')
+    scene_id = (entities.get('world_id') if isinstance(entities, dict) else None) or factory['id']
+    return {'scene_id': scene_id, 'candidate_label': candidate,
             'scene_profile': profile, 'orders': resolved,
             'task_timeout_wall_s': TASK_TIMEOUT_S,
             'delivery_route_budget_wall_s': DELIVERY_ROUTE_WALL_S,
@@ -137,6 +139,7 @@ def loaded_code_reference(extra_paths=()):
     runtime_files = [ROOT/'tools'/name for name in
                      ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_checkpoint.py', 'cooperation_readiness.py', 'cooperation_mecanum.py', 'cooperation_lidar.py', 'cooperation_geometry_check.py', 'cooperation_oracle.py',
                       'cooperation_oracle_base.py', 'cooperation_core.py', 'cooperation_arm.py',
+                      'cooperation_arm_entities.py', 'cooperation_business_scene.py',
                       'cooperation_factory_policy.py', 'cooperation_delivery_route.py')]
     runtime_files.extend(Path(path).resolve() for path in extra_paths)
     paths = [Path(path) for path in module_files.values()]+runtime_files

@@ -265,7 +265,7 @@ class BridgeRaceTests(unittest.TestCase):
         import hashlib
         self.namespace={**vars(core),**vars(perception),'copy':copy,'json':json,'math':math,'hashlib':hashlib,
             'SubscriptionProbeBase':SubscriptionProbeBase,'Clock':Clock,'TimeSource':TimeSource,
-            'np':np,
+            'np':np,'os':NS(environ={}),
             'normalize_egress_motion':normalize_egress_motion,
             'DELIVERY_ROUTE_WALL_S':DELIVERY_ROUTE_WALL_S,
             'time':NS(monotonic=lambda:self.clock,time=lambda:self.epoch+self.clock-100.,sleep=self.sleep),
@@ -306,6 +306,7 @@ class BridgeRaceTests(unittest.TestCase):
         p.docking=NS(server_is_ready=lambda:True)
         p.native_readiness=NS(update=lambda:None,active=lambda:True,snapshot=lambda:{'ready':True})
         p.beacon=None;p.last_station_pose_stamp=-math.inf;p.poses=[]
+        p.localization_warmup=None
         p.perception_config=perception.normalize_config();p.station_last_seen=None;p.station_detection=None
         p.station_rejection=None;p.station_counts={'accepted':0,'unavailable':0,'rejected':0,'forwarded':0}
         p.station_rejection_reason_counts={}

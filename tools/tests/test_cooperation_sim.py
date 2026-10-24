@@ -471,7 +471,7 @@ class ExitFinalizationTests(unittest.TestCase):
         self.code = compile(ast.fix_missing_locations(wrapper), '<current-simulation-finally>', 'exec')
         self.stderr = io.StringIO()
 
-    def probe(self, errors=None, *, timing_enabled=True, queued=False):
+    def probe(self, errors=None, *, timing_enabled=True, queued=False, checkpoint_enabled=False):
         errors = errors or {}
         events = []
         def stage(name):
@@ -500,6 +500,7 @@ class ExitFinalizationTests(unittest.TestCase):
         record = resource('record')
         record.snapshot = lambda: {'kind': 'controlled_test', 'closed': True}
         node = SimpleNamespace(camera=resource('camera'), lidar=resource('lidar'),
+                               checkpoint_io=resource('checkpoint_io') if checkpoint_enabled else None,
                                destroy_node=lambda: stage('node.destroy_node'),
                                runtime_observation={'rmw': 'controlled_test_not_ROS'})
         scope = {'sys': sys, 'json': json,
@@ -532,6 +533,14 @@ class ExitFinalizationTests(unittest.TestCase):
             invoke()
         self.assert_closed(writer, events)
         self.assertEqual(events.count('receiver.join'), 1)
+
+    def test_checkpoint_close_failure_keeps_hold_and_other_resource_cleanup(self):
+        invoke, writer, events = self.probe({'checkpoint_io.close': OSError('checkpoint close failed')},
+                                             checkpoint_enabled=True)
+        with self.assertRaisesRegex(OSError, 'checkpoint close failed'):
+            invoke()
+        self.assert_closed(writer, events)
+        self.assertLess(events.index('checkpoint_io.close'), events.index('frames.close'))
 
     def assert_closed(self, writer, events):
         self.assertEqual(events[:2], [('hold', True), ('wheel_ctrl', 'wheels', 0.)])

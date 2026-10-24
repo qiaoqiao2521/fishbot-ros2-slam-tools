@@ -47,7 +47,8 @@ PYTHON_GROUPS = {
         'test_manual_launch.py', 'test_manual_acceptance.py',
         'test_workbench_recovery_acceptance.py',
         'test_arena_bootstrap.py', 'test_arena_colab.py')),
-    'checkpoint': (ROOT / 'tools/tests/test_cooperation_checkpoint.py',),
+    'checkpoint': (ROOT / 'tools/tests/test_cooperation_checkpoint.py',
+                   ROOT / 'tools/tests/test_cooperation_business_scene.py'),
     'mission': (ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests'
                 / 'test_mission_bridge.py', ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests/test_map_rules.py',
                 ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests/test_rviz_desktop.py',

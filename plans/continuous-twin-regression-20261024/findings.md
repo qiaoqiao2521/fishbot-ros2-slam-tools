@@ -179,6 +179,35 @@ CLI只读复核qoder-8e15b7在180秒超时，没有可用结论；get_status确�
 
 CBC只读子任务cbc-2c3839返回done但result为空，没有可采用产物，未计为M2实施；get_status已确认终态。上述入口事实由根Agent独立读源码，不来自空结果。共享计划/源码继续由root串行整合。
 
+### M2实体场景与Physics首片
+
+- 新增可选--continuous-delivery与continuous-b-entities.json，原build_scene/prepare默认路径保持。原生MJCF attach引用原SO101与货物子树，编译后的B场景为nq/nv/nu=37/34/16，新增一台六轴臂和一个独立自由关节货物；两臂/两货物按名字绑定。序列化索引仅作提示，不以其重绑另一台臂，不增加内容锁。
+- 先试MjSpec.attach＋to_xml，测试发现原有11个body的惯量被导出舍入，base最大差约2.79e-10。该实现未晋级，首6项测试的1个失败保留。改用[MuJoCo 3.3.7原生MJCF attach](https://mujoco.readthedocs.io/en/3.3.7/XMLreference.html#body-attach)直接引用原XML，不放宽断言；原body质量/惯量、geom尺寸/摩擦/solref/solimp和执行器增益/控制/力矩范围逐项精确比较通过。
+- 首次工位沿车辆朝向布置时，新增upper_arm与原factory_channel_occupancy产生约83.5N真实接触，m2-model-a保留为失败（现已归档，恢复入口见progress）。采用新工位旋转pi/2、货架本臂坐标(.05,-.22)，重定位新工位的连接台面；原占道箱体、车体、机械臂碰撞网格与限值未删改。m2-model-b（同一归档）静置2源秒禁碰0，完整几何出生点/B点保守净距约61mm；这是静态预检，不是到达或路线成功。
+- 正常prepare已从原CLI产出新world、定位图、碰撞图和Nav2配置。Physics仍是唯一物理写入者，新增臂servo进入同一step；逐cargo记录支撑、各arm指夹和另一货物接触。原单货物/单臂状态字段保留。既有positions-only关节名输入现能选择附加臂，乱序名字按本臂映射，超范围原子拒绝；原发布者/时间检查保留，未声称ROS端到端卸货已通。
+- 附加臂目标进入R1应用状态，缺失时只跳过该恢复案例；新鲜实例恢复后两臂及两货物100步一致。reset静止条件覆盖第二货物，显式reset恢复附加臂home，但M2订单编排尚未接入，不用reset制造连续库存。
+- m2-prepared-a的原生5源秒/2500步/250个50Hz样本，world/episode不变、reset=0，车体/机械臂500Hz禁止接触累计0；1秒沉降后两件货物各自pickup支撑在50Hz样本中失联0，不外推500Hz支撑连续。最终proof-b.json另核选择源码与四XML输入起止一致；B点初始物理场景的1000步测试也无禁止接触，均不计导航、抓取、卸货或连续订单。
+- 相关93项首跑有11个旧退出fixture错误：SimpleNamespace缺已有checkpoint_io；AST核对该finally与HEAD完全相同。只补fixture的可选字段并新增checkpoint close失败仍完成其余清理的用例，80项运行/工厂检查通过。38项原生场景/快照/prepare检查通过；新增按名路由后60项实体/仿真检查通过。各组有重叠，不相加冒充新全仓总数。旧失败和第三方OpenGL ResourceWarning均保留。
+- zcode-06a373只读复核90秒超时，未采用其结论；get_status确认不在活动列表。所有实体/接触/参数/测试结论由根Agent独立读回。
+
+### M2显式实体规划与当前失败
+
+- ArmPlanner保留默认路径；显式arm_id/cargo_id必须携带当前完整snapshot。新增ArmEntityView按名字抽取本臂六关节和所选自由货物，将位置、四元数、线速度转入工位坐标；自由关节角速度保留本体坐标。B工位yaw=pi/2，不能只复制namespace。其他臂、货物、车型和工位按实际姿态冻结完整碰撞geom，网格使用编译顶点/面，不替换成包围盒。所有写入仅发生在独立查询MjData。
+- 原SO101 plan_transport硬编码原取货台到托盘的路径，不能直接复用于卸货架。prepare_placement仅扩展显式局部路点，复用原carried_configuration_checker、IK和joint_planner；保留.003m笛卡尔、.01rad关节采样、原.2mm载荷和1mm臂余量。选错实体或缺实测状态只拒绝该查询，原单臂默认不变；尚未接入订单owner。
+- m2-entity-grasp-a在派发前失败，0运动样本：误把沉降后的箱体中心当成夹取点，原生查询明确报告夹指与pick_floor穿透约2.5/3.7mm。修复沿用原成功.019m pinch与原台面/箱体尺寸算出的偏移，没有改余量。
+- m2-entity-grasp-b执行同一Physics中的cargo_2抓取：23420步、2242个50Hz样本、world/episode不变、reset=0、车hold、禁碰0。原.025m抬升/.02N双指/.7s连续保持条件离线复核通过：保持1.5s、最小抬升.040913m、最小双指1.587475N、支撑样本0、最大源间隙.02s。fixture-score.json是分项独立评分；原result的passed=false是未评分默认，未改写原记录。不是原运输oracle、ROS或连续订单通过。
+- 内置只读复核在独立查询中复现遗漏：原pad属group0，不在原group3碰撞对；把非目标货物放在pad中心时，原查询valid但原生距离约-6.14mm。新增EntityPadChecker仅补pad与冻结实体的原mask兼容碰撞对；选中目标仍不在rig中，既有目标夹持豁免保持。增加该反例回归；强化后的c轮另存，不把b追认为新源通过。
+- prepare_placement还补回本臂ctrl和源时间，避免用零执行器参考重算所谓实测指夹力；新增捕获独立查询MjData的回归。m2-unload-fixture-a只建立B点托盘有货的新初态，在0运动样本前被invalid_start拒绝；不算从源头配送、不算卸货或库存变化。私有探针首次缩进错误只影响准备，未创建Physics；修复后保留上述真实失败。
+- 最新完整反馈m2-feedback-current-b为1798项通过（1048/15/209/61/465），早于随后补齐的实体规划反例；其前一轮control超时后，追踪发现旧AST测试夹具缺os和localization_warmup，23失败/错误均保留，只修fixture。正确PYTHONPATH下core120项通过；一次直接unittest缺tools路径的导入错误单列。当前最终新增组继续定向复验，不借旧全绿覆盖新源码。
+
+- 强化pad检查后的grasp-c完整复跑，物理与独立分项数值同b，选定源起止一致，14项实体回归通过。独立审查另核B连接台仅改center=(.033,-.145)后，home/托盘/货架(.06/.023/.019)IK端点均通过；距离饱和在2mm，不解读为精确最近净距。原a的2.759mm固定几何重叠保留，新配置不修改旧场景。
+- B卸货b已在真实物理抓起，但显式路径末点.019低于原放置配方.023，载荷检查报告frozen__unload_line_b__pick_floor约-.000114m。未派发该放置路径，保持.0002m载荷门槛。c使用.023并在抓起后保存原生R1，原物理执行与独立分项评分通过；不是调宽门槛，也不把fresh B初态当导航完成。
+
+- 最终卸货c为同一world/episode的51510步、5051帧、103.02源秒，无reset/禁碰，选定源码起止一致。实际抬升最小.040857m、保持双指1.529768N/1.5s，搬运双指最小1.550056N且支撑0。释放后完整货物足迹在本架.058m范围内，line_b支撑、无pad接触和低于.002m/s线速持续1.52源秒；回位误差.000580rad，最终原生速度范数1.725e-5rad/s。fixture-score.json为独立卸货分项通过，原result.completed_segments=5只计初始approach方案；placement-plan另有8段，原标签连续块为10，不以该计数当验收。逐帧臂速度缺失明确记录，不能称原owner连续quiet已验。R1抓起状态和最终图另存，不重置物体、不回写库存、不称导航或连续订单。
+- 最终完整反馈c=1805项（1049/21/209/61/465）全部通过、无失败/跳过。测试是在最终相关源码修改后运行，原时间/碰撞/力/几何门槛未变。90个当前入口/计划本地Markdown链接有效。GitHub原run40111818800最后仍queued，不从本机检查改写远端结论。
+
+- 收尾再增加多实体漏传身份的局部反例：拒绝该查询，不能默默使用只冻结车型的legacy查询；默认原单臂场景保持。7项当前显式选择/子进程测试通过。1805项完整回归发生在该小补丁前，源版本界限明确，不虚增全仓总数。此错误路径不代表已完成owner实体接入。
+
 ### 只读对照页
 
 既有Lichtblick树已有MCAP/时间轴/模型能力，但该树仍有在途修改，不导入第二份播放器或覆盖它。此轮只复用cooperation_timing的流式索引/10Hz投影，新增配送专用comparison JSON：按原世界坐标展示两车、货物、由q6正解的关节线框、原生UUID和原评分；源时间按明确锚点同步，缺口断开。此图不是完整碰撞模型或新评分。

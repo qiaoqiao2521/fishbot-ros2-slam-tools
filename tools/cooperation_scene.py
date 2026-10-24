@@ -212,7 +212,8 @@ def car_footprint(common_model, radius=.13, vehicle=None):
 
 def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
                 spawn=(0., -2.), station=DEFAULT_STATION, spawn_yaw=0., camera=False, camera_light_scale=1.,
-                tag_lateral_offset=.03, scene_profile=None, omit_unused_native_rangefinders=False):
+                tag_lateral_offset=.03, scene_profile=None, omit_unused_native_rangefinders=False,
+                continuous_delivery=None):
     import numpy as np
 
     so101_project, fishbot_project, output = map(lambda path: Path(path).resolve(),
@@ -366,6 +367,9 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
         manifest['spawn_yaw'] = float(spawn_yaw)
     if station_camera is not None:
         manifest['station_camera'] = station_camera
+    if continuous_delivery is not None:
+        from cooperation_business_scene import compose_business_world
+        manifest = compose_business_world(manifest, continuous_delivery, output)
     (output / "scene-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
 

@@ -1,0 +1,17 @@
+{
+  "id": "f1-continuous-b-entities",
+  "unload_stations": [
+    {
+      "id": "line_b",
+      "arm_id": "unload_line_b",
+      "delivery_pose": {"x": 0.7, "y": -2.0, "yaw": 0.0},
+      "arm_yaw_rad": 1.5707963267948966,
+      "shelf_xy_m": [0.05, -0.22],
+      "bridge_center_xy_m": [0.033, -0.145]
+    }
+  ],
+  "cargo_slots": [
+    {"id": "cargo_1", "offset_m": [0.0, 0.0, 0.0]},
+    {"id": "cargo_2", "offset_m": [0.0, 0.04, 0.0]}
+  ]
+}

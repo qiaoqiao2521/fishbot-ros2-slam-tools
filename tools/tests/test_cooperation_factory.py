@@ -38,6 +38,14 @@ def successful_score(order):
 
 
 class ReferenceTests(unittest.TestCase):
+    def test_compound_scene_has_its_own_identity_without_rebinding_orders(self):
+        value = manifest();before = factory.reference(value, candidate='base')
+        value['business_entities'] = {'world_id': 'finite-delivery-scene'}
+        result = factory.reference(value, candidate='entities')
+        self.assertEqual(result['scene_id'], 'finite-delivery-scene')
+        self.assertEqual([o['delivery_pose'] for o in result['orders']],
+                         [o['delivery_pose'] for o in before['orders']])
+
     def test_capture_metrics_keep_one_unknown_request_and_continue_independent_samples(self):
         bridge=Mock()
         bridge.request.side_effect=[RuntimeError('unknown capture receipt'),
