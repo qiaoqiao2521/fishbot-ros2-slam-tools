@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 """Source-time association and unavailable-state evidence must remain honest."""
 import importlib.util
+import copy
 from pathlib import Path
 import tempfile
 import unittest
@@ -117,6 +118,102 @@ class RecordedTrackingTests(unittest.TestCase):
         self.assertEqual(len(result["warnings"]), 2)
         self.assertEqual(result["fsm"], [])
         self.assertEqual(result["voxel_events"], 0)
+
+
+class ForecastTests(unittest.TestCase):
+    def test_constant_velocity_uses_source_age_and_retains_initial_pv(self):
+        anchor = state(1.)
+        prediction = module.predict_pv(anchor, 1.2, "constant_velocity")
+        np.testing.assert_allclose(prediction["position"], [1.2, 0., 1.5])
+        np.testing.assert_allclose(prediction["velocity"], anchor["velocity"])
+        same_time = module.predict_pv(anchor, 1., "constant_velocity")
+        np.testing.assert_allclose(same_time["position"], anchor["position"])
+        self.assertIsNone(anchor["acceleration"])
+
+    def test_causal_acceleration_is_estimated_not_recorded_or_reference(self):
+        anchor, previous = state(1.), {**state(.8), "velocity": [.8, 0., 0.]}
+        prediction = module.predict_pv(anchor, 1.2, "causal_acceleration", previous)
+        np.testing.assert_allclose(prediction["model_acceleration"], [1., 0., 0.])
+        np.testing.assert_allclose(prediction["position"], [1.22, 0., 1.5])
+        self.assertIsNone(anchor["acceleration"])
+        self.assertIsNone(module.predict_pv(anchor, 1.2, "causal_acceleration", state(1.1)))
+
+    def test_late_history_frame_cannot_enter_acceleration_estimate(self):
+        states = [state(.8, 2.), state(1., 1.), state(1.2, 1.2)]
+        result = module.forecast_evidence(states, [{"source_stamp_ns": "1000000000"}], [], 1.3)
+        case = next(r for r in result["cases"] if r["requested_horizon_from_available_s"] == .08)
+        self.assertIsNone(case["previous_available_state"])
+        self.assertEqual(case["models"]["causal_acceleration"]["status"], "unscored")
+        self.assertEqual(case["oracle_source_sim_s"], 1.2)
+        self.assertAlmostEqual(case["oracle_source_offset_s"], .12)
+
+    def test_future_oracle_position_changes_only_score_not_prediction(self):
+        states = [state(.8), state(1.), state(1.2)]
+        focus = [{"source_stamp_ns": "1000000000"}]
+        first = module.forecast_evidence(states, focus, [], 1.3)
+        changed = copy.deepcopy(states)
+        changed[-1]["position"] = [20., 0., 1.5]
+        second = module.forecast_evidence(changed, focus, [], 1.3)
+        a = next(r for r in first["cases"] if r["requested_horizon_from_available_s"] == .08)
+        b = next(r for r in second["cases"] if r["requested_horizon_from_available_s"] == .08)
+        for model in first["models"]:
+            np.testing.assert_array_equal(a["models"][model]["position"], b["models"][model]["position"])
+        self.assertNotEqual(a["models"]["constant_velocity"]["position_error_m"], b["models"]["constant_velocity"]["position_error_m"])
+
+    def test_fsm_consumption_and_recorder_availability_are_distinct(self):
+        anchor = state(1., 1.5)
+        fsm = [{"sim": 1.1, "odom_source": 1., "bag_pv_match_error": [0., 0.]}]
+        result = module.forecast_evidence([state(.8), anchor, state(1.2)],
+            [{"source_stamp_ns": "1000000000"}], fsm, 1.3)
+        self.assertEqual([r["kind"] for r in result["cases"]], ["fsm"])
+        self.assertEqual(result["cases"][0]["input_evidence"], "FSM logged consumed PV")
+
+    def test_conflicting_duplicate_stamp_and_post_failure_oracle_are_unscored(self):
+        anchor = state(1.)
+        result = module.forecast_evidence([anchor, {**anchor, "position": [2., 0., 1.5]}, state(1.2)],
+            [{"source_stamp_ns": "1000000000"}], [], 1.3)
+        self.assertEqual(result["ambiguous_source_stamps"], 1)
+        self.assertEqual(result["cases"], [])
+        result = module.forecast_evidence([anchor, state(1.2)],
+            [{"source_stamp_ns": "1000000000"}], [], 1.1)
+        self.assertTrue(all(r["oracle_source_sim_s"] < 1.1 for r in result["cases"]))
+
+    def test_bad_frame_epoch_or_nonfinite_state_does_not_produce_forecast(self):
+        focus = [{"source_stamp_ns": "1000000000"}]
+        for bad in ({**state(1.), "velocity_frame_id": "body"},
+                    {**state(1.), "position": [float("nan"), 0., 1.5]}):
+            self.assertEqual(module.forecast_evidence([bad], focus, [], 2.)["cases"], [])
+        self.assertEqual(module.forecast_evidence([state(1.)], focus, [], 2., False)["cases"], [])
+
+    def test_invalid_availability_and_consumption_match_do_not_become_inputs(self):
+        focus = [{"source_stamp_ns": "1000000000"}]
+        for value in (None, float("nan"), .9):
+            bad = {**state(1.), "available_by_sim_s": value}
+            self.assertEqual(module.forecast_evidence([bad, state(1.2)], focus, [], 1.3)["cases"], [])
+        fsm = [{"sim": 1.1, "odom_source": 1., "bag_pv_match_error": [float("nan"), 0.]}]
+        self.assertEqual(module.forecast_evidence([state(1.), state(1.2)], [], fsm, 1.3)["cases"], [])
+
+    def test_identical_duplicate_uses_earliest_valid_availability(self):
+        a = {**state(1.), "available_by_sim_s": None}
+        result = module.forecast_evidence([a, state(1., 1.04), state(1.2)],
+            [{"source_stamp_ns": "1000000000"}], [], 1.3)
+        self.assertEqual(result["ambiguous_source_stamps"], 0)
+        self.assertEqual(result["cases"][0]["forecast_at_sim_s"], 1.04)
+
+    def test_numeric_and_string_stamp_cannot_bypass_conflict_detection(self):
+        a = state(1.)
+        b = {**a, "source_stamp_ns": 1000000000, "position": [2., 0., 1.5]}
+        result = module.forecast_evidence([a, b, state(1.2)],
+            [{"source_stamp_ns": "1000000000"}], [], 1.3)
+        self.assertEqual(result["ambiguous_source_stamps"], 1)
+        self.assertEqual(result["cases"], [])
+
+    def test_nonfinite_primary_failure_does_not_open_scoring_horizon(self):
+        fsm = [{"sim": 1.1, "odom_source": 1., "bag_pv_match_error": [0., 0.]}]
+        for failure in (None, float("nan"), float("inf")):
+            result = module.forecast_evidence([state(1.), state(1.2)],
+                [{"source_stamp_ns": "1000000000"}], fsm, failure)
+            self.assertEqual(result["cases"], [])
 
 
 if __name__ == "__main__":

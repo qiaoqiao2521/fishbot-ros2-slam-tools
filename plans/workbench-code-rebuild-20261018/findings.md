@@ -116,3 +116,10 @@ agent-link现已加载，qoder同步调用180s超时且get_status确认无活会
 仅查看truth/telemetry JSONL会遗漏MCAP的1926条原始Odometry。原PV可由CDR读取，来源是sidecar Gazebo pose＋因果差分V；A仍缺。N1 clock夹逼可直接复用来区分源时刻与录制可用上界，不以record ns减sim。
 
 7个FSM状态可同源回读；33.388s的参考与33.228s odom混比会产生.385835m差，同刻参考差为.166906m。#5/#6 odom早于当前新曲线，不反向外推。195个首发前样本的P峰.292422、正Z峰.073111m，均是采样对照，不是连续跟踪界或新判据。完整地图/未来终端区域仍缺，局部cell缺席不等于known-free。方法见docs/DRONE_RECORDED_STATE.md。
+
+
+## 2026-10-24 PV预测误差
+
+状态年龄不等于跟踪误差。7个FSM旧PV在目标实际源时刻评分，缓存保持/恒速/因果A的P RMS为.164031/.007136/.003245m，但33.388s真实参考偏差仍.185380m。预测模型精度改善不能代替控制跟踪证据。
+
+使用现有CDR/clock工具，只加固定数学基线；未来PV作为评分Oracle而非输入。FSM明确消费和recorder可用是两条不同证据，不能机械要求前者一定已被独立recorder写入。CA是过去V差分估计，不是实测A；本轮没有默认切换或新硬界。整数/字符串stamp需规范化消歧，NaN故障时刻不能放开评分截止，两负例已修。

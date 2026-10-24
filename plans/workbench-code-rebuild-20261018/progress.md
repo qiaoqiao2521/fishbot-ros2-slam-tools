@@ -237,3 +237,19 @@ SO101来源084cc7f，工作台本轮abc0ac7/2b9fd90；并行Drone源码已由原
 
 没有改服务或UI，不重建/重跑浏览器。drone c866441冻结/清洁，无训练/飞行/控制写。M2未完成、动态闭环未通过。下一步在冻结边界内评测现有PV外推的误差/时钟适用域，不把估计A冒称实测A；由本对话接续。knowledge_status=already_covered，项目数值留本仓，未写memory。
 - 收尾核对：9份变更文档75处本地链接目标无缺失，diff检查通过。代码/文档按既有qiaoqiao2521分支提交；原CDR、JSON/PNG和日志均留忽略目录。
+
+
+## 2026-10-24 M2固定PV预测基线
+
+在已有drone-recorded-tracking.py增加--forecast，不建第二套读包/调度。缓存保持、恒速、过去V差分估计A三种基线固定；原PVA/飞行源码不变。recorder可用与FSM消费证据分路，未来PV只评分，评分时间偏移0–.016s公开。
+
+949组旧记录case（942 recorder＋7 FSM），33个请求因评分样本越首发/缺失而排除。7 FSM位置RMS .164031/.007136/.003245m，峰值.239405/.010564/.006433m；CA首个样本比CV差，未晋级运行默认。33.388s真实跟踪P差仍.185380m，预测误差变小不能替代控制资格。
+
+20项状态/预测检查（原9＋新增11）与原静态回放8项通过。内置只读审查指出整型/字符串同stamp冲突绕过和NaN首发截止两项，已修补/补负例。Qoder首轮建议有效、二次审查超时，get_status确认该句柄缺失，没有重启同任务。
+
+实际JSON/PNG在原workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/的pv-forecast-evaluation.json与pv-forecast-comparison.png；图已目视核对。参数/表格/复验见docs/DRONE_RECORDED_STATE.md新增节。生成数据和原日志不提交。
+
+工作树另出现RobotStation/station.ts、index.ts、station.test.ts与新stationRecipe.ts/test.ts共5个配方在途文件，语义为SO101 independent_episode包。尚无本轮交付/验证回执且文件在工作期间出现，保留现场、不混入无人机提交。接续owner=根Codex，需从原Station importer/recipe定向测试入口复核并查对应产品化进度，当前不宣称其验收或废弃；不联系其他旧聊天。
+
+无人机c866441冻结、无训练/ROS节点/飞行/控制写。M2未完成、动态闭环未通过。下一项预测后参考偏差/必要制动可行域和时间有效几何，由本对话接续。knowledge_status=already_covered，项目数字留SpecMesh，未写memory。
+- 本轮独立CDR读回17项通过，1926源消息逐个核对预测输入/评分PV，949 case保持原首发截止与时间来源。8份变更文档72处本地链接无缺失，diff检查通过。

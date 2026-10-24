@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MPL-2.0
 """Read original odometry/FSM evidence for M2; never select or send control."""
 import argparse
+import bisect
 from collections import Counter
 import importlib.util
 import json
@@ -132,7 +133,138 @@ def summarize(rows):
         "position_abs_axis_max_m": abs(p).max(axis=0).tolist(),
         "positive_z_error_max_m": float(max(0., p[:, 2].max())),
         "velocity_max_m_s": float(np.linalg.norm(v, axis=1).max()),
-        "peak_position_source_sim_s": rows[int(norm.argmax())]["source_sim_s"]}
+            "peak_position_source_sim_s": rows[int(norm.argmax())]["source_sim_s"]}
+
+
+def predict_pv(anchor, target_s, model, previous=None):
+    """Math baseline only. Caller separately qualifies available input frames.
+
+    This function cannot inspect the oracle. A is an explicit model assumption
+    or past-velocity estimate, never an observed acceleration/PVA contract.
+    """
+    dt = target_s - anchor["source_sim_s"]
+    if not np.isfinite(dt) or dt < 0:
+        return None
+    position, velocity = np.asarray(anchor["position"]), np.asarray(anchor["velocity"])
+    acceleration = np.zeros(3)
+    if model == "hold":
+        return {"position": position.tolist(), "velocity": velocity.tolist(), "model_acceleration": None}
+    if model == "causal_acceleration":
+        if previous is None or not previous["source_sim_s"] < anchor["source_sim_s"]:
+            return None
+        acceleration = (velocity-np.asarray(previous["velocity"]))/(anchor["source_sim_s"]-previous["source_sim_s"])
+    elif model != "constant_velocity":
+        return None
+    return {"position": (position+velocity*dt+.5*acceleration*dt**2).tolist(),
+            "velocity": (velocity+acceleration*dt).tolist(), "model_acceleration": acceleration.tolist()}
+
+
+def usable_pv(state):
+    try:
+        p, v = np.asarray(state["position"]), np.asarray(state["velocity"])
+        return (state.get("epoch") == 0 and p.shape == v.shape == (3,)
+            and all(state.get(k) == "world" for k in ("frame_id", "velocity_frame_id"))
+            and np.all(np.isfinite(np.r_[p, v, state["source_sim_s"]]))
+            and abs(int(state["source_stamp_ns"])/1e9-state["source_sim_s"]) < 1e-9)
+    except (ValueError, KeyError, TypeError):
+        return False
+
+
+def recorded_availability(state):
+    value = state.get("available_by_sim_s")
+    return value if isinstance(value, (float, int)) and np.isfinite(value) and value >= state["source_sim_s"] else np.inf
+
+
+def forecast_evidence(states, tracking, fsm, failure_s, single_epoch=True):
+    """Fixed baselines; future source samples are scoring-only, not inputs."""
+    models = ("hold", "constant_velocity", "causal_acceleration")
+    horizons = (0., .04, .08, .16, .24)
+    failure_valid = isinstance(failure_s, (int, float)) and np.isfinite(failure_s)
+    eligible = [s for s in states if single_epoch and usable_pv(s)]
+    # A repeated source stamp with conflicting PV has no unique oracle/input.
+    groups = {}
+    for state in eligible:
+        groups.setdefault(int(state["source_stamp_ns"]), []).append(state)
+    ambiguous = {stamp for stamp, values in groups.items() if any(
+        v[key] != values[0][key] for v in values for key in ("position", "velocity"))}
+    unique = sorted((min(values, key=recorded_availability)
+                     for stamp, values in groups.items() if stamp not in ambiguous), key=lambda s: s["source_sim_s"])
+    times_ns = [int(s["source_stamp_ns"]) for s in unique]
+    cases, rejected = [], Counter()
+    rejected["input_frame_state_or_epoch_unverified"] = len(states)-len(eligible)
+
+    def score(anchor, now, target, kind, horizon=None):
+        index = bisect.bisect_left(times_ns, round(target*1e9))
+        if index == len(unique) or not failure_valid or unique[index]["source_sim_s"] >= failure_s:
+            rejected[kind+"_oracle_missing_or_after_failure"] += 1
+            return
+        oracle = unique[index]
+        previous = next((s for s in reversed(unique) if s["source_sim_s"] < anchor["source_sim_s"]
+            and recorded_availability(s) <= now), None)
+        row = {"kind": kind, "requested_horizon_from_available_s": horizon,
+            "forecast_at_sim_s": now, "requested_target_sim_s": target,
+            "input_state": anchor, "previous_available_state": previous,
+            "input_evidence": "FSM logged consumed PV" if kind == "fsm" else "recorder clock upper bound",
+            "oracle_source_sim_s": oracle["source_sim_s"],
+            "oracle_source_offset_s": oracle["source_sim_s"]-target,
+            "realized_dt_from_source_s": oracle["source_sim_s"]-anchor["source_sim_s"],
+            "oracle_position": oracle["position"], "oracle_velocity": oracle["velocity"], "models": {}}
+        # Each formula defines a continuous forecast from the initial PV. Score
+        # it at the first actual source timestamp at/after the requested time;
+        # do not interpolate oracle values into the forecast or hide the offset.
+        for model in models:
+            prediction = predict_pv(anchor, oracle["source_sim_s"], model, previous)
+            if prediction is None:
+                row["models"][model] = {"status": "unscored", "reason": "past_velocity_pair_unavailable"}
+                continue
+            error = np.asarray(prediction["position"])-oracle["position"]
+            row["models"][model] = {"status": "scored", **prediction,
+                "position_error_xyz": error.tolist(), "position_error_m": float(np.linalg.norm(error)),
+                "velocity_error_m_s": float(np.linalg.norm(np.asarray(prediction["velocity"])-oracle["velocity"]))}
+        cases.append(row)
+
+    focus = {int(r["source_stamp_ns"]) for r in tracking}
+    for anchor in unique:
+        now = recorded_availability(anchor)
+        if int(anchor["source_stamp_ns"]) not in focus or not np.isfinite(now):
+            continue
+        for horizon in horizons:
+            score(anchor, now, now+horizon, "recorder", horizon)
+    for event in fsm:
+        now = event["sim"]
+        if not np.isfinite(now) or not failure_valid or now >= failure_s:
+            rejected["fsm_at_or_after_failure"] += 1
+            continue
+        anchor = next((s for s in unique if abs(s["source_sim_s"]-event["odom_source"]) < 1e-9), None)
+        match = np.asarray(event.get("bag_pv_match_error", [np.inf]))
+        if anchor is None or anchor["source_sim_s"] > now or not np.all(np.isfinite(match)) or np.max(match) > 1e-10:
+            rejected["fsm_consumed_pv_unverified"] += 1
+            continue
+        score(anchor, now, now, "fsm")
+
+    summaries = []
+    for kind, horizon in [("fsm", None)]+[("recorder", h) for h in horizons]:
+        subset = [r for r in cases if r["kind"] == kind and r["requested_horizon_from_available_s"] == horizon]
+        summary = {"kind": kind, "requested_horizon_from_available_s": horizon, "cases": len(subset), "models": {},
+            "all_models_scored_cases": sum(all(r["models"][m]["status"] == "scored" for m in models) for r in subset),
+            "realized_dt_from_source_range_s": [min((r["realized_dt_from_source_s"] for r in subset), default=None),
+                                                max((r["realized_dt_from_source_s"] for r in subset), default=None)],
+            "oracle_offset_max_s": max((r["oracle_source_offset_s"] for r in subset), default=None)}
+        for model in models:
+            values = [r["models"][model] for r in subset if r["models"][model]["status"] == "scored"]
+            errors = np.array([v["position_error_m"] for v in values])
+            summary["models"][model] = {"scored": len(values), "unscored": len(subset)-len(values),
+                "position_rms_m": float(np.sqrt(np.mean(errors**2))) if len(errors) else None,
+                "position_p95_m": float(np.quantile(errors, .95)) if len(errors) else None,
+                "position_max_m": float(errors.max()) if len(errors) else None}
+        summaries.append(summary)
+    return {"kind": "offline_pv_prediction_fixed_baselines", "models": list(models), "horizons_sim_s": list(horizons),
+        "scope": "same original flight, ideal Gazebo PV; no control, measured A, calibration or invariant bound",
+        "model_acceleration_scope": "CV zero / CA past-V secant; neither is measured acceleration",
+        "hold_scope": "cached PV baseline, not a kinematically consistent executable trajectory",
+        "oracle_scope": "next actual PV source timestamp, offset disclosed; future PV used only to score",
+        "input_scope": "recorder availability and explicit FSM consumption are distinct evidence paths",
+        "ambiguous_source_stamps": len(ambiguous), "excluded": dict(rejected), "summary": summaries, "cases": cases}
 
 
 def analyze(states, records, log, task_id, failure_s, evaluator, single_epoch=True):
@@ -146,7 +278,7 @@ def analyze(states, records, log, task_id, failure_s, evaluator, single_epoch=Tr
         if state.get("frame_id") != "world" or state.get("velocity_frame_id") != "world":
             excluded["frame_unverified"] += 1
             continue
-        if failure_s is None or time >= failure_s:
+        if failure_s is None or not np.isfinite(failure_s) or time >= failure_s:
             excluded["not_strictly_before_primary_failure"] += 1
             continue
         current = next((r for r in reversed(records) if r["received_sim_s"] <= time), None)
@@ -211,7 +343,7 @@ def analyze(states, records, log, task_id, failure_s, evaluator, single_epoch=Tr
         "fsm": fsm, "curve_receipts": receipts}
 
 
-def run(run_dir, root, candidates=None):
+def run(run_dir, root, candidates=None, forecast=False):
     warnings = []
     request = json.loads((run_dir / "request.json").read_text())
     report = json.loads((run_dir / "report.json").read_text())
@@ -234,7 +366,12 @@ def run(run_dir, root, candidates=None):
         warnings.append("report task identity mismatch; failure time not used")
         report = {}
     failure = next((r.get("simulation_s") for r in report.get("failure_events", []) if r.get("simulation_s") is not None), None)
+    if not isinstance(failure, (float, int)) or not np.isfinite(failure):
+        warnings.append("primary failure time unavailable/nonfinite; pre-failure scoring unqualified")
+        failure = None
     result = analyze(states, records, log, request["id"], failure, evaluator, epochs == 1)
+    if forecast:
+        result["forecast"] = forecast_evidence(states, result["tracking"], result["fsm"], failure, epochs == 1)
     headroom = []
     if candidates and candidates.get("archive_task_id") != request["id"]:
         warnings.append("candidate task identity mismatch; headroom comparison skipped")
@@ -313,6 +450,39 @@ def plot_report(result, file):
     plt.close(fig)
 
 
+def plot_forecast(result, file):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    forecast = result.get("forecast")
+    if not forecast or not forecast["cases"]:
+        print("WARNING: no forecast cases; optional forecast plot skipped")
+        return
+    fig, axes = plt.subplots(2, 1, figsize=(10, 7), constrained_layout=True)
+    fig.suptitle("Original-run PV prediction: fixed causal baselines\nIdeal Gazebo pose / differentiated V; no measured A or control")
+    profiles = [s for s in forecast["summary"] if s["kind"] == "recorder"]
+    fsm = [r for r in forecast["cases"] if r["kind"] == "fsm"]
+    for model, color, label in (("hold", "#7c8795", "Cached PV"),
+            ("constant_velocity", "#226fbe", "Constant velocity"),
+            ("causal_acceleration", "#188462", "Past-V acceleration estimate")):
+        axes[0].plot([s["requested_horizon_from_available_s"] for s in profiles],
+            [s["models"][model]["position_rms_m"] for s in profiles], "o-", color=color, label=label)
+        valid = [r for r in fsm if r["models"][model]["status"] == "scored"]
+        axes[1].plot([r["forecast_at_sim_s"] for r in valid],
+            [r["models"][model]["position_error_m"] for r in valid], "o-", color=color, label=label)
+    axes[0].set_xlabel("Horizon requested after recorder availability (s)")
+    axes[0].set_ylabel("Position RMS (m)")
+    axes[1].set_xlabel("FSM start time (s); scores use next actual source timestamp")
+    axes[1].set_ylabel("Position error (m)")
+    for ax in axes:
+        ax.set_yscale("log")
+        ax.grid(alpha=.2, which="both")
+        ax.legend(fontsize=8)
+    file.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(file, dpi=150)
+    plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path, required=True)
@@ -320,9 +490,11 @@ def main():
     parser.add_argument("--candidates", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--plot", type=Path, help="Optional scientific diagnostic figure")
+    parser.add_argument("--forecast", action="store_true", help="Evaluate fixed PV prediction baselines offline")
+    parser.add_argument("--forecast-plot", type=Path, help="Optional forecast comparison figure; requires --forecast")
     args = parser.parse_args()
     data = json.loads(args.candidates.read_text()) if args.candidates else None
-    result = run(args.run_dir, args.drone_root, data)
+    result = run(args.run_dir, args.drone_root, data, args.forecast)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False)+"\n")
     if args.plot:
@@ -330,6 +502,11 @@ def main():
             plot_report(result, args.plot)
         except (ImportError, OSError) as error:
             print(f"WARNING: optional plot unavailable: {error}; JSON retained")
+    if args.forecast_plot:
+        try:
+            plot_forecast(result, args.forecast_plot)
+        except (ImportError, OSError) as error:
+            print(f"WARNING: optional forecast plot unavailable: {error}; JSON retained")
     print(json.dumps({"odometry": result["odometry_count"], "tracking": result["tracking_summary"],
         "qualification": result["qualification"]}))
 
