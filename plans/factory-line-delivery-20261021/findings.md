@@ -10,6 +10,8 @@
 
 标定追加八例0/.06×±.05/±.06说明固定4.5/kv32在本有限面板仍欠转，.05实际约.036–.037、.06约.042–.045，所有50Hz保持通过，负转.06的500Hz有1步断触。没有据此修改有效轮距、摩擦、质量或执行器，也不能把前一.055负转17步断触归为唯一原因。原件loaded-drive-known-rates-response.json。原生yaw-stop只是已验分项，完整任务仍待原oracle。
 
+完整g（fd4c827）原K/连续载货通过，但进场原生4已耗105.982秒、第二段107.856秒才派发，仍在120.012秒取消原5；末4.701cm/.03035rad，A未执行。114–119秒原始轮目标仍是-.06至-.037m/s正常后退/减速，未进入旧朝向摆动卡点。说明该完整初态的路线时间依然不足，不据短测通过宣称业务已修复。physics的-11在后续SIGINT后出现，timing空，原因未知；原任务失败先发生，不归因为这次退出。旧私有证据与迟到见证失败均保留。
+
 - 公开prepare的原spawn/A/B/occupied与短测控制合同读回一致，但完整e仍在1.35进场120.039秒取消，K与连续货物保持通过、A未执行。重建装货初态不包含solver warmstart与AMCL滤波历史，不把短测105.794秒外推为完整业务。原独立记录完整，owned清理、源起止均通过。
 - 真实1.3.13 RPP函数对e实录路径的独立C++探针表明：普通carrot在90秒附近触零阈值，但当前use_fixed_curvature_lookahead=.3的活动曲率非零；后续普通carrot方向翻转。修改C++零阈值没有获证据支持，未实施。原件在私有rpp-recorded-probe/，不把观察关联宣称完整因果。
 - MPPI DiffDrive候选在有限载货初态未保持货物；原生Graceful可完成两UUID，.055最终停稳超120秒，.060/.12实际118.615秒、2.215cm/.00218rad并保持5709个采样检查。增角速.065触载货失败，降速范围.08首段超时。失败全保留，不晋级；选.060/.12继续完整原factory，仍未宣称稳定。
@@ -256,3 +258,13 @@ J100 新生成场景：工位接近扫掠168样本/432几何对，扣采样间�
 - 本机带原oracle测量实际1.0015倍/50Hz、采集closed/complete通过；没有业务marker，oracle业务false符合范围。原first测量1.0026倍但销毁KeyboardInterrupt，保留false。Jazzy execute_local.__on_shutdown对noninteractive会send_sigint，原killpg可重复信号；改只signal owned launcher后，复验finalization=[]/零survivor。所有helper调用者均为非交互ROS launch（包括exec shell入口），不把此法推广为任意进程树终止策略。
 
 - 本机完整b确认compute余量已覆盖真实抓放/出站：包装物理步.914ms、真实任务222.017秒已原K/连续载货通过，仍未交付。随后取消来自fresh()在浮点-0.100000000375928s上拒绝，差原边界.376ns；原接收龄5.791ms，不是收包停止。保持同一100ms/250ms范围，改为生产器同样ROS整数纳秒量化，新增越界1ns负例。较早-120ms的HTTP拒绝是真实越界且仍拒绝；不据此改写所有旧时效问题因果。
+
+
+## 2026-10-24 路径离散与原生终点距离反例
+
+- 官方生成器独立venv（系统NumPy1.26.4/Matplotlib3.6.3，仅补Rtree1.3.0），不修改物理/规划环境。32朝向/.60m/2cm生成160基元，其中64曲线、64原地、32直线；原16朝向248基元。G装货后重建初态，零速度/无warmstart/无AMCL历史，质量/惯量/摩擦/完整碰撞/执行器逐项一致。
+- `local-loaded-g-plan32-a`因几何探针未带MuJoCo模块路径中断，全程hold、原生计划后未发运动，正常清理；修正路径的b轮直达通过完整扫掠、名义100.206秒，按已测.04rad/s响应估算125.490秒，后者不是严格下界。via1.35名义101.348＋10.833秒，未采用32。
+- `local-loaded-g-planr030-a`仅将官方16朝向曲率半径.60→.30m，直达最小距离-1.636mm，拒绝运动；via1.35扫掠通过但名义94.201＋10.833秒，未优于原候选。两静止轮均零业务/零Navigate、静止与owned清理通过。
+- `local-loaded-g-via135-lookahead060-a`恢复原16/.60，只改Graceful max_lookahead .4→.6；原生参数已读回。首UUID64cccb45…在共用120秒取消5、第二段未执行，载货与禁碰未触发、quiet/参数恢复/owned0/端口关闭通过。末端偏航缓慢修正，未采用。
+- 官方1.3.13 Graceful以calculate_path_length(transformed_plan)判断终点位置；裁剪后单点路径内部长度0，两点残段也可能短于15mm，缺少车到首点距离。新增真实controller反例：首点30mm、原checker15mm，1/2点两组旧实现均v=0/w=.25（测试默认最小转速），checker仍拒绝；容差内10mm行为保留。原源码未改前测试失败，原始日志保留。该反例证明边界缺陷，不唯一归因先前所有超时。
+- 最小native补丁仅加hypot(first.x,first.y)，原曲线路程/碰撞/checker/速度保持，20 controller＋5 egopolar通过。新包加入独立overlay，系统安装不变。Kaggle显式graceful构建同时追加Shim与Graceful，旧缓存不得冒充新库；6项项目选择/带空格Bash传参检查通过。下一步仅恢复.4前视的原G fixture验证，再完整H。证据在原根native-graceful-distance/、原生标签仍1.3.13；没有新Kaggle业务成功。

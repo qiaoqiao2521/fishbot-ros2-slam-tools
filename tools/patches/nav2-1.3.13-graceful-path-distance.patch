@@ -1,0 +1,80 @@
+diff --git a/nav2_graceful_controller/src/graceful_controller.cpp b/nav2_graceful_controller/src/graceful_controller.cpp
+index aba04ce..b974df7 100644
+--- a/nav2_graceful_controller/src/graceful_controller.cpp
++++ b/nav2_graceful_controller/src/graceful_controller.cpp
+@@ -158,7 +158,10 @@ geometry_msgs::msg::TwistStamped GracefulController::computeVelocityCommands(
+   }
+
+   // Compute distance to goal as the path's integrated distance to account for path curvatures
+-  double dist_to_goal = nav2_util::geometry_utils::calculate_path_length(transformed_plan);
++  // The pruned path may start ahead of the robot or contain only its goal.
++  const auto & first_position = transformed_plan.poses.front().pose.position;
++  double dist_to_goal = std::hypot(first_position.x, first_position.y) +
++    nav2_util::geometry_utils::calculate_path_length(transformed_plan);
+
+   // If we've reached the XY goal tolerance, just rotate
+   if (dist_to_goal < goal_dist_tolerance_ || goal_reached_) {
+diff --git a/nav2_graceful_controller/test/test_graceful_controller.cpp b/nav2_graceful_controller/test/test_graceful_controller.cpp
+index de95598..3f5f7fa 100644
+--- a/nav2_graceful_controller/test/test_graceful_controller.cpp
++++ b/nav2_graceful_controller/test/test_graceful_controller.cpp
+@@ -1124,6 +1124,59 @@ TEST(GracefulControllerTest, computeVelocityCommandFinal) {
+   EXPECT_LE(cmd_vel.twist.angular.z, 0.5);
+ }
+
++TEST(GracefulControllerTest, prunedPathStillHasRobotToFirstPoseDistance) {
++  auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("testGracefulDistance");
++  auto tf = std::make_shared<tf2_ros::Buffer>(node->get_clock());
++  node->declare_parameter("test.initial_rotation", false);
++  node->declare_parameter("checker.xy_goal_tolerance", 0.015);
++  auto costmap_ros = std::make_shared<nav2_costmap_2d::Costmap2DROS>("test_costmap");
++  costmap_ros->set_parameters({
++    rclcpp::Parameter("global_frame", "test_global_frame"),
++    rclcpp::Parameter("robot_base_frame", "test_robot_frame"),
++    rclcpp::Parameter("width", 10), rclcpp::Parameter("height", 10),
++    rclcpp::Parameter("resolution", 0.1)});
++  costmap_ros->on_configure(rclcpp_lifecycle::State());
++  auto controller = std::make_shared<GMControllerFixture>();
++  controller->configure(node, "test", tf, costmap_ros);
++  controller->activate();
++  geometry_msgs::msg::PoseStamped robot_pose;
++  robot_pose.header.frame_id = "test_robot_frame";
++  robot_pose.pose.orientation.w = 1.0;
++  geometry_msgs::msg::TransformStamped transform;
++  transform.header.frame_id = "test_global_frame";
++  transform.header.stamp = node->get_clock()->now();
++  transform.child_frame_id = "test_robot_frame";
++  transform.transform.rotation.w = 1.0;
++  tf->setTransform(transform, "test", false);
++  nav2_controller::SimpleGoalChecker checker;
++  checker.initialize(node, "checker", costmap_ros);
++  for (const auto count : {1u, 2u}) {
++    SCOPED_TRACE(count);
++    nav_msgs::msg::Path plan;
++    plan.header.frame_id = "test_global_frame";
++    for (size_t j = 0; j < count; ++j) {
++      auto target = robot_pose;
++      target.header.frame_id = plan.header.frame_id;
++      target.pose.position.x = 0.03 + 0.01 * j;
++      plan.poses.push_back(target);
++    }
++    controller->setPlan(plan);
++    auto cmd = controller->computeVelocityCommands(robot_pose, geometry_msgs::msg::Twist(), &checker);
++    EXPECT_GT(cmd.twist.linear.x, 0.0);
++    EXPECT_DOUBLE_EQ(cmd.twist.angular.z, 0.0);
++    EXPECT_FALSE(checker.isGoalReached(robot_pose.pose, plan.poses.back().pose, geometry_msgs::msg::Twist()));
++  }
++  nav_msgs::msg::Path near;
++  near.header.frame_id = "test_global_frame";
++  near.poses.push_back(robot_pose);
++  near.poses.back().header.frame_id = near.header.frame_id;
++  near.poses.back().pose.position.x = 0.01;
++  controller->setPlan(near);
++  EXPECT_DOUBLE_EQ(controller->computeVelocityCommands(robot_pose, geometry_msgs::msg::Twist(), &checker).twist.linear.x, 0.0);
++  controller->deactivate();
++  controller->cleanup();
++}
++
+ int main(int argc, char ** argv)
+ {
+   testing::InitGoogleTest(&argc, argv);

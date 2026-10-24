@@ -219,6 +219,12 @@ yaw-stop补丁在同一F载货重建初态通过119.637秒，两UUID与原静止
 余量仅.363秒；这仍是路线分项。补丁保留原StoppedGoalChecker的全部门槛，
 由新显式overlay加载，原模型、Smac、平滑器与旧默认保持。
 
+完整g仍在原共享120秒耗尽时取消第二Nav，A未执行。32朝向及.30m基元
+静止对照未获时间优势，.60m前视候选也超时，均未采用。当前恢复原
+16朝向/.60m基元和.40m前视，只验证Graceful裁剪路径漏算车到首点距离的
+原生补丁：3cm/1.5cm反例先失败，修补后25项原生检查通过。
+该修补尚不代表载货路线通过；复现与构建见[Kaggle薄适配](../experiments/kaggle/README.md#graceful-裁剪路径的终点距离)。
+
 **本机1.3.13需要原生缓存修复。** 实测发现 `NodeLattice::isNodeValid` 可复用终点缓存，
 跳过另一条入边的碰撞检查。仓库包含最小 C++ 复现和仅修该条件的补丁。
 在独立 overlay 构建后，通过现有 `FISHBOT_NAV2_QUERY_OVERLAY=<overlay>/install`

@@ -170,7 +170,10 @@ def main():
     if yaw_stop:
         run("rotation-yaw-stop-patch", ["git", "apply",
             str(fishbot/"tools/patches/nav2-1.3.13-rotation-yaw-stop.patch")], cwd=source)
-        native_packages.append("nav2_rotation_shim_controller")
+        run("graceful-path-distance-patch", ["git", "apply",
+            str(fishbot/"tools/patches/nav2-1.3.13-graceful-path-distance.patch")], cwd=source)
+        transport_packages = ["nav2_rotation_shim_controller", "nav2_graceful_controller"]
+        native_packages.extend(transport_packages)
     runtime_env = dict(os.environ, CMAKE_BUILD_PARALLEL_LEVEL="2", OMP_NUM_THREADS="2",
                        OPENBLAS_NUM_THREADS="1", FISHBOT_COOP_PYTHON=python,
                        FISHBOT_MUJOCO_DOMAIN_ID="141", FISHBOT_NAV2_QUERY_OVERLAY=str(native/"install"),
@@ -200,10 +203,10 @@ def main():
                       'basis':'same Nav2 1.3.13 and unchanged project native patches; native checks still required'})
         if yaw_stop:
             # An older cache can retain the planner/smoother. Build the newly
-            # selected shim instead of treating a declared parameter as proof.
-            run("rotation-yaw-stop-build", ["bash", "-ec", NATIVE_BUILD_SHELL,
+            # selected controllers instead of treating cached declarations as proof.
+            run("native-transport-build", ["bash", "-ec", NATIVE_BUILD_SHELL,
                 "f1-build", str(native), python, str(planning/"bin/colcon"),
-                "nav2_rotation_shim_controller"], env=runtime_env, timeout=900)
+                *transport_packages], env=runtime_env, timeout=900)
     else:
         if os.environ.get('FISHBOT_REUSE_NATIVE_INSTALL') == '1':
             print('WARNING: no unique native artifact; building the selected sources',flush=True)

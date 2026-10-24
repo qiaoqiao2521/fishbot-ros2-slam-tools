@@ -10,11 +10,15 @@ J100＋3D雷达的同轮完整B→A仍未通过，原FishBot父2/2保持。CLI�
 
 控制计算另有只读证据：本轮两UUID分别1809/259次GC compute内变换路径发布，共2068；它不是输入消费ACK，也不代替原生终态与物理评分。先前离线后接入的独立见证计数0，原样保留为未取到证据。
 
-公开prepare已读回：原spawn=(0,-2,0)、原A/B/B进场1.35、world/rig/arm、载货限幅与progress保持，BT/lattice仅引用路径变化、内容相同。相对完整f仅FollowPath角速.06→.055与显式yaw-stop；81项配置/构建传参/factory/acceptance/loaded检查通过，11项原生测试通过；原factory dry-run为B→A/120/360/1000、零动作。下一步冻结本次源码，运行local-full-b-a-g。必须同轮原factory独立两单评分通过后才能更新PROJECT完成状态。完整e/f及所有短测、静止规划与标定失败继续保留。
+公开prepare已读回：原spawn=(0,-2,0)、原A/B/B进场1.35、world/rig/arm、载货限幅与progress保持，BT/lattice仅引用路径变化、内容相同。相对完整f仅FollowPath角速.06→.055与显式yaw-stop；81项配置/构建传参/factory/acceptance/loaded检查通过，11项原生测试通过；原factory dry-run为B→A/120/360/1000、零动作。源码fd4c827已推远端。
+
+完整g仍失败：B task3a268cb7-2184-4fa9-8f21-c7d37002e14c，255.793墙秒；原K、连续交接/载货、记录与源一致通过。原进场d198f8b3…为4，105.982秒；第二Nav bd43fad2…在107.856秒才派发，原120.012秒总预算取消5，末4.701cm/.03035rad，A未执行。末段参考速度仍为后退减速而非卡死零输出，实际没有足够到达/停稳时间，不能把短测.363秒余量外推成完整成功。所有owned进程0/9111关闭，但physics在随后SIGINT回收中退出-11、timing文件空；此额外回收失败未定位，不称全部正常退出。晚接入只读见证遇API已关闭、未取到证据，未覆盖原失败。
+
+32朝向/.60m与16朝向/.30m的官方生成及原生静止对照已结束，未获路线时间优势；.30m直达还触实体相交。max_lookahead .4→.6的G重建载货短测在首Goal耗尽原120秒，取消5，均未采用。恢复原16朝向/.60m基元和.4前视。新原生反例确认Graceful只算路径内部长度：3cm首点、1.5cm容差，单点及1cm两点残段均提前旋转/零线速度，原checker仍拒绝。最小补丁补上车到首点距离，20控制器＋5坐标测试通过；6项候选/真实Bash构建传参检查通过。先冻结源码、同一G重建载货短测，原样验两UUID/120秒/载货/停车/清理，再完整H。独立overlay新增Graceful，其余原生库保持；原G回收-11仍未知，faulthandler已启用于新运行。生成器独立系统NumPy1环境不改物理venv。必须同轮原factory独立两单评分通过后才更新PROJECT完成状态，所有失败保留。
 
 证据根：~/.local/share/fishbot/cloud-jobs/kaggle-20261024/；最新local-loaded-f-via135-graceful055-yaw-stop-a，原生源码/构建/反例在native-yaw-stop/，标签1.3.13实际f4108e5。新显式候选尚未在Kaggle重跑完整任务，不把本机结果称云端成功。
 
-knowledge_status=updated(local)：原Wiki/FishBot第19节的纳秒边界、正常shutdown、差速进场与问题入口已读回，知识仓未提交推送；本轮原生停车兼容经验待收尾在原段落串行补充。仅仿真，不外推真机或sim-to-real。
+knowledge_status=updated(local)：原Wiki/FishBot第19节已补“停车检查器：先请求制动，再等待成功”，第20节已补调试发布调用点/同点Goal绕过计算/计算非ACK，问题入口同步并读回；既有纳秒、正常shutdown和进场经验保持。知识仓原有改动保留，未提交推送。仅仿真，不外推真机或sim-to-real。
 
 ## Prior 2026-10-24 run notes (preserved)
 

@@ -142,8 +142,8 @@ class NativeBuildArgumentsTests(unittest.TestCase):
     def test_original_packages_with_spaces_in_runtime_path(self):
         self.check_packages(['nav2_smac_planner', 'nav2_velocity_smoother'])
 
-    def test_cached_overlay_can_build_only_new_shim(self):
-        self.check_packages(['nav2_rotation_shim_controller'])
+    def test_cached_overlay_builds_selected_transport_packages(self):
+        self.check_packages(['nav2_rotation_shim_controller', 'nav2_graceful_controller'])
 
 
 if __name__ == '__main__':

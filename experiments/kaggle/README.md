@@ -96,8 +96,8 @@ cp experiments/kaggle/f1_candidate.py /absolute/private/f1-dataset/
 云端v6/v7失败、`.95m`进场失败及其余开发候选均保留；完整B→A另由原factory评分。
 
 原始出生点完整e未复现上述路线分项，1.35进场在120秒取消，A未执行。
-`FISHBOT_TRANSPORT_CONTROLLER=graceful`显式选择已安装Nav2 1.3.13的
-RotationShim＋Graceful；默认仍为RPP，不安装或重写控制器。
+`FISHBOT_TRANSPORT_CONTROLLER=graceful`显式复用Nav2 1.3.13的
+RotationShim＋Graceful及下述两处原生补丁；默认仍为RPP，不另写控制器。
 `graceful-j100.yaml`只替换FollowPath，StagingPath/checker/物理保持；
 原载货平滑器的`.06/.10`和`.025/.05`加速度门槛保持。
 Graceful自身最大线/角速`.06/.055`、降速范围`.12m`。
@@ -118,8 +118,9 @@ Graceful自身最大线/角速`.06/.055`、降速范围`.12m`。
 J100候选仅对FollowPath显式启用，StagingPath与旧默认不变。
 
 `FISHBOT_TRANSPORT_CONTROLLER=graceful`在同一1.3.13源码上应用该补丁，
-正常构建追加`nav2_rotation_shim_controller`。复用旧native缓存时保留原
-Smac/平滑器，再独立构建新Shim，不把参数声明当作补丁已生效的证明。
+同时应用下述距离补丁，构建追加`nav2_rotation_shim_controller`和
+`nav2_graceful_controller`。复用旧native缓存时保留原Smac/平滑器，
+再独立构建这两个包，不把参数声明当作补丁已生效的证明。
 本机已执行原生反例、补丁后11项上游/新增测试及实际加载路径读回。
 云端还需用最新源码包或显式source overlay；旧数据集不会自动获得新文件。
 
@@ -127,11 +128,23 @@ Smac/平滑器，再独立构建新Shim，不把参数声明当作补丁已生�
 
 ```bash
 git apply /absolute/fishbot/tools/patches/nav2-1.3.13-rotation-yaw-stop.patch
-colcon build --packages-select nav2_rotation_shim_controller \
-  --allow-overriding nav2_rotation_shim_controller \
+git apply /absolute/fishbot/tools/patches/nav2-1.3.13-graceful-path-distance.patch
+colcon build --packages-select nav2_rotation_shim_controller nav2_graceful_controller \
+  --allow-overriding nav2_rotation_shim_controller nav2_graceful_controller \
   --cmake-args -DBUILD_TESTING=ON
 ```
 
 复用已有planner/smoother overlay并核对实际加载路径；不覆盖系统安装。
 新增原生测试在`test_shim_controller`的`optInYawBandStopRetainsStoppedChecker`，
 同时验证默认旧行为、容差外旋转与“请求停止仍不等于native成功”。
+
+## Graceful 裁剪路径的终点距离
+
+`nav2-1.3.13-graceful-path-distance.patch`保留同版Apache-2.0实现，
+只为原终点距离补上机器人到裁剪路径首点的距离。原实现中，单点路径的
+内部长度为零；两点残段也可能短于容差，即使车辆仍离目标较远。
+原生反例固定1.5cm容差、首点距车3cm，旧实现提前旋转且线速度为零。
+补丁后继续平移，原GoalChecker仍拒绝提前成功；容差内旋转保持。
+20项控制器和5项坐标测试通过，原型测试在
+`test_graceful_controller`的`prunedPathStillHasRobotToFirstPoseDistance`。
+这只证明原生边界修复，真实载货路线和完整配送仍须独立验收。
