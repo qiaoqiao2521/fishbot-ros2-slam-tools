@@ -417,3 +417,13 @@ SO101来源084cc7f，工作台本轮abc0ac7/2b9fd90；并行Drone源码已由原
 
 无人机c866441冻结、无训练/ROS节点/飞行/控制写。M2未完成、动态闭环未通过。下一项预测后参考偏差/必要制动可行域和时间有效几何，由本对话接续。knowledge_status=already_covered，项目数字留SpecMesh，未写memory。
 - 本轮独立CDR读回17项通过，1926源消息逐个核对预测输入/评分PV，949 case保持原首发截止与时间来源。8份变更文档72处本地链接无缺失，diff检查通过。
+
+
+## 2026-10-25 M2默认关闭观测补片（未应用）
+
+Current：两份可审查patch已保存，11局部检查过/无跳过；drone c866441、PX4 d6f12ad、GCOPTER e0444f6冻结保持，M2部分完成、M3不启动、动态闭环未过。
+Done：复用原任务JSONL与uORB/ULog。sender逐SDK调用保host/sim、身份上下文和ENU/NED，失败/取消不改原控制；PX4保真订阅raw、实际used、输出、计算分支/次数/结果及跨周期本地failsafe来源。默认不写sender日志/不发布诊断；消息注册/logger配置仍变化，不能称全构建不变。
+验证：补片只应用临时副本，原树apply --check通过。原/补片真实函数及C++控制块对照覆盖两模式、七分支组合、写入失败/取消、无更新/无raw、前置与保留failsafe、最终计算失败仍输出。独立审查发现raw误用和前置/跨周期来源丢失，已局部修复并补负例。旧数学/事件夹具未修改，不重复全套机器人实验。
+Issues：官方uORB生成器在系统Python缺genmsg，未安装；完整PX4生成/构建、ULog/JSONL延迟丢帧、跨域对应/原生来源、真实AJ/地图/终端仍未知。补片不接MINCO实时执行、不证明采用ACK。
+交接：[观测合同与补片说明](../../docs/DRONE_HANDOFF_EVIDENCE.md)含两个diff与精确测试入口。Next/owner=根Codex，先在临时副本核已有隔离Python与官方生成/构建；不应用冻结树、不自动飞行。
+Knowledge：already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟与CapMesh PIT-004。agent-link dsh45s超时无返回不作证据；本对话内置Agent仅只读审查，未联系其他聊天。新项目事实未写memory。

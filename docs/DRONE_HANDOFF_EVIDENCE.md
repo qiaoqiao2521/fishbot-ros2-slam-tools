@@ -125,3 +125,31 @@ python3 -m unittest test_drone_handoff_event_fixtures test_drone_handoff_evidenc
 
 `fixture_chain_consistent`只表示声明夹具一致。所有行和总报告均保留`actual_execution_admission=not_performed`，动态闭环仍未通过。没有真实clock对应、完整known-free/终端或控制器消费采集，新事件合同不能从旧原包补出这些事实。
 Next/owner：根Codex准备默认关闭、可审查的最小旁路观测补片，复用现有任务JSONL和PX4消费点；先给出精确diff及离线验证，不应用到冻结树、不启动仿真。停止扩同类数值/事件网格；真实闭环仍需后续解冻后的新采集。drone c866441、PX4 d6f12ad和GCOPTER e0444f6保持，M2部分完成、M3不启动。
+
+
+## 默认关闭的观测补片（2026-10-25，未应用）
+
+本片交付可审查diff，保持drone `c866441`、PX4 `d6f12ad`、GCOPTER `e0444f6`冻结。
+[发送侧补片](../apps/fishbot-control-station/workbench-tools/patches/drone-handoff-sender.patch)针对现有`Flight.setpoint/goto`；[控制消费补片](../apps/fishbot-control-station/workbench-tools/patches/px4-handoff-consumption.patch)针对PX4 v1.17的`mc_pos_control`、消息注册和既有ULog。它们保存在工作台，不是已部署功能。
+
+| 观测点 | 实际新增内容 | 默认及资格边界 |
+| --- | --- | --- |
+| sender | task、trace session、逐RPC序号；EGO调用已有goal/trajectory/source stamp；调用开始/返回/错误的host monotonic及分别采样的sim值；原ENU reference、origin和传给SDK的NED PVA/yaw | `DRONE_TRACE_HANDOFF`不等于`1`时不创建日志。开启后写任务目录`handoff-sender.jsonl`。source epoch仍未知，序号不是原生PX4序号；SDK载荷尚非MAVLink wire读回 |
+| controller | 真正订阅更新的原始快照及available/updated；实际选用输入、原生时间戳、状态sample和输出PVA；primary/old/failsafe、update次数及成功位 | `DRONE_HANDOFF_OBSERVATION` CMake选项默认`OFF`。开启才发布`position_control_handoff`；原logger新增optional topic、interval=0。消息schema注册始终存在，不称整个构建不变 |
+| provenance | 本轮前置failsafe生成与持续使用本地failsafe来源分别记录，last-valid来源随保存/旧输入切换传播 | `PRIMARY`只表示主路径，不推断外部发送者；`OLD_INPUT`也可能来自此前本地failsafe。raw缓存只在订阅真更新时覆盖，不将上轮内部改写值冒充原始输入 |
+
+保持SDK参数、次数及原`reference`提交时机；错误/取消原样重抛。JSON/文件错误warning后继续原调用，不将观测失败变为飞行失败。
+启用后同步JSONL会增加延迟，尚无延迟上界；uORB/ULog仍可能丢记录，不能因interval=0假定零丢帧。跨域clock对应、每个MAVLink ingress、原生发送者身份/候选版本、地图/终端与真实A/J资格仍未补齐。
+控制器读取的是订阅最新值，不是所有接收事件；日志仍不足以建立逐候选唯一采用ACK。没有新MINCO执行器、控制器或安全接管行为。
+
+[局部检查](../apps/fishbot-control-station/workbench-review-tests/test_drone_observation_patches.py)仅向临时副本应用补片。Python提取真实原/补片`setpoint`对照；C++编译真实原/补片控制块及消息字段，以替身依赖比较开关和分支。
+11项检查通过、无跳过。覆盖两种发送模式、ENU/NED三阶值、异常/取消与I/O失败、无新订阅且原对象已改、没有raw、前置failsafe首算成功、连续两周期保留来源、第三算failsafe也失败，以及七组主/旧/无旧/失败计算序列。
+原树`git apply --check`均过，未写原树。C++替身编译不是PX4全构建。系统Python运行官方生成器时缺少`genmsg`，未安装依赖；uORB生成、真实头文件/模块链接及ULog在线记录尚未验证。
+
+```sh
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_observation_patches -v
+```
+
+Next/owner：根Codex先核已有隔离Python依赖，在临时副本做官方消息生成及构建验证；仍不应用冻结树或启动仿真。实际采集须另行解冻后执行，保留raw缺失/重发/clock不确定，不以新日志形式冒充实测闭环。
+M2部分完成，M3未启动，动态闭环未通过。本轮没有ROS初始化、服务/仿真、控制、新飞行或落地。

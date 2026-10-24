@@ -1,0 +1,127 @@
+diff --git a/flight.py b/flight.py
+--- a/flight.py
++++ b/flight.py
+@@ -14,6 +14,7 @@
+ from scene import Scene
+ from diagnosis import classify, record_clearance
+ from preflight import inspect as preflight_inspect, process_alive
++from handoff_observation import HandoffObservation
+ 
+ 
+ MAX_CRUISE_POSE_GAP_S = .25
+@@ -202,6 +203,7 @@
+         self.position_tolerance = float(self.acceptance.get("position_tolerance_m", .5))
+         self.clearance_required = float(self.acceptance.get("min_clearance_m", 0.))
+         self.output = Path(output)
++        self.handoff_observation = HandoffObservation.from_environment(output, request["id"])
+         self.cancel_file = Path(cancel_file)
+         self.return_home_file = Path(return_home_file)
+         self.runtime = runtime
+@@ -515,7 +517,7 @@
+         self.observer.body_radius = envelope["radius_m"]
+         self.report["obstacles"] = self.scene.records
+ 
+-    async def setpoint(self, position, yaw=0., velocity=None, acceleration=None):
++    async def setpoint(self, position, yaw=0., velocity=None, acceleration=None, observation_context=None):
+         from mavsdk_grpc.offboard import PositionNedYaw, VelocityNedYaw, AccelerationNed
+         p = enu_to_ned([a-b for a,b in zip(position, self.origin)])
+         y = enu_yaw_to_ned_degrees(yaw)
+@@ -524,12 +526,29 @@
+                      "acceleration": list(acceleration or [0,0,0]) if velocity is not None else None,
+                      "yaw_rad": yaw, "simulation_s": self.observer.simulation_s,
+                      "mode": "position" if velocity is None else "position_velocity_acceleration"}
+-        if velocity is None:
+-            await self.drone.offboard.set_position_ned(PositionNedYaw(*p, y))
+-        else:
+-            await self.drone.offboard.set_position_velocity_acceleration_ned(
+-                PositionNedYaw(*p, y), VelocityNedYaw(*enu_to_ned(velocity), y),
+-                AccelerationNed(*enu_to_ned(acceleration or [0,0,0])))
++        trace = self.handoff_observation
++        sequence = trace.next_sequence() if trace is not None else None
++        if trace is not None:
++            trace.emit("rpc_start", sequence, self.observer.simulation_s,
++                       identity=observation_context, reference_enu=reference,
++                       origin_enu=list(self.origin), sdk_payload_ned={
++                           "position": p, "yaw_deg": y,
++                           "velocity": enu_to_ned(velocity) if velocity is not None else None,
++                           "acceleration": enu_to_ned(acceleration or [0,0,0]) if velocity is not None else None})
++        try:
++            if velocity is None:
++                await self.drone.offboard.set_position_ned(PositionNedYaw(*p, y))
++            else:
++                await self.drone.offboard.set_position_velocity_acceleration_ned(
++                    PositionNedYaw(*p, y), VelocityNedYaw(*enu_to_ned(velocity), y),
++                    AccelerationNed(*enu_to_ned(acceleration or [0,0,0])))
++        except BaseException as error:
++            if trace is not None:
++                trace.emit("rpc_error", sequence, self.observer.simulation_s,
++                           exception_type=type(error).__name__)
++            raise
++        if trace is not None:
++            trace.emit("rpc_return", sequence, self.observer.simulation_s)
+         self.command_position = list(position)
+         self.reference = reference
+ 
+@@ -644,7 +663,10 @@
+                 if ceiling is not None and command["position"][2] > self.ground_z+ceiling:
+                     raise RuntimeError("EGO 轨迹参考点超过本任务高度上限")
+                 await self.setpoint(command["position"], command["yaw_rad"],
+-                                    command["velocity"], command["acceleration"])
++                                    command["velocity"], command["acceleration"],
++                                    observation_context={"goal_id": goal_id,
++                                        "trajectory_id": command["trajectory_id"],
++                                        "command_stamp_sim_s": command["stamp_sim_s"]})
+                 self.reference.update(trajectory_id=command["trajectory_id"],
+                     task_id=self.request["id"], goal_id=goal_id,
+                     command_stamp_sim_s=command["stamp_sim_s"])
+diff --git a/handoff_observation.py b/handoff_observation.py
+new file mode 100644
+--- /dev/null
++++ b/handoff_observation.py
+@@ -0,0 +1,46 @@
++"""Optional sender observations. RPC return is not a PX4 consumption ACK."""
++import json
++import os
++import sys
++import time
++import uuid
++from pathlib import Path
++
++
++class HandoffObservation:
++    def __init__(self, path, task_id):
++        self.path = Path(path)
++        self.task_id = task_id
++        self.session = str(uuid.uuid4())
++        self.sequence = 0
++        self.warning_reported = False
++
++    @classmethod
++    def from_environment(cls, output, task_id):
++        if os.environ.get("DRONE_TRACE_HANDOFF") != "1":
++            return None
++        return cls(Path(output)/"handoff-sender.jsonl", task_id)
++
++    def emit(self, stage, sequence, simulation_s, **fields):
++        # Diagnostic failures never replace an SDK failure or cancellation.
++        try:
++            row = dict(fields, stage=stage, rpc_call_seq=sequence,
++                       task_id=self.task_id, trace_session_id=self.session,
++                       host_monotonic_ns=time.monotonic_ns(),
++                       source_simulation_s=simulation_s,
++                       source_clock="gazebo_sim_time", source_epoch=None,
++                       actual_execution_admission="unqualified_observation")
++            line = json.dumps(row, ensure_ascii=False, allow_nan=False)
++            with self.path.open("a", encoding="utf-8") as stream:
++                stream.write(line+"\n")
++        except Exception as error:
++            if not self.warning_reported:
++                self.warning_reported = True
++                try:
++                    print("WARNING: handoff observation unavailable: "+type(error).__name__, file=sys.stderr)
++                except Exception:
++                    pass
++
++    def next_sequence(self):
++        self.sequence += 1
++        return self.sequence
