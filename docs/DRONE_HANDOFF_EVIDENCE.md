@@ -189,5 +189,44 @@ DRONE_LOG_DIR=$(mktemp -d)
 tar -xzf apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/handoff-observation-build-logs.tar.gz -C "$DRONE_LOG_DIR"
 ```
 
-Next/owner：根Codex等待用户明确解除“隔离仿真启动/无解锁采集”这一项冻结，再在独立副本做有限记录验证。原`check_minco_link.py`仅监听offboard_control_mode且不启动Offboard，不能直接冒称新增消费topic或PVA读回已通过；未采集/未激活/缺topic必须分别保留，MAVLink ingress与跨域对应仍待证。此许可不包含解锁、起飞或动态任务。
+Next/owner：用户已明确解除隔离启动及无解锁采集限制，本轮实际读回见下节。原`check_minco_link.py`只有模式掩码，不能替代新记录；MAVLink ingress与跨域对应仍待证。许可不包含解锁、起飞或动态任务。
 M2仍部分完成，M3未启动，动态闭环未通过。补片未应用原冻结树，原drone/PX4/GCOPTER源码保持清洁。本片没有新增算法、训练、ROS节点或控制调用。
+
+
+## 隔离无解锁实际读回（2026-10-25）
+
+用户回复“解除”，授权独立副本启动和无解锁采集。直接复用原Flight/SITL启动预检、遥测、清理及官方PX4 listener/logger；新增[有限采集适配](../apps/fishbot-control-station/workbench-tools/drone-disarmed-observation.py)，未修改原冻结树。
+默认不请求Offboard；`--request-offboard`显式开启未解锁模式对照。它只切换模式，不调用arm或起飞。空program、preflight_only及拒绝land/return_home/recover的子类入口阻断运动路径；任何已收到的armed=True或armed流结束均锁存，停止继续发送。发送4s、原生查询3s、整段240s有界，超时取消后仍兜底关闭所属SDK/SITL并保留清理错误。
+
+| run_id | 实际范围 | 发送/原生证据 | 保留结论 |
+| --- | --- | --- | --- |
+| 3852b3b0-7f11-41c0-ba2b-3b716b857284 | 首次隔离启动 | EGO缺trimesh，0发送；4个所属PID退出 | 启动失败，未采集；不是算法失败 |
+| b913b0ab-be8e-4b7f-aef4-a03da63d4920 | 未解锁Loiter对照 | 18调用/18返回，36事件；ULog 962控制行，外部PVA兼容raw为0 | 模式掩码可变化，外部PVA未进入当前原始输入 |
+| b34abfea-ff8e-4072-9063-5fb630a5a950 | 未解锁Offboard对照 | 18调用/18返回，36事件；953控制行，6组PVA全找到兼容raw，共74行 | 输入链路读回成立；实际使用值仍被地面保护改写 |
+
+首轮仅因独立cache遗漏已有mesh-libs，未安装新包；复用原缓存trimesh 4.11.2并在启动前用实际sidecar解释器检查rclpy/numpy/trimesh/rtree/collada，随后两轮启动预检均ready。每次换新UUID，旧失败保留；只在上轮终态及所属PID退出后启动下一轮。
+两轮成功采集分别有43/31个armed=False、0个True，连接建立前4/10个未知保持未知。原生vehicle_status分别19/21条，均为arming_state=1；命令日志均无400（arm/disarm）。模式对照的nav_state含4和14，记录两条176模式命令；没有解锁和起飞。
+
+独立读回使用官方pyulog和冻结frames.py。两轮各18份发送记录的ENU/NED位置、速度、加速度及应用侧yaw转换一致。Offboard轮按MAVLink float32逐轴比较完整PVA，控制raw中6组均兼容，计数7/12/13/13/13/16，总74；这包含缓存/重发，不是74个调用或唯一ACK。相同PVA的原trajectory_setpoint日志仅3行，对应其200ms日志间隔；原生yaw读回相对解析转换最大误差4.371139e-8rad，仅报告观察值，不新增物理容差。
+两份ULog的dropout记录均0，不代表每条uORB发布都被完整记录，也不证明未来实时性。
+
+**地面保护必须单独解释。** 两轮全部控制行分别962/953，均used_branch=PRIMARY、update_success_mask=1；但used位置/速度为NaN，used加速度是NED `[0,0,100]`。固定PX4源在not_taken_off/ground_contact分支故意这样改写，确保零推力。这不是飞机实测100m/s²，不应混入空中轨迹A≤1的算法判据，也不能以PRIMARY/更新成功冒称外部PVA被执行。
+已录Gazebo独立真值窗口XYZ跨度约2.105e-13/1.829e-19/1.001e-6m。PX4 pose全记录中约5m的跳变来自初始场景原点校准，不是实际位移；读回已分列，不改变原坐标或飞行判据。
+原生候选UUID/逐调用身份仍不存在，source epoch及跨域clock未校准，actual adoption/flight_accepted仍未证明。真实A/J、时间有效地图/终端、跟踪与动态闭环资格仍缺。
+
+本轮10项局部检查通过、无跳过。覆盖默认无模式请求、显式未解锁模式请求/退出、失去未解锁/流结束锁存、原流值、SDK pending超时、禁止运动恢复、超时击中父类finally后的SDK兜底和关闭异常仍保摘要。独立审查发现并修补这些路径；末次仅补流结束后不发mode-stop的条件，正常采集路径不变，新增负例已测，没有为未触发分支重跑仿真。
+Loiter轮EGO退出日志出现publisher context invalid，Offboard轮未复现但未修复源码；Offboard轮SDK有两条176额外ACK警告，根因待核。原生状态已证明模式进入，不能忽略警告，也不能把整个采集标成飞行成功。
+
+原忽略目录`workbench-tools/output/drone-committed/<run_id>/`保留request/runtime/preflight、sender/native/telemetry/truth、模型定义、原ULog/深度及失败报告。最新轮另有`independent-readback.py/.json/.log`、`source-build-info.json`、`cleanup.json`及两份实际observer patch归档。
+独立副本及其源码/build/ccache共1310040064B已删除；两个临时辅助文件及三个生成etc链接已清理，保留原cache和所有原始实验记录。可用空间18664943616→19973898240B仅为收尾时全盘观测；12个所属PID、其进程组及14546/20066/8792监听均无残留。清理后再次读回所有新记录成功，原drone/PX4/GCOPTER仍为c866441/d6f12ad/e0444f6且clean。
+
+```sh
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_disarmed_observation -v
+cd ../workbench-tools/output/drone-committed/b34abfea-ff8e-4072-9063-5fb630a5a950
+/home/muqiao/.cache/ros2-drone/venv/bin/python independent-readback.py
+```
+
+重新采集时先按上节重建独立PX4副本与ON构建，向独立drone副本应用sender patch，设置DRONE_CACHE指向副本cache，复用原venv/mesh-libs与DRONE_EGO_WS。新output目录的collection-setup.json至少提供新run_id。从已source ROS Jazzy的shell运行采集适配，传入--drone-source、--output和独立实例/端口；只有显式--request-offboard才请求模式。原运行目录不重派、不覆盖。
+恢复observer补片可在新目录解开applied-observer-patches.tar.gz；大副本按固定源＋补片重建，原ULog可直接由pyulog读取，无需恢复整树。
+Next/owner：根Codex核原生时钟来源/点对应区间、MAVLink ingress与地面改写标记，保留未采用结论；本片不授权后续解锁/起飞。M3无解锁输入读回片完成，完整M3/动态闭环未完成，M2仍部分完成。

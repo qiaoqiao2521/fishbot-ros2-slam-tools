@@ -436,3 +436,13 @@ Done：直接复用已有venv，未安装依赖。新配置默认OFF，控制器
 Issues：可选GStreamer缺依赖，23个未初始化子模块不属于本次px4目标；不扩大到其他插件/板型。同步记录延迟、ULog完整性、MAVLink ingress、跨域对应、实际采用、AJ/地图/终端仍未获资格。现有check_minco_link只读ocm掩码，不证明新增topic消费。
 清理：五个构建日志成员压缩并完整解压读回，报告/归档留原忽略目录。已移除临时源码/build/ccache及两个辅助文件，目录分配空间1306947584B；空闲8566022144→9872965632B。保留原源码/venv/旧构建/遥测。恢复入口见docs/DRONE_HANDOFF_EVIDENCE.md新节；没有遗留编译会话。
 Next/owner：根Codex等待用户明确解冻隔离仿真启动及无解锁采集；获授权后先核有限记录，不默认解锁或飞行，不将topic缺失/未激活改判成功。Knowledge=already_covered，沿用Wiki§20与CapMesh PIT-004；本轮事实留项目。仅文档和忽略的构建证据变化，不新增补片、框架或同类网格。
+
+
+## 2026-10-25 M3无解锁实际输入读回
+
+Current：3852首轮依赖启动失败保留，b913 Loiter和b34 Offboard未解锁对照完成；外部PVA→PX4 raw有证据，地面保护仍改写used。M3仅无解锁输入片完成，完整M3/动态未过，M2部分完成。用户“解除”仅覆盖独立副本启动/未解锁采集，不含arm/起飞。
+Done：新drone-disarmed-observation.py复用原Flight/SITL/preflight_only及listener/logger，默认不请求Offboard，显式模式选项从未解锁状态start/stop，不使用arm API。已有mesh-libs补入cache并预检必要导入；未安装依赖或改冻结树。
+实测：两轮各18调用/18返回、各36事件，坐标三阶量及应用yaw同frames.py。Loiter raw兼容0/962行；Offboard 6组PVA在raw兼容74/953行，原轨迹日志3行，原生yaw误差4.371139e-8rad为观察值。原生arming全部1，arm/disarm命令0；Offboard nav14确认，SDK模式请求与原生状态分列。ground guard把used改为NaN位置/速度及acc=[0,0,100]，所有控制行PRIMARY/mask1不代表实际执行外部PVA。ULog dropout0不代表uORB无损。
+验证：10局部检查过/无跳过，另官方pyulog＋冻结frames独立读取三轮记录。修了父预检可能land/return_home、armed瞬态/流结束漏检、RPC挂起、清理取消漏SDK及runtime.close异常吞摘要；末次流结束停mode负例覆盖，正常路径未变不重复仿真。Loiter退出有rclpy context invalid，模式轮两条176额外ACK警告保留、未冒称修复。
+清理：12所属PID及其进程组已退出，目标三端口关闭；临时源码/build/ccache1310040064B、两个辅助文件、三个etc生成链接已删。保留三轮全部小体积原始证据及observer归档，清理后独立再读回成功。原三个冻结repo HEAD/clean已核，原cache未删。目录/恢复入口见docs/DRONE_HANDOFF_EVIDENCE.md最新节；最新独立报告在b34.../independent-readback.json。
+Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及地面改写诊断，仍不解锁/飞行。Knowledge=already_covered，沿用Wiki§20动作/消费/实际执行分层与原生时钟、CapMesh PIT-004，新的兼容性事实留项目，不写memory。本轮qoder超时发生在后续额度限制更新前，不作证据且未重试；内置Agent仅本对话只读复核。按最新规则优先AGY/ZCode，Qoder/CBC临时额度阻断期间跳过，同批不反复探测，DSH暂停。
