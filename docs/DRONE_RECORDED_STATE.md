@@ -225,3 +225,51 @@ python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-te
 
 原忽略目录新增stopping-viability-evaluation.json、stopping-readback-checks.json，前轮报告保留。完整当前地图、时间有效占据、终端区域、实测A/J和实际接管仍未获资格。
 drone c866441清洁冻结，M2部分完成、M3不解冻；本轮无训练、ROS节点、飞行或控制写入。
+
+## 停止位置与时间联合重解（2026-10-24接续）
+
+新增`workbench-tools/drone-stop-geometry.py`，复用现有S4NU的`stop_positions`和原连续审计。
+SciPy SLSQP只做外部四变量有界搜索[Tx,Ty,Tz,dy]，不修改GCOPTER残差、a_opt或weiAcc。
+搜索范围分别为[3.5,5]s、[.6,2]s、[.1,.4]s及[0,Y规划余量]；本工具仅处理当前正Y运动的静态box夹具，不是通用规划器或全局无解证明。
+
+初始PVA和显式J按原请求保持，重新求解多项式系数，不对生成曲线做全局时间拉伸。
+同步`stop_positions`、`terminal_pva[:,0]`和备份评分target；末端V/A/J保持0，`source_local_target_before_stop`保留原值，备份终点不冒充任务航点。
+提取公共`audit_axis_request`以复用原生生成；搜索探针不调用昂贵的最终证书，最终候选才做完整原连续审计。
+优化器success、原生native_success与`candidate.audit.passed`分列，前两项不能代替后者。
+
+首个自由终点探针A峰.978886，但终点贴Y=2.03m硬边界，仍被原审计corridor拒绝。后续明确向内规划2mm，外部硬界仍保持2.03m及A≤1、V≤1.8、Z≤2.2。
+2mm是本次优化目标余量，不是已校准跟踪包络，也不是机体到障碍物的净空。X停止时间上限收至5s；不能用更长刹停直接宣称动态安全。
+
+### 同一输入的条件构造结果
+
+| 输入PV | 初始A/J来源 | XYZ停止时间s | A范数峰m/s² | Z峰m | Y峰m | 原连续审计 |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| 33.428s过去V差分预测PV | 保留原请求A=J=0假设 | 5/.977107/.200703 | .898199 | 2.195178 | 2.028 | 通过 |
+| 33.428s事后记录PV | 保留原请求A=J=0假设 | 5/.929705/.176402 | .990466 | 2.187738 | 2.028 | 通过 |
+
+事后PV在此明确作为反事实生成输入，不是在线可用证据；它没有倒灌预测函数。因果预测的模型A也未替换原请求A或冒充实测A。
+缓存PV的旧合格曲线保持原样；恒速模型的Z向必要拒绝保留且不搜索。不是从四条里挑两条来算成功率，也没有实际采用回执。
+新曲线最小Y速度分别约−5.55e−16和0m/s，前者属于浮点量级；逐段极值和接缝均纳入统计。
+全段最小box余量均为Y向2mm；端点六面余量与全段余量分开保存，不能以端点自由替代中段检查。
+
+保留边界的数值误差：PVA约1.17e−15/1.55e−15，原审计J接缝约2.85e−14；这是所给数学边界，不是实测交接证明。
+最大J约11.681/9.787m/s³；原验收器没有对应J硬界，本次不额外宣称推力、角速度或PX4可跟踪性通过。
+本次离线进程往返＋搜索＋审计墙钟约.416/.430s，是单轮观察值，不是实时截止预算；不能直接与仿真秒相加。
+
+### 输入合同与验证
+
+独立只读审查发现“variant来源PV与baseline请求PV可能不一致”和“未知必要界被说成拒绝”两处问题，均已修复。
+二改后的PV若与基线请求不一致，只WARNING并跳该行；其他行继续，初始A/J不被偷偷替换。必要界未知保留unscored。
+11项新增检查覆盖终点三联同步、历史target/非零初始A/J保持、未知J、端点合法但中段超调、优化success但审计失败、缺原生程序、来源PV错配与未知必要界。
+加原31状态/预测和8提交轨迹检查，共50项通过；首轮测试因测试夹具缺corridor失败，补齐真实接口合同后重跑通过，不把首轮计通过。
+独立源报告/多项式读回32项通过，另生成科学对比图；密集采样只用于画图，连续判据仍由原Bernstein审计承担。
+Qoder审查超时且get_status确认无句柄，随后由内置只读审查完成，无旧聊天协作。
+
+```sh
+python3 apps/fishbot-control-station/workbench-tools/drone-stop-geometry.py --stopping-report "$STOPPING_JSON" --planning-inset .002 --output "$GEOMETRY_JSON"
+python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-tests -p test_drone_stop_geometry.py
+```
+
+原忽略目录新增stop-position-time-comparison.json、stop-geometry-readback-checks.json、stop-geometry-comparison.png；前轮探针和报告保留。
+下一步核非零A/J假设与5秒刹停所需的时间有效自由体积、终端窗口和求解截止条件。当前地图/跟踪管道仍未获资格，不能把静态几何构造晋级成在线备份。
+drone c866441继续清洁冻结；本轮未训练、启动ROS节点或飞行，也没有控制写入。M2仍部分完成，动态闭环未通过。

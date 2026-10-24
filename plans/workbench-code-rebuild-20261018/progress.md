@@ -1,5 +1,15 @@
 # 实施进度
 
+## 2026-10-24 M2停止位置与时间联合重解
+
+- 当前：新drone-stop-geometry.py复用MINCO stop_positions，SLSQP仅外部有界四维[Tx,Ty,Tz,dy]搜索。初始PVA/J和原target来源保持，不做生成后时间拉伸；终点三联同步，最终原连续审计独立执行。
+- 结果：同一33.428s过去V差分预测PV/事后PV，在原A=J=0假设下均过原连续界，A峰.898199/.990466，XYZ停止约5/.977/.201和5/.930/.176s。Y最高2.028m，规划向内2mm、原硬界2.03m不变。缓存旧合格保持、恒速模型必要拒绝不搜索；事后PV仅明确反事实生成输入，不当在线证据。
+- 验证：11新＋31状态/预测＋8提交回放，共50项通过；独立源报告/多项式读回32项通过，科学对比图已目视核验。独立审查两项来源合同缺口已修并补负例；Qoder超时且句柄缺失后用内置只读审查，无旧聊天协作。首轮测试缺corridor夹具失败，修正后重跑，不计首轮通过。
+- 边界：J峰11.681/9.787m/s³尚无J硬界，约.416/.430wall只是离线观察值；5秒刹停没有时间有效地图、终端区域或实测跟踪证书。next=核非零A/J假设与5秒自由体积/终端/截止条件，owner=根Codex。drone c866441清洁冻结，无训练/ROS节点/飞行/控制；M2部分完成、M3未解冻、goal active。
+- 产物：原忽略的workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/下stop-position-time-comparison.json、stop-geometry-readback-checks.json、stop-geometry-comparison.png。命令和完整边界见docs/DRONE_RECORDED_STATE.md末节。
+- 共享树：本轮期间SO101配方提交7ac8d86/f29a85a已出现，HEAD/origin一致，保留其已提交文档，不混入本无人机提交。当前Station在途改为execution.ts、execution.test.ts、index.tsx三文件，内容是observation_only物理持物证据标签及其负例；已只读理解，继续原位保留，owner=当前SO101根/根Codex，最短接续为execution.test.ts和原站点无运动检查，不能以标签证据宣称回合成功。
+- knowledge_status=already_covered；沿用参考/实际/采用、输入身份和时钟边界经验，新曲线数值留项目，未写memory。
+
 ## 2026-10-24 SO101 可编辑配方交换
 
 - 当前：原RobotStation增加“导出工位配方”，原JSON导入可载入station-recipe v1；保留Station、execution、来源及未知可选元数据。导入不执行，旧任务／历史成功不继承；活任务及文件读取竞态保留原ID与取消入口。

@@ -221,6 +221,12 @@ def axis_stop_fixture(pv, box, limits, executable, audit, handoff):
         corridor.extend([np.r_[normal, -box[1][axis]].tolist(), np.r_[-normal, box[0][axis]].tolist()])
     request = handoff.axis_stop_request({"id": "pv_stop_fixture", "initial_pva": head.tolist(),
         "original_local_target": head[:, 0].tolist(), "corridor": [corridor], "integral_resolution": 16}, [3.5, 1., .4])
+    request["initial_condition_scope"] = "initial A=J=0, neither measured nor a live handoff contract"
+    return audit_axis_request(request, box, limits, executable, audit)
+
+
+def audit_axis_request(request, box, limits, executable, audit, perform_audit=True):
+    """Reuse native generation; an optimizer may request generation-only probes."""
     try:
         result = subprocess.run([str(executable)], input=json.dumps(request)+"\n", text=True,
                                 capture_output=True, timeout=10)
@@ -228,11 +234,12 @@ def axis_stop_fixture(pv, box, limits, executable, audit, handoff):
         native = outputs[-1] if outputs else {"native_success": False}
         if result.returncode or not native.get("native_success"):
             raise ValueError(f"native axis brake unavailable, exit={result.returncode}")
-        return {"status": "audited", "assumption": "initial A=J=0, neither measured nor a live handoff contract",
-            "axis_stop_durations_xyz": [3.5, 1., .4], "request": request, "native": native,
-            "audit": audit.audit_trajectory(native, request, [], limits, box),
+        return {"status": "audited" if perform_audit else "generated",
+            "assumption": request.get("initial_condition_scope", "supplied input A/J, measurement provenance unqualified"),
+            "axis_stop_durations_xyz": request["axis_stop_durations_xyz"], "request": request, "native": native,
+            **({"audit": audit.audit_trajectory(native, request, [], limits, box)} if perform_audit else {}),
             "occupancy": "not_checked; explicit static box only", "execution_admission": "not_performed"}
-    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError) as error:
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, IndexError) as error:
         return {"status": "unscored", "reason": str(error)}
 
 
