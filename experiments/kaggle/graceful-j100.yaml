@@ -33,6 +33,8 @@ controller_server:
       slowdown_radius: 0.12
       initial_rotation: false
       prefer_final_rotation: true
+      # Recheck XY after drift; requires the Graceful path-distance patch.
+      stateful: false
       rotation_scaling_factor: 0.5
       allow_backward: true
       in_place_collision_resolution: 0.1

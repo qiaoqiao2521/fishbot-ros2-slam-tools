@@ -159,7 +159,7 @@ colcon build --packages-select nav2_rotation_shim_controller nav2_graceful_contr
 ## Graceful 裁剪路径的终点距离
 
 `nav2-1.3.13-graceful-path-distance.patch`保留同版Apache-2.0实现，
-只为原终点距离补上机器人到裁剪路径首点的距离。原实现中，单点路径的
+为原终点距离补上机器人到裁剪路径首点的距离，并提供可选当前位置模式。原实现中，单点路径的
 内部长度为零；两点残段也可能短于容差，即使车辆仍离目标较远。
 原生反例固定1.5cm容差、首点距车3cm，旧实现提前旋转且线速度为零。
 补丁后继续平移，原GoalChecker仍拒绝提前成功；容差内旋转保持。
@@ -179,3 +179,14 @@ StoppedGoalChecker一致：减速后漂出15mm范围时，重新交给原控制�
 StagingPath默认true保持；不能用空前缀参数同时改动两个阶段。
 原生反例先失败，补丁后12项Shim测试通过，包括10mm进入、19mm退出。
 运行时须逐项读回FollowPath、StagingPath与原外层的值，空响应不是成功。
+
+## Graceful 主控制器的当前位置模式
+
+同一补丁增加 `FollowPath.stateful`，默认 `true` 保留上游到位记忆。
+显式 J100 候选设置 `false`：车辆进入 XY 范围后又漂出时，主控制器恢复平移。
+它与 Shim 的 `FollowPath.position_checker.stateful=false` 是不同参数；
+外层、Shim 和主控制器都须按当前位置判定，原 15mm/35mrad 与停稳门槛不变。
+
+原生反例先进入 10mm，再漂到 30mm；旧库在显式 false 下仍请求零平移，
+补丁后恢复平移，而未配置的默认行为保持。21 项控制器检查通过；
+实际载货和完整配送的结果单列，不能由这个反例直接推定成功。

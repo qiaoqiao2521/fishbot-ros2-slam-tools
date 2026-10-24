@@ -8,9 +8,11 @@ J100＋3D雷达同轮完整B→A仍未通过，父FishBot2/2保持。最近完�
 
 最新载货分项：H装货后重建初态，进场(1.35,-1.868238476919363,.4)→原B，两原Nav 9c39d06c…/2262d1e5…均4，共117.1158墙秒，末28.258mm/.005142rad，2013次原生计算发布、无载货/禁碰违例，原quiet/参数恢复/owned0/端口关闭通过。是无速度/求解器warmstart/AMCL历史的重建短测，不是完整抓放。预算余量2.884秒，不能宣称稳定。
 
-两组切向进场(.3/.4)静止原生规划与全车扫掠通过，加入实际初态到首路径点的连接段；未缩车。选.4先运动已通过。显式任务配置line-side-j100-tangent-040.json只改B进场姿态，原出生点、A/B、占用体、货物/车/臂物理保持。FISHBOT_F1_FACTORY_CONFIG复用原prepare与factory；默认仍原1.35/-2/0，显式JSON不被覆盖，8项定向检查通过。下一步默认出生点公开prepare/数组与期限读回、源码提交冻结，再同轮完整I B→A原oracle。
+两组切向进场(.3/.4)静止原生规划与全车扫掠通过，加入实际初态到首路径点的连接段；未缩车。选.4先运动已通过。显式任务配置line-side-j100-tangent-040.json只改B进场姿态，原出生点、A/B、占用体、货物/车/臂物理保持。FISHBOT_F1_FACTORY_CONFIG复用原prepare与factory；默认仍原1.35/-2/0，显式JSON不被覆盖，8项定向检查通过。公开prepare/13组物理数组与原期限读回已通过，源码777ce5d已推；完整I因目标代价失败，原结果保留。当前优先原生主控制器当前到位模式反例，再回同I重建初态；不重复无新证据的完整回合。
 
 未采用：Shim原地.06（曲线仍.055）在H载货短测触原保持失败；修好检查器的原RPP仍首Goal120秒取消，2211个PointStamped carrot只证明计算活动。R.80官方生成182秒未完成即停止；启动过早的预检零Goal后取消。RPP-a的观测类型错误与SIGINT使context先关闭，根已回读原UUID85b12450…终态5、hold/guard、两参数组恢复、owned0/端口关闭，recovery.json存档，不冒充正常完成。全部旧失败保留。
+
+完整I更新：B在进场开始约4秒后因206/Goal was in lethal cost终结6，A未执行；K/连续交接与载货/源/记录通过，owned0/端口关闭。实际先有133点计划，再重规划失败；没有该原回合costmap，原因未唯一定位。新四姿态静止面板及首尾连接检查通过，(1.25,-2,atan(.5))实际短测仍120取消，首段102.657秒。已保存costmap与末端逐秒表。当前native-current-goal/先验证Graceful自身goal_reached_默认锁存与严格当前XY需求是否匹配，未修改原速度/物理/评分，也未宣称完整I通过。
 
 knowledge_status=updated(local)：原Wiki/FishBot第19节新增“裁剪路径与嵌套到位状态”，问题入口同步；已读回唯一标题与链接、diff检查通过。原先停车/纳秒/信号/交接经验保持。知识仓大量已有未审改动保留，未做全仓提交，后续整合owner=root。仅仿真，不外推真机/sim-to-real；新补丁尚无新的Kaggle完整业务成功。
 
@@ -491,3 +493,8 @@ knowledge_status=updated(local)：已修订原`Wiki/ROS2 与 FishBot.md`第19节
 - 从记录qpos/qvel/ctrl重放、1s held settle（solver warmstart未存，非逐比特回放），原模型/碰撞/执行器保持。.10纯转与.06/.10弧线各800个50Hz样本失支撑4次、500Hz各30断触；.05正负纯转、.06/.05正负弧线各800个50Hz与8000个500Hz均0断触、车臂禁碰0。只支持该初态有限面板，不宣称泛化。
 - 下一候选保留用户.06/.10上限、原加减速，实际载货turn目标.05、RPP调速半径1.2m、最低调速.005，使转弯稳定并提高直线速度。先用记录车/货位姿做载货短段；其初态不是完整抓放验收。首个keyframe载入因MuJoCo replicate的qpos尺寸拒绝，0物理/Goal，保留失败；b2改为记录车/货初始位姿、速度/轮编码器归零，编译后原质量/惯量/摩擦/接触/执行器参数逐项相同。原完整scene与失败原件未修改。
 - 证据根j100-transport-20261023/{full-b-a,loaded-turn-replay-result.json,loaded-turn-005-replay-result.json,native-loaded-turn-probe,native-loaded-turn-probe-b2}；owner=本对话root，knowledge_status=already_covered，待最终闭环后回写新增稳载经验。
+
+## 2026-10-24 当前位置模式待实际验证
+
+- 原生currentGoalModeResumesTranslationAfterDrift反例先失败，新独立native-current-goal overlay下21项控制器与5项坐标检查通过，8项项目契约检查通过；默认true与显式false两分支均覆盖。此前距离与Shim修补保留，Smac/平滑器/Shim库不改。
+- 下一步I重建载货初态、原(1.25,-2,atan(.5))→B，独占141/9111，原120秒和全部物理门槛；通过才完整J两单。knowledge_status=pending，owner=本对话root：待实际结果后把第三层状态补入原第19节，知识仓其它未审变动保留。

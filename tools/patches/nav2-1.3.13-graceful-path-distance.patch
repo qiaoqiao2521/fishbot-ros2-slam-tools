@@ -1,8 +1,20 @@
+diff --git a/nav2_graceful_controller/include/nav2_graceful_controller/parameter_handler.hpp b/nav2_graceful_controller/include/nav2_graceful_controller/parameter_handler.hpp
+index dd4d4df..ae5a1c9 100644
+--- a/nav2_graceful_controller/include/nav2_graceful_controller/parameter_handler.hpp
++++ b/nav2_graceful_controller/include/nav2_graceful_controller/parameter_handler.hpp
+@@ -50,6 +50,7 @@ struct Parameters
+   bool initial_rotation;
+   double initial_rotation_tolerance;
+   bool prefer_final_rotation;
++  bool stateful;
+   double rotation_scaling_factor;
+   bool allow_backward;
+   double in_place_collision_resolution;
 diff --git a/nav2_graceful_controller/src/graceful_controller.cpp b/nav2_graceful_controller/src/graceful_controller.cpp
-index aba04ce..b974df7 100644
+index aba04ce..9a1145b 100644
 --- a/nav2_graceful_controller/src/graceful_controller.cpp
 +++ b/nav2_graceful_controller/src/graceful_controller.cpp
-@@ -158,7 +158,10 @@ geometry_msgs::msg::TwistStamped GracefulController::computeVelocityCommands(
+@@ -158,10 +158,13 @@ geometry_msgs::msg::TwistStamped GracefulController::computeVelocityCommands(
    }
 
    // Compute distance to goal as the path's integrated distance to account for path curvatures
@@ -13,12 +25,48 @@ index aba04ce..b974df7 100644
 +    nav2_util::geometry_utils::calculate_path_length(transformed_plan);
 
    // If we've reached the XY goal tolerance, just rotate
-   if (dist_to_goal < goal_dist_tolerance_ || goal_reached_) {
+-  if (dist_to_goal < goal_dist_tolerance_ || goal_reached_) {
++  if (dist_to_goal < goal_dist_tolerance_ || (params_->stateful && goal_reached_)) {
+     goal_reached_ = true;
+     double angle_to_goal = tf2::getYaw(transformed_plan.poses.back().pose.orientation);
+     // Check for collisions between our current pose and goal pose
+diff --git a/nav2_graceful_controller/src/parameter_handler.cpp b/nav2_graceful_controller/src/parameter_handler.cpp
+index f8ba2aa..7723b33 100644
+--- a/nav2_graceful_controller/src/parameter_handler.cpp
++++ b/nav2_graceful_controller/src/parameter_handler.cpp
+@@ -64,6 +64,8 @@ ParameterHandler::ParameterHandler(
+     node, plugin_name_ + ".initial_rotation_tolerance", rclcpp::ParameterValue(0.75));
+   declare_parameter_if_not_declared(
+     node, plugin_name_ + ".prefer_final_rotation", rclcpp::ParameterValue(true));
++  declare_parameter_if_not_declared(
++    node, plugin_name_ + ".stateful", rclcpp::ParameterValue(true));
+   declare_parameter_if_not_declared(
+     node, plugin_name_ + ".rotation_scaling_factor", rclcpp::ParameterValue(0.5));
+   declare_parameter_if_not_declared(
+@@ -99,6 +101,7 @@ ParameterHandler::ParameterHandler(
+   node->get_parameter(
+     plugin_name_ + ".initial_rotation_tolerance", params_.initial_rotation_tolerance);
+   node->get_parameter(plugin_name_ + ".prefer_final_rotation", params_.prefer_final_rotation);
++  node->get_parameter(plugin_name_ + ".stateful", params_.stateful);
+   node->get_parameter(plugin_name_ + ".rotation_scaling_factor", params_.rotation_scaling_factor);
+   node->get_parameter(plugin_name_ + ".allow_backward", params_.allow_backward);
+   node->get_parameter(
+@@ -169,7 +172,9 @@ ParameterHandler::dynamicParametersCallback(std::vector<rclcpp::Parameter> param
+         params_.in_place_collision_resolution = parameter.as_double();
+       }
+     } else if (type == ParameterType::PARAMETER_BOOL) {
+-      if (name == plugin_name_ + ".initial_rotation") {
++      if (name == plugin_name_ + ".stateful") {
++        params_.stateful = parameter.as_bool();
++      } else if (name == plugin_name_ + ".initial_rotation") {
+         if (parameter.as_bool() && params_.allow_backward) {
+           RCLCPP_WARN(
+             logger_, "Initial rotation and allow backward parameters are both true, "
 diff --git a/nav2_graceful_controller/test/test_graceful_controller.cpp b/nav2_graceful_controller/test/test_graceful_controller.cpp
-index de95598..3f5f7fa 100644
+index de95598..0431230 100644
 --- a/nav2_graceful_controller/test/test_graceful_controller.cpp
 +++ b/nav2_graceful_controller/test/test_graceful_controller.cpp
-@@ -1124,6 +1124,59 @@ TEST(GracefulControllerTest, computeVelocityCommandFinal) {
+@@ -1124,6 +1124,113 @@ TEST(GracefulControllerTest, computeVelocityCommandFinal) {
    EXPECT_LE(cmd_vel.twist.angular.z, 0.5);
  }
 
@@ -73,6 +121,60 @@ index de95598..3f5f7fa 100644
 +  EXPECT_DOUBLE_EQ(controller->computeVelocityCommands(robot_pose, geometry_msgs::msg::Twist(), &checker).twist.linear.x, 0.0);
 +  controller->deactivate();
 +  controller->cleanup();
++}
++
++TEST(GracefulControllerTest, currentGoalModeResumesTranslationAfterDrift) {
++  for (const bool stateful : {true, false}) {
++    SCOPED_TRACE(stateful);
++    auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("testGracefulCurrent");
++    node->declare_parameter("test.initial_rotation", false);
++    node->declare_parameter("checker.xy_goal_tolerance", 0.015);
++    node->declare_parameter("checker.stateful", false);
++    if (!stateful) {node->declare_parameter("test.stateful", false);}
++    auto tf = std::make_shared<tf2_ros::Buffer>(node->get_clock());
++    auto costmap = std::make_shared<nav2_costmap_2d::Costmap2DROS>("current_costmap");
++    costmap->set_parameters({
++      rclcpp::Parameter("global_frame", "test_global_frame"),
++      rclcpp::Parameter("robot_base_frame", "test_robot_frame"),
++      rclcpp::Parameter("width", 10), rclcpp::Parameter("height", 10),
++      rclcpp::Parameter("resolution", 0.1)});
++    costmap->on_configure(rclcpp_lifecycle::State());
++    auto controller = std::make_shared<GMControllerFixture>();
++    controller->configure(node, "test", tf, costmap);
++    controller->activate();
++    geometry_msgs::msg::PoseStamped robot;
++    robot.header.frame_id = "test_global_frame";
++    robot.pose.orientation.w = 1.0;
++    geometry_msgs::msg::TransformStamped transform;
++    transform.header.frame_id = robot.header.frame_id;
++    transform.child_frame_id = "test_robot_frame";
++    transform.transform.rotation.w = 1.0;
++    auto update = [&](double x) {
++        robot.pose.position.x = x;
++        robot.header.stamp = node->get_clock()->now();
++        transform.header.stamp = robot.header.stamp;
++        transform.transform.translation.x = x;
++        tf->setTransform(transform, "test", false);
++      };
++    update(0.0);
++    nav_msgs::msg::Path plan;
++    plan.header = robot.header;
++    plan.poses.push_back(robot);
++    plan.poses.back().pose.position.x = 0.01;
++    controller->setPlan(plan);
++    nav2_controller::SimpleGoalChecker checker;
++    checker.initialize(node, "checker", costmap);
++    geometry_msgs::msg::Twist velocity;
++    EXPECT_DOUBLE_EQ(controller->computeVelocityCommands(robot, velocity, &checker).twist.linear.x,
++      0.0);
++    update(-0.02);
++    EXPECT_FALSE(checker.isGoalReached(robot.pose, plan.poses.back().pose, velocity));
++    const auto cmd = controller->computeVelocityCommands(robot, velocity, &checker);
++    if (stateful) {EXPECT_DOUBLE_EQ(cmd.twist.linear.x, 0.0);}
++    else {EXPECT_GT(cmd.twist.linear.x, 0.0);}
++    controller->deactivate();
++    controller->cleanup();
++  }
 +}
 +
  int main(int argc, char ** argv)

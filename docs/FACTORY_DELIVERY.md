@@ -300,3 +300,8 @@ controller_server:
 本轮仅规划预检使用独占 141/9111，15 组输入、25 个原生 `ComputePathToPose` 请求。两次实例共 5583 个物理样本全部 hold，Navigate/Dock/任务 start 均为零。每条路径用原完整实体几何和采样间距界检查。5 组整路几何通过，但时间估算均超预算：原 direct 下界 128.690 秒、含余量 142.090 秒；上述 B 进场候选下界 141.189 秒、含余量 155.989 秒。北侧若干目标被原生 costmap 以 lethal cost/206 拒绝；这些不计为可用路线。
 
 因此**新增合同和预算实现完成，J100 完整 B→A 尚未通过**。本轮未重复抓放或声称运动验收；下一步须找到兼顾完整几何与原 120 秒的路径，再验证实际 RPP 跟踪，最后回到同轮两单完整 oracle。全部原生失败、路径、估算、静止和清理证据在 `~/.cache/fishbot/factory-line-delivery-20261021/j100-delivery-approach-20261023/`。原结果保留；双停稳余量的离线重算单列 `time-budget-recalculation.json`，没有重跑仿真或覆盖旧结果。
+
+Graceful 主控制器自身也保留到位记忆。显式 J100 候选另外选择
+`FollowPath.stateful=false`，允许减速漂移后重新修正 XY；默认 true 保持。
+这项原生反例已通过，仍须运行同一路线与完整两单；它不改变目标容差或物理评分。
+见[当前位置模式](../experiments/kaggle/README.md#graceful-主控制器的当前位置模式)。
