@@ -206,3 +206,18 @@ Knowledge closeout：already_covered。沿用PIT-004依赖隔离和现有任务�
 SO101来源084cc7f，工作台本轮abc0ac7/2b9fd90；并行Drone源码已由原owner提交并推送de94a6d，原成绩保留，本轮未改其模块。主FishBot dirty main及Mint未触碰。5186继续可用；5187原owner自行收尾，本轮未停止他人进程。原件在station-tasks/<ID>、浏览器output/workspace-execution-20261024[-left]-v1/，均不提交。
 
 本轮未采EpisodeTiming或精确process CPU，unknown保留；旧Kaggle计时不填此空缺。SO101连续包络、恢复、20+20、50Hz与同世界卸货仍未完成，继续回源SO101主计划推进M1b。Knowledge=already_covered，领域事实只写原计划。
+
+
+## 2026-10-24 M0 / M2完整轨迹静态回放
+
+官方Gatekeeper源码/许可与本地原型对照已核，见[方法与边界](../../docs/DRONE_COMMITTED_REPLAY.md)。机载包许可TODO，未移植；现有CommittedTail＋MINCO＋连续审计以外只有离线薄适配。
+
+新增workbench-tools/drone-committed-replay.py和8项局部检查。已复现admit后首次tick倒退仍track，外部适配以有限时钟高水位修补；不改冻结drone。重审完整前缀/尾段、上下文和地图有效期，不信任缓存passed。
+
+实际N3#6/#7系数的16个静态反事实情景已运行/回读：#6原V1.680871/A.981600/Z2.133051，#7 A拒绝后旧绝对相位保留；占据/终点侵入、未知/过期图、暂停漂移和时间回退均按具体原因撤销选择。原1.8/1/2.2硬界不变。
+
+输出在忽略的apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/selection-replay.json。地图/未来覆盖和理想PVA是声明的fixture，不是原动态感知；protect输出空参考，不是实现安全恢复。M2未完成，动态闭环未通过。
+
+8新局部检查＋原N3三项/N2两项，共13项通过；实际报告20项读回检查通过，9份变更文档72处本地链接无缺失，diff检查通过；内置只读审查无阻断，根核实际结果。AGY启动参数错误无审查结果，未改其配置、不联系旧聊天。未改网页/服务，无需重构建或浏览器QA；5186旧历史展示保持。无训练、飞行、ROS或控制写，drone c866441冻结。
+
+后续由本对话从有来源的实际状态/预测、时间有效地图和终端区域资格接续M2，M3不自动启动。knowledge_status=already_covered，项目事实不写个人memory。

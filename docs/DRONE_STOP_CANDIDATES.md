@@ -63,6 +63,6 @@ node --test apps/fishbot-control-station/workbench-review-tests/drone-candidates
 JSON、原生输出、构建产物和QA截图留忽略目录；代码与文档按既有仓库边界交付。
 
 本片完成组件对照与N4历史旁路展示，不代表N3任务级方法比较、M2完整滚动提交或M3动态执行完成。
-后续先补官方Gatekeeper源码/机载许可及本地CommittedTail差异，再确定完整地图有效性和提交合同的最小适配。
+官方Gatekeeper源码/机载许可及本地CommittedTail差异已核，离线完整选择切片见[滚动回放](DRONE_COMMITTED_REPLAY.md)。
 当前仍缺动态安全集、终端区域、实际跟踪包络与PX4采用回执；动态闭环仍未通过。
 实际页面验收与交付见[进度](../plans/workbench-code-rebuild-20261018/progress.md)。

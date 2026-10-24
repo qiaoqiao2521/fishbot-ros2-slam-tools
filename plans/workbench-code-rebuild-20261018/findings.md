@@ -100,3 +100,12 @@ PPoly原系数锚在原knot，截取中段必须平移；normalized_power接物�
 独立只读复核发现合法JSON null或rows内null会导致可选文件阻断原MCAP（500），已验证顶层并跳过坏条目，局部负例通过。首轮像素检查误把工具栏红色日志badge的44像素当残留；查图确认后排除工具栏并匹配实际抗锯齿颜色，原失败QA保留。
 
 agent-link现已加载，qoder同步调用180s超时且get_status确认无活会话；CBC返回done但正文空，均不计审查通过。内置只读fallback完成实际源码审查，根以原生计算/局部检查/真实浏览器独立验收。没有向其他已有对话派发，不扩展认证或外界队列。
+
+
+## 2026-10-24 Gatekeeper复用与静态滚动选择
+
+官方主仓TRO/a54dac7为MIT的firewatch Julia示例；官方机载master/7c8f87a未提供独立LICENSE，gatekeeper包两处许可TODO。机载默认双积分器LQR前向传播＋离散SFC/终端验收，与本地PVA几何选择不同；不复制机载实现，不继承其安全定理。逐源链接及差异见docs/DRONE_COMMITTED_REPLAY.md。
+
+原CommittedTail的admit未设last_now，首次tick回退可仍track；tick的NaN会覆盖基点。新离线Replay在冻结源外统一检查admission/tick时钟有限高水位。候选拒绝保留旧start本来正确，未将它误列为缺陷。
+
+16个反事实静态情景使用原#6/#7真实系数，但观测/地图是明确fixture；连续重审不采信缓存passed。原#6数学过，#7 A拒绝后保旧相位；新占据使旧证书撤销。动态预测、终端不变集和真实跟踪/飞控采用仍缺，protect不构成安全恢复。
