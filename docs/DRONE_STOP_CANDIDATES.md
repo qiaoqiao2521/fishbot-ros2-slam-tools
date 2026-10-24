@@ -164,3 +164,61 @@ python3 -m unittest test_drone_stop_time_study test_drone_stop_geometry test_dro
 新报告为原忽略drone-committed/748…目录的`reference-z-time-domain-comparison.json`；同目录保留`reference-z-time-readback.json`、PNG、首轮probe及两份before-translation报告。
 下步由根Codex结合原接收/替换时刻与窄盒，核更早参考切点及必要刹停范围；不把宽盒数学正例当原动态场景可采用。
 本轮只改离线适配器/工具/测试/文档，无Web改动、训练、ROS节点、仿真、控制、飞行或新落地证据。drone c866441冻结、M2部分完成、M3不启动。
+
+## 窄盒更早切点与历史时序（2026-10-24）
+
+新增`drone-narrow-handoff.py`，复用`restrict`、逐面必要刹停界、现有S4NU搜索/完整连续审计和Replay。
+从原#4/#7 raw cubic记录的接收相位，分别截取h=.1/.2/.4/.6/.8s。每个切点保留自己的完整参考PVA/J，不把晚切点状态搬到过去。
+实际cut按截断后duration计算；源曲线不足h时保留截短事实，节点J取前缀末段左极限。完整仍C2，切点及尾单列C3。
+继续使用硬盒`[-10,-10,0]→[15,2.03,2.2]`、2mm规划inset及Tz显式域[.1,1.2]；原V1.8/A1/Z2.2不变。
+
+| 原曲线 / h秒 | 最乐观Y刹停余量m | 完整A峰m/s² | 原连续界＋窄盒 |
+| --- | ---: | ---: | --- |
+| #4 / .1 | .876595 | .754442 | 通过 |
+| #4 / .2 | .759882 | .777721 | 通过 |
+| #4 / .4 | .536642 | .783283 | 通过 |
+| #4 / .6 | .354708 | .895545 | 通过 |
+| #4 / .8 | .222529 | .810276 | 通过 |
+| #7 / .1 | .044289 | 1.050777 | 加速度拒绝 |
+| #7 / .2 | .010208 | 1.164543 | 加速度拒绝 |
+| #7 / .4 | −.058099 | 未生成 | 逐面必要界拒绝 |
+| #7 / .6 | −.119066 | 未生成 | 逐面必要界拒绝 |
+| #7 / .8 | −.170268 | 未生成 | 逐面必要界拒绝 |
+
+最初四档必要界probe保留；.1s是probe后显式加入的更早对照。正式十组7生成、5通过、2A拒、3必要界拒，无未评分。
+必要界允许单面瞬时使用全部A预算，忽略已知参考A/J连续性，不是joint viability或实测飞机ICS证明。
+#7的.1/.2s峰主要为Y单轴−1.029983/−1.162129，不只是XY模长预算挤占；未被必要界排除也不保证当前有限生成族能过。
+#4原.8s也能在窄盒内重解通过，说明上一节宽盒最优候选越Y不等于此切点没有窄盒候选。
+
+### 显式追加的#7早切对照
+
+根据上述Y峰诊断，另存h=.05s报告，不覆盖原十组。cut=33.046s，下一曲线接收33.496s、首条故障记录33.452s，均为同一sim时间域。
+完整A=.926514、V=1.515465m/s、Z最高2.198m、Y最高2.028m，原连续界＋窄盒通过；Y和Z仅剩约2mm边界余量。
+本组优化器仍为60次迭代上限false，搜索wall3.026s；原十组搜索wall4.743–8.048s，7个搜索中5个迭代上限。
+独立硬审计可确认有限可行见证，不据此宣称优化收敛、实时计算、物理跟踪余量或在线可采用。
+.05s是仿真参考前缀长度，不代表50ms墙钟感知注入，也不能直接用wall耗时判断sim截止；真实时钟映射/截止仍未获资格。
+
+### 时间、数学与采用分列
+
+每条保存cut相对原完整事件序列中下一接收、首条故障记录的before/at/after/unknown。原首条故障33.452s不是精确故障起点。
+#7的.4s cut33.396s虽在记录边界之前，必要界已拒；.6/.8s在替换和故障记录之后，仅保留反事实诊断。
+没有在历史时间上被排除，不等于原FSM已消费、算法来得及计算或当前地图支持。缺失/损坏故障元数据保持unknown，数学比较可继续。
+`variant_id`区分父曲线与h；原trajectory_id保留。Replay优先candidate_id，继续原绝对start，不按新cut重启相位。
+Replay的全部实际snapshot明确使用窄盒；未知图仍未知。8条生成候选各16个理想静态情景，共128；6个数学正例可接纳、2个始终拒绝。
+通过统计同时要求完整数学合同（含切点J、尾C3、axis_knots）与窄盒门，不能只凭C2盒审计计为通过。
+
+30相关测试通过：10新切点/时序＋2原精确分段＋10参考前缀＋8Replay，无跳过。
+216项独立原JSONL/BSpline PVAJ/系数实根/必要界/时序/完整窄盒与选择结果读回通过；PNG已目视核对。
+内置只读审查指出通过统计曾漏完整合同，已修并补“盒过、合同失败”的计数负例；沿用agent-link已知超时备选，根独立验收。
+源字典、坏h、故障信息缺失分别降级，严格JSON仍可输出；没有把坏项或未知资格变为通过。
+
+```sh
+python3 apps/fishbot-control-station/workbench-tools/drone-narrow-handoff.py --primitives "$PRIMITIVES_JSON" --failure-report "$DRONE_RUN/report.json" --output "$NARROW_REPORT_JSON"
+python3 apps/fishbot-control-station/workbench-tools/drone-narrow-handoff.py --primitives "$PRIMITIVES_JSON" --failure-report "$DRONE_RUN/report.json" --trajectory-ids 7 --horizons 0.05 --output "$EARLY05_REPORT_JSON"
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_narrow_handoff test_drone_primitives test_drone_reference_stops test_drone_committed_replay
+```
+
+原忽略drone-committed/748…目录保留reference-narrow-cut-probe.json、reference-narrow-handoff-comparison.json、reference-narrow-handoff-early05.json、reference-narrow-handoff-readback.json和PNG。
+下一项根Codex将这些候选切点与原记录实测PV及可用时刻比对，核交接误差与毫米级余量；不继续以参考数学证书替代状态/地图/截止资格。
+drone c866441仍冻结；没有Web改动、训练、ROS节点、仿真、控制、新飞行或新落地证据。M2部分完成、M3不启动，真实动态闭环未通过。

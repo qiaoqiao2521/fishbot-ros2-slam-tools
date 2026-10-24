@@ -60,12 +60,17 @@ def static_gate(row, box, limits, audit):
         request, [], limits, box)
 
 
-def replay_cases(row, context, limits, replay, audit, handoff):
+def replay_cases(row, context, limits, replay, audit, handoff, *, box=None):
     # Reuse existing scenarios. The negative comparison is deliberately edited,
     # because a formerly rejected baseline can become a math-pass candidate.
     rejected = copy.deepcopy(row)
     rejected["native"]["pieces"][0]["coefficients_descending"][0][-1] += 1.
     scenarios = replay.fixture_scenarios(row, rejected, context, handoff)
+    if box is not None:
+        for events in scenarios.values():
+            for event in events:
+                if isinstance(event.get("snapshot"), dict):
+                    event["snapshot"]["box"] = copy.deepcopy(box)
     results = []
     for name, events in scenarios.items():
         engine = replay.Replay(context, limits, audit, handoff)
@@ -74,6 +79,7 @@ def replay_cases(row, context, limits, replay, audit, handoff):
         results.append({"scenario": name, "events": steps, "selection_stats": engine.server.stats()})
     return {"scenarios": results, "state_source": "ideal full reference PVA; not measured vehicle",
         "map_source": "declared static configuration-space fixture; not original/future GridMap",
+        "box_fixture": copy.deepcopy(STATIC_BOX if box is None else box),
         "terminal_scope": "finite half-second forecast coverage, not invariant terminal set",
         "execution_admission": "not_performed"}
 

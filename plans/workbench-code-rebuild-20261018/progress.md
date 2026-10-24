@@ -1,5 +1,16 @@
 # 实施进度
 
+## 2026-10-24 M2窄盒更早切点与历史时序
+
+- Current：正式十组7生成/5窄盒过/2A拒/3逐面必要界拒；5正例均为#4。另显式#7 h=.05独立报告得到A=.926514窄盒见证。所有结果只属于参考PVA/J＋声明静态盒；M2部分完成、M3冻结、goal active。
+- Done：新增drone-narrow-handoff.py，复用原restrict、necessary、S4NU搜索/完整审计/Replay。原#4/#7接收相位重截h=.1/.2/.4/.6/.8，每cut保自身参考PVA/J、节点左J和原绝对start；源不足h则用实际截断duration。first recorded failure33.452及原完整下一接收分别before/at/after/unknown，不替代在线ready；新candidate_id区分变体，保原trajectory_id。
+- 诊断：#4五档A=.754442/.777721/.783283/.895545/.810276；#7 .1/.2 A=1.050777/1.164543且Y单轴−1.029983/−1.162129，.4起必要界拒。h=.4虽cut33.396早于故障记录也不合必要界；.6/.8已在替换/故障之后，仅反事实。必要界忽略参考A/J连续性、不构成joint viability或实测ICS。
+- 追加：根据本轮Y峰诊断另存#7 h=.05，原十组不覆盖。cut33.046、A=.926514/V1.515465/Z2.198/Y2.028，Y/Z各仅2mm余量；opt=false/60limit，搜索wall3.026s。正式7搜索中5次迭代上限、wall4.743–8.048s；硬审计给有限可行见证，不宣称收敛、实时或物理跟踪。.05sim前缀不是50ms墙钟注入。
+- 验证：10新＋2精确分段＋10原前缀＋8Replay共30相关检查过，无跳过；216项独立原JSONL/BSpline/系数实根/必要界/时序/完整窄盒及选择读回过，PNG已目视。8条各16个理想静态情景共128，6数学正例可接纳、2始终拒；所有snapshot显式窄盒，未知仍未知。
+- Review：内置只读备选指出通过统计漏切点J/尾C3/axis_knots；现合取full_math_gate与narrow_box_gate，补“盒过/合同失败”的计数负例。沿用agent-link已知超时，不联系旧聊天。坏h/源条目/故障元数据分别降级，unknown不计历史前置资格；根独立验收。
+- 产物/入口：原忽略drone-committed/748…目录保留reference-narrow-cut-probe.json、reference-narrow-handoff-comparison.json、reference-narrow-handoff-early05.json、reference-narrow-handoff-readback.json与PNG；方法/命令见docs/DRONE_STOP_CANDIDATES.md末节。只改离线工具/测试/文档，无Web/服务改动、训练、ROS节点、仿真、控制、新飞行或落地证据；drone c866441冻结清洁。
+- Next/owner：根Codex用原实测PV与可用时刻核这些参考切点的交接偏差/毫米级余量，不再盲磨优化。实际A/J、时间有效地图、终端、截止与跟踪采用仍未获资格。SO101原八文件仍在途，入口runtime.test.cjs、execution.test.ts、station.test.ts及无运动UI QA，实际消费/期限回产品化计划，不混本提交。knowledge_status=already_covered；沿用Wiki/ROS2与FishBot§20、原生时钟和CapMesh PIT-004，当前事实留项目，不写memory。
+
 ## 2026-10-24 M2垂直时长域与源多项式平移
 
 - Current：固定五维12样本仅#7的Tz=.5/.6/.8过；显式联合域Tz=[.1,1.2]让#4/#7完整A降至.723131/.764559，峰均回原前缀。宽盒原硬界通过，窄盒仍Y拒绝，最高Y2.212936/2.288586；M2部分完成、M3冻结、goal active。

@@ -143,7 +143,7 @@ class Replay:
                 else:
                     native, scored = self.score(row)
                     previous = self.server.rejections.copy()
-                    accepted = self.server.admit(str(row["trajectory_id"]), native, scored,
+                    accepted = self.server.admit(str(row.get("candidate_id") or row["trajectory_id"]), native, scored,
                         row["start_sim_s"], now, measured, self.validate)
                     reasons = list((self.server.rejections - previous).keys())
                     if accepted:
