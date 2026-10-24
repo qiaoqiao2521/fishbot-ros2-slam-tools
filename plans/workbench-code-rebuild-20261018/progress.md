@@ -1,5 +1,15 @@
 # 实施进度
 
+## 2026-10-24 M2原历史前缀接内点尾
+
+- Current：原N2的8窗全部纳入对照；6个+Y生成、#2/#3/#5/#6过原数学界及宽盒，#4/#7仍A拒，另−Y和无身份各1未评分。窄盒Y≤2.03只有#2/#3过，动态资格未闭合。M2部分完成、M3冻结、goal active。
+- Done：新增drone-reference-stops.py，复用geometry.search、原compare和Replay。compare可接尾请求，但初态PVA/J必须与实际原前缀末多项式匹配；最终原生接口身份/段数、C3、内点/逐轴停止和完整宽窄盒均重新审。旧固定参数结果保持，原速度1.8/A1/Z2.2不变，完整前缀仍C2。
+- 验证：10新集成＋3原候选＋8Replay＋10S4NU共31项通过，无跳过；93项独立原JSONL/BSpline导数/系数实根/绝对相位及选择结果读回通过，PNG已目视核对。6条各16个理想静态情景共96；4条正例拒绝替换后继续旧相位，2条数学拒绝始终不给参考。实际地图/物理跟踪未测，不冒称96项飞行通过。
+- 结果：#3完整A从1.674366降至.817598；#4/#7仍1.541738/1.051164，峰在切点后.188203/.163840s，Z约−1.537997/+1.029838、Y约1e−6。Tz均抵.4s旧域上界。6条success仍保2拒，wall .129–2.975s不是实时证书。#1/#5/#6/#7切点晚于后继曲线接收，原替换事实保留。
+- 失败/审查：首轮旧请求缺integral_resolution/走廊导致6条unscored，首报保留；补入口字段和完整pipeline回归。首次独立读回把无candidate的None误当应为False，改为全部事件无参考后93过，首读回保留。qoder-295f60超时60秒无有效结论；内置只读审查指出最终原生回执缺口，已修并补mock负例，根独立验收。
+- 产物/入口：原忽略目录reference-s4-inner-point-comparison.json、reference-s4-inner-readback.json、reference-s4-inner-point-comparison.png；方法与CLI见docs/DRONE_STOP_CANDIDATES.md末节。只改离线工具/测试/文档，无Web/服务改动、训练、ROS节点、仿真、控制、飞行或落地证据；冻结源和官方缓存保持原清洁版本。
+- Next/owner：根Codex保持原PVA/J核#4/#7的垂直时长适用域和连续极值，不预设延时必过；完整状态、时间有效图、终端/截止与跟踪采用继续待办。共享SO101八文件搬运接续仍在途；入口沿前轮runtime.test.cjs、execution.test.ts、station.test.ts及无运动UI QA，物理消费/超时回源SO101计划，未混本提交。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟和CapMesh PIT-004，不写memory。
+
 ## 2026-10-24 M2官方S4NU内点薄适配
 
 - Current：同一33.428s的五个有限画像均过原连续硬界＋内点/逐轴停止合同，原三拒绝A峰降至.774606/.754274/.718300。只有静态手工box、A/J假设资格，不是动态成功率或任意初态可行证书。M2部分完成、M3冻结、goal active。

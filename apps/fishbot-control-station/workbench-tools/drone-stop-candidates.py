@@ -4,6 +4,7 @@
 """Offline reference-prefix/MINCO-stop comparison. No control or ROS client."""
 import argparse
 from collections import Counter
+import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -31,13 +32,28 @@ def preview(native, audit):
     return points
 
 
-def compare(window, limits, stopping_times, executable, audit, handoff):
+def compare(window, limits, stopping_times, executable, audit, handoff, *, tail_request=None):
     if window.get("task_attribution") != "recorded":
         return {"trajectory_id": window["trajectory_id"], "status": "unscored",
                 "reason": "source_task_identity_unrecorded", "execution_admission": "not_performed"}
     state = np.asarray(window["terminal_pvaj_xyz_columns"])
+    last = window["pieces"][-1]
+    actual = np.column_stack([poly.polyval(1., audit.derivative(audit.normalized_power(last), last["duration"], i))
+                             for i in range(4)])
+    if state.shape != (3, 4) or not np.all(np.isfinite(state)) or np.max(abs(actual-state)) > 1e-8:
+        return {"trajectory_id": window["trajectory_id"], "status": "unscored",
+                "reason": "reference_cut_pvaj_mismatch", "execution_admission": "not_performed"}
     request = handoff.axis_stop_request({"initial_pva": state[:, :3].tolist(),
         "original_local_target": state[:, 0].tolist(), "corridor": []}, stopping_times, state[:, 3].tolist())
+    if tail_request is not None:
+        supplied = np.asarray(tail_request.get("initial_pva"), dtype=float)
+        jerk = np.asarray(tail_request.get("initial_jerk"), dtype=float)
+        if (not np.array_equal(supplied, state[:, :3]) or not np.array_equal(jerk, state[:, 3])
+                or tail_request.get("mode") != "axis_stop"):
+            return {"trajectory_id": window["trajectory_id"], "status": "unscored",
+                    "reason": "tail_request_changes_reference_boundary", "execution_admission": "not_performed"}
+        request = copy.deepcopy(tail_request)
+        request["required_continuity_order"] = 3
     request["id"] = f"reference-{window['trajectory_id']}-stop"
     started = time.perf_counter()
     try:
@@ -53,11 +69,24 @@ def compare(window, limits, stopping_times, executable, audit, handoff):
         return {"trajectory_id": window["trajectory_id"], "status": "generation_failed", "reason": str(error),
                 "request": request, "execution_admission": "not_performed"}
     process_ms = (time.perf_counter()-started)*1000
+    if "axis_inner_positions_xyz" in request or "axis_segment_durations_xyz" in request:
+        counts = [len(points)+1 for points in request.get("axis_inner_positions_xyz", [[], [], []])]
+        if (native.get("generator") != "official_MINCO_S4NU_axis_inner_points"
+                or native.get("axis_piece_counts") != counts):
+            return {"trajectory_id": window["trajectory_id"], "status": "generation_failed", "request": request,
+                    "reason": "native_inner_point_interface_unacknowledged", "execution_admission": "not_performed"}
     # Original independent V/A/ceiling gates; horizontal space is NOT certified.
     box = [[-np.inf, -np.inf, -np.inf], [np.inf, np.inf, limits["ceiling"]]]
     scored_request = {**request, "corridor": [[[0., 0., 1., -limits["ceiling"]]]], "integral_resolution": 16}
     started = time.perf_counter()
     tail_score = audit.audit_trajectory(native, scored_request, [], limits, box)
+    if "axis_inner_positions_xyz" in request or "axis_segment_durations_xyz" in request:
+        spec = importlib.util.spec_from_file_location("candidate_knots", Path(__file__).with_name("drone-stop-geometry.py"))
+        geometry = importlib.util.module_from_spec(spec); spec.loader.exec_module(geometry)
+        tail_score["axis_knot_contract"] = geometry.audit_axis_knots(native, request, audit)
+        if not tail_score["axis_knot_contract"]["passed"]:
+            tail_score["passed"] = False
+            tail_score["failed_checks"].append("axis_knots")
     composite = {"native_success": True, "pieces": window["pieces"]+native["pieces"]}
     composite_request = {**scored_request, "mode": "recorded_c2_prefix_and_c3_stop",
         "initial_pva": np.asarray(window["initial_pvaj_xyz_columns"])[:, :3].tolist(),
