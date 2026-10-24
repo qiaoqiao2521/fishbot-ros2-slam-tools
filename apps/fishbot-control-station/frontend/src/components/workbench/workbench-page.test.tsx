@@ -31,6 +31,8 @@ describe('workbench frozen evidence page', () => {
   it('renders all six capabilities with task flow, boundaries and the frozen snapshot source', () => {
     const html = render()
     expect(html).toContain('成果工作台')
+    expect(html).toContain('120 秒，花在了哪里')
+    expect(html).toContain('href="#workbench-delivery-timing"')
     for (const item of workbenchSnapshot.capabilities) {
       expect(html).toContain(`data-capability="${item.id}"`)
       expect(html).toContain(item.title)

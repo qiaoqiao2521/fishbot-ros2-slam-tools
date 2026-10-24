@@ -8,6 +8,8 @@ micro-ROS Agent sources, firmware source and staged runtime tools.
 ## Start here
 
 Current planning: [continuous-world operation and visual regression](plans/continuous-twin-regression-20261024/task_plan.md).
+
+Read-only [delivery timing](docs/DELIVERY_TIMING.md) is available on `/results`: native intervals, original budgets, sampling gaps and a rebuildable SQLite index.
 The SpecMesh plan is written; implementation has not started. Its first slice imports existing delivery records into a read-only timing report.
 The [workbench rebuild](plans/workbench-rebuild-20261018/task_plan.md) remains the UI, runtime-contract, rendering, and adapter baseline.
 

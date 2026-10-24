@@ -34,6 +34,7 @@ PYTHON_GROUPS = {
         'test_cooperation_staging.py',
         'test_cooperation_lattice.py',
         'test_cooperation_recording.py', 'test_cooperation_evidence_recording.py',
+        'test_cooperation_timing.py',
         'test_stack_gate.py', 'test_arena.py',
         'test_edge_voice_node.py', 'test_voice_asr.py', 'test_voice_bridge.py',
         'test_runtime_discovery.py', 'test_cooperation_arm.py', 'test_voice_ui_acceptance.py',

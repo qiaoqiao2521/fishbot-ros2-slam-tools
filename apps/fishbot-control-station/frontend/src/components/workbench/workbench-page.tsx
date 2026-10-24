@@ -15,6 +15,7 @@ import type { ServiceState } from '@/lib/workbench-services'
 import { toolEntry } from '@/lib/workbench-tool-entry'
 import { SceneValidationPanel } from './scene-validation-panel'
 import { HardwareLabPanel } from './hardware-lab-panel'
+import { DeliveryTimingPanel } from './delivery-timing-panel'
 import './workbench.css'
 
 const flow = [
@@ -100,12 +101,15 @@ export function WorkbenchPage({ onNavigate, voiceController }: { onNavigate: (ro
     <header className="station-page-heading workbench-heading">
       <div><h1>成果工作台</h1><p>从空间准备到运输交接，集中查看最近可用的能力与验收。</p></div>
       <div className="workbench-heading-actions">
+        <a className="workbench-download" href="#workbench-delivery-timing">配送耗时</a>
         <a className="workbench-download" href="#workbench-voice">语音任务</a>
         <a className="workbench-download" href="/workbench/recent-results.json" download="fishbot-recent-results.json"><FileDown size={15} aria-hidden="true" />下载验收快照</a>
       </div>
     </header>
 
     <div className="workbench-snapshot-note"><span>{snapshot.snapshotLabel}</span><time dateTime={snapshot.updatedAt}>更新于 {snapshot.updatedAt}</time><small>整理范围：{snapshot.period}。当前运行状态到各操作页查看。</small></div>
+
+    <DeliveryTimingPanel />
 
     <nav className="workbench-quick-links" aria-label="能力快捷入口">
       {snapshot.capabilities.map((item) => <a key={item.id} href={`#workbench-capability-${item.id}`}>{item.title}</a>)}

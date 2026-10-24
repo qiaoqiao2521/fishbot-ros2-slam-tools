@@ -1,0 +1,61 @@
+.delivery-timing-panel { padding: 24px; color: #18334f; min-width: 0; scroll-margin-top: 24px; }
+.delivery-timing-heading, .delivery-timing-toolbar, .delivery-timing-chart-heading, .delivery-timing-provenance { display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; }
+.delivery-timing-heading p, .delivery-timing-chart-heading p, .delivery-timing-footnote { color: #61748b; font-size: 13px; line-height: 1.6; margin: 8px 0; }
+.delivery-timing-eyebrow { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #2563eb; margin-bottom: 10px; }
+.delivery-timing-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.delivery-timing-upload { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #dbe4ef; border-radius: 7px; padding: 8px 10px; cursor: pointer; font-size: 12px; }
+.delivery-timing-upload input { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; }
+.delivery-timing-upload:focus-within { outline: 2px solid #2563eb; outline-offset: 3px; }
+.delivery-timing-provenance { background: #f5f8fc; padding: 12px 14px; border-radius: 8px; margin: 18px 0; font-size: 13px; }
+.delivery-timing-provenance span { color: #61748b; }
+.delivery-timing-toolbar { margin-bottom: 16px; }
+.delivery-timing-toolbar [role=group] { display: flex; padding: 3px; border: 1px solid #dbe4ef; border-radius: 8px; gap: 4px; }
+.delivery-timing-toolbar button { padding: 6px 12px; border-radius: 5px; font-size: 12px; color: #506682; }
+.delivery-timing-toolbar button[aria-pressed=true] { background: #eaf0ff; color: #1d4ed8; font-weight: 600; }
+.delivery-timing-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+.delivery-timing-metrics > div { border-left: 3px solid #dbe4ef; padding: 8px 14px; }
+.delivery-timing-metrics dt, .delivery-timing-evidence dt { font-size: 12px; color: #61748b; margin-bottom: 6px; }
+.delivery-timing-metrics dd { font-size: clamp(20px, 2vw, 28px); font-weight: 600; font-variant-numeric: tabular-nums; }
+.delivery-timing-panel small { display: block; color: #61748b; font-size: 11px; font-weight: 400; margin-top: 4px; }
+.delivery-timing-metrics .delivery-timing-tight { border-color: #c58b22; background: #fffaf0; }
+.delivery-timing-tight dd { color: #9a660c; }
+.delivery-timing-chart-heading span { font-size: 11px; color: #61748b; }
+.delivery-timing-scroll { overflow-x: auto; border: 1px solid #dbe4ef; border-radius: 8px; padding: 14px 12px 10px; }
+.delivery-timing-chart { min-width: 700px; }
+.delivery-timing-axis, .delivery-timing-row, .delivery-timing-gap-row { display: grid; grid-template-columns: 190px 1fr; gap: 14px; width: 100%; text-align: left; }
+.delivery-timing-axis { font-size: 10px; color: #61748b; padding-bottom: 14px; }
+.delivery-timing-axis > div { position: relative; height: 16px; }
+.delivery-timing-axis > div > span { position: absolute; white-space: nowrap; }
+.delivery-timing-row { border-radius: 4px; min-height: 47px; align-items: center; padding: 4px 0; }
+.delivery-timing-row:hover, .delivery-timing-row[aria-pressed=true] { background: #f0f5ff; }
+.delivery-timing-row:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.delivery-timing-row-label { font-size: 12px; padding-left: 4px; }
+.delivery-timing-track { height: 100%; min-height: 38px; position: relative; display: block; background: linear-gradient(90deg, #dbe4ef66 1px, transparent 1px) 0 0 / 24% 100%; }
+.delivery-timing-bar { position: absolute; top: 9px; height: 21px; background: #3778df; border-radius: 3px; opacity: .85; }
+.delivery-timing-interval .delivery-timing-bar { background: #b0bdcf; }
+.delivery-timing-budget .delivery-timing-bar { background: #18334f; height: 8px; top: 16px; }
+.delivery-timing-observed_stage .delivery-timing-bar { background: #7099b3; border: 1px dashed #315c77; }
+.delivery-timing-duration { position: relative; float: right; background: #fffffff0; padding: 2px 4px; color: #18334f; font-size: 11px; top: 9px; font-variant-numeric: tabular-nums; z-index: 1; }
+.delivery-timing-limit { position: absolute; top: 0; bottom: 0; border-left: 2px dashed #bd8420; }
+.delivery-timing-gap-row { color: #61748b; font-size: 11px; margin-top: 8px; }
+.delivery-timing-gap-row > div { position: relative; min-height: 32px; }
+.delivery-timing-gap-mark { position: absolute; height: 9px; background: #c14949; top: 0; }
+.delivery-timing-budget-label { display: block; text-align: right; padding-top: 16px; color: #9a660c; }
+.delivery-timing-detail { padding: 14px; background: #f5f8fc; border-left: 3px solid #2563eb; margin-top: 12px; font-size: 12px; }
+.delivery-timing-detail p { margin-top: 6px; color: #506682; overflow-wrap: anywhere; }
+.delivery-timing-evidence { margin-top: 18px; font-size: 12px; }
+.delivery-timing-evidence > dl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+.delivery-timing-evidence dd { font-variant-numeric: tabular-nums; }
+.delivery-timing-evidence details { border-top: 1px solid #dbe4ef; padding-top: 12px; color: #506682; }
+.delivery-timing-evidence summary { color: #2563eb; cursor: pointer; }
+.delivery-timing-evidence details p, .delivery-timing-evidence li { margin: 10px 0; overflow-wrap: anywhere; }
+.delivery-timing-evidence ul { list-style: disc; padding-left: 18px; }
+.delivery-timing-warning { color: #9a660c; background: #fff8e8; padding: 10px 14px; margin: 12px 0; border-radius: 6px; font-size: 12px; }
+@media (max-width: 680px) {
+  .delivery-timing-panel { padding: 16px; }
+  .delivery-timing-metrics { grid-template-columns: 1fr; gap: 8px; }
+  .delivery-timing-metrics > div { padding: 6px 12px; }
+  .delivery-timing-metrics dd { font-size: 23px; }
+  .delivery-timing-evidence > dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .delivery-timing-toolbar { gap: 10px; }
+}
