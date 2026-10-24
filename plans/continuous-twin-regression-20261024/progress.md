@@ -2,7 +2,7 @@
 
 ## Current
 
-2026-10-25，目标仍为完成本计划M1–M4，尚未完成。R1四类各10000步通过；R2已补实际AMCL先验注入、静止新帧及分进程发布环境观察，正常载货仍未通过。新无ROS探针已在原.10转向输入下复现支撑波动；Graceful轮的该输入来自预测碰撞后的Spin恢复，未误改主控制器。M4b只读双轨迹保持，M4c新增CPU工作流；本机74项CPU与687项前端通过，远端运行待核。原生CI、M2/M3和正式A/B仍待完成。旧完整反馈1778项不改写为本轮全仓结果。
+2026-10-25，目标仍为完成本计划M1–M4，尚未完成。R1四类各10000步通过；R2已补实际AMCL先验注入、静止新帧及分进程发布环境观察，正常载货仍未通过。新无ROS探针已在原.10转向输入下复现支撑波动；Graceful轮的该输入来自预测碰撞后的Spin恢复，未误改主控制器。M4b只读双轨迹保持，M4c新增CPU工作流；独立环境74项、全前端687项及构建通过。GitHub原运行40111818800已接受，最后读回queued/0 jobs，尚无远端通过证据。原生CI、M2/M3和正式A/B仍待完成。旧完整反馈1778项不改写为本轮全仓结果。
 
 | 范围 | 当前状态 |
 | --- | --- |
@@ -13,7 +13,7 @@
 | M3 | 故障、异常前留存、模拟充电续单尚未实施 |
 | M4a | 开发试验未晋级，正式5+5／留出／完整回验未派发 |
 | M4b | 只读双轨迹/Ghost首版已验；矩阵编辑与原owner派发未完成 |
-| M4c | CPU工作流与本机相关验证已实施，远端待核；原生CI/发布未完成 |
+| M4c | CPU工作流与本机验证已实施，原远端run排队；原生CI/发布未完成 |
 
 根入口为[任务计划](task_plan.md)，原生结果、限制和技术修正见[发现](findings.md)。旧F1完整K仍为J100＋3D雷达同轮B→A2/2，B119.793848秒；麦轮P1–P3在8b3b9ec独立交付。这些旧成功不抵消本轮新失败，也不复跑它们充数。
 
@@ -61,7 +61,9 @@ knowledge_status=updated。原Wiki/ROS2 与 FishBot.md第20节“快照恢复：
 
 ## Verification
 
-2026-10-25：ci-cpu-contracts-isolated-a.log在仅安装NumPy1.26.4的独立Python环境74/74通过，rclpy/mujoco均未安装；ci-frontend-a.log为57文件/687项通过，ci-frontend-build-a.log构建通过，保留500KB chunk警告。actionlint1.7.12检查新增工作流通过。不是新的1778全仓回归、浏览器验收或原生配送通过；GitHub实际运行待本轮提交后核对。
+2026-10-25：ci-cpu-contracts-isolated-a.log在仅安装NumPy1.26.4的独立Python环境74/74通过，rclpy/mujoco均未安装；ci-frontend-a.log为57文件/687项通过，ci-frontend-build-a.log构建通过，保留500KB chunk警告。actionlint1.7.12检查新增工作流通过。不是新的1778全仓回归、浏览器验收或原生配送通过。
+
+edd6b5b已推送并读回一致，工作流395248656已注册active。显式dispatch一次返回[原运行40111818800](https://github.com/qiaoqiao2521/fishbot-ros2-slam-tools/actions/runs/40111818800)，head_sha=edd6b5b9cbef3848608aca9d331af09b0b94fa13，最后读回queued/conclusion=null/jobs=0；不计远端通过、不重复dispatch。ci-github-watch-a.log保存原运行观察；本地watch到期不代表远端终态。接续owner=root，最短入口为查询该原run及jobs。
 
 私有证据根为~/.cache/fishbot/continuous-twin-20261024/。R1-b/c/d、父回合、R2早期失败/最终两次复现、四开发试验、warmup-3-a/b/c、capture样本、feedback-current-a.json、closeout-contracts-a.log、r2-warmup-contracts-a/b/c.log和ui-comparison-a/b分别保留。R1-d另存loaded-code-start/end.json及inputs-start/end.json，物理通过与来源观察分列。原记录未重写，详细轨迹/原始日志/模型状态/数据库/截图不提交Git。
 
@@ -75,4 +77,4 @@ D0/M1a历史验证：97处文档链接，7项导入、17项前端、9组桌面/�
 
 ## Next
 
-完成CPU CI的独立环境/构建与GitHub实际运行核对，再补原Graceful预测碰撞前的原生轨迹/局部地图证据。probe-c已复现物理支撑波动，原Graceful轮先触发Spin；不再把它误当FollowPath设定被覆写，不继续重复低速阴性探针。区分控制器、恢复动作、50Hz发布与500Hz接触，缺时序则明确不确定性。原120秒/GoalChecker/独立评分保持；取得合格R2后跑正式5+5/留出/完整B→A。M2/M3及矩阵/原生CI不因该缺口取消，独立切片继续。本目标保持active，root继续，不联系其他对话。
+继续查询GitHub原run40111818800，不重新派发；本机独立环境/构建已通过。补原Graceful预测碰撞前的原生轨迹/局部地图证据；probe-c已复现支撑波动，不继续重复低速阴性探针。M2可独立从build_scene/ArmPlanner的单实体约束补B卸货臂和第二货物映射，保留默认K与原owner。区分控制器、恢复动作、50Hz发布与500Hz接触，缺时序则明确不确定性。原120秒/GoalChecker/独立评分保持；取得合格R2后跑正式5+5/留出/完整B→A。M2/M3及矩阵/原生CI范围不缩减，本目标保持active，root继续，不联系其他对话。

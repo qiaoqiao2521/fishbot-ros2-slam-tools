@@ -171,6 +171,14 @@ CLI只读复核qoder-8e15b7在180秒超时，没有可用结论；get_status确�
 
 首轮stdlib-only预检74项中有1项因测试fixture明确需要NumPy失败，保留ci-cpu-contracts-a.log；因此明确安装本机已使用的NumPy1.26.4，不跳过该固定数组用例。系统Python同命令74项通过；全前端57文件/687项通过，不能和旧1778总反馈计数拼接。独立环境、构建与远端实际运行结果见progress；原生CI、正式A/B及业务面板仍待完成。
 
+独立venv仅安装NumPy1.26.4，确认没有rclpy/mujoco，74项通过；生产构建通过，包体积警告保留。edd6b5b已推送并读回完整SHA一致。GitHub注册的工作流395248656为active；初次push未找到同SHA运行记录，显式派发一次后返回40111818800，绑定edd6b5b9cbef3848608aca9d331af09b0b94fa13。已读回status=queued、conclusion=null及jobs=0；没有远端通过证据，不重复派发。后续继续查询原run，不因本地watch超时重启作业；自动push触发的实际行为仍待核。
+
+### M2只读入口核对
+
+根Agent直接读取build_scene与ArmPlanner，确认当前生成器只追加一套SO101执行资产和一个target_free，关节维度公式20/18/6加轮系、期望关节顺序和manifest.layout都固定单臂/单货物。ArmPlanner从manifest顶层读取一套station_offset、arm_home_qpos6、arm_contact_xml，并依赖grasp_target名；只复制namespace不足以获得第二卸货臂的物理/碰撞/IK映射。首个实现切片仍为显式新scene/profile下的B卸货臂＋第二独立货物实体映射，再验证真实抓放与库存，不修改默认K或reset造货。
+
+CBC只读子任务cbc-2c3839返回done但result为空，没有可采用产物，未计为M2实施；get_status已确认终态。上述入口事实由根Agent独立读源码，不来自空结果。共享计划/源码继续由root串行整合。
+
 ### 只读对照页
 
 既有Lichtblick树已有MCAP/时间轴/模型能力，但该树仍有在途修改，不导入第二份播放器或覆盖它。此轮只复用cooperation_timing的流式索引/10Hz投影，新增配送专用comparison JSON：按原世界坐标展示两车、货物、由q6正解的关节线框、原生UUID和原评分；源时间按明确锚点同步，缺口断开。此图不是完整碰撞模型或新评分。
