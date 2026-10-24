@@ -16,6 +16,10 @@ J100＋3D雷达的同轮完整B→A仍未通过，原FishBot父2/2保持。CLI�
 
 32朝向/.60m与16朝向/.30m的官方生成及原生静止对照已结束，未获路线时间优势；.30m直达还触实体相交。max_lookahead .4→.6的G重建载货短测在首Goal耗尽原120秒，取消5，均未采用。恢复原16朝向/.60m基元和.4前视。新原生反例确认Graceful只算路径内部长度：3cm首点、1.5cm容差，单点及1cm两点残段均提前旋转/零线速度，原checker仍拒绝。最小补丁补上车到首点距离，20控制器＋5坐标测试通过；6项候选/真实Bash构建传参检查通过。先冻结源码、同一G重建载货短测，原样验两UUID/120秒/载货/停车/清理，再完整H。独立overlay新增Graceful，其余原生库保持；原G回收-11仍未知，faulthandler已启用于新运行。生成器独立系统NumPy1环境不改物理venv。必须同轮原factory独立两单评分通过后才更新PROJECT完成状态，所有失败保留。
 
+新增实测：仅距离补丁的G短测首Nav仍120秒取消5，末端99–107秒真实静止，但AMCL距进场点约19.4mm，原checker15mm仍拒绝；108秒触progress recovery。原生路径诊断捕获8次单点/首点>15mm，证实此前距离边界实际出现，但该修补并不足以交付。随后尝试已有position_checker.stateful=false时，真实参数服务显示FollowPath/StagingPath作用域均未声明、空前缀.position_checker.stateful仍true；原UUID49c36a32…已主动取消5，不能计为该配置已生效。
+
+原生源码另确认configure在赋plugin_name之前初始化内层checker；一行顺序修复恢复按插件隔离的已有参数。漂移反例先失败、补丁后12项Shim测试全过；当前显式FollowPath内层false与原外层false对齐，Staging默认true及全部容差保持。与距离补丁组成候选，先同G重建载货短测并逐项回读两个作用域，再完整H。旧根因边界与所有失败保持，不把单元/声明当配送成功。
+
 证据根：~/.local/share/fishbot/cloud-jobs/kaggle-20261024/；最新local-loaded-f-via135-graceful055-yaw-stop-a，原生源码/构建/反例在native-yaw-stop/，标签1.3.13实际f4108e5。新显式候选尚未在Kaggle重跑完整任务，不把本机结果称云端成功。
 
 knowledge_status=updated(local)：原Wiki/FishBot第19节已补“停车检查器：先请求制动，再等待成功”，第20节已补调试发布调用点/同点Goal绕过计算/计算非ACK，问题入口同步并读回；既有纳秒、正常shutdown和进场经验保持。知识仓原有改动保留，未提交推送。仅仿真，不外推真机或sim-to-real。

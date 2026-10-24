@@ -1,0 +1,59 @@
+diff --git a/nav2_rotation_shim_controller/src/nav2_rotation_shim_controller.cpp b/nav2_rotation_shim_controller/src/nav2_rotation_shim_controller.cpp
+--- a/nav2_rotation_shim_controller/src/nav2_rotation_shim_controller.cpp
++++ b/nav2_rotation_shim_controller/src/nav2_rotation_shim_controller.cpp
+@@ -38,9 +38,9 @@
+   std::string name, std::shared_ptr<tf2_ros::Buffer> tf,
+   std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros)
+ {
++  plugin_name_ = name;
+   position_goal_checker_ = std::make_unique<nav2_controller::PositionGoalChecker>();
+   position_goal_checker_->initialize(parent, plugin_name_ + ".position_checker", costmap_ros);
+-  plugin_name_ = name;
+   node_ = parent;
+   auto node = parent.lock();
+
+diff --git a/nav2_rotation_shim_controller/test/test_shim_controller.cpp b/nav2_rotation_shim_controller/test/test_shim_controller.cpp
+--- a/nav2_rotation_shim_controller/test/test_shim_controller.cpp
++++ b/nav2_rotation_shim_controller/test/test_shim_controller.cpp
+@@ -42,6 +42,13 @@
+   RotationShimShim()
+   : nav2_rotation_shim_controller::RotationShimController()
+   {
++  }
++
++  bool positionReached(const geometry_msgs::msg::Pose & query,
++    const geometry_msgs::msg::Pose & goal)
++  {
++    position_goal_checker_->setXYGoalTolerance(0.015);
++    return position_goal_checker_->isGoalReached(query, goal, geometry_msgs::msg::Twist());
+   }
+
+   nav2_core::Controller::Ptr getPrimaryController()
+@@ -742,3 +749,27 @@
+     controller->cleanup();
+   }
+ }
++
++TEST(RotationShimControllerTest, positionCheckerUsesItsControllerNamespace)
++{
++  for (const bool stateful : {false, true}) {
++    SCOPED_TRACE(stateful);
++    auto node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("ShimPositionScopeTest");
++    node->declare_parameter("FollowPath.primary_controller",
++      std::string("nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"));
++    node->declare_parameter("FollowPath.position_checker.stateful", stateful);
++    auto tf = std::make_shared<tf2_ros::Buffer>(node->get_clock());
++    auto costmap = std::make_shared<nav2_costmap_2d::Costmap2DROS>("scope_costmap");
++    costmap->on_configure(rclcpp_lifecycle::State());
++    auto ctrl = std::make_shared<RotationShimShim>();
++    ctrl->configure(node, "FollowPath", tf, costmap);
++    EXPECT_TRUE(node->has_parameter("FollowPath.position_checker.xy_goal_tolerance"));
++    geometry_msgs::msg::Pose goal, query;
++    goal.orientation.w = query.orientation.w = 1.0;
++    query.position.x = 0.01;
++    EXPECT_TRUE(ctrl->positionReached(query, goal));
++    query.position.x = 0.019;
++    EXPECT_EQ(ctrl->positionReached(query, goal), stateful);
++    ctrl->cleanup();
++  }
++}

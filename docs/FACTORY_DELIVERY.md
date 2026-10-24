@@ -225,6 +225,12 @@ yaw-stop补丁在同一F载货重建初态通过119.637秒，两UUID与原静止
 原生补丁：3cm/1.5cm反例先失败，修补后25项原生检查通过。
 该修补尚不代表载货路线通过；复现与构建见[Kaggle薄适配](../experiments/kaggle/README.md#graceful-裁剪路径的终点距离)。
 
+仅距离补丁短测仍失败。末端AMCL距目标19.4mm、原外层15mm拒绝，
+Shim内层却保持旧到位状态并持续请求零速；随后触发progress恢复。
+已有按插件设置stateful的参数还受旧初始化顺序影响，实际落到空前缀。
+现补一行命名初始化修复，并仅令FollowPath内层stateful=false匹配原外层；
+12项原生Shim测试通过，真实载货与同轮两单仍待验收。见[参数边界](../experiments/kaggle/README.md#shim-位置检查器的命名与当前判定)。
+
 **本机1.3.13需要原生缓存修复。** 实测发现 `NodeLattice::isNodeValid` 可复用终点缓存，
 跳过另一条入边的碰撞检查。仓库包含最小 C++ 复现和仅修该条件的补丁。
 在独立 overlay 构建后，通过现有 `FISHBOT_NAV2_QUERY_OVERLAY=<overlay>/install`

@@ -97,7 +97,7 @@ cp experiments/kaggle/f1_candidate.py /absolute/private/f1-dataset/
 
 原始出生点完整e未复现上述路线分项，1.35进场在120秒取消，A未执行。
 `FISHBOT_TRANSPORT_CONTROLLER=graceful`显式复用Nav2 1.3.13的
-RotationShim＋Graceful及下述两处原生补丁；默认仍为RPP，不另写控制器。
+RotationShim＋Graceful及下述原生补丁；默认仍为RPP，不另写控制器。
 `graceful-j100.yaml`只替换FollowPath，StagingPath/checker/物理保持；
 原载货平滑器的`.06/.10`和`.025/.05`加速度门槛保持。
 Graceful自身最大线/角速`.06/.055`、降速范围`.12m`。
@@ -128,6 +128,7 @@ J100候选仅对FollowPath显式启用，StagingPath与旧默认不变。
 
 ```bash
 git apply /absolute/fishbot/tools/patches/nav2-1.3.13-rotation-yaw-stop.patch
+git apply /absolute/fishbot/tools/patches/nav2-1.3.13-rotation-position-namespace.patch
 git apply /absolute/fishbot/tools/patches/nav2-1.3.13-graceful-path-distance.patch
 colcon build --packages-select nav2_rotation_shim_controller nav2_graceful_controller \
   --allow-overriding nav2_rotation_shim_controller nav2_graceful_controller \
@@ -148,3 +149,16 @@ colcon build --packages-select nav2_rotation_shim_controller nav2_graceful_contr
 20项控制器和5项坐标测试通过，原型测试在
 `test_graceful_controller`的`prunedPathStillHasRobotToFirstPoseDistance`。
 这只证明原生边界修复，真实载货路线和完整配送仍须独立验收。
+
+## Shim 位置检查器的命名与当前判定
+
+`nav2-1.3.13-rotation-position-namespace.patch`只把插件名赋值提前到
+位置检查器初始化之前，保留同版许可证。旧版初始化时插件名为空，
+实际参数是`.position_checker.stateful`，声明FollowPath下的同名参数不生效。
+先应用yaw-stop补丁，再应用该补丁；两者仍构建同一个Shim包。
+
+显式J100候选设置`FollowPath.position_checker.stateful=false`，与原外层
+StoppedGoalChecker一致：减速后漂出15mm范围时，重新交给原控制器修正XY。
+StagingPath默认true保持；不能用空前缀参数同时改动两个阶段。
+原生反例先失败，补丁后12项Shim测试通过，包括10mm进入、19mm退出。
+运行时须逐项读回FollowPath、StagingPath与原外层的值，空响应不是成功。

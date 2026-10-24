@@ -9,6 +9,10 @@ controller_server:
       forward_sampling_distance: 0.02
       use_path_orientations: true
       rotate_to_goal_heading: true
+      # Match the original non-stateful outer checker after braking drift.
+      # Requires nav2-1.3.13-rotation-position-namespace.patch.
+      position_checker:
+        stateful: false
       # Requires nav2-1.3.13-rotation-yaw-stop.patch in the selected overlay.
       stop_in_goal_yaw_tolerance: true
       rotate_to_heading_once: false

@@ -170,6 +170,8 @@ def main():
     if yaw_stop:
         run("rotation-yaw-stop-patch", ["git", "apply",
             str(fishbot/"tools/patches/nav2-1.3.13-rotation-yaw-stop.patch")], cwd=source)
+        run("rotation-position-namespace-patch", ["git", "apply",
+            str(fishbot/"tools/patches/nav2-1.3.13-rotation-position-namespace.patch")], cwd=source)
         run("graceful-path-distance-patch", ["git", "apply",
             str(fishbot/"tools/patches/nav2-1.3.13-graceful-path-distance.patch")], cwd=source)
         transport_packages = ["nav2_rotation_shim_controller", "nav2_graceful_controller"]

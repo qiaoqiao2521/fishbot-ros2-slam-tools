@@ -268,3 +268,11 @@ J100 新生成场景：工位接近扫掠168样本/432几何对，扣采样间�
 - `local-loaded-g-via135-lookahead060-a`恢复原16/.60，只改Graceful max_lookahead .4→.6；原生参数已读回。首UUID64cccb45…在共用120秒取消5、第二段未执行，载货与禁碰未触发、quiet/参数恢复/owned0/端口关闭通过。末端偏航缓慢修正，未采用。
 - 官方1.3.13 Graceful以calculate_path_length(transformed_plan)判断终点位置；裁剪后单点路径内部长度0，两点残段也可能短于15mm，缺少车到首点距离。新增真实controller反例：首点30mm、原checker15mm，1/2点两组旧实现均v=0/w=.25（测试默认最小转速），checker仍拒绝；容差内10mm行为保留。原源码未改前测试失败，原始日志保留。该反例证明边界缺陷，不唯一归因先前所有超时。
 - 最小native补丁仅加hypot(first.x,first.y)，原曲线路程/碰撞/checker/速度保持，20 controller＋5 egopolar通过。新包加入独立overlay，系统安装不变。Kaggle显式graceful构建同时追加Shim与Graceful，旧缓存不得冒充新库；6项项目选择/带空格Bash传参检查通过。下一步仅恢复.4前视的原G fixture验证，再完整H。证据在原根native-graceful-distance/、原生标签仍1.3.13；没有新Kaggle业务成功。
+
+
+## 2026-10-24 嵌套位置检查器命名空间与漂移
+
+- `local-loaded-g-via135-distance-a`仅Graceful距离修补仍首Nav120秒取消5；8条实际compute路径为单点且距车>15mm。原生路径发布仅为计算活动/输入证据，不称控制消费ACK。99–107秒输出、真实/编码角速均0，真实距目标17mm、AMCL19.4mm，外层15mm原StoppedGoalChecker拒绝，108.2秒progress失败并进入恢复。载货保持/禁碰、原quiet/参数恢复/owned0/端口关闭、源/记录通过，timing非空且无-11；不代表旧G回收问题已定位。
+- Shim内部PositionGoalChecker默认stateful=true，原外层stateful=false。尝试原有FollowPath.position_checker.stateful=false却读回整组空值；逐个原生服务回读确认空前缀`.position_checker.stateful=true`，两个插件前缀均未声明，外层false。`local-loaded-g-via135-current-position-a`的原UUID49c36a32…已主动取消5并清理，原因是配置未生效，不算有效参数对照。
+- 官方1.3.13 configure先initialize(...plugin_name_...)、后plugin_name_=name，导致首次配置前缀为空。最小补丁只提前赋名；新native测试经完整Shim configure，将15mm内10mm→范围外19mm，配置false应重新拒绝，true保留原latch。旧实现命名及false行为均失败，补丁后12项原生测试全过。原始失败与实际参数回读保存在native-graceful-distance/及上述轮目录。
+- 复用已有参数，在显式Graceful候选中选择FollowPath.position_checker.stateful=false，与原外层一致；StagingPath依旧原配置，不设空前缀参数，不放宽XY/yaw/速度/期限。Kaggle同版源码追加namespace补丁，仍仅构建原两个控制器。下一步新overlay、同G fixture、原120秒短测，成功才完整两单。
