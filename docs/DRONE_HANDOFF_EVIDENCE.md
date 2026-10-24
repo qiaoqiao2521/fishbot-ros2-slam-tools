@@ -144,12 +144,50 @@ Next/owner：根Codex准备默认关闭、可审查的最小旁路观测补片�
 
 [局部检查](../apps/fishbot-control-station/workbench-review-tests/test_drone_observation_patches.py)仅向临时副本应用补片。Python提取真实原/补片`setpoint`对照；C++编译真实原/补片控制块及消息字段，以替身依赖比较开关和分支。
 11项检查通过、无跳过。覆盖两种发送模式、ENU/NED三阶值、异常/取消与I/O失败、无新订阅且原对象已改、没有raw、前置failsafe首算成功、连续两周期保留来源、第三算failsafe也失败，以及七组主/旧/无旧/失败计算序列。
-原树`git apply --check`均过，未写原树。C++替身编译不是PX4全构建。系统Python运行官方生成器时缺少`genmsg`，未安装依赖；uORB生成、真实头文件/模块链接及ULog在线记录尚未验证。
+原树`git apply --check`均过，未写原树。C++替身编译不是PX4全构建。初轮系统Python运行官方生成器时缺少`genmsg`，未安装依赖；当时uORB生成、真实头文件/模块链接及ULog在线记录未验证。随后已有隔离环境的构建结果见下节，在线记录仍未验证。
 
 ```sh
 cd apps/fishbot-control-station/workbench-review-tests
 python3 -m unittest test_drone_observation_patches -v
 ```
 
-Next/owner：根Codex先核已有隔离Python依赖，在临时副本做官方消息生成及构建验证；仍不应用冻结树或启动仿真。实际采集须另行解冻后执行，保留raw缺失/重发/clock不确定，不以新日志形式冒充实测闭环。
+Next/owner：根Codex的临时副本官方生成/构建已完成，见下节。实际采集须另行解冻后执行，保留raw缺失/重发/clock不确定，不以新日志形式冒充实测闭环。
 M2部分完成，M3未启动，动态闭环未通过。本轮没有ROS初始化、服务/仿真、控制、新飞行或落地。
+
+
+## 官方工具链构建与清理（2026-10-25）
+
+已有`/home/muqiao/.cache/ros2-drone/venv/bin/python`具备genmsg、empy、jinja2、kconfiglib及pyulog；原PX4构建缓存同样使用这个环境。系统Python缺genmsg是解释器选择问题，本轮未安装或更新依赖。
+仅在新建临时目录复制原源码及Git元数据，排除原`build`，应用既有补片。使用官方`GIT_SUBMODULES_ARE_EVIL=1`保持现有子模块，不自动下载或更新；已初始化子模块无版本偏移。23个未初始化子模块未被本次目标要求，不声称其他板型和插件也能构建。
+
+| 检查 | 新鲜证据 | 结论范围 |
+| --- | --- | --- |
+| 默认关闭 | 新CMake缓存`DRONE_HANDOFF_OBSERVATION:BOOL=OFF`；真实控制器编译命令没有该宏 | 补片的构建开关默认关闭 |
+| 官方生成 | 构建日志包含uORB headers/json/sources/compressed fields生成，新消息头真实存在 | 消息格式与当前官方生成器兼容 |
+| OFF构建 | `cmake --build ... --target px4 --parallel 4`完成1075步，最终链接`bin/px4`，exit 0 | 当前px4_sitl_default的px4目标可编译链接 |
+| ON构建 | 同副本重新配置ON，编译命令包含`-DDRONE_HANDOFF_OBSERVATION=1`，真实mc_pos_control重编译，11步后链接exit 0 | 观测代码与当前真实PX4类型/模块链接兼容 |
+
+OFF/ON产物经`file`读为带调试信息的x86-64 ELF，大小57529472/57533312字节。没有执行二进制，不以文件大小证明记录成功或实时开销。
+两次配置均提示可选GStreamer插件依赖缺失；`px4`目标仍通过。不升级依赖，也不将此结论扩大到GStreamer视频能力。68.226s完整构建与9.114s增量构建只是单次记录，两者工作量不同，不做性能比较。
+
+复验需先新建源码副本、排除原build、应用上节补片，并将`DRONE_BUILD_SOURCE`和`DRONE_BUILD_DIR`指向该副本。以下只配置和编译，不运行SITL：
+
+```sh
+export PATH="/home/muqiao/.cache/ros2-drone/venv/bin:$PATH"
+export GIT_SUBMODULES_ARE_EVIL=1
+cmake -S "$DRONE_BUILD_SOURCE" -B "$DRONE_BUILD_DIR" -G Ninja -DCONFIG=px4_sitl_default -DPYTHON_EXECUTABLE=/home/muqiao/.cache/ros2-drone/venv/bin/python
+cmake --build "$DRONE_BUILD_DIR" --target px4 --parallel 4
+cmake -S "$DRONE_BUILD_SOURCE" -B "$DRONE_BUILD_DIR" -DDRONE_HANDOFF_OBSERVATION=ON
+cmake --build "$DRONE_BUILD_DIR" --target px4 --parallel 4
+```
+
+原忽略输出目录保存`handoff-observation-build.json`及`handoff-observation-build-logs.tar.gz`。归档五个成员全部解压读回后，已删除本轮临时源码、build/ccache及两份本轮/前轮生成辅助文件；移除目录分配空间1306947584字节（约1.217GiB）。文件系统可用空间由8566022144增至9872965632字节；这是收尾时观测，不当作受控性能指标。保留原源码、虚拟环境、旧构建、原遥测和必要新记录。
+恢复日志时新建目录后解压，不需要恢复可再生成的整棵源码副本：
+
+```sh
+DRONE_LOG_DIR=$(mktemp -d)
+tar -xzf apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/handoff-observation-build-logs.tar.gz -C "$DRONE_LOG_DIR"
+```
+
+Next/owner：根Codex等待用户明确解除“隔离仿真启动/无解锁采集”这一项冻结，再在独立副本做有限记录验证。原`check_minco_link.py`仅监听offboard_control_mode且不启动Offboard，不能直接冒称新增消费topic或PVA读回已通过；未采集/未激活/缺topic必须分别保留，MAVLink ingress与跨域对应仍待证。此许可不包含解锁、起飞或动态任务。
+M2仍部分完成，M3未启动，动态闭环未通过。补片未应用原冻结树，原drone/PX4/GCOPTER源码保持清洁。本片没有新增算法、训练、ROS节点或控制调用。

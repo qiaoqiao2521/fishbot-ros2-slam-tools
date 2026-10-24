@@ -427,3 +427,12 @@ Done：复用原任务JSONL与uORB/ULog。sender逐SDK调用保host/sim、身份
 Issues：官方uORB生成器在系统Python缺genmsg，未安装；完整PX4生成/构建、ULog/JSONL延迟丢帧、跨域对应/原生来源、真实AJ/地图/终端仍未知。补片不接MINCO实时执行、不证明采用ACK。
 交接：[观测合同与补片说明](../../docs/DRONE_HANDOFF_EVIDENCE.md)含两个diff与精确测试入口。Next/owner=根Codex，先在临时副本核已有隔离Python与官方生成/构建；不应用冻结树、不自动飞行。
 Knowledge：already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟与CapMesh PIT-004。agent-link dsh45s超时无返回不作证据；本对话内置Agent仅只读审查，未联系其他聊天。新项目事实未写memory。
+
+
+## 2026-10-25 M2官方生成与OFF/ON构建
+
+Current：既有观测补片在临时副本完成官方uORB生成及px4目标OFF/ON编译链接，原冻结树未变。M2部分完成、M3未启动、动态闭环未过。
+Done：直接复用已有venv，未安装依赖。新配置默认OFF，控制器命令无观测宏；完整1075步构建exit0。再启用ON，真实mc_pos_control含宏重编译、11步链接exit0。两产物均离线读为x86-64 ELF，没有执行。前轮同版11局部检查保持，不重复全项目测试。
+Issues：可选GStreamer缺依赖，23个未初始化子模块不属于本次px4目标；不扩大到其他插件/板型。同步记录延迟、ULog完整性、MAVLink ingress、跨域对应、实际采用、AJ/地图/终端仍未获资格。现有check_minco_link只读ocm掩码，不证明新增topic消费。
+清理：五个构建日志成员压缩并完整解压读回，报告/归档留原忽略目录。已移除临时源码/build/ccache及两个辅助文件，目录分配空间1306947584B；空闲8566022144→9872965632B。保留原源码/venv/旧构建/遥测。恢复入口见docs/DRONE_HANDOFF_EVIDENCE.md新节；没有遗留编译会话。
+Next/owner：根Codex等待用户明确解冻隔离仿真启动及无解锁采集；获授权后先核有限记录，不默认解锁或飞行，不将topic缺失/未激活改判成功。Knowledge=already_covered，沿用Wiki§20与CapMesh PIT-004；本轮事实留项目。仅文档和忽略的构建证据变化，不新增补片、框架或同类网格。
