@@ -118,7 +118,7 @@ def extrema(native, audit):
 
 
 def search(base, box, limits, executable, audit, *, planning_inset=.002, max_iterations=60, y_inner=False,
-           z_time_bounds=None, exchange=None):
+           z_time_bounds=None, exchange=None, metrics_backend=None):
     """Bounded recorded +Y profile, not a generic planner or feasibility proof."""
     try:
         head = np.asarray(base["initial_pva"], dtype=float)
@@ -156,7 +156,7 @@ def search(base, box, limits, executable, audit, *, planning_inset=.002, max_ite
         if y_inner and (result["native"].get("generator") != "official_MINCO_S4NU_axis_inner_points"
                 or result["native"].get("axis_piece_counts") != [1, 2, 1]):
             raise ValueError("native interface did not acknowledge the requested Y inner point")
-        metrics = extrema(result["native"], audit)
+        metrics = extrema(result["native"], audit) if metrics_backend is None else metrics_backend(result["native"], audit)
         margins = np.r_[planning_box[1]-metrics["upper"], np.asarray(metrics["lower"])-planning_box[0]]
         return result, metrics, margins
 

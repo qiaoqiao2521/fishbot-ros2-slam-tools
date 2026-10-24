@@ -758,3 +758,60 @@ python3 -m unittest test_drone_native_extrema test_drone_native_session test_dro
 ```
 
 Next/owner：根Codex在最紧#7增加显式可选后端，再比较完整搜索的实际候选/拒绝与含进程生命周期耗时；不要求不同浮点路径生成同一最优解，但每条最终候选必须独立过原门。默认路径、原V1.8/A1/Z2.2门和drone c866441冻结保持，M2部分完成、M3不启动。本轮无Web/服务、训练、ROS节点、仿真、控制、新飞行或落地证据。
+
+## 极值后端完整搜索对照（2026-10-24）
+
+上节固定曲线资格不等于完整搜索资格。本片在最紧#7/h=.05的原四个有限A/J假设上，重新运行两种极值后端。
+`geometry.search`只增加显式`metrics_backend=None`回调；None继续原Python extrema。新的`--compare-search`只在外部离线工具启用回调，没有修改原reanchor默认路径、飞行代码或硬界。
+
+### 同源、同域、独立再验
+
+两方都用本轮同一个metrics binary、原归档`boundary_request`、因果PV来源、窄盒、2mm规划inset、Y内点及Z时间域[.1,1.2]，保持60次迭代上限。
+不把上轮已优化的候选当新seed。每次搜索独立进程和缓存，每个画像三组重复，第二组反向执行顺序；完整wall包住进程创建、搜索及关闭。
+Python回调直接调用原extrema；RootFinder回调多一次现成rootfinder_extrema请求，核形状与有限性，不静默回退。
+生成/诊断次数与SLSQP nfev分别记录。前者含约束新点，nfev仅目标调用，因此可不同；最终还有一次独立再生成和原门/axis_knots。
+
+### 结果包含三次真实拒绝
+
+| #7画像 | Python过原门 | RootFinder过原门 | Python A峰 | RootFinder A峰 | 同画像完整wall中位秒：Python / Root |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A=J=0 | 3/3 | 3/3 | .962272 | .962426 | 2.888 / .592 |
+| Ay=+.2，J=0 | 3/3 | 0/3 | .953297 | 1.038610 | 2.357 / .525（Root均拒绝） |
+| A=0，Jy=+1 | 3/3 | 3/3 | .966133 | .968314 | 2.003 / .371 |
+| A=0，Jy=−1 | 3/3 | 3/3 | .968077 | .968078 | 1.349 / .228 |
+
+四画像×两方×三组共24次完整搜索，Python12/12数学过、Root9/12，均有6次optimizer.success；其余各6次仍保留60iter上限false。
+外向Ay的Root三次optimizer.success=true，但原A≤1门全部拒绝。它不是短片段漏峰：最终相同系数的Python诊断与Root差≤8.88e-16，原审计独立重算也同结论。
+失败候选在相对起点t=.6160197875秒处，A=(-.1149631514,-1.0322277688,0)，范数1.0386099811；axis_knots通过。当前证据只支持搜索结果质量退化，不证明具体中途分歧原因。
+不同后端参数、评价次数和最终系数发生变化，不能把固定曲线同值延伸成优化路径等价。
+
+耗时按画像及math_passed/math_rejected/unscored分别汇总，保留完整范围。
+Root成功9样本中位.371秒与Python成功12样本中位2.108秒来自不同画像集合，不作为同等成功率的加速比。
+原始报告早期wall_summary把audited的拒绝也合并，现保留原报告，另存scored分组副本；24行完全相同，只重新派生汇总，没有重跑/重写搜索成绩。
+`native_exchange_wall_s`包含生成和Root诊断交换，`metrics_wall_s`又包含Root诊断交换，二者重叠，不能相加。
+SciPy试探越界后clipping警告保留；最终候选均由原门独立处理，没有放宽阈值或减少审计换速度。
+
+### 停点旁路诊断与范围
+
+在失败停点，六参数分别±1.49e-8及±1e-6，加原点共25个坐标探针；不是另一次搜索或新合格轨迹。
+仍存在不出规划盒的下降方向。例如Y内部时间比例+1e-6使A从1.038609981降至1.038609008；位移比例−1e-6降至1.038609011，仍超原A门。
+这些探针的两后端A差≤2.23e-15；下降方向不证明完整约束优化可行，也不能直接说明SLSQP具体停止原因。
+下一项先核同一输入的首次数值梯度/活跃峰分歧及停止条件，不盲扫eps，不移除外向Ay，不以optimizer.success代替原硬门。
+
+### 验证与接续
+
+10项新检查覆盖None默认、显式回调失败/缺字段/非有限值无静默回退、假低A不能绕门、axis_knots拒绝、原seed/来源不变、失败后其他后端继续、完整生命周期、交替顺序及按结果分时。
+加原极值16、geometry11和会话14，共51项通过、无跳过。根独立310项读回含原输入、全部系数、最终门、停止合同、计数、重复确定性及分组统计；这些验证包含正确保留三次拒绝，不表示24条都通过。
+内置只读审查独立重算失败系数，并指出汇总混入拒绝的口径，已修；未联系其他已有聊天。
+
+忽略目录drone-committed/748…保存pilot、native-extrema-full-search.json、native-extrema-full-search-scored.json、native-extrema-full-search-readback.json及native-extrema-failed-point-probes.json。
+源码只提交薄回调、离线比较入口与测试，原数据和生成报告不入Git。复验：
+
+```sh
+STOP_REPORT_ROOT=apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6
+python3 apps/fishbot-control-station/workbench-tools/drone-extrema-qualification.py --compare-search --profiles zero_A_J outward_y_A outward_y_J inward_y_J --repetitions 3 --reanchor-report "$STOP_REPORT_ROOT/recorder-PV-reanchored-stopping-tails.json" --output "$STOP_REPORT_ROOT/native-extrema-full-search-rerun.json"
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_extrema_search test_drone_native_extrema test_drone_stop_geometry test_drone_native_session
+```
+
+新后端保持显式可选，不晋级默认。真实A/J、时间有效地图、终端、跟踪及按时采用仍未获资格。drone c866441冻结，M2部分完成、M3不启动；没有无人机Web/服务改动、训练、ROS节点、仿真、控制、新飞行或落地证据。期间独立SO101导入修补与配方QA已提交3bce2c7，未混入本片验收。

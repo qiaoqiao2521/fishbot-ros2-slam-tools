@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MPL-2.0
 """Same-coefficient offline qualification of existing GCOPTER root interfaces."""
 import argparse
+from collections import Counter
 import copy
 import importlib.util
 import json
@@ -108,15 +109,127 @@ def run(source,root,executable,*,repetitions=3):
     return result
 
 
+def native_search_metrics(native,exchange):
+    """Existing diagnostic mode, not a replacement for the final hard gate."""
+    response=exchange({"mode":"rootfinder_extrema","pieces":native["pieces"]})
+    if not response.get("native_success"):
+        raise ValueError(response.get("error","native extrema unavailable"))
+    keys=("upper","lower","acceleration_peak_m_s2","minimum_y_velocity_m_s",
+        "minimum_y_velocity_at_s","reverse_y_speed_m_s")
+    metrics={key:response[key] for key in keys}
+    for key in ("upper","lower"):
+        if np.asarray(metrics[key]).shape!=(3,):raise ValueError("native extrema needs three-axis ranges")
+    if not np.all(np.isfinite(np.r_[metrics["upper"],metrics["lower"],[metrics[key] for key in keys[2:]]])):
+        raise ValueError("native extrema returned nonfinite metrics")
+    return metrics
+
+
+def search_summary(rows):
+    """A fast rejected search is not a successful-search timing sample."""
+    def outcomes(selected):
+        timing={}
+        for outcome in ("math_passed","math_rejected","unscored"):
+            group=[r for r in selected if (r["status"]=="unscored" if outcome=="unscored" else
+                r["status"]=="audited" and bool(r.get("math_passed"))==(outcome=="math_passed")) and "wall_s" in r]
+            if group:
+                values=[r["wall_s"] for r in group]
+                timing[outcome]={"samples":len(values),"minimum_s":min(values),"median_s":float(np.median(values)),"maximum_s":max(values)}
+        return timing
+    backends={backend:[r for r in rows if r.get("backend")==backend] for backend in ("python","rootfinder")}
+    return {"summary":{backend:{"searches":len(selected),"audited":sum(r["status"]=="audited" for r in selected),
+            "unscored":sum(r["status"]=="unscored" for r in selected),
+            "math_passed":sum(r.get("math_passed",False) for r in selected),
+            "optimizer_success":sum(r.get("optimizer",{}).get("success",False) for r in selected),
+            "final_rejection_counts":dict(Counter(reason for r in selected for reason in r.get("final_rejections",[])))}
+            for backend,selected in backends.items() if selected},
+        "wall_summary":{backend:outcomes(selected) for backend,selected in backends.items() if selected},
+        "wall_by_profile":{profile:{backend:outcomes([r for r in selected if r.get("profile")==profile])
+            for backend,selected in backends.items() if any(r.get("profile")==profile for r in selected)}
+            for profile in sorted({r["profile"] for r in rows if "backend" in r})}}
+
+
+def run_search(source,root,executable,*,variant_id="reference-7-h0.05",profile_names=("zero_A_J",),
+               repetitions=3,max_iterations=60):
+    """Complete paired offline searches; keep failures and lifecycle costs."""
+    audit,_=geometry.tracking.load("stop_candidates",Path(__file__).with_name("drone-stop-candidates.py")).load_modules(root)
+    result={"kind":"offline_extrema_backend_search_comparison","archive_task_id":source.get("archive_task_id"),
+        "variant_id":variant_id,"rows":[],"warnings":[],"configuration":{"y_inner":True,"z_time_bounds":[.1,1.2],
+            "max_iterations":max_iterations,"planning_inset":.002},
+        "scope":"archived boundary and finite A/J hypotheses in a declared static box; not online admission or dynamic accept rate",
+        "timing_scope":"complete search including owned process creation and close; serial pairs alternate backend order",
+        "execution_admission":"not_performed","dynamic_closed_loop":"not_passed"}
+    if repetitions<1:raise ValueError("positive repetitions required")
+    for profile in profile_names:
+        try:
+            matches=[r for r in source["rows"] if isinstance(r,dict) and r.get("variant_id")==variant_id
+                and isinstance(r.get("profile"),dict) and r["profile"].get("name")==profile]
+            if len(matches)!=1:raise ValueError("one archived variant/profile required")
+            original=matches[0];base=original["boundary_request"];box=original["hard_box"];limits=original["hard_limits"]
+            # These are the original seed and causal PV provenance, not the
+            # previously optimized endpoint used as a more favorable seed.
+            source_input={k:copy.deepcopy(original[k]) for k in ("input","boundary_request","hard_box","hard_limits","start_sim_s","profile")}
+        except (KeyError,ValueError,TypeError) as error:
+            result["warnings"].append(f"{profile}: {error}")
+            result["rows"].append({"profile":profile,"status":"unscored","reason":str(error)})
+            continue
+        for repetition in range(repetitions):
+            order=("python","rootfinder") if repetition%2==0 else ("rootfinder","python")
+            for backend in order:
+                row={"profile":profile,"repetition":repetition,"backend":backend,"pair_order":list(order),
+                    "source_input":source_input,"execution_admission":"not_performed"}
+                result["rows"].append(row)
+                counters={"generation_calls":0,"extrema_requests":0,"metrics_calls":0,
+                    "native_exchange_wall_s":0.,"metrics_wall_s":0.}
+                session=None;began=time.perf_counter()
+                try:
+                    with sessions.NativeSession(executable,timeout=1.) as session:
+                        def exchange(request):
+                            counters["extrema_requests" if request.get("mode")=="rootfinder_extrema" else "generation_calls"]+=1
+                            start=time.perf_counter()
+                            try:return session.exchange(request)
+                            finally:counters["native_exchange_wall_s"]+=time.perf_counter()-start
+                        def metrics(native,current_audit):
+                            counters["metrics_calls"]+=1;start=time.perf_counter()
+                            try:
+                                return geometry.extrema(native,current_audit) if backend=="python" else native_search_metrics(native,exchange)
+                            finally:counters["metrics_wall_s"]+=time.perf_counter()-start
+                        resolved=geometry.search(base,box,limits,executable,audit,exchange=exchange,
+                            metrics_backend=metrics,**result["configuration"])
+                    row.update(status=resolved["status"],resolved=resolved)
+                    if resolved["status"]=="audited":
+                        candidate=resolved["candidate"]
+                        row.update(math_passed=bool(candidate["audit"]["passed"]),
+                            final_rejections=list(candidate["audit"]["failed_checks"]),optimizer=resolved["optimizer"])
+                    else:row["reason"]=resolved.get("reason")
+                except (ValueError,KeyError,TypeError,OSError,AttributeError) as error:
+                    row.update(status="unscored",reason=str(error));result["warnings"].append(f"{profile}/{repetition}/{backend}: {error}")
+                row.update(wall_s=time.perf_counter()-began,counters=counters,
+                    owned_process_exited=session.process.poll() is not None if session is not None else None)
+                if row["status"]=="audited":
+                    try:
+                        row["python_final_metrics"]=geometry.extrema(row["resolved"]["candidate"]["native"],audit)
+                        row["final_metric_absolute_differences"]={key:float(np.max(abs(np.asarray(row["python_final_metrics"][key])-row["resolved"]["diagnostics"][key])))
+                            for key in ("upper","lower","acceleration_peak_m_s2","minimum_y_velocity_m_s","reverse_y_speed_m_s")}
+                    except (ValueError,KeyError,TypeError) as error:
+                        row["final_metric_readback_error"]=str(error)
+    result.update(search_summary(result["rows"]))
+    return result
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reanchor-report",type=Path,required=True)
     parser.add_argument("--drone-root",type=Path,default=Path.home()/"dev/ros2/projects/drone")
     parser.add_argument("--native",type=Path,default=Path.home()/".cache/ros2-drone/minco-s4-metrics/minco_s4_metrics")
     parser.add_argument("--repetitions",type=int,default=3)
+    parser.add_argument("--compare-search",action="store_true")
+    parser.add_argument("--variant-id",default="reference-7-h0.05")
+    parser.add_argument("--profiles",nargs="+",default=["zero_A_J"])
     parser.add_argument("--output",type=Path,required=True)
     args=parser.parse_args()
-    result=run(json.loads(args.reanchor_report.read_text()),args.drone_root,args.native,repetitions=args.repetitions)
+    source=json.loads(args.reanchor_report.read_text())
+    result=(run_search(source,args.drone_root,args.native,variant_id=args.variant_id,profile_names=args.profiles,
+        repetitions=args.repetitions) if args.compare_search else run(source,args.drone_root,args.native,repetitions=args.repetitions))
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(result,ensure_ascii=False,indent=2,allow_nan=False)+"\n")
     print(json.dumps(result["summary"],ensure_ascii=False))

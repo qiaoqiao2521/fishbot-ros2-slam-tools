@@ -10,6 +10,16 @@ Evidence：workbench-review-tests/output/fixed-x-import/的before-fix-result.jso
 
 Remaining/owner：根继续新固定盘文档的真实HTTP→原物理链和Carry活动任务接续；完整50Hz、同世界恢复、20＋20仍未过。Drone极值工具与其测试保持原owner在途，本轮不混入提交；最短入口为对应drone-extrema计划和当前工具测试。Knowledge=already_covered，沿用Wiki§20的观测／动作／交接分列。
 
+## 2026-10-24 — 无人机极值后端完整搜索对照
+
+Current：新增显式metrics_backend回调及--compare-search离线入口，默认None保持Python。最紧#7的四画像×三成对共24次完整搜索，Python12/12过原门，RootFinder9/12过；外向Ay三次均A1.038609981拒绝，即使optimizer.success=true。新后端不晋级默认。
+
+Done：两方同归档seed、同binary、同域/60iter，交替顺序，完整wall含进程创建/关闭。按画像及数学通过/拒绝/未评分分耗时，不将Root拒绝混入成功收益。原最终regen、Python/Bernstein门和axis_knots保留；51项相关检查、310项根独立读回过。原始24行与重新分组报告分别保留，未重跑以改写成绩。详情和CLI见[完整搜索对照](../../docs/DRONE_RECORDED_STATE.md#极值后端完整搜索对照2026-10-24)。
+
+Issues/Next：最终同系数差≤8.88e-16不能证明所有中途探针相同。失败点25个坐标小扰动中有保持规划盒的下降方向，尚未过A门；下一项核外向Ay首次数值梯度/活跃峰分歧与SLSQP停止条件，不扫参数、不选掉失败画像。实际A/J、地图、终端、跟踪与按时采用仍缺，drone c866441冻结，M2部分完成、M3不启动。
+
+保留：期间SO101普通Station导入补片已独立3bce2c7提交，根只读其当前diff/接续记录，未混无人机验收或重验物理。无无人机Web/服务、训练、ROS节点、仿真、控制或新落地。knowledge_status=already_covered，沿用Wiki§20/CapMesh PIT-004，兼容性事实留项目。
+
 ## 2026-10-24 — 无人机极值接口同系数核对
 
 Current：M2部分完成，M3不启动。官方GCOPTER便利getter在两个解析反例中分别漏峰/超时；外部S4 shim新增只读诊断模式，不修改默认生成、geometry.search或冻结drone源码。
