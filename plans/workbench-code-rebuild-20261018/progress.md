@@ -1,5 +1,16 @@
 # 实施进度
 
+## 2026-10-24 M2必要刹停条件与旧曲线适用域
+
+- 当前：同一drone-recorded-tracking.py新增可选stopping-fixture/native，复用原CDR、MINCO和连续审计。7 FSM＋1 reanchor、32相关PV比较，未来PV只评分；手工box、假定A≤1、未知实测A/J均明示。
+- 已核：原33.228s缓存的C3刹停早已合格，本轮复验A峰.990634。33.388/33.428s记录PV未被逐面必要界排除，但固定3.5/1/.4s候选Y越界；8个原生审计2过/6走廊拒绝，两个通过是同一缓存重复，不算两次独立成功。恒速预测的Z拒绝不冒充实际ICS。
+- 新限制：33.428s对称终点族y_end=y+vy*T/2、A=J=0下，仅Y轴就要求T≥.832136301s且T≤.805914093s。最低标量A约1.032537225；不能仅调T，也不能推成所有刹停无解。
+- 验证：31状态/预测/刹停＋8提交轨迹，共39项通过；独立原CDR/多项式读回19项通过。Qoder超时且句柄缺失，内置只读审查完成。读回脚本首次NumPy bool_序列化失败，修正后重跑，首次不计。
+- 产物：忽略目录workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/的stopping-viability-evaluation.json和stopping-readback-checks.json；命令、完整表格、条件和后续见docs/DRONE_RECORDED_STATE.md新增节。
+- 接续owner=根Codex：先复用已有stop_positions核停止位置自由度/边界重解，再核时间有效几何。完整A/J、当前已知地图、跟踪包络、终端区域均未获资格。drone c866441清洁冻结，无训练/ROS节点/飞行/控制，M2部分完成、M3未解冻，goal active。
+- 在途保护：Station的index.tsx、station.ts、station.test.ts、stationRecipe.ts、stationRecipe.test.ts及workbench-review-tests/recipe-workflow.cjs共6文件仍保留，不混无人机提交。根先回读最新SO101产品化进度/diff，再运行既有stationRecipe/station定向测试和recipe-workflow隔离检查；未得到交付验收前不声称可合并，不联系旧聊天。
+- knowledge_status=already_covered；沿用既有参考/实际/采用及时间边界经验，数值/曲线族限制留项目，未写memory。
+
 ## 2026-10-20 无人机扩展（本轮已交付）
 
 用户批准在同一工作台增加 `/drone-station`，先航点、再 EGO 静态绕障。原 SO101 默认文档与入口保持；RobotStation 按平台选择动作和独立执行 API。

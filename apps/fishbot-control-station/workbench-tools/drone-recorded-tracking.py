@@ -9,6 +9,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import subprocess
 
 import numpy as np
 
@@ -79,7 +80,7 @@ def read_odometry(run):
 
 
 def log_evidence(file):
-    result = {"fsm": [], "callbacks": [], "inflation": [], "voxel_events": 0,
+    result = {"fsm": [], "reanchor": [], "callbacks": [], "inflation": [], "voxel_events": 0,
               "voxel_cells": set(), "warnings": []}
     if not file.exists():
         result["voxel_cells"] = []
@@ -96,7 +97,8 @@ def log_evidence(file):
             match = re.search(r"cell=(\[[^\]]+\])", line)
             if match:
                 result["voxel_cells"].add(tuple(json.loads(match[1])))
-        kind = "fsm" if "FSMStart sim=" in line else "callbacks" if "MapCallback kind=" in line else None
+        kind = ("fsm" if "FSMStart sim=" in line else "reanchor" if "FSMReanchor sim=" in line
+                else "callbacks" if "MapCallback kind=" in line else None)
         if kind:
             fields = {}
             for key, value in re.findall(r"(\w+)=(\[[^\]]*\]|[^ ]+)", line):
@@ -104,7 +106,8 @@ def log_evidence(file):
                     fields[key] = json.loads(value)
                 except ValueError:
                     fields[key] = value
-            required = ("sim", "odom_source", "odom_p", "odom_v", "ref_p") if kind == "fsm" else ("kind", "end")
+            required = (("sim", "odom_source", "odom_p", "odom_v", "ref_p") if kind == "fsm"
+                        else ("sim", "odom_source") if kind == "reanchor" else ("kind", "end"))
             if any(key not in fields for key in required):
                 result["warnings"].append(f"planner.log:{number}: incomplete {kind} witness")
                 continue
@@ -173,6 +176,118 @@ def usable_pv(state):
 def recorded_availability(state):
     value = state.get("available_by_sim_s")
     return value if isinstance(value, (float, int)) and np.isfinite(value) and value >= state["source_sim_s"] else np.inf
+
+
+def stopping_necessary(position, velocity, box, acceleration):
+    """Optimistic per-face necessary bounds, never a joint viability certificate.
+
+    The comparison allows an instantaneous switch to the full acceleration
+    budget on each face separately, conditional on the supplied norm bound.
+    Initial A/J continuity can restrict this model further; passing does not
+    construct a feasible brake or establish the real vehicle's acceleration.
+    """
+    try:
+        p, v, bounds = (np.asarray(value, dtype=float) for value in (position, velocity, box))
+        limit = float(acceleration)
+        if (p.shape != (3,) or v.shape != (3,) or bounds.shape != (2, 3)
+                or not np.all(np.isfinite(np.r_[p, v, bounds.ravel(), limit]))
+                or limit <= 0 or np.any(bounds[0] >= bounds[1])):
+            raise ValueError("finite PV, ordered box and positive acceleration required")
+    except (ValueError, TypeError):
+        return {"status": "unscored", "reason": "invalid_pv_box_or_acceleration"}
+    faces = []
+    for axis, name in enumerate("xyz"):
+        for side, sign in (("lower", -1), ("upper", 1)):
+            distance = float(p[axis]-bounds[0, axis] if sign < 0 else bounds[1, axis]-p[axis])
+            outward = float(max(0., sign*v[axis]))
+            minimum_distance = outward**2/(2*limit)
+            margin = distance-minimum_distance
+            faces.append({"face": name+"_"+side, "distance_m": distance,
+                "outward_speed_m_s": outward, "optimistic_minimum_stop_distance_m": minimum_distance,
+                "distance_margin_m": margin,
+                "required_deceleration_m_s2": outward**2/(2*distance) if distance > 0 else 0. if outward == 0 and distance == 0 else None,
+                "status": "outside" if distance < 0 else "necessary_reject" if margin < 0 else "not_ruled_out"})
+    rejected = [f["face"] for f in faces if f["status"] != "not_ruled_out"]
+    return {"status": "necessary_reject" if rejected else "not_ruled_out", "rejected_faces": rejected,
+        "faces": faces, "joint_viability": "not_proven", "initial_acceleration_and_jerk": "unrecorded"}
+
+
+def axis_stop_fixture(pv, box, limits, executable, audit, handoff):
+    """Reuse the native axis brake with explicit zero-A/J assumptions only."""
+    head = np.column_stack([pv["position"], pv["velocity"], np.zeros(3)])
+    corridor = []
+    for axis in range(3):
+        normal = np.eye(3)[axis]
+        corridor.extend([np.r_[normal, -box[1][axis]].tolist(), np.r_[-normal, box[0][axis]].tolist()])
+    request = handoff.axis_stop_request({"id": "pv_stop_fixture", "initial_pva": head.tolist(),
+        "original_local_target": head[:, 0].tolist(), "corridor": [corridor], "integral_resolution": 16}, [3.5, 1., .4])
+    try:
+        result = subprocess.run([str(executable)], input=json.dumps(request)+"\n", text=True,
+                                capture_output=True, timeout=10)
+        outputs = [json.loads(line.split(" ", 1)[1]) for line in result.stdout.splitlines() if line.startswith("MincoResult ")]
+        native = outputs[-1] if outputs else {"native_success": False}
+        if result.returncode or not native.get("native_success"):
+            raise ValueError(f"native axis brake unavailable, exit={result.returncode}")
+        return {"status": "audited", "assumption": "initial A=J=0, neither measured nor a live handoff contract",
+            "axis_stop_durations_xyz": [3.5, 1., .4], "request": request, "native": native,
+            "audit": audit.audit_trajectory(native, request, [], limits, box),
+            "occupancy": "not_checked; explicit static box only", "execution_admission": "not_performed"}
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError) as error:
+        return {"status": "unscored", "reason": str(error)}
+
+
+def stopping_evidence(states, forecast, reanchors, failure_s, fixture, brake=None):
+    """Compare stale, causal-predicted and retrospective PV in an explicit box."""
+    cases = [r for r in forecast["cases"] if r["kind"] == "fsm"]
+    cases = [{**r, "event_source_line": None} for r in cases]
+    excluded = Counter()
+    for event in reanchors:
+        now = event["sim"]
+        parent = next((r for r in reversed(cases) if r["kind"] == "fsm"
+            and r["forecast_at_sim_s"] <= now
+            and abs(r["input_state"]["source_sim_s"]-event["odom_source"]) < 1e-9), None)
+        if (parent is None or failure_s is None or not np.isfinite(failure_s) or not np.isfinite(now) or now >= failure_s):
+            excluded["reanchor_without_verified_prefailure_fsm_source"] += 1
+            continue
+        # A reanchor has only the consumed source stamp. Link its PV to a
+        # numerically verified earlier FSM, not an arbitrary same-stamp value.
+        future = [s for s in states if usable_pv(s) and round(now*1e9) <= int(s["source_stamp_ns"]) < round(failure_s*1e9)]
+        next_stamp = min((int(s["source_stamp_ns"]) for s in future), default=None)
+        matches = [s for s in future if int(s["source_stamp_ns"]) == next_stamp]
+        if not matches or any(s[key] != matches[0][key] for s in matches for key in ("position", "velocity")):
+            excluded["reanchor_without_unambiguous_prefailure_source_oracle"] += 1
+            continue
+        oracle = matches[0]
+        anchor, previous = parent["input_state"], parent["previous_available_state"]
+        cases.append({"kind": "reanchor", "forecast_at_sim_s": now, "input_state": anchor,
+            "previous_available_state": previous, "oracle_source_sim_s": oracle["source_sim_s"],
+            "oracle_source_offset_s": oracle["source_sim_s"]-now,
+            "oracle_position": oracle["position"], "oracle_velocity": oracle["velocity"],
+            "event_source_line": event["source_line"], "input_evidence": "reanchor stamp linked to earlier verified FSM PV; same past-V pair retained",
+            "models": {model: {"status": "scored", **prediction} if prediction else {"status": "unscored"}
+                for model in forecast["models"] if (prediction := predict_pv(anchor, oracle["source_sim_s"], model, previous)) is not None}})
+    rows = []
+    last_fsm_time = max((r["forecast_at_sim_s"] for r in cases if r["kind"] == "fsm"), default=None)
+    for case in cases:
+        variants = {"cached_source_pv": case["input_state"],
+            **{k: v for k, v in case["models"].items() if k != "hold" and v["status"] == "scored"},
+            "retrospective_source_pv": {"position": case["oracle_position"], "velocity": case["oracle_velocity"]}}
+        row = {key: case[key] for key in ("kind", "forecast_at_sim_s", "oracle_source_sim_s", "oracle_source_offset_s", "input_evidence")}
+        row.update(source_sim_s=case["input_state"]["source_sim_s"],
+            prediction_evaluated_sim_s=case["oracle_source_sim_s"], event_source_line=case["event_source_line"], variants={})
+        for name, pv in variants.items():
+            row["variants"][name] = {"position": pv["position"], "velocity": pv["velocity"],
+                "pv_at_sim_s": case["input_state"]["source_sim_s"] if name == "cached_source_pv" else case["oracle_source_sim_s"],
+                "provenance": "recorded old source" if name == "cached_source_pv" else "retrospective source, scoring only" if name == "retrospective_source_pv" else "causal model, not a measurement",
+                "necessary": stopping_necessary(pv["position"], pv["velocity"], fixture["box"], fixture["limits"]["acceleration"])}
+            if brake and (case["kind"] == "reanchor" or case["forecast_at_sim_s"] == last_fsm_time):
+                row["variants"][name]["conditional_axis_stop"] = brake(pv)
+        rows.append(row)
+    return {"kind": "offline_per_face_necessary_stopping_bound", "box": fixture["box"], "limits": fixture["limits"],
+        "box_scope": "hand-defined historical test fixture, not reconstructed current known free space",
+        "bound_scope": "conditional on supplied norm-acceleration bound; optimistic instantaneous full budget on each face separately; passing is not joint viability",
+        "oracle_scope": "retrospective only; next source timestamp and offset disclosed, all formulas evaluated there; future PV never used by predictions or control",
+        "dynamic_occupancy": "unqualified", "execution_admission": "not_performed", "excluded": dict(excluded), "cases": rows}
 
 
 def forecast_evidence(states, tracking, fsm, failure_s, single_epoch=True):
@@ -343,7 +458,7 @@ def analyze(states, records, log, task_id, failure_s, evaluator, single_epoch=Tr
         "fsm": fsm, "curve_receipts": receipts}
 
 
-def run(run_dir, root, candidates=None, forecast=False):
+def run(run_dir, root, candidates=None, forecast=False, stopping_fixture=None, native=None):
     warnings = []
     request = json.loads((run_dir / "request.json").read_text())
     report = json.loads((run_dir / "report.json").read_text())
@@ -370,8 +485,21 @@ def run(run_dir, root, candidates=None, forecast=False):
         warnings.append("primary failure time unavailable/nonfinite; pre-failure scoring unqualified")
         failure = None
     result = analyze(states, records, log, request["id"], failure, evaluator, epochs == 1)
-    if forecast:
+    if forecast or stopping_fixture:
         result["forecast"] = forecast_evidence(states, result["tracking"], result["fsm"], failure, epochs == 1)
+    if stopping_fixture:
+        try:
+            fixture = json.loads(stopping_fixture.read_text())
+            if stopping_necessary([0.]*3, [0.]*3, fixture["box"], fixture["limits"]["acceleration"])["status"] == "unscored":
+                raise ValueError("invalid stopping fixture")
+            brake = None
+            if native:
+                audit, handoff = load("stop_candidates", Path(__file__).with_name("drone-stop-candidates.py")).load_modules(root)
+                brake = lambda pv: axis_stop_fixture(pv, fixture["box"], fixture["limits"], native, audit, handoff)
+            result["stopping"] = {"fixture_source": str(stopping_fixture), **stopping_evidence(
+                states, result["forecast"], log["reanchor"], failure, fixture, brake)}
+        except (OSError, ValueError, KeyError, TypeError, ImportError) as error:
+            warnings.append(f"optional stopping analysis unavailable: {error}")
     headroom = []
     if candidates and candidates.get("archive_task_id") != request["id"]:
         warnings.append("candidate task identity mismatch; headroom comparison skipped")
@@ -492,9 +620,11 @@ def main():
     parser.add_argument("--plot", type=Path, help="Optional scientific diagnostic figure")
     parser.add_argument("--forecast", action="store_true", help="Evaluate fixed PV prediction baselines offline")
     parser.add_argument("--forecast-plot", type=Path, help="Optional forecast comparison figure; requires --forecast")
+    parser.add_argument("--stopping-fixture", type=Path, help="Explicit historical JSON containing box and limits; offline only")
+    parser.add_argument("--native", type=Path, help="Optional existing MINCO executable for zero-A/J axis-stop fixture audit")
     args = parser.parse_args()
     data = json.loads(args.candidates.read_text()) if args.candidates else None
-    result = run(args.run_dir, args.drone_root, data, args.forecast)
+    result = run(args.run_dir, args.drone_root, data, args.forecast, args.stopping_fixture, args.native)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, allow_nan=False)+"\n")
     if args.plot:

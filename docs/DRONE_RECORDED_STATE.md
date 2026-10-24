@@ -166,3 +166,62 @@ python3 apps/fishbot-control-station/workbench-tools/drone-recorded-tracking.py 
 相关测试现为20项（原9＋预测11），加原静态回放8项共28项；真实CDR另做输入/时钟/评分来源读回。
 Qoder首轮时间建议可用，二次代码审查超时且句柄已缺失；内置只读审查找到时间戳表示和NaN截止两处边界，均已修补/补负例。
 下一步从预测后的参考偏差与必要制动可行域接续M2，再核时间有效几何；本次经验结果不作为动态安全证书，M3仍冻结。
+
+## 必要刹停条件与旧曲线适用域（2026-10-24接续）
+
+同一脚本新增`--stopping-fixture`，读取历史box和limits；可选`--native`复用已有MINCO和连续审计器。
+box下界[1.5,-1,.8]、上界[9.5,2.03,2.2]是手工静态夹具，不是当前自由空间。原加速度硬界仍为1.0m/s²。
+
+逐面使用单位外法向n、距离d、外向速度u=max(0,n·v)，计算必要净空u²/(2A)。
+在给定加速度范数上限A成立的模型内，d小于必要净空则标`necessary_reject`；已经在box外另标`outside`。
+通过只标`not_ruled_out`和`joint_viability=not_proven`。该界允许瞬时把全部预算分配给每个面，忽略A/J连续性、三轴竞争、扰动和动态占据。
+没有数值容差放宽。等号及浮点两侧分别测试；静止于边界也只是不排除，不能保证未来安全。
+
+原33.228s缓存PV的Y/Z必要减速度为.496427/.317697m/s²，未被排除。
+历史报告已有XYZ停止时间3.5/1/.4s的C3分轴刹停，本轮复验仍通过：A峰.990634、Z峰2.194629m。
+其中A=J=0仍是显式假设，不是测量；该结果早已存在，不是本轮新解，也不能据旧两段Y越界宣称原初态为ICS。
+
+### 推进后状态的比较
+
+7个FSM加1个reanchor形成32个相关PV比较；只对最后FSM和reanchor的8个变体做原生刹停审计。
+2个通过都是同一旧缓存PV的重复计算，不能当两次独立成功；其余6个均被`corridor`拒绝，A峰未超1.0。
+更早FSM可能在此局部box之外；`outside`只说明不适用夹具，不能倒推实际飞行违规。
+
+| 事件→评分源时刻s | 状态来源 | Y必要减速度 | Z必要减速度 | 必要条件 | 固定时间刹停 |
+| --- | --- | ---: | ---: | --- | --- |
+| 33.388→33.388 | 33.228缓存PV | .496427 | .317697 | 未排除 | 通过，仅A/J=0夹具 |
+| 33.388→33.388 | 恒速预测 | .714148 | .987944 | 未排除 | 走廊拒绝 |
+| 33.388→33.388 | 过去V差分预测 | .498523 | .264605 | 未排除 | 走廊拒绝 |
+| 33.388→33.388 | 同刻记录PV | .524730 | .117921 | 未排除 | Y终点2.060475m越界 |
+| 33.420→33.428 | 恒速预测 | .802093 | 2.090563 | Z必要拒绝 | 走廊拒绝 |
+| 33.420→33.428 | 过去V差分预测 | .499241 | .238513 | 未排除 | 走廊拒绝 |
+| 33.420→33.428 | 后继记录PV | .550687 | .069113 | 未排除 | Y终点2.073068m越界 |
+
+减速度单位m/s²。reanchor在33.420s，下一条源样本在33.428s，偏移.008s；未伪造同刻真值。
+预测公式从33.228s原PV积分到实际评分源时刻，过去V差分沿用已可用历史对。未来PV只评分。
+每个变体另存`pv_at_sim_s`与来源；缓存仍属于旧时刻，原始实测A仍null。
+恒速模型的Z必要拒绝不能代替记录PV，也不能证明实际状态无解。
+
+### 固定终点规则的限制
+
+33.428s记录为y=1.851165234m、vy=.443806027m/s，距Y边界.178834766m。
+若固定A=J=0、y_end=y+vy*T/2、末端V/A/J=0，现有单轴S4NU解的峰值减速度为1.875*vy/T。
+原生系数在归一化中点的导数读回为1.875000000000014。该对称曲线族仅Y轴就要求T≥.832136301s，同时几何要求T≤.805914093s，两者无交集。
+本族最低所需Y减速度约1.032537225m/s²。它比物理最乐观必要界.550687更强，但只约束当前曲线族，不能升级为所有刹停均无解。
+下一步复用已有`stop_positions`核停止位置自由度和边界重解，再核时间有效几何；不继续盲调T或补造实测A/J。
+
+### 验证与复验入口
+
+31项状态/预测/刹停检查加8项已提交轨迹回放，共39项通过。独立原始CDR/多项式读回19项通过：1926条原PV、8事件、输入/Oracle/恒速公式、8个原生审计及曲线族时间矛盾。
+Qoder审查超时，get_status确认句柄缺失后由内置只读审查完成；模型前提、时刻偏移、逐变体时间及冲突PV建议已落实。
+独立读回首次因NumPy bool_写JSON失败；转为原生bool后重跑通过，首次不计验收。密集采样只做交叉检查，连续判据仍由原审计器承担。
+
+```sh
+. /opt/ros/jazzy/setup.bash
+python3 apps/fishbot-control-station/workbench-tools/drone-recorded-tracking.py --run-dir "$DRONE_RUN" --stopping-fixture "$DRONE_RUN/minco-piecewise-timing-final-r2-audit.json" --native "$HOME/.cache/ros2-drone/minco-probe/minco_probe" --output "$STOPPING_JSON"
+python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-tests -p test_drone_recorded_tracking.py
+python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-tests -p test_drone_committed_replay.py
+```
+
+原忽略目录新增stopping-viability-evaluation.json、stopping-readback-checks.json，前轮报告保留。完整当前地图、时间有效占据、终端区域、实测A/J和实际接管仍未获资格。
+drone c866441清洁冻结，M2部分完成、M3不解冻；本轮无训练、ROS节点、飞行或控制写入。

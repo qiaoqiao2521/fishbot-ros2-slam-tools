@@ -1,5 +1,7 @@
 # 实施发现
 
+- 2026-10-24 必要刹停回放：原33.228s head已有C3分轴3.5/1/.4s合格曲线(A峰.990634)，不重称新解。33.388/33.428s记录PV仍未被逐面A≤1必要界排除，但固定时间/终点族均Y越界；33.428s该族Y向T下界.832136s大于上界.805914s。恒速模型的Z必要拒绝不能替代记录PV或证明ICS。手工box非当前自由地图，A/J仍未测；见docs/DRONE_RECORDED_STATE.md新增节。
+
 - 官方源码归档固定为 `95713edb309d77589b130286642ab149995a5f7b`，17,376,926 字节，2,297 个源文件；来源和摘要在 `apps/fishbot-control-station/workbench/UPSTREAM.md`。
 - 本机 Node 22.23.2；上游 packageManager 为 Yarn 4.17.0。AGENTS 的 Yarn 3.6.3 文案已落后于固定配置。
 - 直接启动 Yarn 被上游 wrapper 拒绝，因为缺 Corepack。实际 Corepack 启动又受 `/home/muqiao/package.json` 的 ESM 作用域影响，报 `Dynamic require of util`。隔离 `COREPACK_HOME` 并声明其 CommonJS 作用域后，Yarn 4.17.0 正常启动。没有修改该主目录配置。

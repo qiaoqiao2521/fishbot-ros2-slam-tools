@@ -216,5 +216,111 @@ class ForecastTests(unittest.TestCase):
             self.assertEqual(result["cases"], [])
 
 
+class StoppingNecessaryTests(unittest.TestCase):
+    box = [[1.5, -1., .8], [9.5, 2.03, 2.2]]
+
+    def test_original_recorded_head_is_not_ruled_out_per_face(self):
+        result = module.stopping_necessary([2.443276083629172, 1.7565359918948806, 2.1646591444870626],
+            [1.262200808117, .521065904265, .149851061152], self.box, 1.)
+        self.assertEqual(result["status"], "not_ruled_out")
+        self.assertEqual(result["joint_viability"], "not_proven")
+        upper = [f["required_deceleration_m_s2"] for f in result["faces"] if f["face"].endswith("upper")]
+        np.testing.assert_allclose(upper, [.1128817634706717, .49642671163353647, .31769661773128305])
+
+    def test_reject_uses_distance_not_only_current_position(self):
+        result = module.stopping_necessary([2., 0., 2.17], [0., 0., .3], self.box, 1.)
+        self.assertEqual(result["rejected_faces"], ["z_upper"])
+        self.assertAlmostEqual(result["faces"][-1]["distance_margin_m"], -.015)
+        reverse = module.stopping_necessary([2., 0., 2.17], [0., 0., -.3], self.box, 1.)
+        self.assertEqual(reverse["status"], "not_ruled_out")
+
+    def test_boundary_rest_and_outside_are_not_conflated(self):
+        at_rest = module.stopping_necessary([2., 0., 2.2], [0.]*3, self.box, 1.)
+        self.assertEqual(at_rest["status"], "not_ruled_out")
+        outward = module.stopping_necessary([2., 0., 2.2], [0., 0., .01], self.box, 1.)
+        self.assertEqual(outward["status"], "necessary_reject")
+        self.assertIsNone(outward["faces"][-1]["required_deceleration_m_s2"])
+        outside = module.stopping_necessary([2., 0., 2.21], [0., 0., -.1], self.box, 1.)
+        self.assertEqual(outside["faces"][-1]["status"], "outside")
+
+    def test_exact_optimistic_stop_boundary_is_not_a_relaxed_gate(self):
+        box = [[0.]*3, [1.]*3]
+        exact = module.stopping_necessary([.5]*3, [1., 0., 0.], box, 1.)
+        self.assertEqual(exact["status"], "not_ruled_out")
+        nearer = module.stopping_necessary([np.nextafter(.5, 1.), .5, .5], [1., 0., 0.], box, 1.)
+        self.assertEqual(nearer["rejected_faces"], ["x_upper"])
+
+    def test_lower_face_and_shared_budget_never_claim_sufficiency(self):
+        result = module.stopping_necessary([.5, .5, .5], [1., 1., 0.], [[0.]*3, [1.]*3], 1.)
+        self.assertEqual(result["status"], "not_ruled_out")
+        self.assertEqual(result["joint_viability"], "not_proven")
+        lower = module.stopping_necessary([.1, .5, .5], [-1., 0., 0.], [[0.]*3, [1.]*3], 1.)
+        self.assertEqual(lower["rejected_faces"], ["x_lower"])
+
+    def test_invalid_inputs_remain_unscored(self):
+        for p, v, box, acceleration in (([float("nan"), 0., 1.], [0.]*3, self.box, 1.),
+                ([2., 0., 1.], [0.]*3, self.box, 0.), ([2., 0.], [0.]*3, self.box, 1.),
+                ([2., 0., 1.], [0.]*3, [self.box[1], self.box[0]], 1.)):
+            self.assertEqual(module.stopping_necessary(p, v, box, acceleration)["status"], "unscored")
+
+    def evidence(self, oracle=None, brake=None):
+        states = [state(.8), state(1.), state(1.1), oracle or state(1.2)]
+        fsm = [{"sim": 1.1, "odom_source": 1., "bag_pv_match_error": [0., 0.]}]
+        forecast = module.forecast_evidence(states, [], fsm, 1.3)
+        events = [{"sim": 1.2, "odom_source": 1., "source_line": 123}]
+        result = module.stopping_evidence(states, forecast, events, 1.3,
+            {"box": [[0., -1., 0.], [10., 1., 2.]], "limits": {"acceleration": 1.}}, brake)
+        return states, forecast, events, result
+
+    def test_future_pv_only_changes_retrospective_bound_not_prediction(self):
+        *_, baseline = self.evidence()
+        *_, changed = self.evidence({**state(1.2), "position": [99., 0., 1.5]})
+        a, b = baseline["cases"][-1], changed["cases"][-1]
+        self.assertEqual(a["kind"], "reanchor")
+        self.assertEqual(a["variants"]["constant_velocity"], b["variants"]["constant_velocity"])
+        self.assertEqual(b["variants"]["retrospective_source_pv"]["necessary"]["status"], "necessary_reject")
+        self.assertEqual(a["source_sim_s"], 1.)
+        self.assertEqual(a["oracle_source_sim_s"], 1.2)
+
+    def test_conflicting_reanchor_oracle_and_missing_consumption_are_excluded(self):
+        states, forecast, events, _ = self.evidence()
+        fixture = {"box": self.box, "limits": {"acceleration": 1.}}
+        conflict = states+[{**state(1.2), "position": [99., 0., 1.5]}]
+        result = module.stopping_evidence(conflict, forecast, events, 1.3, fixture)
+        self.assertEqual(len(result["cases"]), 1)
+        self.assertIn("reanchor_without_unambiguous_prefailure_source_oracle", result["excluded"])
+        result = module.stopping_evidence(states, {**forecast, "cases": []}, events, 1.3, fixture)
+        self.assertEqual(result["cases"], [])
+
+    def test_reanchor_next_source_offset_and_prediction_time_are_disclosed(self):
+        *_, result = self.evidence(state(1.216))
+        row = result["cases"][-1]
+        self.assertEqual(row["forecast_at_sim_s"], 1.2)
+        self.assertEqual(row["prediction_evaluated_sim_s"], 1.216)
+        self.assertAlmostEqual(row["oracle_source_offset_s"], .016)
+        self.assertAlmostEqual(row["variants"]["constant_velocity"]["position"][0], 1.216)
+
+    def test_native_brake_is_separate_from_necessary_diagnostic(self):
+        calls = []
+        def rejected_brake(pv):
+            calls.append(pv)
+            return {"status": "audited", "audit": {"passed": False, "failed_checks": ["corridor"]}}
+        *_, result = self.evidence(brake=rejected_brake)
+        self.assertEqual(len(calls), 8)
+        for case in result["cases"]:
+            row = case["variants"]["constant_velocity"]
+            self.assertEqual(row["necessary"]["status"], "not_ruled_out")
+            self.assertFalse(row["conditional_axis_stop"]["audit"]["passed"])
+        self.assertEqual(result["execution_admission"], "not_performed")
+
+    def test_reanchor_log_does_not_treat_result_as_a_new_consumed_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory)/"planner.log"
+            file.write_text("FSMReanchor sim=1.2 odom_source=1.0 age=0.2\nFSMReanchor result=0 sim=1.3\n")
+            result = module.log_evidence(file)
+        self.assertEqual(len(result["reanchor"]), 1)
+        self.assertEqual(result["reanchor"][0]["odom_source"], 1.)
+
+
 if __name__ == "__main__":
     unittest.main()
