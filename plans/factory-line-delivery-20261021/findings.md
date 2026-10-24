@@ -329,3 +329,21 @@ J100 新生成场景：工位接近扫掠168样本/432几何对，扣采样间�
 - `local-loaded-j-a-global-extra-5mm-entry-a`，episode baa89ff3-e085-4ddb-9946-1fad5fe9950e，原Navigate UUID c325d9c12f3a41c7a92fee6cbdd58dcf，status4/error0。36.317244墙秒；真值末23.122912mm/.020220456rad；1738载货物理样本、0违例。589条原生控制计算路径、677条非零命令；发布数量不称消费ACK。
 - 原加载参数恢复、前后连续静止、源码起止和owned清理证据保留。此初态重建不包含原求解器warmstart/初速度/AMCL历史，不当精确回放或完整抓放运输。
 - 复用现有f1_candidate和prepare，新增可选 `--global-extra-padding-m` / `FISHBOT_GLOBAL_EXTRA_PADDING_M`；缺省25mm。14项针对性测试通过，覆盖显式配置、CLI、环境参数以及原局部/足迹/物理合同保持。下一步以新准备场景从原出生点完整B→A；不把历史B和本A相加。
+
+## 2026-10-24 完整K：显式5mm，同轮原B→A通过2/2
+
+源码b710d8d；run `04e217b2-6d37-4991-b3f2-b5ce036b1a2e`，独占141/9111，本机ROS2 Jazzy/MuJoCo。公共prepare从原出生点 `(0,-2,0)` 重建，原A/B、B进场 `(1.25,-2,atan(.5))` 和箱体保持。与完整J比较，14组物理模型数组与2ms步长相同，任务JSON相同；导航除全局附加缓冲.025→.005，仅重定位了内容相同的BT和Lattice文件路径。现场参数和实际加载的Smac/Graceful/Shim/smoother库均已读回。
+
+| 原订单 | 完整任务墙秒 | 出站后路线墙秒 | 原120秒余量 | 真值末位置/偏航 | 连续末停稳源秒 |
+| --- | ---: | ---: | ---: | --- | ---: |
+| B | 268.405017 | 119.793848 | .206152 | 18.540845mm / .015728857rad | 2.56 |
+| A | 174.794033 | 34.883377 | 85.116623 | 23.612622mm / .021707049rad | 2.58 |
+
+- B：task `a8ec16f2-6a4a-492f-a173-e21c920c2256`，episode `20a44d62-bb78-4c7e-83cb-ea24fc6b74e1`。出站 `7c9f5365d6294cd28170dee813f156b4`、进场 `fd31b33a409e47e7b9636c5634a98b82`、原B终点 `9f24d57022a84e13bb1291c2e7b34895` 全部原生4。
+- A：task `82a017b2-4d15-4a03-aa99-8ddb67d4fdfe`，episode `7aa4bc96-1546-4b49-91a9-cd98363fd1cb`。出站 `1d4ea8ebce924c7bb82d6a016fd0d78c`、原A终点 `d43b745c1444475c8ce88ca99b4d08dd` 全部原生4。没有拼接历史B与新A。
+- 两单独立原K、实际双指抓放/抬升/释放落稳/home、连续交接、同货物运输及目的地评分均通过；整轮488.455119墙秒，2start/1reset/0cancel，原120/360/1000与全部原物理门槛保持。局部padding实际.00999999978，完整多边形不缩小。
+- 仍有观测缺口：B physics13480条、缺1序号，发生在hold=true的arm_lift，最大源间隙.04秒；A8750条、缺50序号，其中16+33在初始入站、1在hold=true的arm_lift，最大源间隙.68秒。完整有界文件写入与源完整性通过，不等于ROS topic零丢帧；不补帧或隐去间隙。
+- 现有ideal plant velocity guard介入B .80/A .78源秒；A有两段源间隙，守卫时长按原口径不插值。观测并非RGB，停车不是纯视觉精度，未证明真机或生产稳定。B预算余量只有.206秒，需单列为后续稳定性问题。
+- 原始现场评分与两份独立离线原oracle复算一致，均true；首次复算因我预建output被入口拒绝，未评分、未运行运动，失败日志保留。换新目录按原入口复算后各return0，离线复算不增加现场成功次数。
+- source-start/end完全一致，干净源码b710d8d；manifest-used与当前输入一致，既有nav2来源记录与现文件一致。参数恢复、quiet、owned0/9111关闭、既有受保护systemd快照保持；未见-11、强杀或关闭失败。14项公共参数/CLI/环境合同通过，原生库未再修改。
+- 私有证据：`~/.local/share/fishbot/cloud-jobs/kaggle-20261024/local-full-b-a-k/` 的 `result.json`、`final-readback.json`、`physical-sampling-gaps.json`、实际参数/库读回及两份observer；离线复算在相邻 `local-full-b-a-k-regrade-b/`。旧完整J的25mm结果仍1/2，旧云失败均保留；本轮不是Kaggle成功。
