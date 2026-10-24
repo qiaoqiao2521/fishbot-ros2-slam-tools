@@ -146,3 +146,12 @@
   .workbench-quick-links a:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
 }
 .workbench-heading-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.workbench-chassis { padding: 24px; min-width: 0; scroll-margin-top: 24px; }
+.workbench-chassis-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.workbench-chassis-grid article { border: 1px solid #dbe4ef; border-radius: 8px; padding: 16px; }
+.workbench-chassis-grid h3 { font-size: 16px; color: #18334f; margin-bottom: 6px; }
+.workbench-chassis-grid article > span { color: #61748b; font-size: 12px; }
+.workbench-chassis-grid p, .workbench-chassis-note { color: #61748b; font-size: 12px; line-height: 1.7; margin: 12px 0; }
+.workbench-chassis-grid a { display: inline-flex; align-items: center; gap: 4px; color: #2563eb; font-size: 12px; margin-top: 8px; }
+.workbench-chassis-grid code { display: block; overflow-wrap: anywhere; padding: 8px; background: #f5f8fc; border-radius: 4px; font-size: 11px; }
+@media (max-width: 760px) { .workbench-chassis-grid { grid-template-columns: 1fr; } .workbench-chassis { padding: 16px; } }

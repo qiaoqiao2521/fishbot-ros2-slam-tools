@@ -16,6 +16,7 @@ import { toolEntry } from '@/lib/workbench-tool-entry'
 import { SceneValidationPanel } from './scene-validation-panel'
 import { HardwareLabPanel } from './hardware-lab-panel'
 import { DeliveryTimingPanel } from './delivery-timing-panel'
+import { ChassisIntegrationPanel } from './chassis-integration-panel'
 import './workbench.css'
 
 const flow = [
@@ -102,6 +103,7 @@ export function WorkbenchPage({ onNavigate, voiceController }: { onNavigate: (ro
       <div><h1>成果工作台</h1><p>从空间准备到运输交接，集中查看最近可用的能力与验收。</p></div>
       <div className="workbench-heading-actions">
         <a className="workbench-download" href="#workbench-delivery-timing">配送耗时</a>
+        <a className="workbench-download" href="#workbench-chassis">底盘接入</a>
         <a className="workbench-download" href="#workbench-voice">语音任务</a>
         <a className="workbench-download" href="/workbench/recent-results.json" download="fishbot-recent-results.json"><FileDown size={15} aria-hidden="true" />下载验收快照</a>
       </div>
@@ -130,6 +132,7 @@ export function WorkbenchPage({ onNavigate, voiceController }: { onNavigate: (ro
       {!local && <p className="workbench-local-note">本机编辑器和视频复核台需在运行工作台的电脑打开。这里的快照、报告与工作区导航仍可查看。</p>}
     </section>
 
+    <ChassisIntegrationPanel onNavigate={onNavigate} />
     <VoicePanel controller={voiceController} />
 
     <HardwareLabPanel />

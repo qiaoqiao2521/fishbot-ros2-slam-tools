@@ -60,12 +60,18 @@ async function main() {
     await panel.locator('.delivery-timing-evidence summary').click();
     assert.ok((await panel.locator('.delivery-timing-evidence').innerText()).includes('缺 33 帧'));
     result.checks.push('A route and its three original sampling gaps retained');
+    const chassis = page.locator('#workbench-chassis');
+    assert.equal(await chassis.locator('[data-chassis]').count(), 3);
+    assert.ok(await chassis.getByText('ROS 底盘已合并 · 仿真模型待接入', { exact: true }).isVisible());
+    await chassis.screenshot({ path: output('desktop-chassis.png') }); result.screenshots.push('desktop-chassis.png');
+    result.checks.push('one workbench exposes three chassis without promoting mecanum to accepted MuJoCo transport');
     await page.setViewportSize({ width: 390, height: 844 });
     await panel.scrollIntoViewIfNeeded();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     assert.ok(await panel.locator('.delivery-timing-scroll').evaluate(element => element.scrollWidth > element.clientWidth));
     await panel.screenshot({ path: output('mobile-a-route.png') }); result.screenshots.push('mobile-a-route.png');
     result.checks.push('390px layout has internal chart scroll and no page overflow');
+    await chassis.screenshot({ path: output('mobile-chassis.png') }); result.screenshots.push('mobile-chassis.png');
     await panel.getByLabel('导入配送耗时 JSON').setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{bad') });
     await panel.getByRole('alert').waitFor();
     assert.ok(await panel.getByText('34.883 s', { exact: true }).isVisible());
