@@ -118,6 +118,33 @@ class NativeS4Tests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertGreater(max(result["maximum_residual_PVAJ_by_axis"][2]), 1e-4)
 
+    def test_nearby_axis_knots_do_not_refit_or_change_unaffected_xy_polynomials(self):
+        first = self.request([3.5, .9994447264216297, .4, .18728824258131896,
+                              .4988675808857195, .8507967875308301])
+        first["initial_pva"] = [[3.3588164448570073,1.489432157919301,.28178840537663435],
+            [2.132179257196546,.36902106071049245,-.3831968238939351],
+            [2.121164784137278,-.1425450258909372,-.5908327335097329]]
+        first["initial_jerk"] = [-.12931996715376998,-.1438908562505944,.08490949631904857]
+        first = module.geometry_request(first, [3.5,.9994447264216297,.4,.18728824258131896,
+            .4988675808857195,.8507967875308301], y_inner=True)
+        curves = []
+        for tz in [.4,.5,1.]:
+            request = copy.deepcopy(first); request["axis_stop_durations_xyz"][2] = tz
+            request["axis_segment_durations_xyz"][2] = [tz]
+            request["stop_positions"][2] = first["initial_pva"][2][0]+.5*tz*first["initial_pva"][2][1]
+            curves.append(run_native([request])[0])
+        for native in curves:
+            self.assertTrue(native["native_success"])
+            self.assertEqual(native["unified_piece_method"], "source_polynomial_time_translation_no_refit")
+            # The tiny union intervals around .5 and 1 are checked inside,
+            # not just at their already constrained endpoint PVA/J.
+            elapsed = 0.
+            for piece in native["pieces"]:
+                for u in [.1,.25,.5,.75,.9]:
+                    t = elapsed+u*piece["duration"]
+                    np.testing.assert_allclose(pvaj(native,t)[:2],pvaj(curves[0],t)[:2],rtol=0,atol=1e-8)
+                elapsed += piece["duration"]
+
     def test_invalid_rows_and_nonadvancing_time_do_not_stop_the_following_input(self):
         good = self.request(); wrong_size = copy.deepcopy(good)
         wrong_size["axis_inner_positions_xyz"][1] = []

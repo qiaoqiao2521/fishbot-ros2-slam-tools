@@ -47,6 +47,7 @@ Json generate(const Json &input) {
   if (!inner.is_array() || !times.is_array() || inner.size()!=3 || times.size()!=3)
     throw std::invalid_argument("Expected one inner-position/duration array per axis");
   std::vector<Trajectory<7>> axes(3);
+  std::vector<std::vector<double>> axisKnots(3,std::vector<double>{0.});
   std::vector<double> actualStops(3),knots={0.};
   Json counts=Json::array();
   for (int axis=0;axis<3;++axis) {
@@ -59,7 +60,7 @@ Json generate(const Json &input) {
       const double next=total+duration;
       if (!std::isfinite(next) || next<=total)
         throw std::invalid_argument("Axis cumulative time did not strictly advance");
-      total=next; knots.push_back(total);
+      total=next; knots.push_back(total);axisKnots[axis].push_back(total);
     }
     if (!std::isfinite(total) || std::abs(total-stops[axis])>1e-9)
       throw std::invalid_argument("Axis durations do not sum to its stopping time; no rescaling");
@@ -91,10 +92,26 @@ Json generate(const Json &input) {
   for (size_t i=1;i<knots.size();++i) {
     const double duration=knots[i]-knots[i-1];
     const auto head=stateAt(knots[i-1]),tail=stateAt(knots[i]);
-    minco::MINCO_S4NU solver;solver.setConditions(head,tail,1);
-    solver.setParameters(Eigen::Matrix3Xd(3,0),Eigen::VectorXd::Constant(1,duration));
-    Trajectory<7> segment;solver.getTrajectory(segment);
-    const auto coeff=segment[0].getCoeffMat();
+    Eigen::Matrix<double,3,8> coeff=Eigen::Matrix<double,3,8>::Zero();
+    for (int axis=0;axis<3;++axis) {
+      if (knots[i-1]>=actualStops[axis]) {coeff(axis,7)=positions[axis];continue;}
+      size_t source=0;
+      while (source+2<axisKnots[axis].size() && knots[i-1]>=axisKnots[axis][source+1]) ++source;
+      const long double offset=static_cast<long double>(knots[i-1])-axisKnots[axis][source];
+      const auto &original=axes[axis][source].getCoeffMat();
+      // Translate the existing polynomial p(t+offset), without a new endpoint
+      // solve. Near-coincident axis knots otherwise amplify endpoint roundoff.
+      for (int power=0;power<8;++power) {
+        long double value=0.;
+        for (int sourcePower=power;sourcePower<8;++sourcePower) {
+          unsigned choose=1;
+          for (int k=1;k<=power;++k) choose=choose*(sourcePower-k+1)/k;
+          value+=static_cast<long double>(original(axis,7-sourcePower))*choose*std::pow(offset,sourcePower-power);
+        }
+        coeff(axis,7-power)=static_cast<double>(value);
+      }
+    }
+    Trajectory<7> segment;segment.emplace_back(duration,coeff);
     if (!coeff.allFinite()) throw std::runtime_error("Nonfinite coefficients at unified breakpoints");
     for (int end=0;end<2;++end) {
       const double t=end ? duration : 0.;
@@ -113,6 +130,7 @@ Json generate(const Json &input) {
   }
   return {{"native_success",!pieces.empty()},{"setup_ok",true},{"cost",0.},
     {"generator","official_MINCO_S4NU_axis_inner_points"},{"polynomial_degree",7},
+    {"unified_piece_method","source_polynomial_time_translation_no_refit"},
     {"axis_piece_counts",counts},{"axis_stop_actual_durations_xyz",actualStops},{"pieces",pieces},
     {"reconstruction_boundary_error",boundaryError},
     {"initial_jerk_source",input.contains("initial_jerk") ? "explicit" : "assumed_zero_not_measured"},

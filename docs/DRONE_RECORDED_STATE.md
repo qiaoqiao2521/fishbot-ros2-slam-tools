@@ -410,10 +410,10 @@ python3 -m unittest discover -s apps/fishbot-control-station/workbench-review-te
 复用本机GCOPTER e0444f6d47b84f972ced91746b05feb36ce1fd4f的`MINCO_S4NU`，MIT版权/许可保留在原checkout。
 官方接口原本就支持3×4首尾PVAJ、3×(N−1)内点和N段时长；冻结wrapper只暴露每轴N=1，旧piecewise_boundary/fixed_times使用S3NU，不能作为C3替代。
 新增`workbench-tools/drone-minco-s4-knots.cpp`只暴露该已有接口，不修改冻结drone、上游求解器或重写系数求解。
-它按各轴内部位置/时长调用S4NU，取累计节点精确并集，再用端点PVAJ重构统一七次段；各轴停止后明确保持位置及零VAJ，不使用原轨迹的尾外推。
+它按各轴内部位置/时长调用S4NU，取累计节点精确并集。当前统一段直接平移源七次多项式的物理时间原点；早期端点PVAJ重拟合在近邻轴节点下放大舍入误差，已替换，见[Z时长域与数值表示](DRONE_STOP_CANDIDATES.md#z时长域与数值表示2026-10-24)。各轴停止后明确保持位置及零VAJ，不使用原轨迹的尾外推。
 不合并真实不同节点、不拉伸时长。累计时间不推进、非法维数/时长、非有限系数或重构PVAJ误差超1e−8，仅拒绝当前输入行，后续JSON行继续。
 
-现有外部SLSQP在[Tx,Ty,Tz,dy]外仅加Y节点时间比例r∈[.15,.85]、位移比例q∈[0,1]；原四维范围、2mm内部规划目标和硬界不变。
+现有外部SLSQP在[Tx,Ty,Tz,dy]外仅加Y节点时间比例r∈[.15,.85]、位移比例q∈[0,1]；默认四维范围、2mm内部规划目标和硬界不变。后续Z时长域对照仅显式传入`z_time_bounds=(.1,1.2)`，未改变默认(.1,.4)或原硬界；下表仍为此前有限画像的历史证据。
 Y内点只固定位置，不人为锁定内部VAJ；初始PVA/J和终端VAJ=0保持，原任务target元数据保留。
 新native必须回执正确generator和各轴[1,2,1]段数；冻结旧程序会忽略新增字段，因此只能标unscored，不能伪称内点优化已生效。
 

@@ -114,3 +114,53 @@ python3 -m unittest test_drone_reference_stops test_drone_stop_candidates test_d
 首次独立读回把无candidate情景的None误要求为False；修正为核全部事件无参考，first-readback保留。没有修改控制或审计判据迁就检查。
 agent-link qoder超时60秒，无有效审查；内置只读审查指出再生成回执缺口，已补原生身份/段数负例。根独立读回通过。
 本片只增加离线对照工具。M2仍部分完成、M3不启动，真实动态闭环仍未通过。
+
+## Z时长域与数值表示（2026-10-24）
+
+新增`drone-stop-time-study.py`复用原N2窗口、上节报告、现有六维搜索、原连续审计与Replay。
+先固定其余五维，对#4/#7逐项重解Tz=.4/.5/.6/.8/1.0/1.2s；Z终点仍按既有`p0+.5*Tz*v0`计算，并非固定终点的纯时间缩放。
+初始原参考PVA/J、完整前缀及硬界不动。由于Tx≥3.5s，固定五维对照中的总尾长和绝对结束时刻不变。
+
+| Tz秒 | #4完整A峰m/s² | #7完整A峰m/s² | 原数学界 |
+| --- | ---: | ---: | --- |
+| .4 | 1.541738 | 1.051164 | 两条拒绝，复现旧结果 |
+| .5 | 1.529433 | .966149 | 仅#7通过 |
+| .6 | 1.529433 | .966986 | 仅#7通过 |
+| .8 | 1.529434 | .972313 | 仅#7通过 |
+| 1.0 | 1.542232 | 1.064629 | 两条拒绝 |
+| 1.2 | 1.571403 | 1.121968 | 两条拒绝 |
+
+#4峰从Z转为约.794s处的Y减速，A约(−.402918,−1.475406,0)。#7也不随Tz单调改善，不能把更长时长当作通用解。
+随后只显式扩展联合搜索Tz域至[.1,1.2]s，其他五维域、默认Tz域[.1,.4]、2mm规划目标及原硬界保持。
+这复用既有SLSQP，不新增求解器或GCOPTER权重；没有后处理拉伸或替换初始A/J。
+
+| 原曲线 | 联合重解后完整A峰 | V峰m/s | Z峰m | 宽盒 | 窄盒 |
+| --- | ---: | ---: | ---: | --- | --- |
+| #4 | .723131 | 1.585710 | 2.109727 | 通过 | Y走廊拒绝 |
+| #7 | .764559 | 1.586434 | 2.138174 | 通过 | Y走廊拒绝 |
+
+两条峰都回到未改的历史前缀；完整曲线最高Y约2.212936/2.288586m，不可称Y≤2.03m场景通过。
+联合重解后的完整时长约5.800000/5.294058sim秒，按最后实际段长重算未来地图覆盖；32个理想静态Replay情景只验证选择分支。
+两条优化器均success，联合搜索wall约2.386/.197s；不是端到端截止或实时证书。真实完整状态、地图、终端、跟踪和PX4采用仍未获资格。
+
+独立连续读回曾发现#7的Tz=.5/1.0对照中，固定XY的PVA/J曲线最大差约3.295e−5/2.834e−4；源端点PVA/J仍过，区间内部不变性却失败。
+原因是适配器把近邻轴节点分出的极短段再次按端点PVA/J拟合，舍入误差在高阶导数中被放大。
+`drone-minco-s4-knots.cpp`现直接对官方源系数做`p(offset+t)`的binomial平移，用long double累加再转double；不重写官方系数求解器。
+原累计double节点保存一次、精确并集、左端等于内节点取右段、停止后常数。没有epsilon选片、合并近邻节点、缩时或放宽1e−8端点护栏。
+原生回执新增`unified_piece_method=source_polynomial_time_translation_no_refit`，证明当前使用了新表示；仍须核实际曲线，不靠回执判安全。
+
+最终51相关测试通过：8时长研究、11几何、10原前缀、11S4NU、3候选、8Replay；无跳过。
+129项独立原源/系数实根/完整宽窄盒/绝对时长/分段XY PVAJ差/选择结果读回全部通过，两个旧不变性失败消失；PNG已目视核对。
+空源条目、坏ID或无效Tz只跳过相应条目；无效声明转为可严格JSON序列化的空值，不终止其余样本。
+agent-link沿用已知超时的内置只读备选，核对数学替换及两项坏条目隔离问题；根独立验收，未联系其他聊天。
+
+```sh
+c++ -std=c++14 -O2 -Wall -Wextra -isystem /usr/include/eigen3 -isystem /home/muqiao/.cache/ros2-drone/reuse/GCOPTER/gcopter/include apps/fishbot-control-station/workbench-tools/drone-minco-s4-knots.cpp -o /home/muqiao/.cache/ros2-drone/minco-s4-knots/minco_s4_knots
+python3 apps/fishbot-control-station/workbench-tools/drone-stop-time-study.py --primitives "$PRIMITIVES_JSON" --reference-report "$REFERENCE_STOPS_JSON" --output "$Z_TIME_REPORT_JSON"
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_stop_time_study test_drone_stop_geometry test_drone_reference_stops test_drone_s4_knots test_drone_stop_candidates test_drone_committed_replay
+```
+
+新报告为原忽略drone-committed/748…目录的`reference-z-time-domain-comparison.json`；同目录保留`reference-z-time-readback.json`、PNG、首轮probe及两份before-translation报告。
+下步由根Codex结合原接收/替换时刻与窄盒，核更早参考切点及必要刹停范围；不把宽盒数学正例当原动态场景可采用。
+本轮只改离线适配器/工具/测试/文档，无Web改动、训练、ROS节点、仿真、控制、飞行或新落地证据。drone c866441冻结、M2部分完成、M3不启动。

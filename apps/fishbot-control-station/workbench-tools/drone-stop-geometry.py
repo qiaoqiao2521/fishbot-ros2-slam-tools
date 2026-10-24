@@ -117,7 +117,8 @@ def extrema(native, audit):
         "minimum_y_velocity_at_s": min_y_time, "reverse_y_speed_m_s": max(0., -min_y_velocity)}
 
 
-def search(base, box, limits, executable, audit, *, planning_inset=.002, max_iterations=60, y_inner=False):
+def search(base, box, limits, executable, audit, *, planning_inset=.002, max_iterations=60, y_inner=False,
+           z_time_bounds=None):
     """Bounded recorded +Y profile, not a generic planner or feasibility proof."""
     try:
         head = np.asarray(base["initial_pva"], dtype=float)
@@ -130,10 +131,16 @@ def search(base, box, limits, executable, audit, *, planning_inset=.002, max_ite
     planning_box = np.array([bounds[0]+planning_inset, bounds[1]-planning_inset])
     if np.any(head[:, 0] < planning_box[0]) or np.any(head[:, 0] >= planning_box[1]):
         return {"status": "unscored", "reason": "input_outside_planning_box", "planning_box": planning_box.tolist()}
+    try:
+        z_bounds = np.asarray((.1, .4) if z_time_bounds is None else z_time_bounds, dtype=float)
+    except (ValueError, TypeError):
+        return {"status": "unscored", "reason": "invalid_z_time_bounds"}
+    if z_bounds.shape != (2,) or not np.all(np.isfinite(z_bounds)) or not 0 < z_bounds[0] < z_bounds[1]:
+        return {"status": "unscored", "reason": "invalid_z_time_bounds"}
     # Explicit bounded experiment, not a full search of all possible brakes.
     displacement = planning_box[1, 1]-head[1, 0]
-    parameter_bounds = [(3.5, 5.), (.6, 2.), (.1, .4), (0., displacement)]
-    initial = [4.5, 1., .4, min(.5*head[1, 1], .95*displacement)]
+    parameter_bounds = [(3.5, 5.), (.6, 2.), tuple(z_bounds), (0., displacement)]
+    initial = [4.5, 1., float(np.clip(.4, *z_bounds)), min(.5*head[1, 1], .95*displacement)]
     if y_inner:
         parameter_bounds += [(.15, .85), (0., 1.)]
         initial += [.5, .85]

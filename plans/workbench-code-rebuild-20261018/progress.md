@@ -1,5 +1,15 @@
 # 实施进度
 
+## 2026-10-24 M2垂直时长域与源多项式平移
+
+- Current：固定五维12样本仅#7的Tz=.5/.6/.8过；显式联合域Tz=[.1,1.2]让#4/#7完整A降至.723131/.764559，峰均回原前缀。宽盒原硬界通过，窄盒仍Y拒绝，最高Y2.212936/2.288586；M2部分完成、M3冻结、goal active。
+- Done：geometry.search新增可选z_time_bounds，默认仍(.1,.4)；新增drone-stop-time-study.py复用原N2/原报告/compare/审计/Replay。原参考PVA/J及前缀不动，固定五维对照的总尾长不变；联合重解后完整时长5.800000/5.294058sim，未来覆盖仍按实际末时刻+.5。默认域、原V1.8/A1/Z2.2及2mm规划目标均保持。
+- 数值修复：独立读回曾129中两项失败，#7 Tz=.5/1.0的固定XY PVAJ差3.295e−5/2.834e−4，端点护栏仍过。适配器极短统一段端点重拟合放大舍入误差；现改为官方源系数的long-double binomial时间平移，不重拟合、不合并近节点/缩时。原轴double累计节点保存一次，等节点取右源段，stop后常数，1e−8端点护栏保持。
+- 验证：51项相关检查（8时长＋11几何＋10原前缀＋11S4NU＋3候选＋8Replay）通过，无跳过；129项独立源/系数实根/完整盒/绝对时长/区间XY PVAJ及选择结果读回过，PNG已目视。2条各16个理想静态Replay，不冒称动态物理。联合搜索wall2.386/.197s不是端到端实时证书。旧probe及两份before-translation失败记录保留。
+- Review：沿用agent-link已知超时的内置只读备选，指出坏源索引和NaN/字符串Tz可阻断整报；现逐项跳过+WARNING、声明转有限值/None，严格JSON负例过。数学替换/节点选片已只读核，根独立验收；未联系其他聊天。
+- 产物：原忽略drone-committed/748…目录的reference-z-time-domain-comparison.json、reference-z-time-readback.json、PNG及首轮probe/before-translation；编译/运行/测试命令见docs/DRONE_STOP_CANDIDATES.md末节，DRONE_RECORDED_STATE.md接口段已同步。不修改冻结drone或官方GCOPTER；无Web/服务改动、训练、ROS节点、仿真、控制、新飞行或落地证据。
+- Next/owner：根Codex结合窄盒与原接收/替换时间核更早参考切点及必要刹停范围；不把更长Tz或宽盒正例当通用/动态资格。真实完整状态、当前/未来图、终端区域、截止与跟踪采用仍缺。SO101原八文件继续在途保留，不混提交；最短入口runtime.test.cjs、execution.test.ts、station.test.ts及无运动UI QA，物理消费/期限回其原产品化计划。knowledge_status=already_covered；沿用Wiki/ROS2与FishBot§20、原生时钟、CapMesh PIT-004，项目数值留现有文档，不写memory。
+
 ## 2026-10-24 M2原历史前缀接内点尾
 
 - Current：原N2的8窗全部纳入对照；6个+Y生成、#2/#3/#5/#6过原数学界及宽盒，#4/#7仍A拒，另−Y和无身份各1未评分。窄盒Y≤2.03只有#2/#3过，动态资格未闭合。M2部分完成、M3冻结、goal active。
