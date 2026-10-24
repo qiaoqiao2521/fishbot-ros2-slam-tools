@@ -85,6 +85,9 @@ def prepare_scene(fishbot, so101, python, data, runtime_env):
         candidate = fishbot/"experiments/kaggle/f1_candidate.py"
         controller_options = ["--transport-controller-yaml",
                               str(fishbot/"experiments/kaggle/graceful-j100.yaml")]
+    if os.environ.get("FISHBOT_LATTICE_SMOOTH_PATH") == "1":
+        candidate = fishbot/"experiments/kaggle/f1_candidate.py"
+        controller_options.append("--lattice-smooth-path")
     run("candidate-configuration", [python, str(candidate),
                                      str(scene/"scene-manifest.json"), *controller_options], env=runtime_env)
     if os.environ.get("FISHBOT_TERMINAL_STOP_HEARTBEAT") == "1":

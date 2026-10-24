@@ -190,3 +190,23 @@ StagingPath默认true保持；不能用空前缀参数同时改动两个阶段�
 原生反例先进入 10mm，再漂到 30mm；旧库在显式 false 下仍请求零平移，
 补丁后恢复平移，而未配置的默认行为保持。21 项控制器检查通过；
 实际载货和完整配送的结果单列，不能由这个反例直接推定成功。
+
+## 显式原生路径平滑候选
+
+```bash
+export FISHBOT_F1_FACTORY_CONFIG=tools/config/factory_delivery/line-side-j100-native-entry.json
+export FISHBOT_TRANSPORT_CONTROLLER=graceful
+export FISHBOT_LATTICE_SMOOTH_PATH=1
+```
+
+新任务输入只把 B 进场设为 `(1.25,-2,atan(.5))`，原 A/B、占用箱体与订单保持。
+原生 Smac 的 `HeadingAware.smooth_path=true` 显式启用；该插件用于哪些入站或
+运输目标，平滑就覆盖哪些目标。StagingPath、目标检查器、物理与评分不变。
+环境变量缺省时保留已有输入；CLI 的 `--no-lattice-smooth-path` 可显式关闭，
+重复配置不覆盖人工编辑。已有旧进场候选保留，不晋级默认。
+
+I 重建载货初态的分项：未平滑两原生动作成功但连续停稳超原120秒；
+原生平滑后两 UUID 成功，119.157秒、末21.249mm/.01544rad，5733个载货
+样本0违例，源/记录/参数恢复/静止及 owned 清理通过。余量仅.843秒；
+缺初始速度、求解器warmstart与AMCL历史，不当精确回放或完整配送。
+完整任务必须从原出生点重新准备，同轮执行B→A并独立评分。

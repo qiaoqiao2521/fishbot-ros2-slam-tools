@@ -109,6 +109,19 @@ class NativeTransportSelectionTests(unittest.TestCase):
         # Reusing the prepared copy itself must not fail with SameFileError.
         CANDIDATE.configure(self.path, self.folder/'transport-controller.yaml')
 
+    def test_native_smoothing_is_explicit_and_preserves_physical_contracts(self):
+        CANDIDATE.configure(self.path, PRESET, lattice_smooth_path=True)
+        manifest, nav = self.read()
+        self.assert_shared_contracts(manifest, nav)
+        self.assertTrue(nav['planner_server']['ros__parameters']['HeadingAware']['smooth_path'])
+        # An absent selection must preserve a later human edit.
+        CANDIDATE.configure(self.path)
+        _, nav = self.read()
+        self.assertTrue(nav['planner_server']['ros__parameters']['HeadingAware']['smooth_path'])
+        CANDIDATE.configure(self.path, lattice_smooth_path=False)
+        _, nav = self.read()
+        self.assertFalse(nav['planner_server']['ros__parameters']['HeadingAware']['smooth_path'])
+
     def test_native_selection_without_progress_does_not_leave_empty_adapter(self):
         self.manifest['vehicle_profile']['loaded_controller'] = {'FollowPath.desired_linear_vel': .03}
         self.path.write_text(json.dumps(self.manifest))
@@ -118,11 +131,13 @@ class NativeTransportSelectionTests(unittest.TestCase):
 
 
 class FactoryInputSelectionTests(unittest.TestCase):
-    def prepare(self, explicit=None):
+    def prepare(self, explicit=None, smoothing=None):
         with tempfile.TemporaryDirectory() as temp:
             folder = Path(temp)
             calls = []
             env = {'FISHBOT_F1_FACTORY_CONFIG': explicit} if explicit else {}
+            if smoothing is not None:
+                env['FISHBOT_LATTICE_SMOOTH_PATH'] = smoothing
             with mock.patch.dict(os.environ, env, clear=True), \
                     mock.patch.object(RUNNER, 'ARTIFACTS', folder), \
                     mock.patch.object(RUNNER, 'run', side_effect=lambda label, args, **kw:
@@ -130,9 +145,25 @@ class FactoryInputSelectionTests(unittest.TestCase):
                 RUNNER.prepare_scene(ROOT, Path('/fixture/so101'), sys.executable,
                                      Path('/fixture/data'), {})
             actual = json.loads((folder/'factory.json').read_text())
+            self.candidate_args = dict(calls)['candidate-configuration']
             args = dict(calls)['scene-prepare']
             self.assertEqual(args[args.index('--factory-config')+1], str(folder/'factory.json'))
             return actual
+
+    def test_smoothing_selection_reaches_candidate_entry(self):
+        self.prepare(smoothing='1')
+        self.assertIn('--lattice-smooth-path', self.candidate_args)
+        self.assertIn(str(ROOT/'experiments/kaggle/f1_candidate.py'), self.candidate_args)
+        self.prepare()
+        self.assertNotIn('--lattice-smooth-path', self.candidate_args)
+
+    def test_native_entry_only_changes_b_approach(self):
+        candidate = self.prepare('tools/config/factory_delivery/line-side-j100-native-entry.json')
+        point = next(x for x in candidate['destinations'] if x['id'] == 'line_b')
+        self.assertEqual(point.pop('approach_poses'),
+                         [{'x': 1.25, 'y': -2., 'yaw': 0.4636476090008061}])
+        original = json.loads((ROOT/'tools/config/factory_delivery/line-side-occupied.json').read_text())
+        self.assertEqual(candidate, original)
 
     def test_default_preserves_original_approach(self):
         factory = self.prepare()

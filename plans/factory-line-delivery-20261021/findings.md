@@ -301,3 +301,12 @@ J100 新生成场景：工位接近扫掠168样本/432几何对，扣采样间�
 
 - 即使外层和Shim位置检查均false，Graceful自身goal_reached_也会永久转入旋转。原生反例在10mm进入后移到30mm，旧库显式test.stateful=false仍输出零平移；新参数化补丁后恢复平移，默认true保持上游行为。21项控制器检查通过，非通用缺陷结论，不推定原运行延迟全部由此造成。
 - 复用同版原控制器，补丁只加可选布尔参数/动态更新和判断，不另造控制owner。J100候选同时选择主stateful=false、内position_checker.stateful=false；15mm/35mrad、碰撞、原速度/加减速及120秒不变。原H/I与grid-entry-a失败保留。
+
+## 2026-10-24 新控制器模式与原生平滑的实际对照
+
+- `local-loaded-i-current-goal-a`：原171a15b8…、a912f636…均4，首段94.719秒；末连续静止未赶上原120秒，route_passed=false。源/记录/参数恢复/owned清理通过，不把动作到达当配送通过。
+- `local-loaded-i-tangent-native-a`：原7c51f06d…6/206，约6秒后Goal was in lethal cost；保留初始/5秒/末代价图，近目标新致命格约从y=-1.49扩展到-1.53。合成层观测不能唯一分层归因。Nav2 Python足迹回算为253，尚未重现Smac的目标占用拒绝；Smac用72朝向缓存且原生栅格扫描不同，不能伪称已修复该根因。
+- `local-loaded-i-edge-clear-a`：原3f348fd5…取消5；实际cargo_tray_floor_contact=false，车体/机械臂禁碰均0，货物仍在托盘内。原判断保持失败，未调接触门槛。目标更远离边缘未报206，不将一次通过外推。
+- 三组未平滑预检共21次原生ComputePath均4、完整采样通过；另一次readiness响应超时为0Goal/0命令，生命周期管理器需升级SIGKILL但owned最终0/9111关闭，独立保留失败。平滑面板5次原生4，直达B完整扫掠余量小于采样界、未运动，其余两组通过。
+- 原生平滑`local-loaded-i-native-smooth-a`：同I重建初态、同(1.25,-2,atan(.5))→B，仅HeadingAware.smooth_path=true。原5ca32dbf…4，91.669秒含原静止/hold；ace54eec…4，全路线119.157秒、末21.249mm/.01544rad，5733样本0载货/禁碰违例、1995原生计算发布。源/记录、参数恢复、quiet、owned0与端口关闭通过。它只是路线分项，.843秒余量不称稳定，不与旧K拼完整运输。
+- 项目只加可选原生平滑参数及环境入口，缺省保留人工输入；该HeadingAware选择同时覆盖其入站与运输规划，不声称只作用运输。公开native-entry任务JSON只改B进场，原A/B/箱体和订单保持。11项定向契约检查通过，完整J另验。

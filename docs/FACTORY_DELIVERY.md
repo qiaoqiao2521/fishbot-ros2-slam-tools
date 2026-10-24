@@ -305,3 +305,9 @@ Graceful 主控制器自身也保留到位记忆。显式 J100 候选另外选�
 `FollowPath.stateful=false`，允许减速漂移后重新修正 XY；默认 true 保持。
 这项原生反例已通过，仍须运行同一路线与完整两单；它不改变目标容差或物理评分。
 见[当前位置模式](../experiments/kaggle/README.md#graceful-主控制器的当前位置模式)。
+
+显式[原生朝向进场](../tools/config/factory_delivery/line-side-j100-native-entry.json)
+与 Smac 原生路径平滑在 I 重建载货初态完成119.157秒分项，两UUID4、
+末21.249mm/.01544rad、5733个载货样本0违例，清理通过。余量仅.843秒，
+不称完整两单或稳定交付；真实出生点完整J待验收。
+选择方式见[显式原生平滑](../experiments/kaggle/README.md#显式原生路径平滑候选)。

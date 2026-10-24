@@ -498,3 +498,10 @@ knowledge_status=updated(local)：已修订原`Wiki/ROS2 与 FishBot.md`第19节
 
 - 原生currentGoalModeResumesTranslationAfterDrift反例先失败，新独立native-current-goal overlay下21项控制器与5项坐标检查通过，8项项目契约检查通过；默认true与显式false两分支均覆盖。此前距离与Shim修补保留，Smac/平滑器/Shim库不改。
 - 下一步I重建载货初态、原(1.25,-2,atan(.5))→B，独占141/9111，原120秒和全部物理门槛；通过才完整J两单。knowledge_status=pending，owner=本对话root：待实际结果后把第三层状态补入原第19节，知识仓其它未审变动保留。
+
+## 2026-10-24 原生平滑分项通过，完整J待运行
+
+- 同I重建初态新增当前位置模式、真实相切和离边运动三轮失败保留；26次只规划中平滑直达B的几何预检拒绝，不当业务成功。一次readiness超时0Goal/0命令已清理，生命周期SIGKILL单列。全部原生/物理结果见findings及各原始目录。
+- 原生平滑分项两UUID4，119.157秒、末21.249mm/.01544rad，5733个载货样本0违例，原hold前/后各.7源秒、原源/记录完整性、恢复和清理通过。余量仅.843秒，未晋级稳定/完整业务；原理想K不拼接。
+- 显式native-entry JSON与FISHBOT_LATTICE_SMOOTH_PATH入口已补，11项定向检查通过。首次公开prepare漏FISHBOT_COOP_PYTHON而失败，未启动ROS；新prepared-b补明确现有规划解释器，旧失败保留。下一步核全物理数组/原生参数、提交冻结，再完整J B→A。
+- knowledge_status=updated(local)：原Wiki/ROS2 与 FishBot第19节“裁剪路径与嵌套到位状态”已追加主控制器的第三层到位记忆与期限内停稳，开发入口触发已同步并读回。知识仓其它未审变动保留，发布整合owner=本对话root；原profile/真值隔离/交接门槛经验继续采用。

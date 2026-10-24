@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 
 
-def configure(manifest_path, transport_controller_yaml=None):
+def configure(manifest_path, transport_controller_yaml=None, *, lattice_smooth_path=None):
     path = Path(manifest_path)
     manifest = json.loads(path.read_text())
     nav_path = Path(manifest["nav2_yaml"])
@@ -26,6 +26,8 @@ def configure(manifest_path, transport_controller_yaml=None):
     planner = nav["planner_server"]["ros__parameters"]["HeadingAware"]
     planner.update(reverse_penalty=1., rotation_penalty=12., cost_penalty=0.,
                    analytic_expansion_max_cost=252.)
+    if lattice_smooth_path is not None:
+        planner["smooth_path"] = lattice_smooth_path
     nav["global_costmap"]["global_costmap"]["ros__parameters"]["footprint_padding"] = .025
     nav["velocity_smoother"]["ros__parameters"].update(
         use_ros_time_for_smoothing=True, scale_velocities=True, smoothing_frequency=50.)
@@ -74,5 +76,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest")
     parser.add_argument("--transport-controller-yaml", type=Path)
+    parser.add_argument("--lattice-smooth-path", action=argparse.BooleanOptionalAction,
+                        default=None, help="Explicit native HeadingAware path smoothing; otherwise preserve input")
     args = parser.parse_args()
-    configure(args.manifest, args.transport_controller_yaml)
+    configure(args.manifest, args.transport_controller_yaml,
+              lattice_smooth_path=args.lattice_smooth_path)
