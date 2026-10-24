@@ -1,5 +1,15 @@
 # 重构进度
 
+## 2026-10-24 — 固定X文档导入不再继承旧任务成功
+
+Current：SO101固定盘四样例的实际无运动浏览器检查复现缺口：普通robot-station导入后数据更新，但旧成功任务仍挂在“当前仿真任务”；四例首测失败证据保留，不借配方导入旧成绩代替。
+
+Done：仅将成功导入的commit调用统一使用detachTask=true，沿原方法清本面板taskId/task/error及executionTaskId关联；不删除历史、不停止原任务、不改执行API。原recipe-workflow新增普通Station导入回归。四样例20项实际浏览器通过：盘(.24,-.13)固定、cube独立，.35开度／补证参数、保存刷新和往返相同，旧结果关联已清。原导入QA19项、Jest56项和生产构建通过；两项原包体告警保持。
+
+Evidence：workbench-review-tests/output/fixed-x-import/的before-fix-result.json、result.json、recipe-regression/result.json及root-readback.json。两组浏览器真实控制写请求和pageerror均0；预览POST/scene WS使用明确fixture，任务GET读真实13条历史，原成功ID保留。根另直接比字段、核服务新main.216128d5dc9572125bab.js和真实历史。PID3776050未重启；不将无运动导入当作新HTTP抓放成功。
+
+Remaining/owner：根继续新固定盘文档的真实HTTP→原物理链和Carry活动任务接续；完整50Hz、同世界恢复、20＋20仍未过。Drone极值工具与其测试保持原owner在途，本轮不混入提交；最短入口为对应drone-extrema计划和当前工具测试。Knowledge=already_covered，沿用Wiki§20的观测／动作／交接分列。
+
 ## 2026-10-24 — 无人机极值接口同系数核对
 
 Current：M2部分完成，M3不启动。官方GCOPTER便利getter在两个解析反例中分别漏峰/超时；外部S4 shim新增只读诊断模式，不修改默认生成、geometry.search或冻结drone源码。

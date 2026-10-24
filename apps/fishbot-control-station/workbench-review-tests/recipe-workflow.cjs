@@ -103,6 +103,13 @@ function envelope(document) {
     const edit=await context({width:1600,height:1100},{historical:true});
     await edit.page.goto(base+'/so101-station');const panel=panelFor(edit.page);
     await expect(panel.getByText('原任务 ID：'+edit.historyId,{exact:true})).toBeVisible({timeout:90000});
+    const plainStation={format:'robot-station',version:1,station:clone(canonical.station)};
+    plainStation.station.name='普通 Station 导入：独立草稿';
+    await imported(panel,plainStation,'qa-plain-station.json');
+    await expect(panel.getByLabel('工作站名称',{exact:true})).toHaveValue(plainStation.station.name);
+    await expect(panel.getByRole('region',{name:'当前仿真任务',exact:true})).toHaveCount(0);
+    await expect(panel.getByText(/^原任务 ID：/)).toHaveCount(0);
+    result.checks.push('plain-station-import-clears-historical-task-selection');
     const fixture=clone(canonical);
     fixture.station.name='配方浏览器核验：原件';
     fixture.vendorNotes={source:'editor-only QA',nested:{labels:['retain','clone'],editable:true}};

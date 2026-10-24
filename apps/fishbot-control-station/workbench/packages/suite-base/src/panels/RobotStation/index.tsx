@@ -1307,7 +1307,7 @@ function RobotStation({
                     "文件与当前机器人类型不同，请在对应工作台入口导入；当前草稿未改变。",
                   );
                 }
-                commit(imported.station, imported.station.recipeDocument !== undefined);
+                commit(imported.station, true);
                 setSelected(imported.station.nodes[0]?.id ?? "");
                 setNotice(
                   imported.warnings.length > 0
