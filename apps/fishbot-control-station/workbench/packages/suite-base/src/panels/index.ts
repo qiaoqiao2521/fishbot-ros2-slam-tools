@@ -142,6 +142,13 @@ export const getBuiltin: (t: TFunction<"panels">) => PanelInfo[] = (t) => [
     hasCustomToolbar: true,
   },
   {
+    title: "无人机历史诊断",
+    type: "DroneDiagnostics",
+    description: "同一回放时间下的实际轨迹、规划见证与感知时序",
+    module: async () => await import("./DroneDiagnostics"),
+    hasCustomToolbar: true,
+  },
+  {
     title: "SO101 回合复盘",
     type: "EpisodeReview",
     description: "历史仿真回合的来源、指标与阶段定位",

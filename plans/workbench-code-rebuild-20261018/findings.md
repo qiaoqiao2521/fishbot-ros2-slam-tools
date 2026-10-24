@@ -57,3 +57,13 @@ FishBot coop-api的transport仍是车臂协同任务，不能替代SO101独立�
 新目标(.22,.17)已放盘但固定37mm脱离触腕限，34.154mm前缀在原全臂/释放物1mm与回位检查下可认证。(.20,.20)的28mm释放目标可达，但60/57mm中转不可达；54mm完整五段通过。故保留60/37mm优先，复用原IK与全arm/payload样本认证候选，不按坐标特判或扩大关节范围。
 
 独立审核负例发现RuntimeError泛捕获会把未知后端故障当成IK不可达，已限定已知No vertical前缀；未知错误/取消保留原异常身份。默认/B两轮同源码实跑后再加分类补丁；最终A完整实跑与最终B保存snapshot离线逐字段重演覆盖该影响范围。任务变化与性能/模型候选比较分开，不把三回合称统计鲁棒性。
+
+
+## 2026-10-24 无人机历史诊断复用
+
+- 748原回合保留在drone的output一级记录目录，未出现在网页tasksRoot。通过request.json原ID发现它，与已有任务目录去重；不复制成新任务、不触发派发。
+- 原记录含345条真值位姿、346条遥测、8条名义曲线。planner.log可对齐10条失流见证；17条ReboundCollision只有曲线局部时间，不能直接放到绝对播放轴。
+- 复用drone-scene、drone-live.sceneOptions和McapWriter；旧flight.mcap生成与新诊断导出共用writeFrames。诊断缓存独立，原记录和旧MCAP不改写。
+- 黄线只采样记录中的B样条作显示，不参与碰撞判定。绿线为已保存Gazebo位姿；无真值时明确改为橙色估计，缺备份不补青线。
+- 原报告33.452s的planner_emergency、Z最高2.210886m、最终landed/disarmed分别保留。连接期失流不能自动解释巡航期紧停。
+- 原生3D的Frame world not found/No coordinate frames为首帧前INFO，官方13网格随后实际加载；未作为飞行错误或新物理成绩。

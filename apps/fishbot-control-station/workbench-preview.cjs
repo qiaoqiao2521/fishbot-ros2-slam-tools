@@ -9,6 +9,7 @@ const { createSo101Live } = require("./so101-live.cjs");
 const { createDroneRuntime } = require("./drone-runtime.cjs");
 const { createDroneLive } = require("./drone-live.cjs");
 const { createDronePlanning } = require("./drone-planning.cjs");
+const { createDroneDiagnostics } = require("./drone-diagnostics.cjs");
 
 const workbench = path.join(__dirname, "workbench");
 const serveHandler = createRequire(path.join(workbench, "web", "package.json"))("serve-handler");
@@ -38,7 +39,9 @@ const droneRuntime=createDroneRuntime({
   validateSubmission:dronePlanning.validateFlight,
 });
 droneLive=createDroneLive({runtime:droneRuntime,planning:dronePlanning});
+const droneDiagnostics=createDroneDiagnostics({runtime:droneRuntime,sceneOptions:()=>droneLive.sceneOptions()});
 const server = http.createServer(async (request, response) => {
+  if (await droneDiagnostics.handle(request, response, serveHandler)) return;
   if (await live.handle(request, response, serveHandler)) return;
   if (await runtime.handle(request, response, serveHandler)) return;
   if (await droneLive.handle(request, response, serveHandler)) return;
@@ -72,7 +75,7 @@ const server = http.createServer(async (request, response) => {
   } else if (pathname === "/records/so101.mcap" && recordings) {
     publicPath = path.resolve(recordings);
     request.url = "/so101.mcap";
-  } else if (["/layouts/so101-review.json", "/layouts/so101-mobile.json", "/layouts/so101-station.json", "/layouts/so101-station-mobile.json", "/layouts/drone-station.json", "/layouts/drone-station-mobile.json", "/layouts/drone-review.json"].includes(pathname)) {
+  } else if (["/layouts/so101-review.json", "/layouts/so101-mobile.json", "/layouts/so101-station.json", "/layouts/so101-station-mobile.json", "/layouts/drone-station.json", "/layouts/drone-station-mobile.json", "/layouts/drone-review.json", "/layouts/drone-diagnostics.json", "/layouts/drone-diagnostics-mobile.json"].includes(pathname)) {
     publicPath = layouts;
     request.url = `/${path.basename(pathname)}`;
   } else if (pathname.startsWith("/records/") || pathname.startsWith("/layouts/")) {

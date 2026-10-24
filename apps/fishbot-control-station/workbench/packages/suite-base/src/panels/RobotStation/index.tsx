@@ -1928,6 +1928,15 @@ function RobotStation({
         </div>
         {drone && (
           <>
+            <Typography variant="body2">
+              <a
+                href={`${task && !taskIsActive(task) ? `/drone-diagnostics?taskId=${encodeURIComponent(task.id)}` : "/drone-diagnostics?"}${window.innerWidth < 600 ? "&mobile=1" : ""}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                打开历史飞行诊断
+              </a>
+            </Typography>
             <TextField
               select
               size="small"

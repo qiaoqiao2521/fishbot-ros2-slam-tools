@@ -138,3 +138,15 @@ Knowledge closeout：already_covered。沿用PIT-004依赖隔离和现有任务�
 - 初次A64.40sim脱离失败、初次B32.14sim搬运失败和原输入/报告均保留；没有改IK精度、限位、1mm/0.2mm或释放评分，也没有退回旧目标。通用技能自由编排、其他物体/台面高度、CY、真机、20+20与完整50Hz继续未验。
 
 证据：忽略的`output/station-task-goals/`、`station-task-goals-before-hover-repair/`、`station-task-drafts/`和真实task目录；SO101的`output/station-task-goals-20261020/`保留A及离线重演。两实现分支由根串行提交推送，研究仓单独记录。Knowledge closeout：already_covered，沿用Wiki按当前任务选择验收依据、ROS2与FishBot第20节的分层物理验收和PIT-004；本次目标/路径参数留项目，不写个人记忆。
+
+
+## 2026-10-24 无人机历史诊断交付
+
+- 入口：常用5186的`/drone-diagnostics?taskId=748f910e-f0f8-4ecf-b2d5-22b7b15d57e6`；手机追加`&mobile=1`。5187完成隔离验收后归还。
+- 复用原播放器、三维、X500网格与任务身份。659个源仿真时刻的派生MCAP包含scene/telemetry/diagnostics三通道；原日志、MCAP和报告未改写。
+- 11项Node局部检查通过，含旧MCAP、双WebSocket共存及缺真值/损坏行/报告ID不符/只读HTTP/反向读取。定向ESLint与生产构建通过，保留两项上游包体积警告；初次lint问题已修复。
+- 实际历史记录桌面1440×1000及手机390×844检查9项通过：原ID与终态、故障跳转、前后seek、播放暂停、无时刻事件禁用、缺失通道说明、无横向溢出。控制写请求0、实时WebSocket0、pageerror0。
+- 截图和result.json保存在忽略的workbench-review-tests/output/drone-diagnostics-release；根已目视核对。曲线和原报告的全频评分分列，回放不构成新飞行验收。
+- 当前环境的SO101模型导出Python路径不存在，服务启动给出WARNING。本片不使用它；仅双WebSocket合同单测通过，没有宣称SO101完整三维/物理回归。
+- 未改drone飞行源码、未启动PX4/Gazebo、未训练；动态闭环仍失败，在线备份、精确拒绝绝对区间和全帧感知延迟链仍待补齐。
+- Knowledge closeout: already_covered，沿用Wiki/ROS2与FishBot§20及源时钟/回执分层经验。事实留本计划；未修改共享知识或memory。owner=本对话Codex。

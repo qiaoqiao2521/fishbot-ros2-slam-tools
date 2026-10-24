@@ -11,6 +11,7 @@
 ## Constraints
 Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。历史无线延迟与专项验收边界继续保留，不再作为已售实车的当前阻塞项。
 ## Current State
+2026-10-24 无人机历史诊断首版已接入原工作台：名义/实际轨迹、原报告、感知时序与事件共用原生MCAP播放时间。只读、可后退定位；缺备份和缺绝对时刻的见证明示，不改飞行执行器。[使用与边界](docs/DRONE_DIAGNOSTICS.md)，验收见[工作台进度](plans/workbench-code-rebuild-20261018/progress.md)。
 2026-10-20 工作台已接SO101原规划执行器：网页新抓放74.76sim/50.22wall通过，运行中刷新无重发，另轮网页取消及本次录像/报告读取通过。固定模板、方块XY各±10mm和附加障碍；任意程序/实时3D/CY切换仍待后续。见[进度](plans/workbench-code-rebuild-20261018/progress.md)。
 2026-10-20 新底座增加 RobotStation 场景与程序编辑面板：对象树、平移坐标系、目标引用、步骤排序、撤销重做、原生布局保存及 JSON 导入导出。入口 `/so101-station`，P2 部分实施；新仿真执行仍待 P3，当前验证见[进度](plans/workbench-code-rebuild-20261018/progress.md)。
 2026-10-18 Lichtblick 源码重建 P1 已通过：固定完整源码构建、真实 SO101 MCAP、原生回合面板、桌面 11 项与手机浏览器仿真 9 项验收。当前是本机历史回放入口；P2/P3 新任务、取消与查询、CY 切换待接续。实施与边界见[源码重建计划](plans/workbench-code-rebuild-20261018/task_plan.md)，原跨层计划的在途成果仍待串行整合。
