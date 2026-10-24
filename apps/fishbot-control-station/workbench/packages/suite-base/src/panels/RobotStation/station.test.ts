@@ -22,8 +22,91 @@ import {
   stationKindLabel,
   stationPlatform,
   transformObstacle,
+  workspaceStationSample,
   worldPosition,
 } from "./station";
+
+describe("SO101 workspace development samples", () => {
+  it.each([
+    "x-plus20",
+    "x-minus20",
+  ] as const)("keeps %s geometry and execution intent aligned", (id) => {
+    const station = workspaceStationSample(id);
+    const plus = id === "x-plus20";
+    const world = (name: string) =>
+      worldPosition(station.nodes.find((node) => node.id === name)!, station.nodes);
+    expect(world("pick")).toEqual(plus ? [0.26, -0.13, 0] : [0.235, -0.13, 0]);
+    for (const name of ["cube", "approach", "grasp"]) {
+      expect(world(name)[0]).toBeCloseTo(plus ? 0.26 : 0.22);
+      expect(world(name)[1]).toBe(-0.13);
+    }
+    expect(world("approach")[2]).toBe(plus ? 0.074 : 0.08);
+    expect(world("release")).toEqual(plus ? [0.24, 0.14, 0.03] : [0.2, 0.2, 0.03]);
+    expect(world("clear")).toEqual(plus ? [0.24, 0.14, 0.1] : [0.2, 0.2, 0.1]);
+    expect(station.program).toEqual(defaultStation().program);
+    expect(station.execution).toEqual({
+      mode: "workspace-development-v1",
+      pick_xy_m: plus ? [0.26, -0.13] : [0.235, -0.13],
+      pickup_hover_z_m: plus ? 0.054 : 0.06,
+      target_region_xy_m: [
+        [0.21, 0.27],
+        [-0.16, -0.1],
+      ],
+    });
+    expect(station.notes).toContain("须重新运行原物理裁判");
+    expect(defaultStation()).not.toHaveProperty("execution");
+  });
+
+  it("round-trips edited execution fields through JSON and native layout storage", () => {
+    const original = workspaceStationSample("x-plus20");
+    const execution = original.execution as { pickup_hover_z_m: number; source?: string };
+    execution.pickup_hover_z_m = 0.055;
+    execution.source = "human edit";
+    const restored = importStation(JSON.parse(exportStation(original)));
+    expect(restored.station.execution).toEqual(original.execution);
+    expect(restored.warnings).toEqual([]);
+    const baseline = JSON.parse(
+      readFileSync(join(__dirname, "../../../../../robot-layouts/so101-station.json"), "utf8"),
+    ) as LayoutData;
+    const id = "RobotStation!so101station";
+    const current = {
+      ...baseline,
+      configById: {
+        ...baseline.configById,
+        [id]: { ...baseline.configById[id], station: restored.station },
+      },
+    };
+    expect(isLayoutEqual(baseline, current)).toBe(false);
+  });
+
+  it("copies execution arrays independently from the original and imported document", () => {
+    const original = workspaceStationSample("x-plus20");
+    const imported = importStation(original).station;
+    const copied = copyStation(imported);
+    const execution = copied.execution as { pick_xy_m: number[]; target_region_xy_m: number[][] };
+    execution.pick_xy_m[0] = 0.25;
+    execution.target_region_xy_m[0]![0] = 0.22;
+    expect(imported.execution).toEqual(original.execution);
+    expect(copied.execution).not.toEqual(original.execution);
+    (imported.execution as { pick_xy_m: number[] }).pick_xy_m[1] = -0.12;
+    expect(imported.execution).not.toEqual(original.execution);
+  });
+
+  it.each([
+    { mode: "unknown-mode", extra: [1, 2] },
+    null,
+    { mode: "workspace-development-v1", pickup_hover_z_m: -1 },
+  ])("preserves invalid execution %s without falling back to legacy", (execution) => {
+    const restored = importStation({ ...defaultStation(), execution });
+    expect(restored.station).toHaveProperty("execution", execution);
+    expect(restored.warnings.some((warning) => warning.includes("不回退默认场景"))).toBe(true);
+    expect(importStation(JSON.parse(exportStation(restored.station))).station).toHaveProperty(
+      "execution",
+      execution,
+    );
+    expect(copyStation(restored.station)).toHaveProperty("execution", execution);
+  });
+});
 
 describe("RoboDK-style station editing", () => {
   it("commits 3D obstacle handles in their parent's frame and preserves undo input", () => {

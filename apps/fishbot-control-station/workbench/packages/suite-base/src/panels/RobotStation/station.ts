@@ -51,6 +51,8 @@ export type Instruction = {
 };
 export type Station = {
   platform?: Platform;
+  // Preserve editable execution intent, including unsupported values, for backend validation.
+  execution?: unknown;
   flight?: {
     speed_m_s: number;
     planner: "waypoint" | "ego";
@@ -266,6 +268,48 @@ export function defaultStation(): Station {
   };
 }
 
+/** Development layouts remain editable task inputs, never inherited pass certificates. */
+export function workspaceStationSample(id: "x-plus20" | "x-minus20"): Station {
+  const station = defaultStation();
+  const plus = id === "x-plus20";
+  const pick: Vec3 = plus ? [0.26, -0.13, 0] : [0.235, -0.13, 0];
+  const offset = plus ? 0 : -0.015;
+  station.name = plus ? "SO101 X+20mm 布局开发样例" : "SO101 X−20mm 布局开发样例";
+  for (const node of station.nodes) {
+    if (node.id === "pick") {
+      node.position = pick;
+    } else if (["cube", "approach", "grasp"].includes(node.id)) {
+      node.position[0] = offset;
+      if (node.id === "approach" && plus) {
+        node.position[2] = 0.074;
+      }
+    } else if (node.id === "place" && !plus) {
+      node.position = [0.2, 0.2, 0];
+    }
+  }
+  station.execution = {
+    mode: "workspace-development-v1",
+    pick_xy_m: pick.slice(0, 2),
+    pickup_hover_z_m: plus ? 0.054 : 0.06,
+    target_region_xy_m: [
+      [0.21, 0.27],
+      [-0.16, -0.1],
+    ],
+  };
+  station.notes = `来源：workspace-x-m1a / ${plus ? "outside_x_plus20_layout" : "outside_x_minus20_layout_secondary"}。仅为布局开发样例，不代表连续工作区已验证；编辑后须重新运行原物理裁判。`;
+  return station;
+}
+
+function copyExecution(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(copyExecution);
+  }
+  const object = record(value);
+  return object
+    ? Object.fromEntries(Object.entries(object).map(([key, item]) => [key, copyExecution(item)]))
+    : value;
+}
+
 /** Keep references inside the document, but share no editable data with its source. */
 export function copyStation(station: Station): Station {
   return {
@@ -282,6 +326,9 @@ export function copyStation(station: Station): Station {
       }),
     ),
     program: station.program.map((step) => ({ ...step })),
+    ...(Object.hasOwn(station, "execution")
+      ? { execution: copyExecution(station.execution) }
+      : {}),
     ...(station.flight
       ? {
           flight: {
@@ -446,6 +493,28 @@ export function importStation(value: unknown): {
     throw new Error("请选择含 nodes 数组的工作站 JSON；当前草稿未改变。");
   }
   const warnings: string[] = [];
+  if (Object.hasOwn(source, "execution")) {
+    const execution = record(source.execution);
+    const pair = (value: unknown): value is [number, number] =>
+      Array.isArray(value) &&
+      value.length === 2 &&
+      value.every((item) => typeof item === "number" && Number.isFinite(item));
+    const region = execution?.target_region_xy_m;
+    const hover = execution?.pickup_hover_z_m;
+    if (
+      execution?.mode !== "workspace-development-v1" ||
+      !pair(execution.pick_xy_m) ||
+      typeof hover !== "number" ||
+      !Number.isFinite(hover) ||
+      hover < 0.054 ||
+      hover > 0.06 ||
+      !Array.isArray(region) ||
+      region.length !== 2 ||
+      !region.every((bounds) => pair(bounds) && bounds[0] < bounds[1])
+    ) {
+      warnings.push("执行参数未知或无效，已原样保留；运行时由执行器校验，不回退默认场景。");
+    }
+  }
   const platform: Platform = source.platform === "px4" ? "px4" : "so101";
   if (
     source.platform != undefined &&
@@ -627,6 +696,9 @@ export function importStation(value: unknown): {
   }
   const station: Station = {
     ...(source.platform != undefined ? { platform } : {}),
+    ...(Object.hasOwn(source, "execution")
+      ? { execution: copyExecution(source.execution) }
+      : {}),
     ...(platform === "px4"
       ? {
           flight: {

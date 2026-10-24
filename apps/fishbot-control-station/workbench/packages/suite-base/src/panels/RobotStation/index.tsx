@@ -58,6 +58,7 @@ import {
   stationPlatform,
   transformObstacle,
   worldPosition,
+  workspaceStationSample,
 } from "./station";
 import type { Instruction, Kind, Station, StationNode, Vec3 } from "./station";
 
@@ -900,6 +901,22 @@ function RobotStation({
     );
     void changeScene("draft", next);
   };
+  const loadWorkspaceSample = (sample: "x-plus20" | "x-minus20") => {
+    if (drone || checkingTask || submitting || cancelling || taskIsActive(task)) {
+      return;
+    }
+    const next = workspaceStationSample(sample);
+    setPast((history) => [...history, station]);
+    setFuture([]);
+    setTaskId("");
+    setTask(undefined);
+    setExecutionError("");
+    rejectedTaskId.current = "";
+    saveConfig({ station: next, executionTaskId: "" });
+    setSelected("cube");
+    setNotice("已载入独立草稿，尚未运行。修改后需重新验证，原任务记录保留。");
+    void changeScene("draft", next);
+  };
   const changeNode = (patch: Partial<StationNode>) => {
     commit({
       ...station,
@@ -1101,6 +1118,41 @@ function RobotStation({
             commit({ ...station, name: event.target.value });
           }}
         />
+        {!drone && (
+          <div role="region" aria-label="SO101 开发工位样例">
+            <Typography variant="subtitle2">开发工位样例</Typography>
+            <div className={classes.row}>
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={checkingTask || submitting || cancelling || taskIsActive(task)}
+                onClick={() => {
+                  loadWorkspaceSample("x-plus20");
+                }}
+              >
+                载入 X+20mm 布局
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={checkingTask || submitting || cancelling || taskIsActive(task)}
+                onClick={() => {
+                  loadWorkspaceSample("x-minus20");
+                }}
+              >
+                载入 X−20mm 布局
+              </Button>
+            </div>
+            <Typography variant="caption" color="text.secondary">
+              每个样例仅验证过指定点位。加载只改草稿；修改后重新规划并运行。
+            </Typography>
+            {station.execution !== undefined && (
+              <Alert severity="info" style={{ marginTop: 8 }}>
+                开发工位：红盘与取料高位随 JSON 保存。声明区域是定位先验，尚未证明整个区域都能抓放。
+              </Alert>
+            )}
+          </div>
+        )}
         <div className={classes.row}>
           <Button
             size="small"

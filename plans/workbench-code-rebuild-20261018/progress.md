@@ -175,3 +175,11 @@ Knowledge closeout：already_covered。沿用PIT-004依赖隔离和现有任务�
 - 忽略产物：workbench-tools/output/drone-primitives/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/exact-windows.json。初次constant-axis-error报告保留（当时仅7窗），修复后8窗warnings为空。原记录、drone c866441和5186只读页面保持。
 - [方法、结果表与命令](../../docs/DRONE_TRAJECTORY_PRIMITIVES.md)为最短接续入口；N2仅精确分段资格，单段压缩/教师/模型比较未做。后续选定实际候选再接旁路，不自动训练、启动飞行或解冻。owner=本对话Codex。
 - Knowledge closeout: already_covered。采用Wiki/ROS2与FishBot原生源时间、参考/实际分层及既有连续审计；数值、C2合同与代码适配留项目，不写memory。
+
+## 2026-10-24 — SO101 工作区开发样例接入中
+
+根Codex沿SO101 `plans/workcell-productization-20261024/` 接续。RobotStation新增两样例按钮与显式execution往返；原task-runtime/UUID/取消/scene/录像保持。默认±10mm不变，新声明域不代表连续物理已验，原失败和历史结果不继承到草稿。
+
+数据层33项、任务服务3项通过；生产构建通过，仅原两项包体积警告。桌面／390px九项浏览器检查通过，零tasks写请求／pageerror；真实导出fixture经SO101准入检查通过。根查看两屏截图。5186以交付SO101_ROOT及planning-venv显式恢复，已有5187别人的服务未动。新网页完整物理待验，不使用此前开发CLI4/4替代。
+
+本轮只提交RobotStation、so101-runtime、样例浏览器检查和本记录/说明。DroneDiagnostics/drone-diagnostics/drone-candidates仍由原owner在途，保留不纳入本次提交；不停止它们的服务或任务。主FishBot dirty main未改。Knowledge=already_covered，项目状态回源SO101主计划。

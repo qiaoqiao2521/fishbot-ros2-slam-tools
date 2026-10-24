@@ -11,7 +11,7 @@ function createSo101Runtime(options = {}) {
     script:path.join(sourceRoot,'experiments/colab-twin/station_executor.py'),
     tasksRoot:process.env.SO101_TASKS_DIR ?? path.join(__dirname,'workbench-tools/output/station-tasks'),
     env:{MUJOCO_GL:'egl',MPLBACKEND:'agg'},
-    message:'已连接固定八步抓放模板。',
+    message:'已连接 MuJoCo 抓放执行器；工位参数逐任务检查。',
     capabilities:['MuJoCo 仿真','RGB 定位与 IK/OMPL','抓取、放置、脱离与回位'],
     ...options,
   });
