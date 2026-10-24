@@ -38,6 +38,18 @@ def successful_score(order):
 
 
 class ReferenceTests(unittest.TestCase):
+    def test_capture_metrics_keep_one_unknown_request_and_continue_independent_samples(self):
+        bridge=Mock()
+        bridge.request.side_effect=[RuntimeError('unknown capture receipt'),
+            {'request_id':'second','status':'succeeded','capture_copy_wall_s':.001}]
+        with patch('cooperation_factory.uuid.uuid4',side_effect=['first','second']):
+            result=factory.checkpoint_measurements(bridge,2)
+        self.assertFalse(result['passed'])
+        self.assertEqual([s['request_id'] for s in result['samples']],['first','second'])
+        self.assertTrue(result['samples'][1]['passed'])
+        self.assertEqual(bridge.request.call_count,2)
+        self.assertTrue(result['end_to_end_is_observed_upper_bound'])
+
     def test_host_protection_default_is_unchanged_but_cloud_does_not_query_systemd(self):
         self.assertEqual(factory.protected_units(SimpleNamespace()), factory.PROTECTED_UNITS)
         self.assertEqual(factory.protected_units(SimpleNamespace(protected_unit=['demo.service'])),
@@ -155,6 +167,21 @@ class ScoreTests(unittest.TestCase):
         value = self.report()
         self.assertEqual(value['task_verdict'], 'passed')
         self.assertEqual(value['guard_telemetry'], {'assisted': True})
+
+    def test_route_branch_pass_is_separate_from_original_full_transport(self):
+        score=copy.deepcopy(self.score)
+        score.update(original_k_oracle_passed=False,
+                     route_acceptance={'passed':True},full_transport_acceptance_claimed=False)
+        value=self.report(score,scope='route',elapsed_wall_s=119.)
+        self.assertEqual(value['task_verdict'],'passed')
+        self.assertFalse(value['original_k_passed'])
+        self.assertFalse(value['full_transport_acceptance_claimed'])
+        self.assertTrue(value['execution']['within_task_budget'])
+        self.assertEqual(self.report(score)['task_verdict'],'failed')
+        self.assertFalse(self.report(score,scope='route',elapsed_wall_s=360.01)
+                         ['execution']['within_task_budget'])
+        score['route_acceptance']['passed']=False
+        self.assertEqual(self.report(score,scope='route')['task_verdict'],'failed')
 
     def test_completed_execution_and_failed_task_are_independent(self):
         first = self.report()

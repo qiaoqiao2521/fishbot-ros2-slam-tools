@@ -88,6 +88,16 @@ python3 -B tools/cooperation_workflow.py --ledger "$HOME/.cache/fishbot/workflow
 
 ready 事件绑定 event UUID、batch、machine 和连续 version。重复同 ID 同内容只读；同 ID 改内容、旧版本、跳版本、不同 batch、工位占用期间的新事件均拒绝。每次 reset 清除已消费 readiness，但保留事件历史与版本。
 
+## 可选检查点与R2载货路线
+
+manifest设置`checkpoint_directory`后，原bridge的`POST /coop-api/checkpoint`接纳`request_id`和可选`context`，沿原ROS收件箱交给Physics在周期边界捕获。按原请求ID读取`GET /coop-api/checkpoint/<request_id>`；捕获、后台落盘及回执分开计时。活动世界没有加载/回滚接口。
+
+`tools/cooperation_checkpoint.prepare_ros_branch`从检查点准备新分支。只用父回合记录的map到base TF均值初始化AMCL，缺失时不借真值补齐；粒子、EKF/Nav2/DDS历史明确未恢复。新launch读取`restore_checkpoint`，分配新world/episode身份、保持车辆并清除旧移动命令。
+
+显式`scope=route`仅允许合格R2载货分支，复用原加载参数事务、Nav2路线、货物保持和清理。Workflow在发包前持久保存该scope。默认请求仍为完整transport；route没有本回合装货，不继承原K完整抓放成绩。任务总预算仍为360秒，出站后配送路线独立保持120秒，不把初始化误计入这120秒。
+
+factory增加`--scope route --select-order order-b`用于单个恢复切片；`--checkpoint-samples 5`在原清理确认后测量只读捕获RPC。标签不加载策略，原物理评分不变。当前R1四类通过、R2两次载货路线超时，完整验收状态见[计划进度](../plans/continuous-twin-regression-20261024/progress.md)。
+
 ## CPU 验收
 
 ```bash

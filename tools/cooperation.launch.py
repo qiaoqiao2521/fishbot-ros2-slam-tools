@@ -44,6 +44,10 @@ def start(context):
         simulation.append('--no-overview-render')
     if manifest.get('queued_ros_dispatch') is True:
         simulation.append('--queued-ros-dispatch')
+    if manifest.get('checkpoint_directory'):
+        simulation+=['--checkpoint-dir',str(manifest['checkpoint_directory'])]
+    if manifest.get('restore_checkpoint'):
+        simulation+=['--restore-checkpoint',str(manifest['restore_checkpoint'])]
     if record_state=='true':
         simulation += ['--state-log',str(output/'physics.jsonl'),
             '--state-log-hz',LaunchConfiguration('state_log_hz',default='2').perform(context),

@@ -56,6 +56,7 @@ class Bridge:
             return {'error': 'fixture rejection', 'outcome': 'rejected'}
         if kind == 'start':
             self.value['task'] = {'id': body['task_id'], 'status': 'running'}
+            if 'scope' in body:self.value['task']['scope']=body['scope']
             if 'delivery_pose' in body:
                 self.value['task']['delivery_pose'] = copy.deepcopy(body['delivery_pose'])
             if 'delivery_approach_poses' in body:
@@ -91,6 +92,27 @@ class Bridge:
         self.value.update(episode_id=uid(), ready=True, task={'id': None, 'status': 'idle'})
         self.value['reset'].update(available=True, pending=False)
         record.update(status='succeeded', new_episode_id=self.value['episode_id'])
+
+
+class RouteScopeTests(unittest.TestCase):
+    def test_scope_is_durable_before_send_and_survives_ledger_reopen(self):
+        bridge=Bridge();batch=uid()
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'ledger.json'
+            with Workflow(path,bridge) as value:
+                value.create([batch],scope='route')
+                value.event({'event_id':uid(),'batch_id':batch,'machine_id':'laundry-machine-1',
+                             'version':1,'ready':True})
+                state=value.dispatch()
+                self.assertEqual(state['jobs'][0]['attempts'][0]['dispatch']['body']['scope'],'route')
+            with Workflow(path,bridge) as value:
+                self.assertEqual(value.tick()['status'],'active')
+            self.assertEqual(len(bridge.calls),1)
+            self.assertEqual(bridge.calls[0][1]['scope'],'route')
+            bridge.value['task']['scope']='transport'
+            with Workflow(path,bridge) as value:
+                self.assertEqual(value.tick()['status'],'unknown')
+            self.assertEqual(len(bridge.calls),1)
 
 
 class SceneTemplateTest(unittest.TestCase):

@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -35,6 +36,7 @@ PYTHON_GROUPS = {
         'test_cooperation_lattice.py',
         'test_cooperation_recording.py', 'test_cooperation_evidence_recording.py',
         'test_cooperation_timing.py',
+        'test_cooperation_comparison.py',
         'test_mecanum_integration.py', 'test_cooperation_mecanum.py',
         'test_stack_gate.py', 'test_arena.py',
         'test_edge_voice_node.py', 'test_voice_asr.py', 'test_voice_bridge.py',
@@ -45,6 +47,7 @@ PYTHON_GROUPS = {
         'test_manual_launch.py', 'test_manual_acceptance.py',
         'test_workbench_recovery_acceptance.py',
         'test_arena_bootstrap.py', 'test_arena_colab.py')),
+    'checkpoint': (ROOT / 'tools/tests/test_cooperation_checkpoint.py',),
     'mission': (ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests'
                 / 'test_mission_bridge.py', ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests/test_map_rules.py',
                 ROOT / 'workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/tests/test_rviz_desktop.py',
@@ -94,16 +97,18 @@ def python_group(name):
 def run_python(name):
     # Setup affects this child process only. These tests never initialize ROS.
     setup = Path('/opt/ros/jazzy/setup.bash')
-    command = ['/usr/bin/python3', '-B', str(Path(__file__).resolve()), '--python-group', name]
+    python = (os.environ.get('FISHBOT_SO101_PYTHON',str(Path.home()/'.cache/so101-colab/planning-venv/bin/python'))
+              if name=='checkpoint' else '/usr/bin/python3')
+    command = [python, '-B', str(Path(__file__).resolve()), '--python-group', name]
     if setup.is_file():
         shell = '''set -e
 source /opt/ros/jazzy/setup.bash
 if [[ "$1" == mission && -d "${FISHBOT_MUJOCO_RUNTIME:-$2/workspaces/fishbot_mujoco_ws/.runtime}/opt/ros/jazzy" ]]; then
     source "$2/tools/fishbot_mujoco_env.sh"
 fi
-exec /usr/bin/python3 -B "$2/tools/fishbot_feedback_check.py" --python-group "$1"
+exec "$3" -B "$2/tools/fishbot_feedback_check.py" --python-group "$1"
 '''
-        command = ['bash', '-c', shell, 'fishbot-feedback', name, str(ROOT)]
+        command = ['bash', '-c', shell, 'fishbot-feedback', name, str(ROOT),python]
     try:
         result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=180)
         report = json.loads(result.stdout)
@@ -128,6 +133,7 @@ def frontend_group():
         command = [npm, 'test', '--', 'src/lib/simulation.test.ts',
                    'src/lib/voice.test.ts', 'src/components/voice/voice-panel.test.tsx',
                    'src/lib/patrol-mission.test.ts', 'src/lib/map-zones.test.ts',
+                   'src/lib/delivery-comparison.test.ts',
                    'src/lib/route-safety.test.ts', 'src/lib/patrol-draft-cache.test.ts',
                    'src/hooks/use-patrol-draft-cache.test.ts',
                    'src/lib/workbench.test.ts',
@@ -176,7 +182,7 @@ def main():
     groups.append(frontend_group())
     code = exit_status(groups)
     print(json.dumps({'status': {0: 'passed', 1: 'failed', 2: 'partial'}[code],
-                      'scope': 'offline regression; no physical simulation or hardware acceptance',
+                      'scope': 'offline contracts and native fixtures; no ROS actions or hardware acceptance',
                       'groups': groups}, ensure_ascii=False, indent=2))
     return code
 

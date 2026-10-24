@@ -66,6 +66,36 @@ class MarkedBridge(LocalBridge):
         return super().post(kind, body)
 
 
+def checkpoint_measurements(bridge,count,*,check=lambda:None):
+    """Measure the existing capture RPC after physical cleanup; never move."""
+    samples=[]
+    for _ in range(count):
+        check()
+        request_id=str(uuid.uuid4());started=time.monotonic()
+        try:
+            receipt=bridge.request('/coop-api/checkpoint',{'request_id':request_id,
+                'context':{'purpose':'held_checkpoint_rpc_measurement'}})
+            deadline=started+10.
+            while receipt.get('status')=='pending' and time.monotonic()<deadline:
+                time.sleep(.02)
+                receipt=bridge.request('/coop-api/checkpoint/'+request_id)
+            samples.append({'request_id':request_id,'receipt':receipt,
+                'end_to_end_observed_wall_s':time.monotonic()-started,
+                'passed':receipt.get('status')=='succeeded' and receipt.get('request_id')==request_id})
+        except (RuntimeError,OSError,ValueError) as error:
+            samples.append({'request_id':request_id,'passed':False,'error':str(error)})
+    def percentiles(values):
+        values=sorted(v for v in values if type(v) in (int,float) and math.isfinite(v))
+        return {key:values[max(0,math.ceil(q*len(values))-1)] if values else None
+                for key,q in [('p50',.5),('p95',.95),('max',1.)]}
+    return {'passed':bool(samples) and all(item['passed'] for item in samples),'samples':samples,
+        'sample_count':len(samples),'poll_interval_wall_s':.02,
+        'end_to_end_is_observed_upper_bound':True,
+        'end_to_end_wall_s':percentiles([s.get('end_to_end_observed_wall_s') for s in samples if s['passed']]),
+        'capture_copy_wall_s':percentiles([s.get('receipt',{}).get('capture_copy_wall_s') for s in samples]),
+        'scope':'held native physics capture and durable file receipt; not ROS restoration latency'}
+
+
 def reference(manifest, *, candidate, order=None):
     """Resolve scene business data; candidate is a display label, not a loader."""
     from cooperation_factory_scene import factory_template_jobs, normalize_factory_config
@@ -96,7 +126,7 @@ def reference(manifest, *, candidate, order=None):
             'candidate_label_loads_code': False}
 
 
-def loaded_code_reference():
+def loaded_code_reference(extra_paths=()):
     """Observe actual local code, without a content-hash execution lock."""
     import cooperation_acceptance
     import cooperation_factory_scene
@@ -105,9 +135,10 @@ def loaded_code_reference():
                cooperation_factory_scene, cooperation_workflow)
     module_files = {module.__name__: str(Path(module.__file__).resolve()) for module in modules}
     runtime_files = [ROOT/'tools'/name for name in
-                     ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_mecanum.py', 'cooperation_lidar.py', 'cooperation_geometry_check.py', 'cooperation_oracle.py',
+                     ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_checkpoint.py', 'cooperation_mecanum.py', 'cooperation_lidar.py', 'cooperation_geometry_check.py', 'cooperation_oracle.py',
                       'cooperation_oracle_base.py', 'cooperation_core.py', 'cooperation_arm.py',
                       'cooperation_factory_policy.py', 'cooperation_delivery_route.py')]
+    runtime_files.extend(Path(path).resolve() for path in extra_paths)
     paths = [Path(path) for path in module_files.values()]+runtime_files
     result = {'module_files': module_files,
               'module_files_scope': 'Actually imported in the evaluation process',
@@ -131,7 +162,7 @@ def loaded_code_reference():
 
 
 def order_report(order, *, task_id, episode_id, terminal, score, score_file,
-                 elapsed_wall_s):
+                 elapsed_wall_s, scope='transport'):
     """Summarize original scores; do not reproduce physical verdict logic."""
     delivery = score.get('task_delivery_acceptance', {}) if score else {}
     attempts = [item for item in delivery.get('attempts', [])
@@ -140,8 +171,12 @@ def order_report(order, *, task_id, episode_id, terminal, score, score_file,
     bound = (len(attempts) == 1 and
              attempt.get('expected_delivery_pose') == order['delivery_pose'] and
              attempt.get('expected_delivery_approach_poses', []) == order.get('delivery_approach_poses', []))
+    scoped_passed = (score.get('route_acceptance',{}).get('passed') is True
+                     and score.get('full_transport_acceptance_claimed') is False
+                     if score and scope=='route' else
+                     bool(score and score.get('original_k_oracle_passed') is True))
     verdict = 'unknown' if score is None else 'passed' if (
-        score.get('passed') is True and score.get('original_k_oracle_passed') is True
+        score.get('passed') is True and scoped_passed
         and delivery.get('required') is True and delivery.get('passed') is True
         and bound and attempt.get('passed') is True) else 'failed'
     pose_error = attempt.get('final_true_pose_error') or {}
@@ -149,10 +184,12 @@ def order_report(order, *, task_id, episode_id, terminal, score, score_file,
     status = terminal.get('task', {}).get('status') if terminal else None
     valid_elapsed = (type(elapsed_wall_s) in (int, float)
                      and math.isfinite(elapsed_wall_s) and elapsed_wall_s >= 0.)
+    task_limit = TASK_TIMEOUT_S
     return {**copy.deepcopy(order), 'task_id': task_id, 'episode_id': episode_id,
+            'scope':scope, 'full_transport_acceptance_claimed':scope=='transport',
             'execution': {'task_status': status,
                           'terminal_observed': status in ('succeeded', 'failed', 'canceled'),
-                          'within_task_budget': elapsed_wall_s <= TASK_TIMEOUT_S if valid_elapsed else None},
+                          'within_task_budget': elapsed_wall_s <= task_limit if valid_elapsed else None},
             'task_verdict': verdict, 'original_score_passed': None if score is None else score.get('passed'),
             'original_k_passed': None if score is None else score.get('original_k_oracle_passed'),
             'destination_bound': bound, 'carrying_nav_uuid': attempt.get('carrying_nav_uuid'),
@@ -329,6 +366,9 @@ class ReadOnlyMonitor:
 
 def run(args, manifest, declaration):
     from fishbot_simulation_suite import domain_is_empty
+    scope = getattr(args,'scope','transport')
+    task_limit = TASK_TIMEOUT_S
+    marker_prefix = 'route' if scope=='route' else 'full'
     output = args.output.resolve()
     if output.exists() or output.is_relative_to(ROOT):
         raise ValueError('Use a new private output directory outside the source repository')
@@ -409,7 +449,8 @@ def run(args, manifest, declaration):
         save(output/'mutation-intents.json', mutation_posts)
         if kind == 'start':
             task_id = body['task_id']
-            marker('full_started', scope='transport',
+            marker(marker_prefix+'_started', scope=scope,
+                   snapshot_id=manifest.get('checkpoint_parent',{}).get('snapshot_id'),
                    expected_delivery_pose=current_order['delivery_pose'],
                    requested_delivery_pose=body.get('delivery_pose'),
                    expected_delivery_approach_poses=current_order.get('delivery_approach_poses', []),
@@ -480,6 +521,7 @@ def run(args, manifest, declaration):
         workflow('create', [item['batch_id'] for item in declared], 'factory-pickup',
                  {item['batch_id']: item['delivery_pose'] for item in declared},
                  scene_profile=declaration['scene_profile'],
+                 scope=scope,
                  delivery_approach_poses={item['batch_id']: item['delivery_approach_poses'] for item in declared})
         reset_receipt = None
         for index, order in enumerate(declared):
@@ -493,7 +535,7 @@ def run(args, manifest, declaration):
             save(current_folder/'markers.json', {'events': []})
             arguments = [str(launcher), 'oracle', '--domain', str(args.domain),
                          '--api', bridge.endpoint+'/coop-api', '--expected-episode', episode,
-                         '--scope', 'transport', '--expected-outcome', 'success',
+                         '--scope', scope, '--expected-outcome', 'success',
                          '--markers', str(current_folder/'markers.json'),
                          '--output', str(current_folder/'observer')]
             arguments += (['--reset-receipt', str(reset_receipt)] if reset_receipt
@@ -517,7 +559,7 @@ def run(args, manifest, declaration):
             task_id = value['jobs'][index]['attempts'][-1]['task_id']
             task_rejected = value['jobs'][index]['attempts'][-1]['dispatch']['outcome'] == 'rejected'
             terminal = None
-            while time.monotonic()-order_started < TASK_TIMEOUT_S:
+            while time.monotonic()-order_started < task_limit:
                 checkpoint()
                 tail.refresh()
                 state = bridge.state()
@@ -536,7 +578,7 @@ def run(args, manifest, declaration):
                     raise RuntimeError('Owned launch or oracle exited during task')
                 time.sleep(.1)
             if terminal is None:
-                raise TimeoutError('Original 360s task limit exceeded; no automatic resend')
+                raise TimeoutError(f'Original {task_limit:g}s task limit exceeded; no automatic resend')
             save(current_folder/'terminal-state.json', terminal)
             proof = independent_cleanup()
             save(current_folder/'cleanup-quiet.json', proof)
@@ -545,7 +587,7 @@ def run(args, manifest, declaration):
                 return tail.quiet_proof(minimum_source_s=1.)
             capture = wait_until(captured_stop, 20, description='Observer trailing one-second stop incomplete')
             save(current_folder/'capture-stop.json', capture)
-            marker('full_finished', scope='transport')
+            marker(marker_prefix+'_finished', scope=scope)
             task_elapsed = time.monotonic()-order_started
             marker('cleanup_checked')
             signal_observer_once(observer)
@@ -557,7 +599,7 @@ def run(args, manifest, declaration):
             score = read_json(score_file) if score_file else None
             item = order_report(order, task_id=task_id, episode_id=episode, terminal=terminal,
                                 score=score, score_file=score_file,
-                                elapsed_wall_s=task_elapsed)
+                                elapsed_wall_s=task_elapsed,scope=scope)
             item['observer_returncode'] = code
             result['orders'].append(item)
             save(output/'progress.json', result)
@@ -585,15 +627,31 @@ def run(args, manifest, declaration):
         final = independent_cleanup()
         save(output/'final-cleanup-quiet.json', final)
         result['execution']['cleanup_complete'] = True
+        if getattr(args,'checkpoint_samples',0):
+            result['checkpoint_measurements']=checkpoint_measurements(bridge,args.checkpoint_samples,check=checkpoint)
         result['execution']['owned_launch_stopped'] = stop_owned_launch(launch, result)
     except (OSError, ValueError, RuntimeError, TimeoutError, subprocess.SubprocessError,
             KeyboardInterrupt) as error:
         result['errors'].append(type(error).__name__+': '+str(error))
         if launch is not None and launch.poll() is None and task_id is not None and tail is not None:
             try:
+                current=bridge.state()
+                if (current.get('episode_id')==episode and current.get('task',{}).get('id')==task_id
+                        and current['task'].get('status') in ('running','canceling')):
+                    result['execution']['failure_cancel_receipt']=bridge.post('cancel',{
+                        'task_id':task_id,'issued_at':time.time()})
                 proof = independent_cleanup()
                 save(output/'failure-cleanup-quiet.json', proof)
+                current=bridge.state()
+                save(current_folder/'terminal-state.json',current)
+                task_elapsed=time.monotonic()-order_started
+                existing=read_json(current_folder/'markers.json')['events']
+                if not any(e['kind']==marker_prefix+'_finished' and e.get('task_id')==task_id for e in existing):
+                    marker(marker_prefix+'_finished',scope=scope,outcome='failure_cleanup')
+                marker('cleanup_checked',outcome='failure_cleanup')
                 result['execution']['cleanup_complete'] = True
+                if getattr(args,'checkpoint_samples',0):
+                    result['checkpoint_measurements']=checkpoint_measurements(bridge,args.checkpoint_samples,check=checkpoint)
                 if observer is not None:
                     signal_observer_once(observer)
                 result['execution']['owned_launch_stopped'] = stop_owned_launch(launch, result)
@@ -633,7 +691,7 @@ def run(args, manifest, declaration):
             result['orders'].append(order_report(
                 current_order, task_id=task_id, episode_id=episode, terminal=terminal,
                 score=read_json(score_file) if score_file else None, score_file=score_file,
-                elapsed_wall_s=task_elapsed))
+                elapsed_wall_s=task_elapsed,scope=scope))
         source_end = loaded_code_reference()
         save(output/'loaded-code-end.json', source_end)
         result['code_observation'] = {'start': str(output/'loaded-code-start.json'),
@@ -664,6 +722,11 @@ def main(argv=None):
     execute.add_argument('--policy-config', type=Path,
                          help='Explicit trusted local policy JSON; loads only during run')
     execute.add_argument('--order', action='append', help='Explicit permutation of all order IDs')
+    execute.add_argument('--select-order',action='append',
+                         help='Explicit finite subset for a snapshot or route experiment')
+    execute.add_argument('--scope',choices=('transport','route'),default='transport')
+    execute.add_argument('--checkpoint-samples',type=int,default=0,
+                         help='Optional held capture RPC measurements after native cleanup')
     execute.add_argument('--planning-python', type=Path,
                          default=Path.home()/'.cache/so101-colab/planning-venv/bin/python')
     protection = execute.add_mutually_exclusive_group()
@@ -683,7 +746,21 @@ def main(argv=None):
             if not 1024 <= args.port <= 65535:
                 raise ValueError('Choose an unprivileged TCP port')
             manifest = read_json(args.manifest)
+            if args.checkpoint_samples<0:
+                raise ValueError('--checkpoint-samples must be nonnegative')
             declaration = reference(manifest, candidate=args.candidate, order=args.order)
+            if args.select_order is not None:
+                by_id={item['id']:item for item in declaration['orders']}
+                if (not args.select_order or len(set(args.select_order))!=len(args.select_order)
+                        or any(name not in by_id for name in args.select_order)):
+                    raise ValueError('--select-order must name distinct declared orders')
+                declaration['orders']=[by_id[name] for name in args.select_order]
+                declaration['explicit_subset']=True
+            declaration['scope']=args.scope
+            if args.scope=='route':
+                if not manifest.get('restore_checkpoint') or len(declaration['orders'])!=1:
+                    raise ValueError('R2 route evaluation requires one declared order and a checkpoint')
+                declaration['full_transport_acceptance_claimed']=False
             declaration['publication_mode'] = {
                 'requested': args.publication_mode,
                 'process_scope': ['cooperation_sim', 'cooperation_bridge'],

@@ -84,7 +84,7 @@ def extra_checks(records, marker_path, expected, *, reset_receipt=None, allow_in
     reset_counts = [r['payload'].get('episode_reset', {}).get('count') for r in physics]
     reset_count_fixed = bool(reset_counts) and all(isinstance(x, int) and not isinstance(x, bool) for x in reset_counts) and len(set(reset_counts)) == 1
     windows = []
-    prefix = 'dock' if scope == 'dock' else 'full'
+    prefix = 'dock' if scope == 'dock' else 'route' if scope == 'route' else 'full'
     for start in (e for e in events if e.get('kind') == prefix+'_started'):
         ends = [e for e in events if e.get('kind') == prefix+'_finished' and e.get('task_id') == start['task_id'] and e['wall_time'] >= start['wall_time']]
         end = min((e['wall_time'] for e in ends), default=None)
@@ -106,17 +106,19 @@ def extra_checks(records, marker_path, expected, *, reset_receipt=None, allow_in
                     if key in action_ids:
                         terminal[key] = s['status']
         dock_ids = [k for k in action_ids if k[0] == 'dock']
-        native_success = bool(action_ids) and bool(dock_ids) and all(terminal.get(k) == 4 for k in action_ids)
+        native_success = bool(action_ids) and all(terminal.get(k) == 4 for k in action_ids)
         if scope == 'dock':
             native_success = native_success and len(dock_ids) == 1
+        elif scope == 'route':
+            native_success = native_success and not dock_ids and any(k[0] == 'nav' for k in action_ids)
         else:
-            native_success = native_success and any(k[0] == 'nav' for k in action_ids)
+            native_success = native_success and bool(dock_ids) and any(k[0] == 'nav' for k in action_ids)
         native_known = bool(action_ids) and all(terminal.get(k) in (4,5,6) for k in action_ids)
         native = native_success if expected_outcome == 'success' else native_known
         http = [r['payload'] for r in records if r['topic'] == 'http_state'
                 and r['received_wall_time'] >= start['wall_time']
                 and r['payload'].get('task', {}).get('id') == start['task_id']]
-        strict_handles = scope == 'dock' or start.get('scope') in ('dock','transport')
+        strict_handles = scope == 'dock' or start.get('scope') in ('dock','transport','route')
         handle_ids=set();handle_terminal={};handle_cancel_times={};handle_bad=False
         for state in http:
             for action in state.get('native_actions',[]):
@@ -243,7 +245,7 @@ def transport_checks(samples, audit, attempts, events):
             'passed': bool(windows) and all(window['passed'] for window in windows)}
 
 
-def delivery_checks(records, samples, audit, attempts, events):
+def delivery_checks(records, samples, audit, attempts, events, *, marker_prefix='full'):
     """Bind each declared task destination to its native UUID and true stop.
 
     The bridge freezes the sent goal before send_goal_async. HTTP is evidence
@@ -291,15 +293,15 @@ def delivery_checks(records, samples, audit, attempts, events):
         return value
 
     target_keys = ('expected_delivery_pose', 'delivery_pose', 'requested_delivery_pose')
-    declared = any(e.get('kind') == 'full_started' and any(k in e for k in target_keys) for e in events)
+    declared = any(e.get('kind') == marker_prefix+'_started' and any(k in e for k in target_keys) for e in events)
     declared |= any(r['topic'] == 'http_state' and 'delivery_pose' in r['payload'].get('task', {}) for r in records)
     results = []
     for attempt in attempts:
         task_id, start = attempt['task_id'], attempt['started_wall_time']
-        starts = [e for e in events if e.get('kind') == 'full_started'
+        starts = [e for e in events if e.get('kind') == marker_prefix+'_started'
                   and e.get('task_id') == task_id and e['wall_time'] == start]
         event = starts[0] if len(starts) == 1 else {}
-        ends = [e['wall_time'] for e in events if e.get('kind') == 'full_finished'
+        ends = [e['wall_time'] for e in events if e.get('kind') == marker_prefix+'_finished'
                 and e.get('task_id') == task_id and e['wall_time'] >= start]
         end = min(ends, default=math.inf)
         states = [r['payload'] for r in records if r['topic'] == 'http_state'
@@ -332,14 +334,16 @@ def delivery_checks(records, samples, audit, attempts, events):
             binding &= state.get('task', {}).get('delivery_approach_poses', []) == approaches
         manifests = [r['payload'].get('source', {}).get('manifest', {}) for r in records
                      if r['topic'] == 'physics' and episode_id(r['payload']) == episode]
-        declarations = [m['egress_pose'] for m in manifests if m.get('egress_pose') is not None]
+        declarations = [m['egress_pose'] for m in manifests
+                        if marker_prefix!='route' and m.get('egress_pose') is not None]
         egress_declared = bool(declarations)
         def egress_pose(value):
             return pose(dict(zip(('x', 'y', 'yaw'), value))
                         if isinstance(value, (list, tuple)) and len(value) == 3 else value)
         egress = egress_pose(declarations[0]) if declarations else None
         binding &= all(egress_pose(value) == egress and egress is not None for value in declarations)
-        motion_declarations = [m['egress_motion'] for m in manifests if m.get('egress_motion') is not None]
+        motion_declarations = [m['egress_motion'] for m in manifests
+                               if marker_prefix!='route' and m.get('egress_motion') is not None]
         motion_declared = bool(motion_declarations)
         egress_motion = motion(motion_declarations[0]) if motion_declarations else None
         binding &= all(motion(value) == egress_motion and egress_motion is not None
@@ -446,7 +450,8 @@ def delivery_checks(records, samples, audit, attempts, events):
             and start <= receipt['started_wall_time'] <= receipt['finished_wall_time'] <= end
             and independent_span is not None and 0 <= independent_span <= 120.))
         gate = oracle.Gate(1.)
-        placed = attempt.get('released_full_footprint_supported_and_relative_rest', {}).get('first_pass_stamp')
+        placed = (attempt.get('route_started_source_stamp') if marker_prefix=='route' else
+                  attempt.get('released_full_footprint_supported_and_relative_rest', {}).get('first_pass_stamp'))
         previous = last = None
         last_valid = False
         errors = None
@@ -859,7 +864,7 @@ def plant_guard_telemetry(records, events):
     """Describe observed ideal plant assistance without changing any verdict."""
     physics=[r for r in records if r['topic']=='physics'];windows=[]
     for start in events:
-        if start.get('kind') not in ('dock_started','full_started'):continue
+        if start.get('kind') not in ('dock_started','full_started','route_started'):continue
         prefix=start['kind'].split('_')[0]
         finishes=[e['wall_time'] for e in events if e.get('kind')==prefix+'_finished'
                   and e.get('task_id')==start['task_id'] and e['wall_time']>=start['wall_time']]
@@ -903,6 +908,51 @@ def plant_guard_telemetry(records, events):
         'sampling_limit':'Durations sum adjacent same-state source intervals <=0.1s; gaps are omitted, not interpolated. An initially tripped sample is not a within-window rising edge.'}
 
 
+def route_checks(records, samples, audit, events):
+    """R2 loaded slices reuse destination scoring, without inventing a grasp."""
+    attempts = []
+    windows = []
+    for start in (e for e in events if e.get('kind') == 'route_started'):
+        ends = [e['wall_time'] for e in events if e.get('kind') == 'route_finished'
+                and e.get('task_id') == start['task_id'] and e['wall_time'] >= start['wall_time']]
+        end = min(ends, default=math.inf)
+        items = [s for s in samples if start['wall_time'] <= s['wall_time'] <= end]
+        first = items[0] if items else None
+        branch = first['raw'].get('checkpoint_branch', {}) if first else {}
+        origin = bool(first and branch.get('restored') is True and branch.get('level')=='R2'
+            and branch.get('snapshot_id')==start.get('snapshot_id')
+            and branch.get('episode_id')==first['raw'].get('episode_id')
+            and branch.get('parent_episode_id')!=branch.get('episode_id')
+            and isinstance(branch.get('world_session_id'),str)
+            and branch['world_session_id']==first['raw'].get('world_session_id')
+            and branch.get('parent_world_session_id')!=branch['world_session_id']
+            and branch.get('old_motion_commands_restored') is False
+            and branch.get('external_components_restored') is False
+            and branch.get('integration_readback_max_abs_error')==0.)
+        violations = []
+        for item in items:
+            raw = item['raw']
+            retained = (abs(item['relative'][0])<=.047 and abs(item['relative'][1])<=.047
+                and -.002<=item['relative'][2]<=.04 and raw.get('cargo_tray_floor_contact') is True
+                and all(abs(item['relative'][axis])+item['extents'][axis]<=.058 for axis in range(2)))
+            home = (max(abs(q-target) for q,target in zip(raw['q6'],audit['home_q6']))<.02
+                    and oracle.norm(raw['qvel6'])<.05)
+            if not (item['independent_crosscheck'] and raw.get('finite') is True and retained and home
+                    and len(item['forces'])>=2 and max(item['forces'])<.02):
+                violations.append(item['stamp'])
+        moved = oracle.norm([items[-1]['cargo'][i]-first['cargo'][i] for i in (0,1)]) if first else 0.
+        attempts.append({'task_id':start['task_id'],'started_wall_time':start['wall_time'],
+                         'route_started_source_stamp':first['stamp'] if first else None})
+        windows.append({'task_id':start['task_id'],'snapshot_origin_bound':origin,
+            'physical_sample_count':len(items),'cargo_displacement_m':moved,
+            'retention_or_home_violation_count':len(violations),'violation_preview':violations[:40],
+            'passed':origin and bool(ends) and bool(items) and not violations and moved>=.5})
+    delivery = delivery_checks(records,samples,audit,attempts,events,marker_prefix='route')
+    return {'passed':bool(windows) and all(w['passed'] for w in windows) and delivery['passed'],
+            'windows':windows,'task_delivery_acceptance':delivery,
+            'full_transport_acceptance_claimed':False,'grasp_or_release_in_this_episode_claimed':False}
+
+
 def augment_score(value, records, samples, audit, events):
     scope=getattr(options,'scope','transport'); outcome=getattr(options,'expected_outcome','success')
     extra = extra_checks(records, options.markers, options.expected_episode,
@@ -936,6 +986,14 @@ def augment_score(value, records, samples, audit, events):
         value['passed']=bool(docking['passed'] and extra['passed'] and integrity.get('passed') is True and not callback_errors and current_ok)
         value['task_completion_passed']=bool(outcome == 'success' and value['passed'])
         value['expected_safety_passed']=bool(outcome == 'safe_cancel' and value['passed'])
+    elif scope == 'route':
+        routing = route_checks(records,samples,audit,events) if audit else {'passed':False}
+        value['route_acceptance'] = routing
+        value['full_transport_acceptance_claimed'] = False
+        value['task_delivery_acceptance'] = routing.get('task_delivery_acceptance',{})
+        value['passed'] = bool(routing['passed'] and extra['passed'] and integrity.get('passed') is True
+                               and value.get('recording_integrity',{}).get('passed') is True
+                               and not callback_errors and current_ok)
     else:
         value['passed'] = bool(value['passed'] and extra['passed'] and handoff['passed'] and delivery['passed'] and not callback_errors and current_ok)
     first_physics=next((r['payload'] for r in records if r['topic']=='physics'),{})
@@ -977,7 +1035,7 @@ def parse_options(argv=None):
     parser.add_argument('--markers', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--score-only', type=Path)
-    parser.add_argument('--scope',choices=('dock','transport'),default='transport')
+    parser.add_argument('--scope',choices=('dock','transport','route'),default='transport')
     parser.add_argument('--expected-outcome',choices=('success','safe_cancel'),default='success')
     result = parser.parse_args(argv)
     if not result.expected_episode.strip():

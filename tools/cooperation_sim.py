@@ -68,13 +68,14 @@ def reset_result(request, *, episode_id=None, reset_stamp=None, message=''):
 
 class ResetRequests:
     """Bounded request mailbox and receipts; callbacks never reset MuJoCo."""
-    def __init__(self):
+    def __init__(self, parse=reset_request, result=reset_result):
+        self.parse, self.result = parse, result
         self.pending = deque()
         self.pending_ids = set()
         self.results = OrderedDict()
 
     def offer(self, payload, now=None):
-        request = reset_request(payload)
+        request = self.parse(payload)
         identity = request['request_id']
         if identity in self.results:
             return dict(self.results[identity])
@@ -82,21 +83,23 @@ class ResetRequests:
             return None
         now = time.time() if now is None else now
         if not 0 <= now-request['issued_at'] <= 5:
-            return self.finish(request, reset_result(request, message='reset request expired or in the future'))
+            return self.finish(request, self.result(request, message='request expired or in the future'))
         if len(self.pending) >= 4:
-            return self.finish(request, reset_result(request, message='reset request queue is busy'))
+            return self.finish(request, self.result(request, message='request queue is busy'))
         self.pending.append(request)
         self.pending_ids.add(identity)
         return None
 
-    def take(self):
+    def take(self, *, keep_pending=False):
         if not self.pending:
             return None
         request = self.pending.popleft()
-        self.pending_ids.discard(request['request_id'])
+        if not keep_pending:
+            self.pending_ids.discard(request['request_id'])
         return request
 
     def finish(self, request, result):
+        self.pending_ids.discard(request['request_id'])
         self.results[request['request_id']] = dict(result)
         while len(self.results) > 64:
             self.results.popitem(last=False)
@@ -574,6 +577,7 @@ class Physics:
         angles = np.arange(360)*math.pi/180
         self.ray_directions = np.column_stack((np.cos(angles), np.sin(angles), np.zeros(360)))
         self.episode_id = str(uuid.uuid4())
+        self.world_session_id = str(uuid.uuid4())
         self.identity['episode_id'] = self.episode_id
         from cooperation_faults import FaultInjector, normalize_fault_config
         self.observation_faults = FaultInjector(
@@ -813,6 +817,8 @@ class Physics:
             -self.np.cross(self.np.array(tray_velocity[:3]), cargo_offset))
         payload = {'schema': 1, 'stamp': float(self.data.time), 'wall_time': self.last_wall,
                    'episode_id': self.episode_id,
+                   'world_session_id': getattr(self, 'world_session_id', self.episode_id),
+                   'checkpoint_branch': getattr(self, 'checkpoint_branch', None),
                    'episode_reset': {'count': self.reset_count, 'stamp': self.reset_stamp,
                        'ready': self.reset_ready, 'native_actions_busy': self.native_actions_busy,
                        'source_clock_continuous': True, 'encoder_odometry_continuous': True},
@@ -983,6 +989,17 @@ def run_ros(args):
 
     manifest = getattr(args, 'manifest', None)
     physics = Physics(args.scene, manifest=manifest) if manifest is not None else Physics(args.scene)
+    from cooperation_checkpoint import (CheckpointIO, capture as capture_checkpoint,
+        restore as restore_checkpoint, read_checkpoint, write_checkpoint,
+        signature as checkpoint_signature, request as checkpoint_request,
+        receipt as checkpoint_receipt, REQUEST_TOPIC, RESULT_TOPIC)
+    if getattr(args, 'restore_checkpoint', None):
+        result = restore_checkpoint(physics, read_checkpoint(args.restore_checkpoint), level='R2')
+        if not result['restored']:
+            raise ValueError('checkpoint branch skipped: '+'; '.join(result['reasons']))
+        physics.checkpoint_branch = result
+    if getattr(args, 'checkpoint_dir', None):
+        checkpoint_signature(physics)  # Large immutable mesh description, before control starts.
     timing = LoopTiming(lambda: float(physics.data.time))
     frames = (FrameWriter(physics, args.frame_dir, args.frame_fps, args.camera)
               if args.frame_dir and not getattr(args, 'no_overview_render', False) else None)
@@ -1048,6 +1065,11 @@ def run_ros(args):
             self.reset_pub = self.create_publisher(String, RESET_RESULT_TOPIC, reset_qos)
             self.reset_requests = ResetRequests()
             self.create_subscription(String, RESET_REQUEST_TOPIC, self.handler(self.reset_command), reset_qos)
+            self.checkpoint_pub = self.create_publisher(String, RESULT_TOPIC, reset_qos)
+            self.checkpoint_requests = ResetRequests(parse=checkpoint_request, result=checkpoint_receipt)
+            self.checkpoint_io = CheckpointIO() if getattr(args, 'checkpoint_dir', None) else None
+            self.checkpoint_pending = {}
+            self.create_subscription(String, REQUEST_TOPIC, self.handler(self.checkpoint_command), reset_qos)
             self.create_subscription(String, FAULT_TOPIC, self.handler(self.fault_trigger), 10)
             from rclpy.utilities import get_rmw_implementation_identifier
             self.runtime_observation = {'rmw': get_rmw_implementation_identifier(),
@@ -1130,6 +1152,48 @@ def run_ros(args):
                 self.reject('episode_reset', error)
             reply = self.reset_requests.finish(request, reply)
             self.reset_pub.publish(String(data=json.dumps(reply, allow_nan=False)))
+
+        def checkpoint_command(self, message):
+            try:
+                unique_arm_publisher(self.get_publishers_info_by_topic(REQUEST_TOPIC), args.arm_publisher_node)
+                reply = self.checkpoint_requests.offer(json.loads(message.data))
+                if reply is not None:
+                    self.checkpoint_pub.publish(String(data=json.dumps(reply, allow_nan=False)))
+            except (ValueError, TypeError, KeyError, OverflowError) as error:
+                self.reject('checkpoint_capture', error)
+
+        def process_checkpoints(self):
+            for identity, (request, future) in list(self.checkpoint_pending.items()):
+                if not future.done():
+                    continue
+                try:
+                    reply = checkpoint_receipt(request, **future.result())
+                except Exception as error:
+                    reply = checkpoint_receipt(request, message=error)
+                    self.reject('checkpoint_io', error)
+                self.checkpoint_pending.pop(identity)
+                self.checkpoint_requests.finish(request, reply)
+                self.checkpoint_pub.publish(String(data=json.dumps(reply, allow_nan=False)))
+            request = self.checkpoint_requests.take(keep_pending=True)
+            if request is None:
+                return
+            try:
+                if self.checkpoint_io is None:
+                    raise ValueError('checkpoint directory is not configured')
+                if request['episode_id'] != physics.episode_id:
+                    raise ValueError('checkpoint request belongs to another episode')
+                if not 0 <= time.time()-request['issued_at'] <= 5:
+                    raise ValueError('checkpoint request expired before physics boundary')
+                value = capture_checkpoint(physics, context=request['context'])
+                path = args.checkpoint_dir/('snapshot-'+value['snapshot_id']+'.json')
+                future = self.checkpoint_io.submit(write_checkpoint, path, value)
+                if future is None:
+                    raise ValueError('checkpoint IO busy; only this request was skipped')
+                self.checkpoint_pending[request['request_id']] = (request, future)
+            except (ValueError, TypeError, KeyError, OverflowError) as error:
+                reply = checkpoint_receipt(request, message=error)
+                self.checkpoint_requests.finish(request, reply)
+                self.checkpoint_pub.publish(String(data=json.dumps(reply, allow_nan=False)))
 
         def guard_command(self, message):
             try:
@@ -1348,6 +1412,7 @@ def run_ros(args):
             else:
                 timing.measure('command_apply', node.callback_inbox.drain)
             node.process_reset()
+            node.process_checkpoints()
             timing.measure('mj_step', physics.step)
             # 50 Hz state/odom and 10 Hz synchronous rays; physics stays single-owner.
             if physics.steps % 10 == 0:
@@ -1388,7 +1453,7 @@ def run_ros(args):
                     if receiver_errors:
                         raise RuntimeError('ROS receive executor failed') from receiver_errors[0]
                 finalize_stage('ros_receive.stop', stop_receiver)
-            for name, resource in (('frames', frames), ('camera', node.camera),
+            for name, resource in (('checkpoint_io', node.checkpoint_io), ('frames', frames), ('camera', node.camera),
                                    ('lidar', node.lidar), ('record', record)):
                 if resource is not None:
                     finalize_stage(name+'.close', resource.close)
@@ -1431,6 +1496,8 @@ def parser():
     result.add_argument('--state-log-max-bytes', type=int, default=8*1024*1024)
     result.add_argument('--state-log-backups', type=int, default=3)
     result.add_argument('--timing-log', type=Path, help='optional final bounded timing observations')
+    result.add_argument('--checkpoint-dir', type=Path, help='opt-in asynchronous R1 checkpoint directory')
+    result.add_argument('--restore-checkpoint', type=Path, help='initialize a fresh R2 branch; never reload a live world')
     result.add_argument('--duration', type=float)
     result.add_argument('--queued-ros-dispatch', action='store_true',
                         help='receive ROS off-thread and apply commands at the physics boundary')

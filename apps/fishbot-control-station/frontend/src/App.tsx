@@ -1,6 +1,6 @@
 import { lazy, Suspense, startTransition, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Bot, ChevronRight, House, LayoutDashboard, Radar, FileCheck2, Workflow } from 'lucide-react'
+import { Bot, ChevronRight, House, LayoutDashboard, Radar, FileCheck2, GitCompare, Workflow } from 'lucide-react'
 
 import { LeasedMotionPanel, ManualStopButton } from '@/components/control/leased-motion-panel'
 import { useManualOwner } from '@/hooks/use-manual-owner'
@@ -13,6 +13,7 @@ const SimulationPage = lazy(() => import('@/components/simulation/simulation-pag
 const CooperationPage = lazy(() => import('@/components/cooperation/cooperation-page').then((module) => ({ default: module.CooperationPage })))
 import { ExpansionPanel } from '@/components/roadmap/expansion-panel'
 const WorkbenchPage = lazy(() => import('@/components/workbench/workbench-page').then((module) => ({ default: module.WorkbenchPage })))
+const RegressionPage = lazy(() => import('@/components/workbench/regression-page').then((module) => ({ default: module.RegressionPage })))
 import { ConnectionStatusPanel } from '@/components/status/connection-status-panel'
 import { RobotStatePanel } from '@/components/status/robot-state-panel'
 import { RuntimeModePanel } from '@/components/status/runtime-mode-panel'
@@ -46,7 +47,7 @@ function App() {
   }, [])
 
   function navigate(next: AppRoute) {
-    const pathname = next === 'workbench' ? '/workbench' : next === 'results' ? '/results' : next === 'cooperation' ? '/cooperation' : next === 'simulation' ? '/simulation' : next === 'radar' ? '/radar' : '/'
+    const pathname = next === 'workbench' ? '/workbench' : next === 'results' ? '/results' : next === 'regression' ? '/regression' : next === 'cooperation' ? '/cooperation' : next === 'simulation' ? '/simulation' : next === 'radar' ? '/radar' : '/'
     if (window.location.pathname === pathname) {
       return
     }
@@ -72,6 +73,7 @@ function App() {
         <RadarWorkbenchPage active={route === 'radar'} onBack={() => navigate('dashboard')} onPatrol={() => navigate('workbench')} />
       </Suspense>}
       {route === 'results' && <Suspense fallback={<div className="workspace-loading">正在读取成果与验收…</div>}><WorkbenchPage onNavigate={navigate} voiceController={voiceController} /></Suspense>}
+      {route === 'regression' && <Suspense fallback={<div className="workspace-loading">正在打开配送对照…</div>}><RegressionPage /></Suspense>}
       {route === 'dashboard' && <StationSurface navigate={navigate} manual={manual} />}
     </StationFrame>
   )
@@ -83,6 +85,7 @@ const workspaces = [
   { route: 'radar', label: '雷达与地图', icon: Radar },
   { route: 'cooperation', label: '车臂协同', icon: Workflow },
   { route: 'results', label: '成果验收', icon: FileCheck2 },
+  { route: 'regression', label: '配送回归', icon: GitCompare },
 ] as const
 
 function StationFrame({ route, navigate, children, stop, manualEnabled }: {
@@ -108,7 +111,7 @@ function StationFrame({ route, navigate, children, stop, manualEnabled }: {
         <div className="station-sidebar-note"><span>FishBot + SO101</span><small>控制 · 感知 · 协作</small></div>
       </aside>
       <div className="station-workspace">
-        <div className="station-topbar"><span>FishBot <ChevronRight size={14} /> <strong>{workspaces.find((item) => item.route === (route === 'simulation' ? 'workbench' : route))?.label}</strong></span>{stop}<RuntimeContextStatus route={route === 'dashboard' && manualEnabled ? 'workbench' : route} /></div>
+        <div className="station-topbar"><span>FishBot <ChevronRight size={14} /> <strong>{workspaces.find((item) => item.route === (route === 'simulation' ? 'workbench' : route))?.label}</strong></span>{stop}<RuntimeContextStatus route={route === 'regression' ? 'results' : route === 'dashboard' && manualEnabled ? 'workbench' : route} /></div>
         {children}
       </div>
     </div>

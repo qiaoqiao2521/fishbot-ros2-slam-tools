@@ -53,6 +53,20 @@ class TimingImportTest(unittest.TestCase):
         path.write_text("\n".join(x if isinstance(x, str) else json.dumps(x) for x in items) + "\n")
         return path
 
+    def test_r2_route_markers_keep_samples_without_claiming_full_transport(self):
+        result=json.loads((self.run/'result.json').read_text())
+        result['orders'][0]['scope']='route';self.write('result.json',result)
+        markers=json.loads((self.run/'order-1/markers.json').read_text())
+        for event in markers['events']:event['kind']=event['kind'].replace('full_','route_')
+        self.write('order-1/markers.json',markers)
+        self.rows([self.http(100,'delivery'),self.physics(100.01,10.,1),self.physics(100.03,10.02,2)])
+        report=import_run(self.run,self.output);case=report['cases'][0]
+        self.assertEqual(case['scope'],'route')
+        self.assertFalse(case['full_transport_acceptance_claimed'])
+        self.assertGreater(case['trajectory']['sample_count'],0)
+        self.assertFalse(case['original_verdict']['original_score_passed'])
+        self.assertFalse(public_report(report)['cases'][0]['full_transport_acceptance_claimed'])
+
     def test_keeps_original_verdict_and_separates_route_from_egress(self):
         self.rows([self.http(100, "arm_load"), self.http(110, "egress"), self.http(122, "done")])
         report = import_run(self.run, self.output)

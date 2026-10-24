@@ -194,8 +194,8 @@ def request_identity(body, *, cancel=False, now=None, episode_id=None):
 def task_scope(body):
     """The legacy start request remains a complete transport task."""
     value = body.get('scope', 'transport') if isinstance(body, dict) else None
-    if value not in ('dock', 'transport'):
-        raise Rejected('任务范围须为 dock 或 transport')
+    if value not in ('dock', 'transport', 'route'):
+        raise Rejected('任务范围须为 dock、transport 或已恢复分支的 route')
     return value
 
 

@@ -137,12 +137,13 @@ class Workflow:
 
     def _validate_ledger(self):
         value = self.data
+        scope=value.get('scope','transport') if isinstance(value,dict) else None
         if (not isinstance(value, dict) or type(value.get('schema')) is not int or value['schema'] != 1
                 or value.get('endpoint') != self.bridge.endpoint
                 or type(value.get('revision')) is not int or value['revision'] < 1
                 or value.get('status') not in {'waiting_ready', 'active', 'canceling', 'unknown',
                                               'waiting_quiet', 'waiting_reset', 'reset_pending',
-                                              'fault', 'succeeded'}):
+                                              'fault', 'succeeded'} or scope not in ('transport','route')):
             raise ContractError('invalid ledger or different bridge endpoint')
         identity(value['workflow_id'])
         identity(value['episode_id'])
@@ -169,8 +170,10 @@ class Workflow:
                 if (attempt['task_id'] in tasks or attempt['dispatch']['body']['task_id'] != attempt['task_id']
                         or attempt['dispatch']['body']['episode_id'] != attempt['episode_id']
                         or set(attempt['dispatch']['body']) != ({'task_id', 'episode_id', 'issued_at'}
+                            | ({'scope'} if 'scope' in value else set())
                             | ({'delivery_pose'} if target is not None else set())
                             | ({'delivery_approach_poses'} if approaches is not None else set()))
+                        or ('scope' in value and attempt['dispatch']['body'].get('scope')!=scope)
                         or ('delivery_pose' in attempt) != (target is not None)
                         or (target is not None and (delivery_pose(attempt['delivery_pose']) != target
                             or delivery_pose(attempt['dispatch']['body']['delivery_pose']) != target))
@@ -214,9 +217,11 @@ class Workflow:
             os.close(descriptor)
 
     def create(self, batches, machine='laundry-machine-1', delivery_poses=None, scene_profile=None,
-               delivery_approach_poses=None):
+               delivery_approach_poses=None, scope='transport'):
         if self.data is not None:
             raise ContractError('ledger already exists; it cannot be reinitialized')
+        if scope not in ('transport','route'):
+            raise ContractError('workflow scope must be transport or an explicit R2 route')
         if (not isinstance(batches, (list, tuple)) or not batches
                 or not machine or not isinstance(machine, str)):
             raise ContractError('a nonempty batch list and a machine are required')
@@ -255,6 +260,8 @@ class Workflow:
                                **({'delivery_approach_poses': copy.deepcopy(approaches[batch])}
                                   if batch in approaches else {})}
                               for batch in batches]}
+        if scope!='transport':
+            self.data['scope']=scope
         self._save()
         return self.snapshot()
 
@@ -291,6 +298,8 @@ class Workflow:
                 or len({canonical(item['task']) for item in candidates}) != 1):
             raise ContractError('conflicting task history or episode')
         task = candidates[0]['task']
+        if 'scope' in self.data and task.get('scope')!=self.data['scope']:
+            raise ContractError('original task ID has a different scope')
         if ('delivery_pose' in attempt
                 and delivery_pose(task.get('delivery_pose')) != attempt['delivery_pose']):
             raise ContractError('original task ID has a different delivery_pose')
@@ -364,6 +373,8 @@ class Workflow:
         record = {'body': {'task_id': task_id, 'episode_id': self.data['episode_id'],
                            'issued_at': self.clock()},
                   'outcome': 'attempted', 'receipt': None}
+        if 'scope' in self.data:
+            record['body']['scope']=self.data['scope']
         attempt = {'task_id': task_id, 'episode_id': self.data['episode_id'], 'status': 'unknown',
                    'ready_event_id': event['event_id'], 'dispatch': record, 'cancel': None, 'task': None}
         if 'delivery_pose' in job:

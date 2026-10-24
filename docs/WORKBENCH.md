@@ -41,6 +41,25 @@
 
 编辑器与复核台继续在原页面处理导出和审批。两者只绑定电脑loopback；手机的localhost指手机自身，因此不开放错误的本机直链。当前前端若部署到其他服务器，需显式配置这些只读代理；快照无需依赖分析服务在线。
 
+## 配送回归与只读双轨迹
+
+`/regression`读取两次真实回合的配送投影。左右共用原世界坐标、源时间锚点和显示边界；Ghost不平移轨迹，缺帧处断开。货物中心与机械臂关节投影来自保存数据；原任务、episode、检查点和原生Goal终态可展开核对。失败、未知与保护介入分别保留，不从回放画面重新判分。
+
+复用原耗时导入器生成私有摘要；在项目根、已有规划Python环境运行：
+
+```bash
+python -B tools/cooperation_comparison.py \
+  --run /absolute/private/run-a --run /absolute/private/run-b \
+  --label 基线 --label 候选 --group baseline --group candidate \
+  --output /absolute/private/new-comparison
+```
+
+命令只读原记录，在独立目录生成`comparison.json`、可重建SQLite与10Hz展示流。通用日志回放仍在既定Lichtblick工作台；此页只处理配送对齐和证据投影，不接ROS动作。
+
+前端开发/预览服务通过`FISHBOT_REGRESSION_REPORT=/absolute/private/comparison.json`选择该文件。默认读取`~/.cache/fishbot/continuous-twin/latest/comparison.json`。`/workbench/continuous-comparison.json`仅允许GET，浏览器不能选择服务器文件路径。也可直接导入8MiB以内的本地JSON；404或语法错误保留已有报告。
+
+该页面不派发实验。正式矩阵编辑、原owner派发、5+5与留出/完整回验仍按[连续孪生计划](../plans/continuous-twin-regression-20261024/task_plan.md)推进；当前两次R2原参数路线均未通过，不能把对照页验收当成配送成功。原始记录与详细轨迹默认本地保留，不随代码公开。
+
 ## 启动与验证
 
 条件：已安装项目现有Node/npm依赖，端口空闲。从前端目录启动：

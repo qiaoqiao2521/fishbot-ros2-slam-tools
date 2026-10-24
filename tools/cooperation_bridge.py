@@ -2,6 +2,7 @@
 """Real Nav2 and contact-feedback orchestration; local synthetic worlds only."""
 import argparse
 import copy
+import uuid
 import hashlib
 import json
 import math
@@ -120,6 +121,10 @@ def make_server(bridge, args, *, runtime):
                 try:self.send_json(200,bridge.reset_record(path.rsplit('/',1)[1]))
                 except Rejected as error:self.send_json(error.status,{'error':str(error),'outcome':'rejected'})
                 return
+            if path.startswith('/coop-api/checkpoint/'):
+                try:self.send_json(200,bridge.checkpoint_record(path.rsplit('/',1)[1]))
+                except Rejected as error:self.send_json(error.status,{'error':str(error),'outcome':'rejected'})
+                return
             if path=='/coop-api/frame.jpg':
                 try:
                     with bridge.lock:
@@ -145,6 +150,7 @@ def make_server(bridge, args, *, runtime):
                 if path=='/coop-api/start':result=bridge.start(body)
                 elif path=='/coop-api/cancel':result=bridge.cancel(body)
                 elif path=='/coop-api/reset':result=bridge.reset_episode(body)
+                elif path=='/coop-api/checkpoint':result=bridge.request_checkpoint(body)
                 else:raise Rejected('未知接口',404)
                 self.send_json(200,result)
             except (Rejected,ValueError,TypeError) as error:self.send_json(getattr(error,'status',400),{'error':str(error),'outcome':'rejected'})
@@ -235,6 +241,7 @@ def run(args):
             self.reset_acks = {}
             self.reset_runtime = {}
             self.last_reset_id = None
+            self.checkpoint_records = {}
             self.history = []
             self.buffer = Buffer()
             self.listener = TransformListener(self.buffer, self)
@@ -285,6 +292,8 @@ def run(args):
                                    durability=DurabilityPolicy.VOLATILE)
             self.reset_pub = self.create_publisher(String, '/cooperation/reset_request', reset_qos)
             self.create_subscription(String, '/cooperation/reset_result', self.observe_reset, reset_qos)
+            self.checkpoint_pub = self.create_publisher(String, '/cooperation/checkpoint_request', reset_qos)
+            self.create_subscription(String, '/cooperation/checkpoint_result', self.observe_checkpoint, reset_qos)
             self.reset_clearers = [self.create_client(ClearEntireCostmap, path) for path in (
                 '/global_costmap/clear_entirely_global_costmap', '/local_costmap/clear_entirely_local_costmap')]
             latest_state_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -1231,11 +1240,59 @@ def run(args):
                         f'误差 {errors[joint]:.4f}rad，仿真时间 {age:.2f}/{source_limit:.2f}s')
                 time.sleep(.02)
 
+        def execute_route_branch(self, token):
+            raw = self.check()
+            branch = raw.get('checkpoint_branch') or {}
+            if branch.get('level') != 'R2' or branch.get('restored') is not True:
+                raise RuntimeError('载货路线切片需要明确恢复的R2实例')
+            self.loaded = True
+            raw = self.wait_condition(lambda value: transport_handoff_ready(value, manifest['arm_home_qpos6']),
+                                      duration=.7, timeout=8., carrying=True)
+            start = raw['cargo']['position'][:2]
+            self.apply_loaded_parameters(token)
+            self.event('car','delivery','R2检查点分支开始载货路线；本回合不执行装货。')
+            self.delivery_route()
+            raw = self.wait_condition(lambda value: transport_handoff_ready(value, manifest['arm_home_qpos6']),
+                                      duration=1., timeout=8., carrying=True)
+            if math.hypot(raw['cargo']['position'][0]-start[0],raw['cargo']['position'][1]-start[1])<.5:
+                raise RuntimeError('R2载货路线实际位移不足0.5米')
+            self.event('car','delivered','R2载货路线结束，货物留盘且车辆停稳。')
+            if not self.cleanup(token):
+                raise RuntimeError('R2路线清理证据未知')
+            with self.lock:
+                self.owner(token)
+                self.task.update(status='succeeded',message='R2载货路线完成；未执行本回合装货')
+                self.persist()
+
+        def capture_delivery_checkpoint(self):
+            if not manifest.get('capture_before_delivery'):
+                return
+            self.wait_condition(lambda value: transport_handoff_ready(value, manifest['arm_home_qpos6']),
+                                duration=.7, timeout=8., carrying=True)
+            request = self.request_checkpoint({'request_id':str(uuid.uuid4()),
+                'context':{'purpose':'loaded_after_egress_before_delivery'}})
+            deadline = time.monotonic()+10.
+            while time.monotonic()<deadline:
+                self.check(carrying=True)
+                receipt = self.checkpoint_record(request['request_id'])
+                if receipt['status']=='succeeded':
+                    with self.lock:
+                        self.task['delivery_checkpoint'] = receipt
+                        self.persist()
+                    return
+                if receipt['status']=='failed':
+                    raise RuntimeError('出站检查点保存失败：'+receipt.get('message',''))
+                time.sleep(.02)
+            raise RuntimeError('出站检查点回执未知；保留原请求，不自动重发')
+
         def execute(self, token):
             self.worker.token = token
             try:
                 scope = self.task.get('scope', 'transport')
                 self.wall_deadline = time.monotonic()+(60 if scope == 'dock' else 360)
+                if scope == 'route':
+                    self.execute_route_branch(token)
+                    return
                 self.event('car','docking','前往 SO101 工位，请等待停靠。')
                 if self.perception_config['mode'] == 'vision':
                     # The original staging view avoids the arm's oblique
@@ -1318,6 +1375,7 @@ def run(args):
                 elif self.task.get('egress_pose') is not None:
                     self.event('car','delivery','收到交接确认，先驶出工位，再前往交付点。')
                     self.navigate(copy.deepcopy(self.task['egress_pose']),carrying=True)
+                self.capture_delivery_checkpoint()
                 self.event('car','delivery','收到交接确认，驶往交付点。')
                 self.delivery_route()
                 raw = self.wait_condition(lambda v: transport_handoff_ready(v, manifest['arm_home_qpos6']),
@@ -1398,6 +1456,61 @@ def run(args):
             return {'available': reason is None, 'reason': reason or '可恢复到新合成回合',
                     'pending': self.reset_in_progress(),
                     'last': last}
+
+        def request_checkpoint(self, body):
+            """Capture through the existing physics owner; no second HTTP writer."""
+            if not isinstance(body, dict):
+                raise Rejected('检查点请求必须是JSON对象')
+            identity = str(uuid.UUID(body.get('request_id') or str(uuid.uuid4())))
+            with self.lock:
+                if identity in self.checkpoint_records:
+                    return copy.deepcopy(self.checkpoint_records[identity])
+                if not manifest.get('checkpoint_directory'):
+                    raise Rejected('此实例未配置检查点目录')
+                raw = self.fresh()
+                context = {'task_id': self.task['id'], 'stage': self.task['stage'],
+                    'native_actions': self.native_action_state(), 'source_stamp':raw['stamp'],
+                    'localization_source':'parent map->base_footprint TF',
+                    'localization_covariance':None,
+                    'caller_context':body.get('context', {})}
+                try:
+                    context['localized_pose'] = self.localized()
+                except Exception as error:
+                    context['localized_pose'] = None
+                    context['localization_missing_reason'] = str(error)
+                try:
+                    json.dumps(context, allow_nan=False)
+                except (ValueError, TypeError):
+                    context['caller_context'] = {}
+                    self.get_logger().warning('忽略不能序列化的可选检查点注释')
+                request = {'request_id':identity, 'episode_id':self.episode_id,
+                           'issued_at':time.time(), 'action':'capture', 'context':context}
+                self.checkpoint_records[identity] = {**request, 'status':'pending'}
+                self.checkpoint_pub.publish(String(data=json.dumps(request,allow_nan=False)))
+                return copy.deepcopy(self.checkpoint_records[identity])
+
+        def observe_checkpoint(self, message):
+            try:
+                value = json.loads(message.data)
+                with self.lock:
+                    original = self.checkpoint_records.get(value['request_id'])
+                    if (original is None or original['episode_id'] != value['episode_id']
+                            or value.get('status') not in ('succeeded','failed')):
+                        return
+                    self.checkpoint_records[value['request_id']] = {**original, **value}
+                    while len(self.checkpoint_records)>128:
+                        terminal = next((key for key,item in self.checkpoint_records.items()
+                                         if item.get('status') in ('succeeded','failed')), None)
+                        if terminal is None:break
+                        self.checkpoint_records.pop(terminal)
+            except (KeyError, ValueError, TypeError) as error:
+                self.get_logger().warning('忽略无效检查点回执：'+str(error))
+
+        def checkpoint_record(self, identity):
+            with self.lock:
+                if identity not in self.checkpoint_records:
+                    raise Rejected('未知检查点请求',404)
+                return copy.deepcopy(self.checkpoint_records[identity])
 
         def observe_reset(self, message):
             try:
@@ -1712,7 +1825,8 @@ def run(args):
                 raise ValueError('后向相机帧已更新或缺失')
             return path
 
-        def state(self):
+        def state(self, *, scope=None):
+            scope = scope or ('route' if manifest.get('restore_checkpoint') else 'transport')
             context = self.timing_context(getattr(self, 'raw', None))
             waiting_at = time.monotonic()
             with self.lock:
@@ -1739,7 +1853,14 @@ def run(args):
                     reason='共享物理世界与 Nav2 已就绪' if ready else '等待原生导航服务'
                     self.station_publishers()
                     station=manifest['station_offset']; target=raw['cargo']['position']
-                    if math.hypot(target[0]-station[0]-.24,target[1]-station[1]+.13)>.035:
+                    if scope == 'route':
+                        branch = raw.get('checkpoint_branch') or {}
+                        if (not manifest.get('restore_checkpoint') or branch.get('level')!='R2'
+                                or branch.get('restored') is not True
+                                or branch.get('episode_id')!=raw.get('episode_id')
+                                or not transport_handoff_ready(raw, manifest['arm_home_qpos6'])):
+                            ready=False;reason='R2分支来源或载货停稳条件尚未就绪'
+                    elif math.hypot(target[0]-station[0]-.24,target[1]-station[1]+.13)>.035:
                         ready=False; reason='物体已离开取货盘；本回合完成后需重置合成场景'
                     if any(raw[f'{body}_forbidden_contact_{kind}']
                            for body in ('arm','car') for kind in ('count','total')):
@@ -1831,16 +1952,16 @@ def run(args):
                 if existing is not None:
                     return existing
                 episode = self.episode_id
-                current=self.state()
+                current=self.state(scope=scope)
                 if not current['ready']: raise Rejected(current['reason'],409)
             # Compilation and native geometry queries never hold the telemetry
             # lock. Physics/observation callbacks continue updating their cache.
             preflight = (self.validate_delivery_goal(delivery)
-                         if scope == 'transport' and 'delivery_pose' in body else None)
+                         if scope in ('transport','route') and 'delivery_pose' in body else None)
             if preflight is not None:
                 preflight.update(cargo_minimum_net_displacement_m=.5, cargo_transport_validated=False)
             approach_preflight = ([self.validate_delivery_goal(goal) for goal in approaches]
-                                  if scope == 'transport' else [])
+                                  if scope in ('transport','route') else [])
             with self.lock:
                 if self.episode_id != episode:
                     raise Rejected('场景回合已变化，请读取最新状态后重新开始',409)
@@ -1848,7 +1969,7 @@ def run(args):
                 existing = self.existing_start(task_id, scope, delivery, approaches)
                 if existing is not None:
                     return existing
-                current=self.state()
+                current=self.state(scope=scope)
                 if not current['ready']: raise Rejected(current['reason'],409)
                 self.archive_current()
                 self.known_ids.add(task_id)

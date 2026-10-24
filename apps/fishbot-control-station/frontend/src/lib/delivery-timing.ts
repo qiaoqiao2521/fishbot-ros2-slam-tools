@@ -10,6 +10,7 @@ export interface TimingGap {
   before_wall_s: number | null; after_wall_s: number | null; stage_before: string; stage_after: string
 }
 export interface TimingCase {
+  scope: string
   id: string; label: string; task_id: string; episode_id: string; vehicle: string; sensor: string; scene_id: string; observation_mode: string
   start_wall_s: number | null; end_wall_s: number | null; task_budget_s: number | null; task_elapsed_s: number | null
   route: { start_wall_s: number | null; end_wall_s: number | null; elapsed_s: number | null; budget_s: number | null; remaining_s: number | null; boundary: string }
@@ -44,6 +45,7 @@ export function parseDeliveryTiming(input: unknown): TimingReport {
     const guardValues = list(c.guard).map(item => numeric(record(item).tripped_observed_contiguous_source_duration_s))
     return [{
       id: text(c.id, `case-${index}`), label: text(c.label, `案例 ${index + 1}`), task_id: text(c.task_id), episode_id: text(c.episode_id),
+      scope: text(c.scope, 'transport'),
       vehicle: text(c.vehicle), sensor: text(c.sensor), scene_id: text(c.scene_id), observation_mode: text(c.observation_mode),
       start_wall_s: numeric(c.start_wall_s), end_wall_s: numeric(c.end_wall_s), task_budget_s: numeric(c.task_budget_s), task_elapsed_s: numeric(c.task_elapsed_s),
       route: { start_wall_s: numeric(route.start_wall_s), end_wall_s: numeric(route.end_wall_s), elapsed_s: numeric(route.elapsed_s), budget_s: numeric(route.budget_s), remaining_s: numeric(route.remaining_s), boundary: text(route.boundary) },

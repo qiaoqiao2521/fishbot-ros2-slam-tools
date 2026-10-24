@@ -165,7 +165,7 @@ def scan_observer(path: Path, case: dict, trajectory: Path) -> dict:
                     # Keep the next valid display sample disconnected as well.
                     clock_break_pending = True
                     continue
-                # physics_hz describes MuJoCo integration (2500Hz in K), not the
+                # physics_hz describes MuJoCo integration, not the
                 # observer publication cadence. This importer uses K's 50Hz contract.
                 gap_before = delta > 1 or stamp - previous["source_s"] > .03
                 if gap_before:
@@ -262,11 +262,14 @@ def import_run(run_path: Path, output: Path) -> dict:
         markers = read_json(folder / "markers.json", case_warnings)
         matching = [obj(event) for event in markers.get("events", [])
                     if obj(event).get("task_id") == order.get("task_id") and obj(event).get("episode_id") == order.get("episode_id")]
-        start = next((event.get("wall_time") for event in matching if event.get("kind") == "full_started"), None)
-        end = next((event.get("wall_time") for event in matching if event.get("kind") == "full_finished"), None)
+        scope=order.get('scope',declaration.get('scope','transport'))
+        prefix='route' if scope=='route' else 'full'
+        start = next((event.get("wall_time") for event in matching if event.get("kind") == prefix+"_started"), None)
+        end = next((event.get("wall_time") for event in matching if event.get("kind") == prefix+"_finished"), None)
         receipt = obj(obj(order.get("delivery_route_budget")).get("receipt"))
         metric = obj(order.get("metrics"))
         case = {"id": f"{source.get('run_id', 'unknown')}:{order.get('id', index)}", "label": order.get("id", f"order-{index}"),
+                'scope':scope,'full_transport_acceptance_claimed':scope=='transport',
                 "source_run_id": source.get("run_id"), "task_id": order.get("task_id"), "episode_id": order.get("episode_id"),
                 "vehicle": profile.get("vehicle", "unknown"), "sensor": profile.get("sensors", "unknown"),
                 "scene_id": declaration.get("scene_id", "unknown"),
@@ -330,6 +333,8 @@ def public_report(report: dict) -> dict:
     for case in report["cases"]:
         exported = {key: case[key] for key in ("start_wall_s", "end_wall_s", "task_budget_s", "task_elapsed_s", "route", "physical",
                     "sampling", "guard", "unavailable", "warnings", "import_status", "evidence_refs", "trajectory")}
+        exported.update(scope=case.get('scope','transport'),
+                        full_transport_acceptance_claimed=case.get('full_transport_acceptance_claimed',True))
         for key in ("id", "label", "source_run_id", "task_id", "episode_id", "vehicle", "sensor", "scene_id", "observation_mode"):
             exported[key] = identifier(case.get(key))
         exported["route"] = {k: identifier(v) if k in ("clock", "boundary") else v for k, v in case["route"].items()}

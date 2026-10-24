@@ -193,6 +193,60 @@ def drive_egress_delivery_fixture():
     return records,samples,attempt,events
 
 
+class RouteBranchTests(unittest.TestCase):
+    def fixture(self):
+        records,samples,unused,events=delivery_fixture()
+        events[0].update(kind='route_started',scope='route',wall_time=105.,snapshot_id='snapshot')
+        events[1]['kind']='route_finished'
+        for item in samples:
+            item['raw']['world_session_id']='world'
+            item['raw']['checkpoint_branch']={'restored':True,'level':'R2','snapshot_id':'snapshot',
+                'episode_id':'episode','parent_episode_id':'parent',
+                'world_session_id':'world','parent_world_session_id':'parent-world',
+                'old_motion_commands_restored':False,'external_components_restored':False,
+                'integration_readback_max_abs_error':0.}
+        return records,samples,events
+
+    def test_loaded_native_route_passes_without_claiming_a_new_grasp(self):
+        records,samples,events=self.fixture()
+        result=oracle.route_checks(records,samples,audit(),events)
+        self.assertTrue(result['passed'])
+        self.assertFalse(result['full_transport_acceptance_claimed'])
+        self.assertFalse(result['grasp_or_release_in_this_episode_claimed'])
+        self.assertEqual(result['task_delivery_acceptance']['attempts'][0]
+                         ['carrying_nav_uuid'],'03'*16)
+
+    def test_stale_origin_dropped_cargo_and_unknown_native_result_do_not_pass(self):
+        for kind in ('old_episode','old_world','wrong_snapshot','readback','dropped','unknown_native'):
+            records,samples,events=self.fixture()
+            first=next(item for item in samples if item['wall_time']>=105.)
+            if kind=='old_episode':first['raw']['checkpoint_branch']['episode_id']='old'
+            if kind=='old_world':first['raw']['checkpoint_branch']['world_session_id']='parent-world'
+            if kind=='wrong_snapshot':events[0]['snapshot_id']='different'
+            if kind=='readback':first['raw']['checkpoint_branch']['integration_readback_max_abs_error']=.001
+            if kind=='dropped':samples[400]['raw']['cargo_tray_floor_contact']=False
+            if kind=='unknown_native':records[2]['payload']['status_list'][0]['status']=2
+            with self.subTest(kind=kind):
+                self.assertFalse(oracle.route_checks(records,samples,audit(),events)['passed'])
+
+    def test_recording_failure_cannot_be_overridden_by_good_route_metrics(self):
+        settings=SimpleNamespace(scope='route',expected_outcome='success',
+            markers=Path('/unused'),expected_episode='episode',reset_receipt=None,
+            allow_initial_episode=True,score_only=None,output=Path('/unused'))
+        records,samples,events=self.fixture()
+        value={'passed':False,'source_integrity':{'passed':True,
+            'current_driver_matches_collection_end':True},'recording_integrity':{'passed':False}}
+        with patch.object(oracle,'options',settings), \
+                patch.object(oracle,'extra_checks',return_value={'passed':True,'windows':[]}), \
+                patch.object(oracle,'transport_checks',return_value={'passed':False}), \
+                patch.object(oracle,'observation_metrics',return_value={}), \
+                patch.object(oracle,'fault_checks',return_value={'passed':True}), \
+                patch.object(oracle,'plant_guard_telemetry',return_value={}):
+            result=oracle.augment_score(value,records,samples,audit(),events)
+        self.assertTrue(result['route_acceptance']['passed'])
+        self.assertFalse(result['passed'])
+
+
 class TaskDeliveryTests(unittest.TestCase):
     def score(self, fixture):
         records, samples, attempt, events = fixture
