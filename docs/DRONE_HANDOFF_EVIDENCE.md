@@ -89,4 +89,39 @@ python3 -m unittest test_drone_handoff_evidence
 17项新检查与原Replay8项共25项通过，无跳过。覆盖错task/goal、重复ID、时序/域外、NaN/超大JSON整数、畸形PVA、伪ACK和缺文件/坏行/坏UTF-8流的局部降级；输入保持不变。
 根137项直接原文件读回通过，逐快照核身份/源行/时序/PVA形状，四份原源文件前后逐字节相同；`handoff-evidence-readback.json`保存结果。这些检查验证读取器，不验证飞行或采用。
 
-Next/owner：根Codex先将上述公共上下文、事件关联和时钟歧义做成离线正反夹具，复用已有Replay审计/拒绝逻辑；不新写控制器，不改原硬门，也不靠旧原包伪造新采集字段。采集点和冻结边界分开，M2仍部分完成、M3不启动，动态闭环未过。
+## 六阶段离线事件夹具（2026-10-25）
+
+`drone-handoff-event-fixtures.py`复用原`Replay`完整硬审计/剩余占据/终端检查和冻结`frames.py`转换。使用原#4/h=.1、zero_A_J尾段和原起点/盒/限；不重新优化，不生成新飞行数据。
+每个夹具隔离一个候选、一个发送样本和一个消费周期。阶段为ready、audited、RPC开始、RPC返回、PX4输入观察、控制器消费观察。输入/消费事件不填写原生消息没有的候选UUID或sample序号。
+跨域只接受`declared_fixture_correspondence`显式点对应区间。它不是实测校时结果，也不是通用时间转换器；原`clock_bracket`仅证明录制可用性，不能代替源事件时钟对应。
+
+34个声明夹具期望全部吻合：6个一致、28个不成立、未评分0。六个正例分别验证以下行为：
+
+| 正例 | 允许的行为 |
+| --- | --- |
+| normal | 同候选版本、原相位、当前地图、单个正常消费周期 |
+| input_before_rpc_return | 输入先抵达，SDK随后返回；不强排两个并行环节 |
+| sim_paused | host单调时钟前进而sim不变；保留原相位 |
+| map_changed_and_rechecked | 新revision经原Replay复审仍安全；revision变化本身不拒绝 |
+| native_resends_unique_consumed_timestamp | 多条原生重发按实际使用的raw input timestamp唯一关联 |
+| rejected_new_candidate_keeps_original | 新提案被原门拒绝后继续原有效候选，不把拒绝当成全链中止 |
+
+负例覆盖版本/body/采样相位串线、跨goal、缺/重sample、clock epoch和源时钟回退、缺对应锚/区间重叠、原生时钟改名绕锚、地图声明过期、终端不足/新占据、未知A、篡改系数、旧输入/failsafe/update失败、payload符号/frame不符、伪原生UUID、重复输入timestamp、缺消费见证及曲线已结束。
+候选绑定至采样时`Replay.server.active`的实际body、ID、起点；仅绑定最初ready事件会漏掉中途换候选。新提案被拒但旧候选保留时，仍可记录旧候选的完整一致链。
+PX4 boot域及epoch独立声明并必须与sim异域；不能将两条原生事件直接改名为sim、删掉对应锚后通过。区间不能证明先后时标ambiguous，不取中点。
+
+payload按声明的MAVLink float32表示比较，仅用于关联，不修改原物理PVA、速度/加速度/高度或占据门。极端原点下两个ENU位置可能落入同一float32 bin；物理状态偏移仍由原Replay拒绝，不能把wire相等当作跟踪误差预算。
+原selector已因状态、占据或终端拒绝时，payload关联标为未评分，保留原拒绝，不再制造附带的payload不匹配原因。坏case局部未评分并继续；NaN原夹具仅省略不可JSON化的嵌入，保留诊断并warning，不填0或中断整份输出。
+
+14项新检查加原17项legacy和8项Replay，共39项通过，无跳过。根145项独立读回复用原Replay逐case重审，另核源不变、原起点/盒/限、NED三阶payload、原生无伪身份与原拒绝分列，全部通过。
+审查实际复现的三处假阳性/输出缺口已修并覆盖：采样前换活跃候选、原生clock改名绕锚、NaN fixture阻断严格JSON序列化。忽略目录保存`handoff-event-fixtures.json`和`handoff-event-readback.json`。
+
+```sh
+STOP_REPORT_ROOT=apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6
+python3 apps/fishbot-control-station/workbench-tools/drone-handoff-event-fixtures.py --reanchor-report "$STOP_REPORT_ROOT/recorder-PV-reanchored-stopping-tails.json" --output "$STOP_REPORT_ROOT/handoff-event-fixtures-rerun.json"
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_handoff_event_fixtures test_drone_handoff_evidence test_drone_committed_replay
+```
+
+`fixture_chain_consistent`只表示声明夹具一致。所有行和总报告均保留`actual_execution_admission=not_performed`，动态闭环仍未通过。没有真实clock对应、完整known-free/终端或控制器消费采集，新事件合同不能从旧原包补出这些事实。
+Next/owner：根Codex准备默认关闭、可审查的最小旁路观测补片，复用现有任务JSONL和PX4消费点；先给出精确diff及离线验证，不应用到冻结树、不启动仿真。停止扩同类数值/事件网格；真实闭环仍需后续解冻后的新采集。drone c866441、PX4 d6f12ad和GCOPTER e0444f6保持，M2部分完成、M3不启动。

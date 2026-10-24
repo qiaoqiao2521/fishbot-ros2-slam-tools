@@ -1,5 +1,15 @@
 # 实施进度
 
+## 2026-10-25 M2六阶段事件与时钟夹具
+
+- Current：外部离线合同34声明case期望全吻合，6一致/28不成立/未评分0。全部actual_execution_admission=not_performed；M2部分完成、M3冻结、动态未过、goal active。
+- Done：新drone-handoff-event-fixtures.py复用原Replay完整硬审计/剩余占据/终端与冻结frames.py。原#4/h=.1 zeroAJ尾、原起点/盒/V1.8/A1/Z2.2不变，不再优化。只隔离一个候选/样本/消费周期，候选版本、实际active body和sample相位均绑定；原生事件不伪造UUID/seq。
+- 时钟/消费：跨域仅显式fixture点对应区间，PX4 boot域/epoch角色不得重标sim，重叠区间标歧义；host只核因果边，不换sim。SDK返回可晚于输入；重发按consumer.used_input_timestamp唯一关联；normal/update成功与old_input/failsafe分开，后两者不晋级新候选。
+- 原门：地图revision变化后原Replay复审可通过；缺revision/终端不足/新占据/未知A/篡改曲线均原门拒。拒绝新提案但继续旧有效候选为正例。selector拒绝时payload关联不评分，避免混因；float32仅为wire关联，不放宽物理状态。
+- 验证：14新＋legacy17＋Replay8共39过，无跳过；根145项原Replay重审/原起点盒限/独立NED PVA/原生身份/拒绝分列及source不变读回过。审查实复现的active替换漏检、原生时钟重标绕锚、NaN fixture阻断JSON三项已修/补负例；坏case局部处理，后项继续。
+- 交接：docs/DRONE_HANDOFF_EVIDENCE.md新节保正负行为表/CLI/范围，原忽略目录handoff-event-fixtures.json及handoff-event-readback.json，不入Git。无Web/服务、训练、ROS节点、仿真、控制、新飞行/落地；drone/PX4/GCOPTER源码保持。
+- Next/owner：根Codex准备默认关闭、可审查的最小旁路观测diff及离线验证，复用现有JSONL/PX4消费点，不应用冻结树，不继续扩同类网格。真实clock/图/终端/消费仍缺，实际闭环需后续新采集。knowledge_status=already_covered，沿用Wiki§20、原生时钟与CapMesh PIT-004，不写memory。
+
 ## 2026-10-25 M2接管证据合同与历史关联
 
 - Current：最小字段/补录点已按冻结源码核对，新增离线只读关联器。原8曲线中7条关联38个post-await PVA reference快照，8号task/goal缺失仍未归属；PX4采用证据0，M2部分完成/M3冻结，goal active。
