@@ -1073,6 +1073,7 @@ def run_ros(args):
             self.create_subscription(String, FAULT_TOPIC, self.handler(self.fault_trigger), 10)
             from rclpy.utilities import get_rmw_implementation_identifier
             self.runtime_observation = {'rmw': get_rmw_implementation_identifier(),
+                'publication_mode_env':os.environ.get('RMW_FASTRTPS_PUBLICATION_MODE'),
                 'ros_dispatch': 'queued_receive_main_owner_apply' if self.callback_inbox else 'inline',
                 'record_write_includes_handler_flush': True,
                 'ephemeral_qos': {topic: {'depth': pub.qos_profile.depth,

@@ -94,11 +94,13 @@ manifest设置`checkpoint_directory`后，原bridge的`POST /coop-api/checkpoint
 
 `tools/cooperation_checkpoint.prepare_ros_branch`从检查点准备新分支。只用父回合记录的map到base TF均值初始化AMCL，缺失时不借真值补齐；粒子、EKF/Nav2/DDS历史明确未恢复。新launch读取`restore_checkpoint`，分配新world/episode身份、保持车辆并清除旧移动命令。
 
-新准备的分支显式设置`checkpoint_warmup.nomotion_updates=3`，沿AMCL原服务请求静止更新；旧manifest缺该配置时保持原行为。`checkpoint_initialization`分别记录服务回执、请求后新源帧及原协方差，协方差异常只作诊断，不称三帧收敛。服务缺失或没有新帧时，沿原readiness时限结束该案例；默认非R2任务不新增预热。
+新准备的分支显式设置`checkpoint_warmup.nomotion_updates=3`。已知分支协方差时，同字段的`initial_pose`保存父均值与36项协方差，先经AMCL原生SetInitialPose提交，再沿原服务请求静止更新；这不是恢复父滤波器协方差。旧manifest缺该配置时保持原行为。`checkpoint_initialization`分别记录实际初始化输入、服务回执、请求后新源帧及原协方差，协方差诊断不作收敛门槛。初始化回执未知不重发，迟到的原回执可对账；服务缺失或没有新帧时沿原readiness时限结束该案例，默认非R2任务不新增预热。
 
 显式`scope=route`仅允许合格R2载货分支，复用原加载参数事务、Nav2路线、货物保持和清理。Workflow在发包前持久保存该scope。默认请求仍为完整transport；route没有本回合装货，不继承原K完整抓放成绩。任务总预算仍为360秒，出站后配送路线独立保持120秒，不把初始化误计入这120秒。
 
-factory增加`--scope route --select-order order-b`用于单个恢复切片；`--checkpoint-samples 5`在原清理确认后测量只读捕获RPC。标签不加载策略，原物理评分不变。当前R1四类与R2静止预热通过，原基线及预热开发轮载货路线仍超时，完整验收状态见[计划进度](../plans/continuous-twin-regression-20261024/progress.md)。
+factory增加`--scope route --select-order order-b`用于单个恢复切片；`--checkpoint-samples 5`在原清理确认后测量只读捕获RPC。标签不加载策略，原物理评分不变。当前R1四类及R2实际先验/静止预热通过，载货仍未通过；最新两个异步开发轮为支撑条件失败，完整验收状态见[计划进度](../plans/continuous-twin-regression-20261024/progress.md)。
+
+复现原完整K启动条件时，显式携带`--publication-mode asynchronous`。bridge状态与physics的loop-timing分别保存实际`publication_mode_env`；factory另存起止系统load。旧source样本仍有效，但缺实际环境观察时不把它称为完全相同的原K基线。以上为诊断字段，不增加执行门槛。
 
 ## CPU 验收
 

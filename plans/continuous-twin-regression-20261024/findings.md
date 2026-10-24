@@ -130,7 +130,24 @@ R1-c四类均通过原/恢复分支各10000步，积分、接触、车货轨迹�
 
 c轮仍失败：与1c/2b使用同一真实装货快照、相同Nav2参数及balanced。预热.558墙秒后原Nav UUID 47d879b28f1942048d86aee4997de9b6实际运行，120.016秒超时，第一进场段未完成；货物实际移动1.868m，保持违例1，末46.59cm/.67499rad。日志在路线约46/72墙秒分别报告Collision detected in trajectory，达到原patience后清图重试；只证明原生预测碰撞阻断，未定位到具体障碍或唯一根因。清理完整、原UUID终态5、连续quiet、guard关闭、参数恢复、源码起止一致及owned关闭分别核实，正常任务仍记失败。AMCL新帧到达不是收敛，补预热不是已证明的路线优化。
 
-继续回源发现明确的初始化合同缺口：同版AmclNode::on_activate在set_initial_pose分支新建PoseWithCovarianceStamped，只填均值、时间与frame，没有给默认零协方差赋值；initial_cov_xx/yy/aa没有本版参数读取点。当前prepare_ros_branch保存它们只代表配置，不能称实际生效。c轮三帧均值几乎等于父均值，协方差约零与此一致。下一步优先通过已有SetInitialPose原生接口传入相同父均值及已声明的分支协方差，再观察实际帧；不增加真值输入或调大参数。该缺口已确认，仍不据此宣布它是路线失败的唯一根因。
+继续回源发现明确的初始化合同缺口：同版AmclNode::on_activate在set_initial_pose分支新建PoseWithCovarianceStamped，只填均值、时间与frame，没有给默认零协方差赋值；initial_cov_xx/yy/aa没有本版参数读取点。e2ed656时prepare_ros_branch只保存配置，不能称实际生效。c轮三帧均值几乎等于父均值，协方差约零与此一致。据此选择通过已有SetInitialPose原生接口传入相同父均值及已声明的分支协方差；不增加真值输入或调大参数。该缺口已确认，仍不据此宣布它是路线失败的唯一根因。
+
+该输入缺口现已按原生SetInitialPose接回，保留旧manifest行为；实际SDK类型与46项相关合同通过。r2-prior-a与原两基线使用同快照、相同Nav2 YAML值和balanced，唯一初始化差异为显式输入已有先验协方差。实际读回初始化state=received，输入对角线.0004/.0004/.001；三条新帧协方差约1e-5且均值发生更新，证明输入链起效。该轮仍在120.004秒失败，首进场94.594秒成功，剩余约23.836秒配送未完成，末25.75cm/.03623rad，保持违例1；原UUID终态、quiet、清理与源起止一致均成立，不称路线修复。
+
+随后试用本机已有[Nav2 1.3.13 RPP](https://github.com/ros-navigation/navigation2/blob/1.3.13/nav2_regulated_pure_pursuit_controller/README.md)，仅修改FollowPath控制器配方。RotationShim沿原值，RPP的最大/最小线速、lookahead范围和减速距离映射原Graceful值，其余复用StagingPath既有RPP配置。完整车体、地图余量、平台.06/.10、原加减速、GoalChecker和物理评分保持。source开发轮r2-rpp-a在81.811秒支撑失败，原UUID920411f8终态5；不晋级，也不声称单个标量对照。
+
+原完整K的declaration/launch_command明确为asynchronous，旧新切片却选择source；我漏带了这一原启动参数。旧进程未保存实际环境，不能从source直接断言它已使用同步发布。现于两节点及factory报告增加publication_mode_env、起止系统load平均值，39项相关检查通过；字段只观察，不新增门禁。新两轮分别读回两个Python进程ASYNCHRONOUS，仍保留原全部门槛：
+
+| 开发轮 | 唯一控制配方／发布条件 | 结果 |
+| --- | --- | --- |
+| r2-prior-async-a | 原Graceful＋显式异步，已注入同一先验 | 109.393秒支撑失败，末95.56cm/.07223rad，原UUIDc0a2a5c5终态5 |
+| r2-rpp-async-a | 上述固定RPP配方＋显式异步，同一先验 | 31.172秒支撑失败，末84.26cm/.36828rad，原UUID53d67844终态5 |
+
+两轮源/墙记录时长比约.99995/.99997，源码起止一致，原生终态/quiet/guard关闭/参数恢复/owned退出均核实。并发系统负载另存；发布环境与负载不是唯一因果结论。两轮失败帧中，货物完整平面足迹仍在原边界内、双指力为0，底面接触曾为false；不能把通用错误文案直接解释为货物已经滑出托盘，也不修改原接触门槛。详见私有async-support-diagnostic-a.json。
+
+时钟速率接近1不表示采样无损：新Graceful/RPP异步记录分别缺37/6个物理序号，最大源间隙.34/.04秒。缺口按原样保留并在回放断开，不能由展示插值补成评分证据。
+
+RPP异步轮收到440条received_global_plan及440条lookahead_collision_arc；旧source轮分别1359条。本机源码的发布点位于computeVelocityCommands，证明存在原生RPP计算活动；不冒充每条命令消费ACK、GID独占或任务成功。所有试验仍是开发数据，未派发正式5+5、留出或原出生点完整回验。
 
 ### 只读对照页
 

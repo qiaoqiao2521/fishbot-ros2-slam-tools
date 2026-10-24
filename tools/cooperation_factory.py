@@ -161,6 +161,15 @@ def loaded_code_reference(extra_paths=()):
     return result
 
 
+def host_load_observation():
+    value={'logical_cpus':os.cpu_count(),'scope':'system load, not controller execution cost'}
+    try:
+        value['load_average_1_5_15m']=list(os.getloadavg())
+    except OSError as error:
+        value.update(load_average_1_5_15m=None,warning=str(error))
+    return value
+
+
 def order_report(order, *, task_id, episode_id, terminal, score, score_file,
                  elapsed_wall_s, scope='transport'):
     """Summarize original scores; do not reproduce physical verdict logic."""
@@ -387,6 +396,7 @@ def run(args, manifest, declaration):
               'manifest': str(args.manifest.resolve()), 'domain': args.domain, 'port': args.port,
               'execution': {}, 'orders': [], 'errors': [], 'task_verdict': 'unknown', 'passed': False}
     result['execution']['started_wall_time'] = time.time()
+    result['execution']['host_load_start'] = host_load_observation()
     source_start = loaded_code_reference()
     save(output/'loaded-code-start.json', source_start)
     save(output/'manifest-used.json', manifest)
@@ -520,6 +530,7 @@ def run(args, manifest, declaration):
         initial = wait_until(ready, 65, description='Original native readiness unavailable')
         result['execution']['actual_initial_source'] = initial.get('source')
         result['execution']['checkpoint_initialization'] = initial.get('checkpoint_initialization')
+        result['execution']['actual_bridge_publication_mode_env'] = initial.get('publication_mode_env')
         declared = declaration['orders']
         workflow('create', [item['batch_id'] for item in declared], 'factory-pickup',
                  {item['batch_id']: item['delivery_pose'] for item in declared},
@@ -682,6 +693,7 @@ def run(args, manifest, declaration):
         result['execution']['elapsed_wall_s'] = time.monotonic()-started
         result['execution']['within_total_budget'] = result['execution']['elapsed_wall_s'] <= TOTAL_TIMEOUT_S
         result['execution']['ended_wall_time'] = time.time()
+        result['execution']['host_load_end'] = host_load_observation()
         result['execution']['mutation_posts'] = {
             kind: sum(item['kind'] == kind for item in mutation_posts)
             for kind in ('start', 'cancel', 'reset')}

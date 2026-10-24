@@ -69,13 +69,24 @@ def prepare_ros_branch(checkpoint_path, output):
         raise ValueError('R2 case has no readable parent AMCL configuration: '+str(error)) from error
     amcl['set_initial_pose'] = True
     amcl['initial_pose'] = {**pose, 'z':0.}
+    warmup = {'nomotion_updates':3}
+    diagonal = [amcl.get(k) for k in ('initial_cov_xx','initial_cov_yy','initial_cov_aa')]
+    if all(type(v) in (int,float) and math.isfinite(v) and v>=0 for v in diagonal):
+        covariance = [0.]*36
+        for index, number in zip((0,7,35),diagonal):covariance[index]=float(number)
+        warmup['initial_pose'] = {'mean':copy.deepcopy(pose),'covariance':covariance,
+                                 'mean_source':'parent_map_to_base_TF',
+                                 'covariance_source':'branch_configuration_not_restored_filter'}
+    else:
+        warmup['initialization_missing_reason'] = 'branch covariance is unknown; startup mean only'
+        logging.warning(warmup['initialization_missing_reason'])
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     params_path = output/'branch-nav2.yaml'
     params_path.write_text(yaml.safe_dump(parameters,sort_keys=False))
     os.chmod(params_path,0o600)
     manifest.update(nav2_yaml=str(params_path),restore_checkpoint=str(checkpoint_path),
                     capture_before_delivery=False,checkpoint_directory=str(output/'checkpoints'),
-                    checkpoint_warmup={'nomotion_updates':3},
+                    checkpoint_warmup=warmup,
                     checkpoint_parent={'snapshot_id':value['snapshot_id'],
                         'world_session_id':value['world_session_id'],
                         'episode_id':value['application']['episode_id'],
@@ -86,7 +97,7 @@ def prepare_ros_branch(checkpoint_path, output):
                         'branch_initial_covariance':{k:amcl.get(k) for k in
                             ('initial_cov_xx','initial_cov_yy','initial_cov_aa')},
                         'external_components_restored':False,
-                        'warmup':'new native lifecycle, held world and 3 fresh post-request AMCL frames'})
+                        'warmup':'native SetInitialPose prior when configured, held world and 3 fresh AMCL frames'})
     _write_json(output/'manifest.json',manifest,64*1024*1024)
     return manifest
 

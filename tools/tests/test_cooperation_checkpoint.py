@@ -127,7 +127,13 @@ class CheckpointTests(unittest.TestCase):
             params=yaml.safe_load(Path(branch['nav2_yaml']).read_text())
             self.assertEqual(params['amcl']['ros__parameters']['initial_pose'],{**pose,'z':0.})
             self.assertFalse(branch['capture_before_delivery'])
-            self.assertEqual(branch['checkpoint_warmup'],{'nomotion_updates':3})
+            warmup=branch['checkpoint_warmup']
+            self.assertEqual(warmup['nomotion_updates'],3)
+            self.assertEqual(warmup['initial_pose']['mean'],pose)
+            self.assertEqual([warmup['initial_pose']['covariance'][i] for i in (0,7,35)],
+                             [.0004,.0004,.001])
+            self.assertEqual(sum(abs(v) for i,v in enumerate(warmup['initial_pose']['covariance'])
+                                 if i not in (0,7,35)),0.)
             self.assertIsNone(branch['checkpoint_parent']['parent_localization_covariance'])
             self.assertFalse(branch['checkpoint_parent']['external_components_restored'])
             self.assertEqual(branch['world_xml'],self.manifest['world_xml'])

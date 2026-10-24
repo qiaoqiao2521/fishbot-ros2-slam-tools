@@ -67,11 +67,15 @@ class NativeReadiness:
 class StaticLocalizationWarmup:
     """R2-only no-motion requests with separate fresh AMCL pose evidence.
 
-    No true pose, initial-pose publication, motion command or action is accepted.
+    Initial priors use the native service; no true pose or motion is accepted.
     A service response sets an update flag; it is not a pose-consumption ACK.
     """
-    def __init__(self, client, request, updates=3):
+    def __init__(self, client, request, updates=3, *, initializer=None):
         self.client, self.request, self.required = client, request, updates
+        self.initializer, self.initial_future = initializer, None
+        self.initialization = {'configured':initializer is not None,
+            'state':'not_requested' if initializer is not None else 'not_configured',
+            'request':None,'response_is_convergence':False}
         self.lock = threading.RLock()
         self.records = []
         self.pending = self.candidate = None
@@ -90,6 +94,8 @@ class StaticLocalizationWarmup:
                 self.reason = 'waiting_for_held_native_world'
                 return
             now = time.monotonic()
+            if self.initializer is not None and not self.initialize(source,now):
+                return
             if self.pending is not None:
                 item = self.pending
                 if item['future'].done() and item.get('response_wall') is None:
@@ -122,7 +128,52 @@ class StaticLocalizationWarmup:
                                 'monotonic':now}
             except Exception as error:
                 self.reason = 'nomotion_service_error: '+str(error)
+                return
             self.reason = 'waiting_for_service_and_new_amcl_pose'
+
+    def initialize(self, source, now):
+        """One prior request; a late response may reconcile it, never resend it."""
+        state = self.initialization
+        if state['state']=='received':
+            return True
+        if state['state']=='failed_before_send' or (state['state']=='unknown' and self.initial_future is None):
+            return False
+        if self.initial_future is None:
+            client, factory = self.initializer
+            if not client.service_is_ready():
+                self.reason = 'waiting_for_initial_pose_service'
+                return False
+            try:
+                request, values = factory()
+            except Exception as error:
+                state.update(state='failed_before_send',error=str(error))
+                self.reason = 'initial_pose_input_invalid: '+str(error)
+                return False
+            self.started_wall = self.started_wall or time.time()
+            self.initial_monotonic = now
+            state.update(state='attempted',request=copy.deepcopy(values),
+                         requested_source_s=source,requested_wall=time.time())
+            try:
+                self.initial_future = client.call_async(request)
+            except Exception as error:
+                state.update(state='unknown',error=str(error))
+                self.reason = 'initial_pose_service_error: '+str(error)
+            return False
+        if self.initial_future.done():
+            try:
+                if self.initial_future.result() is None:
+                    raise RuntimeError('initial pose response unavailable')
+                state.update(state='received',response_wall=time.time())
+                return True
+            except Exception as error:
+                state.update(state='unknown',error=str(error))
+                self.reason = 'initial_pose_response_unknown: '+str(error)
+        elif now-self.initial_monotonic > 3.:
+            state['state'] = 'unknown'
+            self.reason = 'initial_pose_response_unknown; original request retained'
+        else:
+            self.reason = 'waiting_for_initial_pose_response'
+        return False
 
     def observe(self, *, stamp, pose, covariance, frame_id, source_now):
         with self.lock:
@@ -159,5 +210,6 @@ class StaticLocalizationWarmup:
                     'reason':self.reason,'required_updates':self.required,
                     'completed_updates':len(self.records),'started_wall':self.started_wall,
                     'finished_wall':self.finished_wall,'records':copy.deepcopy(self.records),
+                    'initialization':copy.deepcopy(self.initialization),
                     'service_response_is_pose_consumption_ack':False,
                     'truth_used_for_localization':False,'convergence_claimed':False}

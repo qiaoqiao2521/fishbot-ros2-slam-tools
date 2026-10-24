@@ -137,5 +137,48 @@ class StaticLocalizationWarmupTests(unittest.TestCase):
         self.observe(gate,100.6);self.tick(gate,100.7)
         self.assertTrue(gate.snapshot()['ready'])
 
+    def initialized_gate(self):
+        client=Mock();client.service_is_ready.return_value=True
+        client.call_async.return_value=Future()
+        prior={'pose':{'x':-.88,'y':-1.68,'yaw':.02},
+               'covariance':[.0004 if i in (0,7) else .001 if i==35 else 0. for i in range(36)]}
+        factory=Mock(return_value=(object(),prior))
+        gate=self.gate()
+        gate.initializer=(client,factory)
+        gate.initialization.update(configured=True,state='not_requested')
+        return gate,client,factory,prior
+
+    def test_explicit_prior_response_precedes_nomotion_and_new_frames(self):
+        gate,client,factory,prior=self.initialized_gate()
+        self.tick(gate);self.observe(gate)
+        gate.client.call_async.assert_not_called()
+        self.assertEqual(gate.snapshot()['initialization']['request'],prior)
+        self.assertEqual(gate.snapshot()['completed_updates'],0)
+        client.call_async.return_value.set_result(object());self.tick(gate,100.2)
+        self.assertEqual(gate.snapshot()['initialization']['state'],'received')
+        self.assertFalse(gate.snapshot()['ready'])
+        gate.pending['future'].set_result(object());self.observe(gate,100.3);self.tick(gate,100.4)
+        self.assertTrue(gate.snapshot()['ready'])
+        client.call_async.assert_called_once();factory.assert_called_once()
+
+    def test_unknown_initialization_is_not_resent_and_late_original_ack_reconciles(self):
+        gate,client,_,_=self.initialized_gate()
+        with patch.object(readiness.time,'monotonic',return_value=10.):self.tick(gate)
+        with patch.object(readiness.time,'monotonic',return_value=14.):self.tick(gate,100.2)
+        self.assertEqual(gate.snapshot()['initialization']['state'],'unknown')
+        self.tick(gate,100.3);client.call_async.assert_called_once()
+        gate.client.call_async.assert_not_called()
+        client.call_async.return_value.set_result(object());self.tick(gate,100.4)
+        self.assertEqual(gate.snapshot()['initialization']['state'],'received')
+        client.call_async.assert_called_once()
+
+    def test_ambiguous_initialization_send_error_never_repeats_the_request(self):
+        gate,client,_,_=self.initialized_gate()
+        client.call_async.side_effect=RuntimeError('response channel lost')
+        self.tick(gate);self.tick(gate,100.1);self.tick(gate,100.2)
+        self.assertEqual(gate.snapshot()['initialization']['state'],'unknown')
+        self.assertFalse(gate.snapshot()['ready'])
+        client.call_async.assert_called_once();gate.client.call_async.assert_not_called()
+
 
 if __name__=='__main__':unittest.main()

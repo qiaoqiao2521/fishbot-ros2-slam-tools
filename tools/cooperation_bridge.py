@@ -177,7 +177,7 @@ def run(args):
     from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
     from message_filters import Subscriber, TimeSynchronizer
     from nav2_msgs.action import NavigateToPose, DockRobot, DriveOnHeading
-    from nav2_msgs.srv import ClearEntireCostmap
+    from nav2_msgs.srv import ClearEntireCostmap, SetInitialPose
     from sensor_msgs.msg import JointState
     from rosgraph_msgs.msg import Clock
     from std_msgs.msg import Bool, String
@@ -261,8 +261,12 @@ def run(args):
                 if type(updates) is not int or updates < 1:
                     self.get_logger().warning('R2 warmup count invalid; using 3 fresh AMCL frames')
                     updates = 3
+                initializer = ((self.create_client(SetInitialPose,'/set_initial_pose'),
+                                self.branch_initial_pose_request)
+                               if warmup_config.get('initial_pose') is not None else None)
                 self.localization_warmup = StaticLocalizationWarmup(
-                    self.create_client(Empty,'/request_nomotion_update'),Empty.Request,updates)
+                    self.create_client(Empty,'/request_nomotion_update'),Empty.Request,updates,
+                    initializer=initializer)
                 self.create_subscription(PoseWithCovarianceStamped,'/amcl_pose',
                                          self.observe_warmup_pose,qos_profile_sensor_data)
             self.physics_callbacks = MutuallyExclusiveCallbackGroup()
@@ -482,6 +486,24 @@ def run(args):
                 self.get_logger().warning(reason)
             finally:
                 self.timing_record('physics_callback', started, context)
+
+        def branch_initial_pose_request(self):
+            prior = manifest['checkpoint_warmup']['initial_pose']
+            mean = prior['mean']
+            x,y,yaw = finite_vector([mean[k] for k in ('x','y','yaw')],3,'R2定位先验')
+            covariance = finite_vector(prior['covariance'],36,'R2分支协方差')
+            request = SetInitialPose.Request()
+            request.pose.header.frame_id = 'map'
+            request.pose.header.stamp = self.get_clock().now().to_msg()
+            request.pose.pose.pose.position.x,request.pose.pose.pose.position.y = x,y
+            request.pose.pose.pose.orientation.z = math.sin(yaw/2)
+            request.pose.pose.pose.orientation.w = math.cos(yaw/2)
+            request.pose.pose.covariance = covariance
+            stamp = request.pose.header.stamp
+            return request, {'frame_id':'map','source_s':stamp.sec+stamp.nanosec*1e-9,
+                'pose':{'x':x,'y':y,'yaw':yaw},'covariance':[float(v) for v in request.pose.pose.covariance],
+                'mean_source':prior.get('mean_source'),
+                'covariance_source':prior.get('covariance_source')}
 
         def observe_warmup_pose(self, message):
             if self.localization_warmup is None:
@@ -1910,6 +1932,7 @@ def run(args):
                     'source':{'scene_sha':scene_sha,'origin':'manifest_world_xml','observed':raw is not None},
                     'nav':{'ready':nav_ready,'pose':pose},'stations':self.stations(),
                     'native_lifecycle':self.native_readiness.snapshot(),
+                    'publication_mode_env':os.environ.get('RMW_FASTRTPS_PUBLICATION_MODE'),
                     'checkpoint_initialization':(self.localization_warmup.snapshot()
                                                  if self.localization_warmup is not None else None),
                     'freshness_failure':copy.deepcopy(getattr(self,'last_freshness_failure',None)),
