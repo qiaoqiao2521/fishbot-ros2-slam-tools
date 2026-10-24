@@ -14,6 +14,7 @@ export type SimulationTask = {
   submittedAt?: string;
   simulation_s?: number;
   report?: Record<string, unknown>;
+  skill_evidence?: Record<string, unknown>;
   artifacts?: { video?: string; report?: string; mcap?: string };
   error?: string;
   station?: Station;
@@ -91,6 +92,27 @@ export function taskIsActive(task: SimulationTask | undefined): boolean {
     task != undefined &&
     !["succeeded", "failed", "cancelled"].includes(task.status)
   );
+}
+
+/** Show original monitor evidence separately from controller phases and task success. */
+export function graspEvidenceLabel(task: SimulationTask | undefined): string | undefined {
+  const value = task?.skill_evidence ?? task?.report?.skill_evidence;
+  if (value == undefined || typeof value !== "object") {
+    return undefined;
+  }
+  const source = value as Record<string, unknown>;
+  if (source.schema !== "so101.physical-skill-evidence.v1" || source.scope !== "observation_only"
+      || source.grasp == undefined || typeof source.grasp !== "object") {
+    return undefined;
+  }
+  const grasp = source.grasp as Record<string, unknown>;
+  if (grasp.postcondition_met !== true) {
+    return "物理抓取证据：尚未确认；闭爪阶段不代表已抓住。";
+  }
+  const elapsed = grasp.first_met_elapsed_s;
+  const when = typeof elapsed === "number" && Number.isFinite(elapsed)
+    ? `在 ${elapsed.toFixed(2)} s ` : "";
+  return `物理抓取证据：曾${when}确认持续持物；不代表本回合完成。`;
 }
 
 export function taskStatusLabel(status: string): string {

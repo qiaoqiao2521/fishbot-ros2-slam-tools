@@ -111,6 +111,8 @@ node workbench-preview.cjs
 
 任务栏显示原 ID、阶段、原物理结果与本次录像。刷新仅查询任务；提交响应未知时点击“查询原任务”，不会自动再提交。点击“取消任务”请求现有执行循环协作停止，终态落盘后才显示已取消。运行自动切到本次任务三维；完成或取消后保留最后实际姿态，本次录像与报告仍在任务栏。历史回放通过独立入口打开。
 
+新执行器的`skill_evidence`会另外显示“物理抓取证据”：原monitor未确认前，close／hold阶段不会变成抓取成功；确认后只表示曾持续持物，后续取消或失物仍保留原终态与物理失败。旧记录不补造该字段。无运动展示检查用`node workbench-review-tests/grasp-evidence.cjs`；它以原记录回放作为HTTP fixture，不是新抓放验收。
+
 预览服务通过 `SO101_ROOT` 和 `SO101_PYTHON` 指向已有项目与环境。默认使用本机 `~/dev/ros2/projects/so101` 及 `~/.cache/so101-graspgenx/upstream/.venv/bin/python`。可复现交付环境使用：
 
 ```bash

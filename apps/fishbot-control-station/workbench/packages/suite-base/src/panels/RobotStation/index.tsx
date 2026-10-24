@@ -27,6 +27,7 @@ import { SaveConfig } from "@lichtblick/suite-base/types/panels";
 
 import { clearDroneEditor, setDroneEditor } from "./droneEditor";
 import {
+  graspEvidenceLabel,
   latestSimulationTask,
   requestSimulation,
   simulationArtifactUrl,
@@ -2138,6 +2139,11 @@ function RobotStation({
                 {task.report.grasp_success === true ? "是" : "否"}； 放置落定：
                 {task.report.place_success === true ? "是" : "否"}； 安全停止：
                 {task.report.safety_stop === true ? "是" : "否"}
+              </Typography>
+            )}
+            {!drone && graspEvidenceLabel(task) && (
+              <Typography variant="body2" data-testid="physical-grasp-evidence">
+                {graspEvidenceLabel(task)}
               </Typography>
             )}
             {task.report && (

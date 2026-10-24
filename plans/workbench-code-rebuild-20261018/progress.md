@@ -1,5 +1,13 @@
 # 实施进度
 
+## 2026-10-24 SO101 原物理抓取证据展示
+
+- Current：RobotStation读取原status／report.skill_evidence，单列“曾确认持续持物”，不由close/hold阶段推断成功、不覆盖task终态。旧记录没有新证据就不补造；无人机显示路径保持。
+- Done：12项相关execution数据测试、最终生产构建通过（原2项包体警告）；10项桌面／390px无运动浏览器通过，写请求0、页面异常0。成功／取消回放显示27.68s，历史失物28.80s，失败／取消与原false结果保持。证据和截图在忽略目录workbench-review-tests/output/grasp-evidence/；scope明确为真实记录回放的HTTP fixture，未启动新物理。
+- Remaining：SO101固定b21b1d9的新原完整回合与运行中取消正在Kaggle验证，由SO101主计划独立回读；本次网页QA不替代它。六技能、同世界恢复与卸货未因增加展示而完成。
+- Issues：此前Drone源码／测试／说明已由原owner交付至275f6bf，当前按实时diff只整合本轮4个前端／QA文件及文档，不覆盖其他成果。根继续保留共享树在途内容。
+- Next：物理证据与技能生命周期继续在SO101主计划推进。Knowledge=already_covered，沿用Wiki《ROS2 与FishBot》§20；未写共享知识或memory。
+
 ## 2026-10-24 M2停止位置与时间联合重解
 
 - 当前：新drone-stop-geometry.py复用MINCO stop_positions，SLSQP仅外部有界四维[Tx,Ty,Tz,dy]搜索。初始PVA/J和原target来源保持，不做生成后时间拉伸；终点三联同步，最终原连续审计独立执行。

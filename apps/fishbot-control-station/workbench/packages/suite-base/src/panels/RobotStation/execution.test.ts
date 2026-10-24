@@ -5,6 +5,7 @@
 // License, v2.0. https://mozilla.org/MPL/2.0/
 
 import {
+  graspEvidenceLabel,
   latestSimulationTask,
   requestSimulation,
   simulationArtifactUrl,
@@ -15,6 +16,20 @@ import {
 import { defaultDroneStation, defaultStation } from "./station";
 
 describe("SO101 simulation task transport", () => {
+  it("keeps grasp evidence separate from phase and cancelled attempt outcome", () => {
+    const evidence = { schema: "so101.physical-skill-evidence.v1", scope: "observation_only",
+      grasp: { postcondition_met: false, first_met_elapsed_s: null } };
+    expect(graspEvidenceLabel({ id: "same-task", status: "running", phase: "close" })).toBeUndefined();
+    expect(graspEvidenceLabel({ id: "same-task", status: "running", phase: "hold", skill_evidence: evidence }))
+      .toContain("尚未确认");
+    const confirmed = { ...evidence, grasp: { postcondition_met: true, first_met_elapsed_s: 27.68 } };
+    const task = { id: "same-task", status: "cancelled", report: { passed: false, skill_evidence: confirmed } };
+    expect(graspEvidenceLabel(task)).toBe("物理抓取证据：曾在 27.68 s 确认持续持物；不代表本回合完成。");
+    expect(task.report.passed).toBe(false);
+    expect(task.status).toBe("cancelled");
+    expect(graspEvidenceLabel({ ...task, skill_evidence: { ...confirmed, scope: "control" } })).toBeUndefined();
+  });
+
   const originalFetch = globalThis.fetch;
   let fetchMock: jest.MockedFunction<typeof fetch>;
 
