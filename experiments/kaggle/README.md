@@ -108,6 +108,23 @@ Graceful自身最大线/角速`.06/.055`、降速范围`.12m`。
 当前`.055`＋可选原生yaw-stop短测119.637秒通过，余量仅.363秒；
 尚不能据此宣称完整两单、稳定性或云端配送完成。实际状态见原SpecMesh。
 
+## 显式配送任务输入
+
+可选`FISHBOT_F1_FACTORY_CONFIG`指定任务JSON，相对路径从FishBot根解析。
+未设置时保留既有进场`(1.35,-2,0)`；设置后完整保留输入，不再覆盖进场姿态。
+仍由原prepare校验场景，由原factory、Nav2与独立oracle执行和评分。
+
+```bash
+export FISHBOT_F1_FACTORY_CONFIG=tools/config/factory_delivery/line-side-j100-tangent-040.json
+export FISHBOT_TRANSPORT_CONTROLLER=graceful
+```
+
+该有限候选把B进场改为`(1.35,-1.868238476919363,.4)`，与倒入原B的
+圆弧切向相接；原A/B、占用体、默认出生点、物理与预算保持。
+H装货后重建初态短测两原Goal成功，117.1158秒、末28.258mm/.005142rad，
+仅证明路线分项，余量2.884秒。完整H仍失败，当前须从原默认起点重跑I两单。
+Kaggle需新源码包或显式source overlay；该输入选择不代表已在云端完成任务。
+
 ## StoppedGoalChecker 与末端制动
 
 `tools/patches/nav2-1.3.13-rotation-yaw-stop.patch`面向官方

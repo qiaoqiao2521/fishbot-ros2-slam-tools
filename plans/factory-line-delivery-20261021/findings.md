@@ -276,3 +276,15 @@ J100 新生成场景：工位接近扫掠168样本/432几何对，扣采样间�
 - Shim内部PositionGoalChecker默认stateful=true，原外层stateful=false。尝试原有FollowPath.position_checker.stateful=false却读回整组空值；逐个原生服务回读确认空前缀`.position_checker.stateful=true`，两个插件前缀均未声明，外层false。`local-loaded-g-via135-current-position-a`的原UUID49c36a32…已主动取消5并清理，原因是配置未生效，不算有效参数对照。
 - 官方1.3.13 configure先initialize(...plugin_name_...)、后plugin_name_=name，导致首次配置前缀为空。最小补丁只提前赋名；新native测试经完整Shim configure，将15mm内10mm→范围外19mm，配置false应重新拒绝，true保留原latch。旧实现命名及false行为均失败，补丁后12项原生测试全过。原始失败与实际参数回读保存在native-graceful-distance/及上述轮目录。
 - 复用已有参数，在显式Graceful候选中选择FollowPath.position_checker.stateful=false，与原外层一致；StagingPath依旧原配置，不设空前缀参数，不放宽XY/yaw/速度/期限。Kaggle同版源码追加namespace补丁，仍仅构建原两个控制器。下一步新overlay、同G fixture、原120秒短测，成功才完整两单。
+
+
+## 2026-10-24 完整H失败与切向进场
+
+- 完整H，B task46fe0838-36f6-468c-8fda-dbad93de16bf，255.304墙秒；原K、连续handoff/7471载货样本0违例、源与记录通过。出站5a9a6302…4；进场2b9f18d3…4，101.142秒；第二Nav d70892b7…于103.055秒才启动，原120.004秒取消5。末22.567mm/.02374rad是取消后结果，连续末停仅.8源秒，不能当交付通过；A未执行。理想guard介入.8源秒单列。所有owned0/9111关闭、timing非空，无-11；旧G额外回收异常仍未知。
+- H首进场独立physics接收/源stamp窗口实时比1.000005，不能把最后几秒短缺归因当前计算容量。
+- `local-loaded-h-via135-shim060-a`仅Shim原地.055→.060，曲线仍.055，约50秒后触原货物保持，取消5并清理，拒绝采用。原已测±.06原地50Hz保持均无失败，但负转500Hz有1步失触，分项不外推动态转换或持续接触。
+- 官方R.80生成约182秒未完成，SIGINT结束130，无可用原语；因调度过早启动的planr080-a已在零Goal/零命令时取消并清理，不当几何失败。
+- 原RPP＋新Shim修复的a轮错误订阅PoseStamped，而实际是PointStamped；SIGINT触rclpy context先关闭，finally发布hold异常。根额外恢复读回原UUID85b12450…5、持续静止、hold/guard关闭及两个参数组baseline，按原单次父SIGINT/PID身份回收全部owned，recovery.json保留；第一恢复查找绝对launch路径的错误与中间结果也保留，不宣称正常退出。b轮改正确类型后实际2211个carrot计算发布、2381非零命令，仍首Goal120秒取消5，未采用。观测是compute活动，不是输入消费ACK。
+- 先声明两组进场公式 y=-2+.65*tan(yaw/2)，yaw=.3/.4，原B不变。原生4次ComputePath均4，全车扫掠加入声明起点到路径首点连接。两组首段最小采样85.201mm（间距界3.094mm），次段61mm；.4名义73.577＋21.519秒，估算不是实际时限保证。
+- `local-loaded-h-arc040-a`在同一H重建载货初态，原Nav9c39d06c…4（93.5005秒含原静止/hold）、2262d1e5…4，总117.1158墙秒，末28.258mm/.005142rad，2013个原生GC计算发布，无原留盘/禁碰失败。参数恢复、quiet、owned0/端口关闭通过。初态缺速度、求解器warmstart及AMCL历史，不当精确回放或完整任务；下一轮从默认出生点完整I。
+- 公开任务配置只改B进场姿态；已有prepare与factory可直接消费。Kaggle适配增加可选FISHBOT_F1_FACTORY_CONFIG，保留默认进场，显式JSON整体不覆盖；8项输入选择/原契约/真实Bash参数检查通过。知识原第19节与索引已局部写入并读回，原知识仓其它未审变动保留。

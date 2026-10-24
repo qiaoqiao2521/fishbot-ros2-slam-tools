@@ -58,10 +58,14 @@ def run(name, args, *, cwd=None, timeout=600, env=None, required=True):
 
 def prepare_scene(fishbot, so101, python, data, runtime_env):
     scene = ARTIFACTS/"scene"
-    factory = json.loads((fishbot/"tools/config/factory_delivery/line-side-occupied.json").read_text())
-    for destination in factory["destinations"]:
-        if destination["id"] == "line_b":
-            destination["approach_poses"] = [{"x": 1.35, "y": -2., "yaw": 0.}]
+    explicit_factory = os.environ.get("FISHBOT_F1_FACTORY_CONFIG")
+    source = Path(explicit_factory) if explicit_factory else Path(
+        "tools/config/factory_delivery/line-side-occupied.json")
+    factory = json.loads((source if source.is_absolute() else fishbot/source).read_text())
+    if not explicit_factory:
+        for destination in factory["destinations"]:
+            if destination["id"] == "line_b":
+                destination["approach_poses"] = [{"x": 1.35, "y": -2., "yaw": 0.}]
     factory_file = ARTIFACTS/"factory.json"
     factory_file.write_text(json.dumps(factory, indent=2)+"\n")
     options = (["--omit-unused-native-rangefinders"]

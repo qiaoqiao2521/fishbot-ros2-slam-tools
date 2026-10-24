@@ -231,6 +231,12 @@ Shim内层却保持旧到位状态并持续请求零速；随后触发progress�
 现补一行命名初始化修复，并仅令FollowPath内层stateful=false匹配原外层；
 12项原生Shim测试通过，真实载货与同轮两单仍待验收。见[参数边界](../experiments/kaggle/README.md#shim-位置检查器的命名与当前判定)。
 
+完整H仍最后Nav120秒取消；原K与连续载货通过，A未执行，结果保留。
+切向进场候选`line-side-j100-tangent-040.json`在H重建载货初态通过117.1158秒，
+最终目标仍原B；不把该分项视为完整配送。公开prepare可直接选择该factory JSON，
+Kaggle薄适配可用`FISHBOT_F1_FACTORY_CONFIG`保留显式输入，默认行为保持。
+8项输入/配置检查通过，下一步原默认出生点完整I；见[任务输入](../experiments/kaggle/README.md#显式配送任务输入)。
+
 **本机1.3.13需要原生缓存修复。** 实测发现 `NodeLattice::isNodeValid` 可复用终点缓存，
 跳过另一条入边的碰撞检查。仓库包含最小 C++ 复现和仅修该条件的补丁。
 在独立 overlay 构建后，通过现有 `FISHBOT_NAV2_QUERY_OVERLAY=<overlay>/install`

@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import yaml
 
@@ -114,6 +115,36 @@ class NativeTransportSelectionTests(unittest.TestCase):
         CANDIDATE.configure(self.path, PRESET)
         manifest, _ = self.read()
         self.assertNotIn('loaded_controller', manifest['vehicle_profile'])
+
+
+class FactoryInputSelectionTests(unittest.TestCase):
+    def prepare(self, explicit=None):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp)
+            calls = []
+            env = {'FISHBOT_F1_FACTORY_CONFIG': explicit} if explicit else {}
+            with mock.patch.dict(os.environ, env, clear=True), \
+                    mock.patch.object(RUNNER, 'ARTIFACTS', folder), \
+                    mock.patch.object(RUNNER, 'run', side_effect=lambda label, args, **kw:
+                                      calls.append((label, args))):
+                RUNNER.prepare_scene(ROOT, Path('/fixture/so101'), sys.executable,
+                                     Path('/fixture/data'), {})
+            actual = json.loads((folder/'factory.json').read_text())
+            args = dict(calls)['scene-prepare']
+            self.assertEqual(args[args.index('--factory-config')+1], str(folder/'factory.json'))
+            return actual
+
+    def test_default_preserves_original_approach(self):
+        factory = self.prepare()
+        point = next(x for x in factory['destinations'] if x['id'] == 'line_b')
+        self.assertEqual(point['approach_poses'], [{'x': 1.35, 'y': -2., 'yaw': 0.}])
+
+    def test_explicit_factory_keeps_pose_and_all_business_inputs(self):
+        relative = 'tools/config/factory_delivery/line-side-j100-tangent-040.json'
+        source = ROOT/relative
+        original = source.read_bytes()
+        self.assertEqual(self.prepare(relative), json.loads(original))
+        self.assertEqual(source.read_bytes(), original)
 
 
 class NativeBuildArgumentsTests(unittest.TestCase):

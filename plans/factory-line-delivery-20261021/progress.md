@@ -2,6 +2,22 @@
 
 ## Current
 
+J100＋3D雷达同轮完整B→A仍未通过，父FishBot2/2保持。最近完整H在B最后Nav耗尽120秒，A未执行；本对话root串行推进，CLI账号muqiaoqiao，不改网络或其它任务。H首进场的实际源／墙时比1.000005，不能将该失败归因于计算不足。
+
+已确认并交付两个原生边界修复：Graceful终点距离补车到裁剪首点；Shim先赋插件名再初始化嵌套位置检查器。旧实现反例均先失败；25项Graceful/坐标＋12项Shim原生测试通过。显式FollowPath内层false与原外层false对齐，Staging内层true；原检查器15mm/.035rad、真实40mm/.05rad、.06/.10上限、.025/.05加减速及120/360/1000保持。代码637cc4a已推，当前新增输入选择正在收尾。
+
+最新载货分项：H装货后重建初态，进场(1.35,-1.868238476919363,.4)→原B，两原Nav 9c39d06c…/2262d1e5…均4，共117.1158墙秒，末28.258mm/.005142rad，2013次原生计算发布、无载货/禁碰违例，原quiet/参数恢复/owned0/端口关闭通过。是无速度/求解器warmstart/AMCL历史的重建短测，不是完整抓放。预算余量2.884秒，不能宣称稳定。
+
+两组切向进场(.3/.4)静止原生规划与全车扫掠通过，加入实际初态到首路径点的连接段；未缩车。选.4先运动已通过。显式任务配置line-side-j100-tangent-040.json只改B进场姿态，原出生点、A/B、占用体、货物/车/臂物理保持。FISHBOT_F1_FACTORY_CONFIG复用原prepare与factory；默认仍原1.35/-2/0，显式JSON不被覆盖，8项定向检查通过。下一步默认出生点公开prepare/数组与期限读回、源码提交冻结，再同轮完整I B→A原oracle。
+
+未采用：Shim原地.06（曲线仍.055）在H载货短测触原保持失败；修好检查器的原RPP仍首Goal120秒取消，2211个PointStamped carrot只证明计算活动。R.80官方生成182秒未完成即停止；启动过早的预检零Goal后取消。RPP-a的观测类型错误与SIGINT使context先关闭，根已回读原UUID85b12450…终态5、hold/guard、两参数组恢复、owned0/端口关闭，recovery.json存档，不冒充正常完成。全部旧失败保留。
+
+knowledge_status=updated(local)：原Wiki/FishBot第19节新增“裁剪路径与嵌套到位状态”，问题入口同步；已读回唯一标题与链接、diff检查通过。原先停车/纳秒/信号/交接经验保持。知识仓大量已有未审改动保留，未做全仓提交，后续整合owner=root。仅仿真，不外推真机/sim-to-real；新补丁尚无新的Kaggle完整业务成功。
+
+## Prior 2026-10-24 run notes (preserved)
+
+### Before tangent entry qualification (preserved)
+
 J100＋3D雷达的同轮完整B→A仍未通过，原FishBot父2/2保持。CLI账号仍muqiaoqiao；本机计算余量已恢复，当前仅仿真，由本对话root串行推进，不改网络或其它任务。
 
 最新有效分项：同一F装货后重建初态，原Nav b7071018…与24c680d1…均2→4，原共享路线119.637墙秒，末2.173cm/.01542rad；5759个检查样本无留盘/禁碰违例，原.7源秒quiet、两参数组restore、owned存活0、9111关闭通过。余量仅.363秒，不称稳定或完整抓放。源/独立记录通过；空业务marker使原完整oracle任务评分false是预期，不冒充完整运输。
@@ -23,8 +39,6 @@ J100＋3D雷达的同轮完整B→A仍未通过，原FishBot父2/2保持。CLI�
 证据根：~/.local/share/fishbot/cloud-jobs/kaggle-20261024/；最新local-loaded-f-via135-graceful055-yaw-stop-a，原生源码/构建/反例在native-yaw-stop/，标签1.3.13实际f4108e5。新显式候选尚未在Kaggle重跑完整任务，不把本机结果称云端成功。
 
 knowledge_status=updated(local)：原Wiki/FishBot第19节已补“停车检查器：先请求制动，再等待成功”，第20节已补调试发布调用点/同点Goal绕过计算/计算非ACK，问题入口同步并读回；既有纳秒、正常shutdown和进场经验保持。知识仓原有改动保留，未提交推送。仅仿真，不外推真机或sim-to-real。
-
-## Prior 2026-10-24 run notes (preserved)
 
 ### Before native yaw-stop qualification (preserved)
 
