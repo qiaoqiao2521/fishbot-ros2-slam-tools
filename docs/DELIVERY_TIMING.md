@@ -56,3 +56,20 @@ node tools/fishbot_delivery_timing_ui_contract.cjs \
 检查 B/A、预算轴、来源、桌面/390px、坏文件保留、编辑下载、404 保留和零写请求。主文档和摘要来自实际 HTTP 服务；无关服务 GET 明确返回离线，不伪造 ROS 成功。
 
 本片只验证旧仿真记录的分析与界面。物理快照、连续卸货、故障注入、配对 A/B、真机与 sim-to-real 尚未由此验收。
+
+## CPU 回归 CI
+
+[Continuous twin CPU regression](../.github/workflows/continuous-twin-cpu.yml)在相关代码的 PR、main 推送或手动派发时运行。两个独立作业使用 GitHub 托管 Ubuntu 24.04：Python 3.12＋NumPy 1.26.4检查任务合同、原回执、时间索引与回放投影；Node 22按现有package-lock安装，执行完整前端测试与生产构建。每个作业最多10分钟，不申请GPU，不依赖本机ROS或私有模型。
+
+在项目根复核Python作业：
+
+```bash
+python3 -B -m unittest \
+  tools.tests.test_cooperation_factory \
+  tools.tests.test_cooperation_readiness \
+  tools.tests.test_cooperation_loaded_limits \
+  tools.tests.test_cooperation_timing \
+  tools.tests.test_cooperation_comparison
+```
+
+任务摘要绑定GitHub实际源码提交。该工作流不上传原日志、地图、快照、数据库或凭据，不启动运动接口，不自动执行长测。ROS／MuJoCo分层面板仍使用本机原runner与独立评分；其CI派发、正式A/B和完整业务验收尚未完成。
