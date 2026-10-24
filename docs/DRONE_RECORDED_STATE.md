@@ -689,3 +689,72 @@ python3 -m unittest test_drone_handoff_timing test_drone_native_session test_dro
 ```
 
 根Codex核官方GCOPTER已有连续极值接口能否复用于每次候选评估，优先减少当前主耗时的重复求根；先核接口与同系数对照，不自写新求根器，不减少或跳过最终硬门。真实A/J、有效地图、终端及按时采用仍未获资格，c866441冻结，M2部分完成、M3不启动。
+
+## 官方连续极值接口同系数核对（2026-10-24）
+
+本片核上节主要耗时的候选极值计算。先读取固定GCOPTER提交`e0444f6d47b84f972ced91746b05feb36ce1fd4f`的`trajectory.hpp`和`root_finder.hpp`，不改MIT上游或冻结drone。
+默认MINCO生成与`geometry.search`保持原行为；独立cache binary只新增诊断mode，尚未进入搜索热路径。
+
+### 便利接口不能直接替换
+
+`Piece::getMaxVelRate/getMaxAccRate`在归一化时间u=t/T中求根，再回物理时间评价。
+归一化加速度系数含T²，其平方范数导数的绝对阈值不是物理加速度恒定判据。
+两个解析反例都在独立owned进程实测，保留原失败，不从成功样本排除：
+
+| 输入 | 解析加速度峰 | 官方getMaxAccRate实测 | 外部RootFinder诊断 |
+| --- | ---: | --- | ---: |
+| T=1e-6，Px=t³/(6T) | 1 | 0，漏掉末端峰 | 1 |
+| T=1，Px=1e-5·t⁷ | .00042 | .25wall秒回复超时，owned PID回收 | .00042 |
+
+第二例的平方加速度导数为1.764e-6·u⁹。官方无界while不断把负左端减半，端点值反而更接近零；不能放进467次评估热路径。
+超时记录含进程退出状态；deadline与清理wall分别存在，不把.25秒截止说成完整生命周期耗时。
+
+### 只复用现成求根器
+
+`drone-minco-s4-knots.cpp`新增`official_piece_rates`复现原API，以及`rootfinder_extrema`进行薄适配诊断。
+后者接收原3×8降幂物理系数和正片段时长，不生成、重拟合或放缩轨迹。
+求驻点的导数副本按maxabs缩放，恒零单列，三轴平方范数先合并再缩放；评价仍使用原物理量。
+端点选择最多32次外扩，检查有限性；调用官方`solvePolynomial(..., isolation=true)`，归一化根容差1e-10，再过滤0<u<1并独立评价0/1。
+保留位置上下界、向量V/A峰值及各段峰时刻；minVy保符号，总时刻累加已过片段。多个相同极小值不要求argmin唯一。
+
+这不是新求根算法，也不是精确证书。官方内部仍有epsilon裁剪；近重根和数值条件尚不具备任意曲线完备保证，最终Python/Bernstein硬门及axis_knots继续独立执行。
+外扩有次数界不等于内部solver有执行时间界，调用仍用NativeSession owned进程deadline。
+探针构造、exchange、close失败仅该分支unscored；坏归档行不阻断后续曲线。平方多项式或范数溢出返回明确错误，不输出native_success加null。
+
+### 固定24条尾轨迹的结果
+
+输入原`recorder-PV-reanchored-stopping-tails.json`中的24条候选，原PVA/J假设、全部系数、窄盒和硬界保持。
+位置上下界、V/A范数峰、minVy及反向速度最大差2.109424e-15；返回极小值时刻的原曲线速度读回也一致。
+24条原硬审计和axis_knots逐字未变；新binary重新生成原24请求的pieces也逐字一致。
+实际A/J、有效地图、终端、跟踪及飞控采用资格仍为未知或未执行。
+
+每条固定曲线连续测三次，共72次；native往返使用已打开的owned进程，不含创建/关闭。
+两侧本轮均计算V峰，Python侧为原geometry.extrema加V峰，因此不能直接映射为上节完整搜索的加速比。
+
+| 固定曲线诊断 | 最小ms | 中位ms | 最大ms |
+| --- | ---: | ---: | ---: |
+| Python，含V峰 | 4.076 | 4.918 | 7.515 |
+| RootFinder完整请求/回复 | .264 | .410 | .857 |
+| 其中native内部，已包含于往返 | .087 | .161 | .307 |
+
+原生成曲线固定不等于优化器路径等价。极值最后几位变化可能改变SLSQP数值梯度、迭代数和候选；本轮不宣称完整搜索提速、收敛改善或实时接管。
+
+### 验证、产物与接续
+
+16项新检查包括零/恒速/正负minVy、内部反向、端点/重复根、三轴不同相位、累计时间、纳秒短片段、官方漏峰/超时、非法片段后继续、默认系数等价和分支失败隔离。
+加原会话14、S4NU11和geometry11，52项通过、无跳过。根独立465项读回含逐段位置/V/A极值、返回时刻、原门、重新生成及统计，全部通过。
+审查发现的探针阻断和finite-large范数溢出已修；只读审查不代替根验收，没有联系其他已有聊天。
+
+忽略目录drone-committed/748…新增`official-extrema-negative-probes.json`、`native-extrema-qualification.json`和`native-extrema-readback.json`；不提交原遥测、运行日志和生成报告。
+编译目标独立于原minco_s4_knots，不覆盖原binary：
+
+```sh
+mkdir -p "$HOME/.cache/ros2-drone/minco-s4-metrics"
+c++ -std=c++14 -O2 -Wall -Wextra -isystem /usr/include/eigen3 -isystem "$HOME/.cache/ros2-drone/reuse/GCOPTER/gcopter/include" apps/fishbot-control-station/workbench-tools/drone-minco-s4-knots.cpp -o "$HOME/.cache/ros2-drone/minco-s4-metrics/minco_s4_metrics"
+STOP_REPORT_ROOT=apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6
+python3 apps/fishbot-control-station/workbench-tools/drone-extrema-qualification.py --reanchor-report "$STOP_REPORT_ROOT/recorder-PV-reanchored-stopping-tails.json" --output "$STOP_REPORT_ROOT/native-extrema-qualification.json"
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_native_extrema test_drone_native_session test_drone_s4_knots test_drone_stop_geometry
+```
+
+Next/owner：根Codex在最紧#7增加显式可选后端，再比较完整搜索的实际候选/拒绝与含进程生命周期耗时；不要求不同浮点路径生成同一最优解，但每条最终候选必须独立过原门。默认路径、原V1.8/A1/Z2.2门和drone c866441冻结保持，M2部分完成、M3不启动。本轮无Web/服务、训练、ROS节点、仿真、控制、新飞行或落地证据。

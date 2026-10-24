@@ -1,5 +1,15 @@
 # 重构进度
 
+## 2026-10-24 — 无人机极值接口同系数核对
+
+Current：M2部分完成，M3不启动。官方GCOPTER便利getter在两个解析反例中分别漏峰/超时；外部S4 shim新增只读诊断模式，不修改默认生成、geometry.search或冻结drone源码。
+
+Done：复用官方RootFinder隔离法，导数副本统一缩放、有限32次外扩端点、独立0/1评价，保物理单位与有符号minVy。24条归档尾轨迹全部对照通过，最大差2.11e-15，原硬审计和axis_knots逐字未变。新binary另存cache，不覆盖默认binary。52项相关检查、465项独立读回通过；范围与CLI见[核对记录](../../docs/DRONE_RECORDED_STATE.md#官方连续极值接口同系数核对2026-10-24)。
+
+Issues：RootFinder仍为浮点诊断，内部求解由owned进程deadline约束，不作为连续安全证明。审查发现的探针异常跨项阻断及finite-large系数范数溢出已修，正反例过。固定曲线72次诊断的中位Python4.918ms、native往返.410ms，二者含V峰；不代表完整搜索提速或实时通过。
+
+Next/owner：根Codex在最紧#7增加显式可选诊断后端，比较完整搜索候选/拒绝与含生命周期耗时；不预设数值扰动后优化路径相同，每条最终候选仍过原硬门。实际A/J、时间有效地图、终端区域、跟踪及按时采用未获资格。无Web/服务、训练、ROS节点、仿真、控制或新落地。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20及CapMesh PIT-004，数值事实留本项目。
+
 ## 2026-10-24 — SO101 Carry接续入口收口
 
 Current：复核并接续原八个Carry在途文件，未改Drone离线工具或Mint。根读当前diff，原runtime五项测试新跑通过；既有56项Jest、生产构建和13项无运动浏览器QA所涉前端源码未变（a433d1e至59e5578无workbench源码改动），复用原证据，不与后台Blender抢渲染。
