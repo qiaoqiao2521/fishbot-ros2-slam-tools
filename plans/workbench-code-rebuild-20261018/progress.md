@@ -150,3 +150,18 @@ Knowledge closeout：already_covered。沿用PIT-004依赖隔离和现有任务�
 - 当前环境的SO101模型导出Python路径不存在，服务启动给出WARNING。本片不使用它；仅双WebSocket合同单测通过，没有宣称SO101完整三维/物理回归。
 - 未改drone飞行源码、未启动PX4/Gazebo、未训练；动态闭环仍失败，在线备份、精确拒绝绝对区间和全帧感知延迟链仍待补齐。
 - Knowledge closeout: already_covered，沿用Wiki/ROS2与FishBot§20及源时钟/回执分层经验。事实留本计划；未修改共享知识或memory。owner=本对话Codex。
+
+
+## 2026-10-24 N0/N1选型与只读稀疏观测交付
+
+- N0选择EGO＋PX4现有执行/历史基线，MINCO S4NU仅离线候选；完整GCOPTER、稀疏网络和NavRL未接入。来源、许可、接口及差异见[稀疏观测](../../docs/DRONE_SPARSE_OBSERVATIONS.md)。
+- N1从原748深度包抽取1329帧/3372束（前681×4、下648×1）；965hit、2407no_return。源像素字节、斜距/光学方向、同源理想Gazebo光学位姿、分离时钟和可用包络保留。0未对齐/0重复/单时钟回合；不称四向ToF、真实VIO或稀疏控制。
+- 独立原CDR审计3372像素/1329位姿通过：斜距误差≤1.78e-15m、世界端点≤7.11e-15m。56帧可用时已过期，全部不生成新鲜射线；前/下视最长源间隔1.124/.892s。数据缺口不能直接当注入丢帧率或准确传输延迟。
+- 6项Python及14项Node局部检查、定向ESLint、最终生产构建通过；仍两项上游包体积警告。合成细柱、大小端/行填充、光学旋转、无回波/无效、时钟reset、未来/过期及旧诊断/双WS均覆盖，没有重跑全部机器人实验。
+- 5187隔离、常用5186最终各13项浏览器行为检查通过（桌面1440×1000、手机390×844）；原ID/失败报告、射线与表格、过期清除、故障seek/后退/播放暂停均通过。writes=0、live websockets=0、pageerror=0。根已目视核对两端截图；手机使用原生2px标注线解决世界尺寸线宽的子像素不可见。
+- 常用入口：`http://127.0.0.1:5186/drone-diagnostics?taskId=748f910e-f0f8-4ecf-b2d5-22b7b15d57e6`；手机追加`&mobile=1`。原生MCAP保留原659个位姿时刻，完整源帧在独立JSON；缺导出时只降级本片，不影响原任务回放。
+- 证据：忽略的`workbench-tools/output/drone-diagnostics/<id>/sparse-observations.json`和`sparse-audit.json`；页面QA在`workbench-review-tests/output/drone-sparse-release/`及隔离`drone-sparse-acceptance-v5/`。早期审计/截图检查失败保留：整数ns修复审计浮点假失败；颜色背景误判和手机线宽失败未计通过。
+- 复验：先按文档离线抽取/独立审计，再执行`STATION_TEST_URL=http://127.0.0.1:5186 DRONE_SPARSE_EXPECTED=1 DRONE_DIAGNOSTIC_ID=748f910e-f0f8-4ecf-b2d5-22b7b15d57e6 node apps/fishbot-control-station/workbench-review-tests/drone-diagnostics-browser.cjs`。不启动ROS节点、仿真或飞行。
+- 内置只读复核未发现核心P1/P2问题，.25s标签/射线边界差异已统一并局部复验；agent-link工具未加载，已如实告知，未联系其他已有对话。原SO101模型Python路径WARNING保持，未宣称SO101实际三维/物理回归。
+- drone始终c866441且清洁；未改算法、未启动PX4/Gazebo、未训练。动态闭环仍失败、在线备份未接入。下一切片为N2轨迹接口旁路资格，不能把本片当控制成功。owner=本对话Codex。
+- Knowledge closeout: already_covered。沿用任务身份/回放、原生时钟与PIT-004；数值与兼容性发现留项目，未改共享知识或个人memory。

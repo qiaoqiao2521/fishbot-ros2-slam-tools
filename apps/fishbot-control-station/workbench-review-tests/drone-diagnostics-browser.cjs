@@ -7,6 +7,16 @@ const path = require('node:path');
 const { createRequire } = require('node:module');
 const upstream = createRequire(path.join(__dirname, '../workbench/package.json'));
 const { chromium, expect } = upstream('@playwright/test');
+const { PNG } = upstream('pngjs');
+const sparseExpected = process.env.DRONE_SPARSE_EXPECTED === '1';
+const purplePixels = bytes => {
+  const png = PNG.sync.read(bytes); let count = 0;
+  for (let i = 0; i < png.data.length; i += 4) {
+    const [r, g, b] = png.data.subarray(i, i + 3);
+    if (r > g + 20 && b > g + 35) count++;
+  }
+  return count;
+};
 const base = process.env.STATION_TEST_URL ?? 'http://127.0.0.1:5187';
 const output = process.env.DRONE_QA_OUTPUT ?? path.join(__dirname, 'output/drone-diagnostics');
 fs.mkdirSync(output, { recursive: true });
@@ -57,9 +67,30 @@ const checked = name => { result.checks.push(name); save(); console.log(name); }
       // Native Plot prefetch runs in a worker after range reads; allow the 26 MiB fixture to fill.
       await page.waitForTimeout(7000);
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      if (sparseExpected) {
+        await expect(panel).toContainText(`已抽取 ${evidence.sparse.summary.frames} 帧`);
+        await expect(panel.getByRole('table', { name: '前视稀疏测距' }).getByRole('row')).toHaveCount(5);
+        await expect(panel.getByRole('table', { name: '下视稀疏测距' }).getByRole('row')).toHaveCount(2);
+        await panel.getByText('稀疏观测 · 只读旁路', { exact: true }).scrollIntoViewIfNeeded();
+        const freshShot = path.join(output, mobile ? 'mobile-fresh-scene.png' : 'desktop-fresh-scene.png');
+        const purple = purplePixels(await scene.screenshot({ path: freshShot }));
+        result.screenshots.push(freshShot); result[mobile ? 'mobileFreshPixels' : 'desktopFreshPixels'] = purple; save();
+        assert(purple > 10, 'Fresh source-pose rays must be visible in native 3D');
+        checked(`${mobile ? 'mobile' : 'desktop'}-fixed-rays-source-age-and-native-overlay`);
+      }
       const shot = path.join(output, mobile ? 'mobile-failure.png' : 'desktop-failure.png');
       await page.screenshot({ path: shot, fullPage: true }); result.screenshots.push(shot); save();
       checked(`${mobile ? 'mobile' : 'desktop'}-failure-button-seeks-native-clock-and-3d`);
+      if (sparseExpected) {
+        await timestamp.fill(evidence.recording.end_s.toFixed(9)); await timestamp.press('Enter'); await timestamp.blur();
+        await expect(panel.getByText(/已过期/)).toHaveCount(2);
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const staleShot = path.join(output, mobile ? 'mobile-stale-scene.png' : 'desktop-stale-scene.png');
+        const purple = purplePixels(await scene.screenshot({ path: staleShot }));
+        result.screenshots.push(staleShot); save();
+        assert.equal(purple, 0, 'Expired depth must not retain fresh world rays');
+        checked(`${mobile ? 'mobile' : 'desktop'}-stale-observations-retain-age-and-hide-world-rays`);
+      }
       const back = Math.max(evidence.recording.start_s, evidence.primary_failure.simulation_s - 5);
       await timestamp.fill(back.toFixed(9)); await timestamp.press('Enter'); await timestamp.blur();
       await expect(panel).toContainText(`仿真时间 ${back.toFixed(3)}`);
