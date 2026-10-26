@@ -129,6 +129,21 @@ class BusinessOracleTests(unittest.TestCase):
                 row['payload']['pose']['position']['x']+=.02
         self.assertFalse(score(records,events)['passed'])
 
+    def test_late_recovery_marker_does_not_charge_terminal_idle_time_to_loading(self):
+        records,events,_,_=fixture()
+        records=[r for r in records if r['received_wall_time'] <= 106.]
+        terminal=copy.deepcopy(next(r for r in records if r['topic']=='http_state'))
+        terminal['received_wall_time']=392.
+        terminal['payload']['task']['status']='failed'
+        records.append(terminal)
+        for event in events:
+            if event['kind'] in ('full_finished','cleanup_checked'):event['wall_time']=527.
+        attempt=score(records,events)['attempts'][0]
+        self.assertEqual(attempt['wall_budget']['load_and_delivery_wall_s'],292.)
+        self.assertEqual(attempt['wall_budget']['full_task_wall_s'],427.)
+        self.assertNotIn('load_and_delivery_budget_exceeded',attempt['phase_evidence']['rejection_reasons'])
+        self.assertFalse(attempt['passed'])
+
     def test_named_endpoint_identity_rejects_second_source_and_wrong_owner(self):
         for kind in ('valid','second_source','wrong_owner','empty'):
             records,events,_,_=fixture()

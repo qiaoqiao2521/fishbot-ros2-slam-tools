@@ -254,3 +254,11 @@ CBC只读子任务cbc-2c3839返回done但result为空，没有可采用产物，
 - ForceImpulse现已接原Physics唯一mj_step与checkpoint，默认无事件轨迹保持，R1待执行脉冲恰好一次，R2撤销旧自有wrench。根独立force17+Physics8+原checkpoint7共32通过；未增加ROS触发器，也未声称有原生Goal接纳证明、掉货取消或长测。
 
 - query_placement复用原受控子进程，只隔离命名装/卸货IK/OMPL。父执行检查器另用同一快照refresh，防止沿用抓取前的冻结实体；原360装运/180卸货剩余期限及owner取消检查保留，不设新配额。实际快照子进程计划逐项一致，记录m2-placement-query-a；共享负载不同，不把10秒与95源秒之差宣称已定位GIL或已解决预算。
+
+## 2026-10-26：子进程放货原生试验与接管
+
+新C在源码734550b冻结下真实运行，放货查询source80.28、子PID175935已退出、10.020墙秒，剩余原360预算288.671秒。第一载货进场Nav仍在120.01777秒终态5，最终真位姿(1.26044,-2.15578,1.75735)，目标(1.25,-2,.463648)未完成；没有卸货或第二单。新旧轮共享负载/起始误差并非严格配对面板，不称稳定提速或算法改进。
+
+外层协调器退出143原因unknown，但Bridge与原独立observer继续工作；root不重发，回收已失败原UUID，按既有cleanup_proof/EvidenceTail连续quiet/stop_owned_launch清理。原recovery侧车、terminal-state、cleanup-quiet、score、sources与protected snapshots保留。接管延迟不能算进装运执行时间：报告改用第一条原任务终态HTTP接收时间；full_task窗口仍保留接管上界，两者不混用。原始marker不回写为更早的伪精确时间。
+
+CLI已让SIGTERM进入原RuntimeError清理路径，真实子进程信号fixture证明可展开原finally；不能仅凭这个fixture声称ROS取消整链在受信号时已验。未定位外部SIGTERM发送方，也没有修改其它任务、网络或平台配置。

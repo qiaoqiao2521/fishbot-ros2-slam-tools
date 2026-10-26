@@ -1219,7 +1219,9 @@ def business_delivery_checks(records, events, audit):
             arrival = arrival_gate.first_pass
             prefix = [s for s in selected if arrival is not None and s['stamp'] <= arrival]
             load = {'task_id': task_id, 'started_wall_time': start, **oracle.full_score(prefix, selected_audit)}
-            prefix_end = prefix[-1]['wall_time'] if prefix else end
+            terminal_observations = [r['received_wall_time'] for r in task_states
+                                     if r['payload']['task'].get('status') in ('failed', 'canceled', 'succeeded')]
+            prefix_end = prefix[-1]['wall_time'] if prefix else min(terminal_observations, default=end)
             prefix_events = [e for e in events if not (e.get('kind') == 'full_finished' and e.get('task_id') == task_id)]
             prefix_events.append({'kind': 'full_finished', 'task_id': task_id, 'wall_time': prefix_end})
             handoff = transport_checks(prefix, selected_audit, [load], prefix_events)
@@ -1282,7 +1284,7 @@ def business_delivery_checks(records, events, audit):
                                        'declared': declared_budget, 'load_and_delivery_wall_s':prefix_end-start,
                                        'load_and_delivery_complete': arrival is not None,
                                        'load_and_delivery_time_basis': ('physical_arrival_prefix' if arrival is not None
-                                                                       else 'elapsed_until_terminal_or_observation_end'),
+                                                                       else 'elapsed_until_first_terminal_observation_or_window_end'),
                                        'full_task_wall_s':end-start},
                           phase_evidence={'independent_selected_samples': len(selected),
                               'load_and_transport_prefix_samples': len(prefix),

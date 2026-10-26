@@ -14,6 +14,7 @@ import json
 import math
 import os
 from pathlib import Path
+import signal
 import socket
 import subprocess
 import sys
@@ -952,7 +953,13 @@ def main(argv=None):
                               key: code[key] for key in ('module_files', 'git_head', 'git_status',
                                                         'observation_errors') if key in code}}
             else:
-                result = run(args, manifest, declaration)
+                def interrupted(signum, frame):
+                    raise RuntimeError('Factory coordinator interrupted by SIGTERM; recover the original task')
+                previous = signal.signal(signal.SIGTERM, interrupted)
+                try:
+                    result = run(args, manifest, declaration)
+                finally:
+                    signal.signal(signal.SIGTERM, previous)
         print(json.dumps(result, ensure_ascii=False, allow_nan=False, indent=2))
         return 0 if result.get('dry_run') or result.get('passed') is True else 1
     except (OSError, ValueError, RuntimeError) as error:
