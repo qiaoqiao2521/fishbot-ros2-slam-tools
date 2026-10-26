@@ -446,3 +446,13 @@ Done：新drone-disarmed-observation.py复用原Flight/SITL/preflight_only及lis
 验证：10局部检查过/无跳过，另官方pyulog＋冻结frames独立读取三轮记录。修了父预检可能land/return_home、armed瞬态/流结束漏检、RPC挂起、清理取消漏SDK及runtime.close异常吞摘要；末次流结束停mode负例覆盖，正常路径未变不重复仿真。Loiter退出有rclpy context invalid，模式轮两条176额外ACK警告保留、未冒称修复。
 清理：12所属PID及其进程组已退出，目标三端口关闭；临时源码/build/ccache1310040064B、两个辅助文件、三个etc生成链接已删。保留三轮全部小体积原始证据及observer归档，清理后独立再读回成功。原三个冻结repo HEAD/clean已核，原cache未删。目录/恢复入口见docs/DRONE_HANDOFF_EVIDENCE.md最新节；最新独立报告在b34.../independent-readback.json。
 Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及地面改写诊断，仍不解锁/飞行。Knowledge=already_covered，沿用Wiki§20动作/消费/实际执行分层与原生时钟、CapMesh PIT-004，新的兼容性事实留项目，不写memory。本轮qoder超时发生在后续额度限制更新前，不作证据且未重试；内置Agent仅本对话只读复核。按最新规则优先AGY/ZCode，Qoder/CBC临时额度阻断期间跳过，同批不反复探测，DSH暂停。
+
+
+## 2026-10-26 M3原生接收与时钟观测
+
+- Current：接收/控制原生记录片完成，M2部分完成、完整M3/动态未过；保持未解锁及三处源码冻结。精确入口见docs/DRONE_HANDOFF_EVIDENCE.md同日最新节。
+- Done：新增默认OFF的px4-handoff-ingress.patch，依赖既有consumption；记录wire头/掩码/PVA、接收/发布决定/HRT及ground/rampup原生原因。采集器仅增加一个查询topic；新只读审计不发控制、不强选歧义、不混clock。
+- 实测：724首次listener有、ULog缺；定位optional启动登记后改nonoptional，新adb两轮各18调用/18返回。adb53条ingress中21非Offboard/32发布调用，26次控制新raw按stamp/PVA关联；962行全部地面改写。SDK True0，原生arming全1/400命令0。两轮真值已录窗XYZ跨度0。原生差0–8ms只属sim域，重复stamp4组及记录序号缺6个保留，不称实时/无丢失/唯一采用。
+- 验证：27局部过/0跳过；真ON1076步与修日志增量、末OFF构建通过；独立pyulog重算并在删副本后再过。26相符不替代完整M3/动态；额外176ACK警告保留未修。
+- 收尾：已删1310269440B临时源/build/ccache、三个辅助文件、四生成链接；八所属PID/进程组无残留，完整原记录/模型/失败及精确patch归档保留。cleanup.json记录可用空间5053059072→6363344896B，恢复/复验入口在证据文档。
+- Next/owner：根Codex核已有发送边界样本身份/源有效期/SDK缓存重发；PX4新接收stamp不等于新候选。保持不解锁/飞行。Knowledge=already_covered，沿用Wiki§20/原生时钟及CapMesh PIT-004；兼容性事实留项目。Qoder/AGY --pick均ready选择Qoder，真实短审查60s超时后不重试，改本对话内置审查/局部测试；不联系其他聊天，DSH暂停。

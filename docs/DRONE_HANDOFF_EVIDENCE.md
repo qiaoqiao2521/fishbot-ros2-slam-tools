@@ -230,3 +230,43 @@ cd ../workbench-tools/output/drone-committed/b34abfea-ff8e-4072-9063-5fb630a5a95
 重新采集时先按上节重建独立PX4副本与ON构建，向独立drone副本应用sender patch，设置DRONE_CACHE指向副本cache，复用原venv/mesh-libs与DRONE_EGO_WS。新output目录的collection-setup.json至少提供新run_id。从已source ROS Jazzy的shell运行采集适配，传入--drone-source、--output和独立实例/端口；只有显式--request-offboard才请求模式。原运行目录不重派、不覆盖。
 恢复observer补片可在新目录解开applied-observer-patches.tar.gz；大副本按固定源＋补片重建，原ULog可直接由pyulog读取，无需恢复整树。
 Next/owner：根Codex核原生时钟来源/点对应区间、MAVLink ingress与地面改写标记，保留未采用结论；本片不授权后续解锁/起飞。M3无解锁输入读回片完成，完整M3/动态闭环未完成，M2仍部分完成。
+
+
+## 原生接收、时钟与地面改写读回（2026-10-26）
+
+本轮继续既有隔离启动/未解锁许可。新增[接收观测补片](../apps/fishbot-control-station/workbench-tools/patches/px4-handoff-ingress.patch)，先应用前节consumption补片，再应用本片；仅临时副本使用。原drone/PX4/GCOPTER保持c866441/d6f12ad/e0444f6且clean，未解锁、起飞或更改算法/物理门槛。
+
+**源码时钟边界。** 固定PX4 `GZBridge.cpp:331–345`从同分区Gazebo Clock的sim字段取值；首回调设置REALTIME，后续设置MONOTONIC。`platforms/posix/src/px4/common/drv_hrt.cpp:106–110,484–490`在ENABLE_LOCKSTEP_SCHEDULER下直接读写锁步时钟，scheduler直接赋值，微秒转换会截断。真实编译命令已确认该宏。故PX4 HRT在这个运行配置中由Gazebo仿真时钟驱动；同tick可相等，不承诺严格递增或与宿主同步。
+固定`mavlink_receiver.cpp:1034–1151`的LOCAL_NED处理不使用wire time_boot_ms；地址/forward/frame/force/PVA检查后发布offboard_control_mode，仅nav_state=OFFBOARD时调用trajectory_setpoint发布。两个stamp均取本地HRT。SDK host monotonic、wire发送方boot时间、PX4 HRT与异步缓存sim必须分列；没有建立跨域实际锚点或延迟上界。
+
+补片默认`DRONE_HANDOFF_INGRESS_OBSERVATION=OFF`。开启后在原handler旁路记录源sysid/compid、8bit报文seq、receiver channel/局部序号、wire时间/掩码/原始PVA/yaw、解码PVA、nav_state、接收/结束/原发布HRT。RAII保留提前拒绝分支，不改变原检查、转换、发布次序或返回；PUBLISH_CALLED仅指原发布被调用，不是订阅消费ACK。receiver局部序号不跨对象生命周期，不能当候选UUID。
+原consumption消息另加ground_state_evaluated、not_taken_off、flying_ground_contact、ground_override、rampup_acceleration_cleared，取自原生分支条件，不修改地面零推力或rampup规则。两开关均关闭时仍注册消息schema；ingress logger预留订阅，不能声称整个构建/资源占用完全不变。开启旁路的执行开销仍无上界证据。
+
+| run_id | 实际结果 | 结论范围 |
+| --- | --- | --- |
+| 7242409e-7bb8-44c9-89e0-1c1baaff78b8 | 18开始/18返回，未解锁；listener三阶段可见ingress，ULog缺该topic，968控制行 | 日志链不成立，原记录保留 |
+| adbbaa2d-6e06-4653-8ba9-ca158a04db20 | 修日志登记后新UUID；18开始/18返回，53 ingress、962控制行、40原轨迹行 | 26次新raw更新有单一记录内stamp＋完整PVA关联；仅已录原生链 |
+
+首轮不是网络/算法失败：官方`LoggedTopics::add_topic`在optional且启动时orb不存在时不登记该订阅，logger早于首次SDK指令。仅将新ingress登记改为add_topic，复用原logger的晚订阅；不另建日志线程或强迫启动顺序。第二轮证实可写ULog。两轮实际应用的三份patch分别归档，旧失败不被新源码覆盖。
+第二轮53条中21条MODE_NOT_OFFBOARD、32条PUBLISH_CALLED；源sysid245/compid190、channel1、frame1。position-only掩码2552共36条，PVA掩码2048共17条。六组SDK PVA各有wire兼容3/2/3/3/3/3行、controller raw兼容7/12/13/13/13/17行；ENU/NED三阶应用转换独立核对无误，26对关联的wire/raw yaw相等。缓存/重发不是新RPC，也不证明新候选。
+原生发布stamp有4组重复，各2条。receiver序号已录范围11–69，内部缺13/32/38/51/63/66；ULog dropout记录0仍不等于全消息完整，不能确定每个缺号发生在哪层。346次新raw更新中26次相符、320次未关联、歧义0、同stamp但PVA不符0、未来接收候选0。未关联包含其他来源/窗口且可能有记录缺失，不判为320次外部指令丢失。
+26对native接收到控制观测的HRT差为0–8000µs，handler内差均0；这是本次锁步分辨率下的仿真时间观察，不是CPU耗时、宿主端到端延迟或性能保证。wire boot时间2084206–2086419ms，native接收7264000–9432000µs，不直接相减。当前源route已核，跨域样本锚点/epoch仍未知。
+第二轮962行ground_state_evaluated/not_taken_off/ground_override均true，flying_ground_contact/rampup清除均false；used P/V全NaN、A为NED[0,0,100]。26关联行也全在地面保护中，不能称外部PVA实际跟踪。原生arming_state两轮全1，400命令0；SDK False31/32、True0/0、连接前未知8/7保留。已录Gazebo真值窗口5.832–9.400/5.868–9.472sim内XYZ跨度均0；不扩大到记录前启动全过程。
+
+[只读审计](../apps/fishbot-control-station/workbench-tools/drone-native-ingress-audit.py)仅计算native域差，保留所有stamp/PVA候选；歧义不选，未来接收记录单列排除，跨channel序号按各channel检查。缺ULog/topic写warning并保留未知，不制造空成功。它不发控制，不认定日志完整、唯一RPC采用或飞行资格。
+27项局部检查通过、0跳过：原有限采集10项、新接收/地面补片10项、审计7项。新补片测试编译实际原/OFF/ON接收全函数和ground块，BODY_NED使用真实PX4 matrix头；覆盖地址/forward/frame/force/无PVA/Loiter/Offboard/位置-only、8bit回绕、同tick、观测丢失和12组ground/rampup组合。审计负例覆盖不同PVA、重复stamp、交错channel回退、未来接收及缺日志；不将局部编译替身视作整栈运行。
+官方生成＋ON真px4构建1076步完成；修日志后增量构建完成，末次OFF真构建也通过，两模块编译命令均无观测宏。ON中LOCKSTEP及两个观测宏均确认。两轮原生读回由独立pyulog脚本重算，源码副本清理后再次成功。两轮SDK仍各有两条176额外ACK warning，根因未修；EGO context-invalid本轮未出现，不称此前问题解决。
+
+恢复入口：原忽略`workbench-tools/output/drone-committed/<run_id>/`保存原始sender/native/telemetry/truth/depth/ULog/模型、构建日志、精确三patch归档及报告。最新adb目录有native-ingress-audit.json、independent-ingress-readback.py/.json/.log、source-build-info.json、off-build-info.json及cleanup.json。恢复补片到新目录并按原固定源重建；重新采集仍用新UUID，独立DRONE_CACHE、原venv/mesh-libs/EGO overlay，ON配置需另加`-DDRONE_HANDOFF_INGRESS_OBSERVATION=ON`。
+已删本轮临时源码/build/ccache1310269440B（约1.22GiB）、三个临时辅助文件和四个生成链接；八个所属PID及其进程组无残留。可用空间5053059072→6363344896B仅为收尾时全盘观测。两份patch归档已逐成员完整解压读回，原cache与全部新记录保留。
+
+```sh
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_disarmed_observation test_drone_ingress_patch test_drone_native_ingress_audit -v
+cd ../workbench-tools
+/home/muqiao/.cache/ros2-drone/venv/bin/python drone-native-ingress-audit.py output/drone-committed/adbbaa2d-6e06-4653-8ba9-ca158a04db20
+cd output/drone-committed/adbbaa2d-6e06-4653-8ba9-ca158a04db20
+/home/muqiao/.cache/ros2-drone/venv/bin/python independent-ingress-readback.py
+```
+
+Next/owner：根Codex核已有发送边界的候选样本身份、源有效期与SDK重发缓存，复用现有失效处理。因为PX4按每次接收重打HRT、忽略wire boot，新的raw stamp不能单独证明候选仍新鲜。先明确过期/暂停/恢复/撤销合同，再准备可审查的执行适配；当前不自动解锁或飞行。此接收/地面诊断片完成，M2部分完成、完整M3与动态闭环仍未验收。

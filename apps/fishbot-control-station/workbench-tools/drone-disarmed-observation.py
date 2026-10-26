@@ -16,7 +16,7 @@ import time
 SETPOINT_TIMEOUT_S = 4.
 
 TOPICS = ('offboard_control_mode', 'trajectory_setpoint', 'position_control_handoff',
-          'vehicle_control_mode', 'vehicle_status')
+          'mavlink_setpoint_ingress', 'vehicle_control_mode', 'vehicle_status')
 
 
 
