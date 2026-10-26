@@ -35,62 +35,95 @@ class _PayloadQueryBackend:
 
 def query_approach(manifest, q6, car_pose, *, check, timeout_s=30.,
                    arm_id=None, cargo_id=None, snapshot=None):
-    """One pure planning process; the caller retains action ownership and hold.
+    """Original bounded approach query; input and its 30s limit stay intact."""
+    if not math.isfinite(timeout_s) or not 0 < timeout_s <= 30.:
+        raise ValueError('Approach query requires a wall budget up to 30 seconds')
+    payload = {'manifest': manifest, 'q6': [float(v) for v in q6],
+               'car_pose': [float(v) for v in car_pose]}
+    if arm_id is not None or cargo_id is not None:
+        payload.update(arm_id=arm_id, cargo_id=cargo_id, snapshot=snapshot)
+    return _query('approach', payload, check=check, timeout_s=timeout_s)
 
-    Each query uses the original planner's first seed, without global RNG resets.
-    Poll the existing owner's check while waiting. Cancel/timeout closes the owned
-    query before returning; the child never creates ROS nodes or moves live data.
+
+def query_placement(manifest, snapshot, centers_local, *, check, timeout_s,
+                    arm_id, cargo_id, car_pose=None):
+    """Pure named placement under the owner's remaining original task budget."""
+    if not math.isfinite(timeout_s) or not 0 < timeout_s <= 360.:
+        raise ValueError('Placement query requires remaining original task budget up to 360 seconds')
+    if arm_id is None or cargo_id is None:
+        raise ValueError('Placement query requires explicit arm_id and cargo_id')
+    if car_pose is None:
+        car_pose = snapshot['car']['position']+snapshot['car']['quaternion_wxyz']
+    payload = {'manifest': manifest, 'snapshot': snapshot,
+               'centers_local': centers_local, 'car_pose': [float(v) for v in car_pose],
+               'arm_id': arm_id, 'cargo_id': cargo_id}
+    return _query('placement', payload, check=check, timeout_s=timeout_s)
+
+
+def _query(kind, values, *, check, timeout_s):
+    """One owned pure child, polled through the existing task owner's check.
+
+    No ROS, live-data writes, retries or new scheduler. Query artifacts and the
+    child are reclaimed on success, original cancellation, timeout or failure.
     """
     import os
     import subprocess
     import sys
     import tempfile
     import uuid
-    if not math.isfinite(timeout_s) or not 0 < timeout_s <= 30.:
-        raise ValueError('Approach query requires a wall budget up to 30 seconds')
+    label = kind.capitalize()
     identity = str(uuid.uuid4()); started = time.monotonic(); process = None
-    payload = {'query_id': identity, 'manifest': manifest,
-               'q6': [float(v) for v in q6], 'car_pose': [float(v) for v in car_pose]}
-    if arm_id is not None or cargo_id is not None:
-        payload.update(arm_id=arm_id, cargo_id=cargo_id, snapshot=snapshot)
+    payload = {'query_id': identity, **values}
     encoded = json.dumps(payload, allow_nan=False)
     if len(encoded.encode()) > 1024*1024:
-        raise ValueError('Approach query exceeds one MiB')
-    with tempfile.TemporaryDirectory(prefix='fishbot-approach-') as folder:
+        raise ValueError(label+' query exceeds one MiB')
+    with tempfile.TemporaryDirectory(prefix='fishbot-'+kind+'-') as folder:
         request, response = Path(folder)/'request.json', Path(folder)/'response.json'
         request.write_text(encoded)
         try:
             check()
             process = subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()),
-                '--query-approach', str(request), str(response)], stdin=subprocess.DEVNULL,
+                '--query-'+kind, str(request), str(response)], stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
             while process.poll() is None:
                 check()
                 if time.monotonic()-started >= timeout_s:
-                    raise TimeoutError('Approach planning exceeded its wall budget')
+                    raise TimeoutError(label+' planning exceeded its wall budget')
                 time.sleep(.02)
             check()
             if time.monotonic()-started >= timeout_s:
-                raise TimeoutError('Approach planning exceeded its wall budget')
+                raise TimeoutError(label+' planning exceeded its wall budget')
             if not response.is_file() or response.stat().st_size > 1024*1024:
-                raise RuntimeError('Approach query returned no bounded result')
+                raise RuntimeError(label+' query returned no bounded result')
             result = json.loads(response.read_text())
             if result.get('query_id') != identity:
-                raise RuntimeError('Approach query identity mismatch')
+                raise RuntimeError(label+' query identity mismatch')
             if process.returncode or result.get('error'):
-                raise RuntimeError('Approach query failed: '+str(result.get('error', process.returncode)))
+                raise RuntimeError(label+' query failed: '+str(result.get('error', process.returncode)))
             plan = result['plan']
-            if (not isinstance(plan, dict) or plan.get('planning', {}).get('status') != 'solved'
-                    or not isinstance(plan.get('segments'), list) or len(plan['segments']) != 5):
-                raise RuntimeError('Malformed approach query result')
-            plan['planning']['execution'] = {'mode': 'one_owned_query_process',
-                'query_id': identity,
+            if kind == 'approach':
+                valid = (isinstance(plan, dict) and plan.get('planning', {}).get('status') == 'solved'
+                    and isinstance(plan.get('segments'), list) and len(plan['segments']) == 5)
+                field = 'planning'
+            else:
+                valid = (isinstance(plan, dict) and plan.get('retreat', {}).get('status') == 'solved'
+                    and isinstance(plan.get('report'), dict)
+                    and isinstance(plan.get('segments'), list)
+                    and len(plan['segments']) == len(payload['centers_local'])+3)
+                field = 'report'
+            if not valid:
+                raise RuntimeError('Malformed '+kind+' query result')
+            execution = {'mode': 'one_owned_query_process', 'query_id': identity,
                 'input_sha256': hashlib.sha256(json.dumps(
                     {key: value for key, value in payload.items() if key != 'query_id'},
                     sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest(),
                 'child_pid': process.pid, 'caller_pid': os.getpid(), 'child_exited': True,
                 'elapsed_wall_s': time.monotonic()-started, 'wall_budget_s': timeout_s,
                 'seed_scope': 'first_plan_of_each_query_process', 'shortcut_applied': False}
+            if kind == 'placement':
+                execution['wall_remaining_s'] = max(0., timeout_s-execution['elapsed_wall_s'])
+                execution['is_controller_consumption_ack'] = False
+            plan[field]['execution'] = execution
             return plan
         finally:
             if process is not None and process.poll() is None:
@@ -302,16 +335,11 @@ class ArmPlanner:
         return {"segments": segments, "report": report, "retreat": retreat,
                 "car_pose": self.car_pose, "snapshot_tip_forces_n": forces}
 
-    def prepare_placement(self, snapshot, centers_local, *, car_pose=None):
-        """Explicit station route using the original carried checker and IK.
-
-        The upstream transport function hardcodes the original tray route.
-        Only waypoint selection is generalized here; its margins, upright IK,
-        Cartesian/joint resolutions and measured dual-pad admission stay intact.
-        """
+    def refresh_placement_context(self, snapshot, *, car_pose=None):
+        """Refresh only the parent's measured execution collision-check context."""
         if self.entity_view is None:
             raise ValueError('Station placement requires named entities')
-        np, mj, view = self.np, self.mujoco, self.entity_view
+        view = self.entity_view
         local = view.canonical_snapshot(snapshot)
         if 'ctrl' not in local:
             raise ValueError('Measured station grasp requires the current actuator references')
@@ -319,6 +347,17 @@ class ArmPlanner:
             adr = int(self.common.joint('base_free_joint').qposadr[0])
             car_pose = view.data.qpos[adr:adr+7]
         self._refresh_models(car_pose)
+        return local
+
+    def prepare_placement(self, snapshot, centers_local, *, car_pose=None):
+        """Explicit station route using the original carried checker and IK.
+
+        The upstream transport function hardcodes the original tray route.
+        Only waypoint selection is generalized here; its margins, upright IK,
+        Cartesian/joint resolutions and measured dual-pad admission stay intact.
+        """
+        np, mj = self.np, self.mujoco
+        local = self.refresh_placement_context(snapshot, car_pose=car_pose)
         execution = mj.MjData(self.contact)
         execution.qpos[:] = local['qpos']; execution.qvel[:] = local['qvel']
         if 'ctrl' in local:
@@ -369,7 +408,7 @@ class ArmPlanner:
 
 def _query_main():
     import sys
-    if len(sys.argv) != 4 or sys.argv[1] != '--query-approach':
+    if len(sys.argv) != 4 or sys.argv[1] not in ('--query-approach', '--query-placement'):
         raise SystemExit('Use the bounded query adapter from the existing owner')
     request, response = map(Path, sys.argv[2:])
     payload = json.loads(request.read_text())
@@ -377,7 +416,9 @@ def _query_main():
     try:
         planner = ArmPlanner(payload['manifest'], car_pose=payload['car_pose'],
             arm_id=payload.get('arm_id'), cargo_id=payload.get('cargo_id'), snapshot=payload.get('snapshot'))
-        result['plan'] = planner.prepare_approach(payload['q6'], seed=0)
+        result['plan'] = (planner.prepare_approach(payload['q6'], seed=0)
+                          if sys.argv[1] == '--query-approach' else
+                          planner.prepare_placement(payload['snapshot'], payload['centers_local']))
     except Exception as error:
         result['error'] = str(error)[:2000]
     response.write_text(json.dumps(result, allow_nan=False))

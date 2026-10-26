@@ -231,3 +231,26 @@ CBC只读子任务cbc-2c3839返回done但result为空，没有可采用产物，
 - B/A 配置公开 prepare 得到43qpos/40qvel/22ctrl；1000原生静止步的禁碰/reset0，原完整几何 A/B 点预检通过。初次私有静态脚本误导入 SceneGeometry，在创建 Physics 前失败；正确入口 cooperation_geometry_check 后通过。未验 A 卸货臂实际抓放或 B/A 路线。
 - 最新 m2-feedback-owner-a 完整反馈1855项通过：control1098/checkpoint22/mission209/autonomy61/frontend465，0失败/跳过。定向25/26项早期 fixture 错误及漏声明 slot 失败保留；125旧计数曾含导入 TestCase 重复收集，已改模块别名，不当125个独立新用例。
 - CLI 子 Agent 本批 AGY 90s、额度预检 usable=true 的 Qoder 180s 均超时，未据此称交付；Qoder get_status sessions=0、无残留进程，未产生源码改动。根与内部子 Agent 实施并独立核验。原 GitHub run40111818800 本轮再次读回 queued/conclusion=null；未重复派发。
+
+
+## M2 K 配置接续与 A 卸货（2026-10-25）
+
+- 原完整K的实际缓存位于 ~/.local/share/fishbot/cloud-jobs/kaggle-20261024/local-full-b-a-k，不是旧 ~/.cache/fishbot/factory-line-delivery-20261021。原 manifest/nav2/最终读回均可读取。新B/B与B/A以公开prepare重新生成多实体世界与地图，再复用现有f1_candidate.configure选择原Graceful配置与已确认.005全局附加余量；控制器、平滑器、行为服务器三节点YAML、载货事务限速、工厂输入、Omni模型、staging和传感器计算设置与K分别相等。新地图/实体和当前源码不同，不称K原回合重放。默认旧配置未修改。
+- 发现并修正可选 capture_before_delivery 的主货物别名检查：原检查在第二件配送时会读已经在货架的 cargo_1；现调用原 task_handoff 选择当前货物。6项真实Bridge方法定向合同通过。新完整场景该可选开关仍为false，未靠关闭一个原已启用能力来绕过本轮失败。
+- A新初态卸货 cargo_2-a 的57960步/5696帧、115.92源秒完成，源码起止一致；最小抬升40.858mm、双指保持1.5源秒、最终支撑/独立cell/夹指0/原生静止1.52源秒。臂速度范数最大1.791e-5rad/s，B上第一货物全样本保持其货位和支撑，禁碰/reset0。只是A到站后卸货分项，不是B/A连续运输。
+- 新完整B/B a在保护快照阶段因当前shell缺XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESS而退出，0 native launch/0动作，原目录及setup-failure保留；现有uid1000总线socket可用。仅在下一条运行命令设置现存用户bus地址，未启动/重启daemon，也未改全局环境或保护实例。b使用新输出目录、domain166/9136；已实际进入第一单，原UUID51a90819-27dd-4516-b419-23dfb2406566，实际加载native-current-goal的四个预期库。最终业务结果待原run结束，不从当前stage计通过。
+- M3只读接口核对：现FaultInjector每episode只接受一个Dock UUID，不适用于无reset第二订单；SensorDrop宜在Bridge转发detected_dock_pose前真实跳过发布，保留源端及Oracle流。ForceImpulse应在Physics步边界累积源时间Ns，结束仅撤销本事件wrench。transport现有Oracle仍以业务成功为条件，掉货后的正确取消需单列task_completion=false与expected_safety结果。SoC应复用fishbot_sim_power.PowerModel，prefault ring复用R1/CheckpointIO；应用快照还须保存故障水位/剩余冲量/SoC，R2去激活时移除旧故障自有外力。不能从原R1含xfrc就推断这些新应用状态已恢复。
+
+
+## 2026-10-26：B/B失败边界与规划剖析
+
+- m2-native-b-b-b第一单原装运360墙秒失败，路线83.196墙秒/120秒并未先耗尽；任务实际362.544秒，单次start、reset0、同world/episode，第二单未执行。原生DriveOnHeading成功，approach Nav终态5；quiet、参数恢复和owned清理分别成立，不计运输通过。
+- 历史独立复算m2-native-b-b-diagnostic-replay-a：17337有效命名样本、缺独立样本0；抓取/放货/回位及载货位移分项成立，但未到站，所以最终成功前缀0。原报告把空前缀装运耗时显示0；现补实际终态耗时362.544及phase_evidence，不改成功门槛。
+- m2-placement-profile-a从真实source99/seq4949双指保持帧单次离线prepare_placement，未启动ROS或推进物理。原checker1335×1061=1416435次距离查询，固定底座/world304380次；原生距离累计4.264秒，forward6102次0.641秒，因此“forward主导”被否定。cProfile/计数包装器有显著开销，32.65秒不是未插桩基线，不宣称提速；原完整几何、1mm/0.2mm与345路径样本保持。
+- M3新ForceImpulse独立复验发现可编辑快照的非终态累计时长超过目标会产生负剩余反向力；现恢复前检查时长/源窗/尾段比例，step局部撤销无效事件，其他外力保持。17项含两个原生小模型通过；尚无Physics接入、真实掉货取消或长测结论。
+
+- 固定pair缓存候选在531状态（含9个碰撞负例）与原判定0差异，但单次顺序对照.921707/.964599秒，没有提速；生产代码已撤回，patch/测试/全结果在私有m2-fixed-pair-cache-a，不能称预算修复。原无插桩全placement在同真实快照6.007墙秒/6.001CPU秒、初始化3.484秒，原345路径样本保持。活动任务95源秒与离线6墙秒的原因未唯一定位；独立查询用于复用现有取消/期限响应能力，提速必须另验。
+- 新命名GID核验保存运行中端点，与physics节点owner交叉核对；domain167实际两cargo各181帧，均唯一真实端点，全部hold/reset0/禁碰0，producer退出/context关闭。历史B/B没有该命名端点字段，明确unavailable，不追补为核验成功。
+- ForceImpulse现已接原Physics唯一mj_step与checkpoint，默认无事件轨迹保持，R1待执行脉冲恰好一次，R2撤销旧自有wrench。根独立force17+Physics8+原checkpoint7共32通过；未增加ROS触发器，也未声称有原生Goal接纳证明、掉货取消或长测。
+
+- query_placement复用原受控子进程，只隔离命名装/卸货IK/OMPL。父执行检查器另用同一快照refresh，防止沿用抓取前的冻结实体；原360装运/180卸货剩余期限及owner取消检查保留，不设新配额。实际快照子进程计划逐项一致，记录m2-placement-query-a；共享负载不同，不把10秒与95源秒之差宣称已定位GIL或已解决预算。

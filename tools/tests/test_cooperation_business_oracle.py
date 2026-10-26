@@ -102,12 +102,59 @@ class BusinessOracleTests(unittest.TestCase):
         self.assertFalse(result['passed'])
         self.assertTrue(result['attempts'][0]['missing_independent_samples_preview'])
 
+    def test_failed_arrival_retains_observed_samples_and_elapsed_load_budget(self):
+        records,events,_,_=fixture()
+        records=[r for r in records if r['received_wall_time'] <= 106.]
+        for event in events:
+            if event['kind'] in ('full_finished','cleanup_checked'):
+                event['wall_time']=461.
+        result=score(records,events)
+        attempt=result['attempts'][0]
+        self.assertFalse(result['passed'])
+        evidence=attempt['phase_evidence']
+        self.assertGreater(evidence['independent_selected_samples'],0)
+        self.assertEqual(evidence['load_and_transport_prefix_samples'],0)
+        self.assertGreater(evidence['pickup_and_transport_observed']['scored_samples'],0)
+        self.assertIn('arrival_not_verified',evidence['rejection_reasons'])
+        self.assertLess(attempt['missing_independent_samples'],evidence['independent_selected_samples'])
+        self.assertIn('load_and_delivery_budget_exceeded',evidence['rejection_reasons'])
+        self.assertFalse(attempt['wall_budget']['passed'])
+        self.assertFalse(attempt['wall_budget']['load_and_delivery_complete'])
+        self.assertEqual(attempt['wall_budget']['load_and_delivery_wall_s'],361.)
+
     def test_raw_cargo_pose_cannot_override_independently_received_pose(self):
         records,events,_,_=fixture()
         for row in records:
             if row['topic']=='cargo:cargo_2' and row['source_stamp']>15.:
                 row['payload']['pose']['position']['x']+=.02
         self.assertFalse(score(records,events)['passed'])
+
+    def test_named_endpoint_identity_rejects_second_source_and_wrong_owner(self):
+        for kind in ('valid','second_source','wrong_owner','empty'):
+            records,events,_,_=fixture()
+            primary={'node':'physics','namespace':'/','gid':[1,2,3]}
+            named={'node':'physics','namespace':'/','gid':[4,5,6]}
+            entries=[named]
+            if kind=='second_source':entries.append({**named,'gid':[7,8,9]})
+            elif kind=='wrong_owner':named['node']='another_process'
+            elif kind=='empty':entries=[]
+            records.append({'topic':'publisher_inventory','received_wall_time':102.,
+                'payload':{'/cooperation/physics_state':[primary],
+                           '/cooperation/cargo/cargo_2/pose':entries}})
+            with self.subTest(kind=kind):
+                result=score(records,events);identity=result['attempts'][0]['named_pose_publisher_identity']
+                self.assertTrue(identity['required'])
+                self.assertEqual(result['passed'],kind=='valid')
+                self.assertEqual(identity['passed'],kind=='valid')
+
+    def test_historical_missing_endpoint_inventory_is_not_claimed_verified(self):
+        records,events,_,_=fixture()
+        result=score(records,events)
+        self.assertTrue(result['passed'])
+        self.assertFalse(result['named_pose_publisher_identity_checked'])
+        identity=result['attempts'][0]['named_pose_publisher_identity']
+        self.assertFalse(identity['required'])
+        self.assertEqual(identity['status'],'historical_inventory_unavailable')
 
     def test_web_inventory_and_success_do_not_substitute_for_unload_lift(self):
         records,events,_,_=fixture()

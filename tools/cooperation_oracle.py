@@ -70,6 +70,7 @@ def observe(args):
     cargo_ids = list(manifest['business_entities']['cargo'])
     for cargo_id in cargo_ids:
         cargo_topic(cargo_id)
+    args.publisher_inventory_topics = tuple(cargo_topic(cargo_id) for cargo_id in cargo_ids)
     import rclpy.node as node_module
     original_node = node_module.Node
     node_module.Node = named_observer_node(original_node, cargo_ids)
@@ -1137,6 +1138,28 @@ def _business_shelf(item, previous, manifest, binding, unload_arm):
                          'all_entities_quiet': bool(entities_quiet), 'independent_world_speed_m_s': speed}
 
 
+def named_publisher_identity(records, cargo_id, start, end):
+    """Audit recorded endpoints; historical missing inventories remain explicit."""
+    topic = cargo_topic(cargo_id)
+    inventories = [r['payload'] for r in records if r['topic'] == 'publisher_inventory'
+                   and start <= r['received_wall_time'] <= end]
+    required = any(topic in value for value in inventories)
+    endpoints = {}
+    for name in (topic, '/cooperation/physics_state'):
+        entries = [entry for value in inventories for entry in value.get(name, [])]
+        endpoints[name] = {'gids': sorted({tuple(entry.get('gid', [])) for entry in entries}),
+                           'nodes': sorted({(entry.get('namespace'), entry.get('node')) for entry in entries})}
+    complete = all(len(value['gids']) == 1 and bool(value['gids'][0])
+                   and len(value['nodes']) == 1
+                   and all(isinstance(part, str) and part for part in value['nodes'][0])
+                   for value in endpoints.values())
+    same_owner = complete and endpoints[topic]['nodes'] == endpoints['/cooperation/physics_state']['nodes']
+    return {'required': required, 'checked': required and complete,
+            'passed': bool(same_owner) if required else True,
+            'status': ('verified' if same_owner else 'invalid_or_missing_endpoints') if required else 'historical_inventory_unavailable',
+            'topics': endpoints, 'scope': 'recorded_endpoint_identity_not_per_message_consumption_ack'}
+
+
 def business_delivery_checks(records, events, audit):
     """Score named load/transport, then physical unload through final cleanup."""
     states = [r for r in records if r['topic'] == 'http_state']
@@ -1163,6 +1186,8 @@ def business_delivery_checks(records, events, audit):
                   'inventory_receipt_is_physical_proof': False, 'controller_helpers_imported': False}
         try:
             binding = _business_binding(declarations[0]);result['business_delivery'] = binding
+            publishers = named_publisher_identity(records, binding['cargo_id'], start, end)
+            result['named_pose_publisher_identity'] = publishers
             if manifest is None or any(_business_binding(value) != binding for value in declarations):
                 raise ValueError('Missing manifest or changing named cargo binding')
             entities = manifest['business_entities'];station = entities['unload_stations'][binding['unload_station_id']]
@@ -1194,7 +1219,7 @@ def business_delivery_checks(records, events, audit):
             arrival = arrival_gate.first_pass
             prefix = [s for s in selected if arrival is not None and s['stamp'] <= arrival]
             load = {'task_id': task_id, 'started_wall_time': start, **oracle.full_score(prefix, selected_audit)}
-            prefix_end = prefix[-1]['wall_time'] if prefix else start
+            prefix_end = prefix[-1]['wall_time'] if prefix else end
             prefix_events = [e for e in events if not (e.get('kind') == 'full_finished' and e.get('task_id') == task_id)]
             prefix_events.append({'kind': 'full_finished', 'task_id': task_id, 'wall_time': prefix_end})
             handoff = transport_checks(prefix, selected_audit, [load], prefix_events)
@@ -1255,10 +1280,24 @@ def business_delivery_checks(records, events, audit):
                           wall_budget={'required': declared_budget is not None, 'passed': budget_ok,
                                        'load_and_delivery_limit_wall_s': 360.,
                                        'declared': declared_budget, 'load_and_delivery_wall_s':prefix_end-start,
+                                       'load_and_delivery_complete': arrival is not None,
+                                       'load_and_delivery_time_basis': ('physical_arrival_prefix' if arrival is not None
+                                                                       else 'elapsed_until_terminal_or_observation_end'),
                                        'full_task_wall_s':end-start},
+                          phase_evidence={'independent_selected_samples': len(selected),
+                              'load_and_transport_prefix_samples': len(prefix),
+                              'arrival_source_stamp': arrival,
+                              'pickup_and_transport_observed': preliminary,
+                              'unload_samples_after_arrival': sum(arrival is not None and s['stamp'] > arrival for s in unload),
+                              'rejection_reasons': ([ 'missing_independent_samples' ] if window_missing or not selected else [])
+                                  + ([ 'named_publisher_identity_not_verified' ] if not publishers['passed'] else [])
+                                  + ([ 'arrival_not_verified' ] if arrival is None else [])
+                                  + ([ 'load_and_delivery_budget_exceeded' ] if prefix_end-start > 360 else [])
+                                  + ([ 'unload_lift_not_verified' ] if lift.first_pass is None else [])
+                                  + ([ 'shelf_home_rest_not_verified' ] if not continuously_settled else [])},
                           missing_independent_samples=len(window_missing),
                           missing_independent_samples_preview=(missing+missing_unload)[:8])
-            result['passed'] = bool(len(ends) == 1 and selected and load['passed']
+            result['passed'] = bool(publishers['passed'] and len(ends) == 1 and selected and load['passed']
                 and handoff['passed'] and delivery['passed'] and lift.first_pass is not None
                 and continuously_settled and fresh and cleanup['passed'] and receipt_ok and all_contacts_clear and budget_ok)
         except (KeyError, TypeError, ValueError, IndexError, StopIteration) as error:
@@ -1266,7 +1305,9 @@ def business_delivery_checks(records, events, audit):
         results.append(result)
     return {'required': True, 'attempts': results, 'passed': bool(results) and all(r['passed'] for r in results),
             'independent_pose_topic_template': '/cooperation/cargo/<cargo_id>/pose',
-            'legacy_primary_pose_fallback': True, 'named_pose_publisher_identity_checked': False,
+            'legacy_primary_pose_fallback': True,
+            'named_pose_publisher_identity_checked': bool(results) and all(
+                r.get('named_pose_publisher_identity', {}).get('checked') is True for r in results),
             'original_thresholds_preserved': True}
 
 

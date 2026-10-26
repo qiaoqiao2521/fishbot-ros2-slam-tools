@@ -27,6 +27,7 @@ import xml.etree.ElementTree as ET
 from fishbot_sim_power import BEACON_LABEL, PowerModel, Truth
 from cooperation_core import ContinuousEvidence
 from cooperation_recording import BoundedDiagnosticLog
+from cooperation_physical_faults import ForceImpulse, _context as normalize_force_owner_context
 from cooperation_perception import (
     DETECTION_TOPIC as STATION_DETECTION_TOPIC, DIAGNOSTIC_NAME,
     POSE_TOPIC as STATION_POSE_TOPIC, normalize_config,
@@ -644,6 +645,40 @@ class Physics:
         self.native_actions_busy = False
         self.reset_quiet = ContinuousEvidence(.7)
         self.reset_ready = False
+        self.physical_faults = ForceImpulse(self.model, self.data)
+        self.physical_fault_context = None
+
+    def force_owner_context(self, context):
+        """Validate an explicit owner handoff; this does not verify a ROS Goal."""
+        current = normalize_force_owner_context(context)
+        if (current['world_session_id'] != self.world_session_id
+                or current['episode_id'] != self.episode_id):
+            raise ValueError('Force owner context belongs to another physical world or episode')
+        return current
+
+    def offer_force_impulse(self, event, *, context):
+        """Accept an explicitly handed-off task/Goal/stage context, never dispatch it."""
+        current = self.force_owner_context(context)
+        previous = tuple(self.physical_faults.events)
+        # Validate/offer first: a malformed new event must not withdraw valid forces.
+        self.physical_faults.offer(event, context=current)
+        if current != self.physical_fault_context:
+            for identity in previous:
+                self.physical_faults.dearm(identity, reason='owner_context_changed')
+        self.physical_fault_context = current
+        return self.physical_faults.status(event['event_id'])
+
+    def set_force_owner_context(self, context):
+        """Withdraw or update a handoff at the physics-owner boundary."""
+        current = None if context is None else self.force_owner_context(context)
+        if current != self.physical_fault_context:
+            self.physical_faults.dearm(reason='owner_context_withdrawn' if current is None else 'owner_context_changed')
+        self.physical_fault_context = current
+
+    def close(self):
+        """Withdraw additive forces; no body state or another owner's wrench changes."""
+        self.physical_faults.dearm(reason='physics_closed')
+        self.physical_fault_context = None
 
     def set_arm_reference(self, names, positions, *, source_stamp=None):
         if self.reset_stamp is not None:
@@ -700,6 +735,7 @@ class Physics:
             self.reset_quiet = ContinuousEvidence(.7)
             raise ValueError('physical reset readiness changed')
         preserved_time = float(self.data.time)
+        self.set_force_owner_context(None)
         self.mj.mj_resetData(self.model, self.data)
         self.data.qpos[:] = self.initial_qpos
         self.data.time = preserved_time
@@ -748,7 +784,16 @@ class Physics:
             self.data.ctrl[actuator] = max(low, min(high, self.data.ctrl[actuator]))
         if self.docking_guard.update(self.data.qpos[self.car_free_q:self.car_free_q+2]):
             self.data.ctrl[self.wheel_a] = 0.
-        self.mj.mj_step(self.model, self.data)
+        force_step = self.physical_fault_context is not None
+        try:
+            if force_step:
+                self.physical_faults.before_step(self.physical_fault_context)
+            self.mj.mj_step(self.model, self.data)
+            if force_step:
+                self.physical_faults.after_step()
+        except BaseException:
+            self.close()
+            raise
         self.steps += 1
         self.last_wall = time.time()
         if not (all(self.np.isfinite(value).all() for value in
@@ -756,6 +801,7 @@ class Physics:
                      self.data.xpos, self.data.xquat)) and math.isfinite(self.data.time)):
             self.wheels.set_hold(True)
             self.data.ctrl[self.wheel_a] = 0.
+            self.close()
             raise RuntimeError('nonfinite MuJoCo state; car hold latched')
         if self.docking_guard.update(self.data.qpos[self.car_free_q:self.car_free_q+2]):
             self.data.ctrl[self.wheel_a] = 0.
@@ -1533,7 +1579,7 @@ def run_ros(args):
                         raise RuntimeError('ROS receive executor failed') from receiver_errors[0]
                 finalize_stage('ros_receive.stop', stop_receiver)
             for name, resource in (('checkpoint_io', node.checkpoint_io), ('frames', frames), ('camera', node.camera),
-                                   ('lidar', node.lidar), ('record', record)):
+                                   ('lidar', node.lidar), ('record', record), ('physics', physics)):
                 if resource is not None:
                     finalize_stage(name+'.close', resource.close)
         finally:

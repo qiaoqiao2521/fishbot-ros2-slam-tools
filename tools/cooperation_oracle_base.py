@@ -377,7 +377,13 @@ def score(directory,marker_path,*,output_directory=None,augment=None):
         print(json.dumps({'score_file':str(target),'passed':False,'reason':result['reason']}))
         return result
     records=[]; first_physics=True
-    with (directory/'observer.jsonl').open() as source_file:
+    record_path = directory/'observer.jsonl'
+    if record_path.exists():
+        source_file = record_path.open()
+    else:
+        import gzip
+        source_file = gzip.open(directory/'observer.jsonl.gz', 'rt', encoding='utf-8')
+    with source_file:
         for line in source_file:
             record=json.loads(line)
             if record['topic']=='physics':
@@ -597,7 +603,8 @@ def observe(args):
                                          '/cooperation/station_pose','/cooperation/station_detection','/cooperation/perception_status',
                                          '/cooperation/station_admission',
                                          '/cooperation/camera/image_raw','/cooperation/camera/camera_info',
-                                         '/cooperation/camera/frame_metadata','/cooperation/vision_quality')}
+                                         '/cooperation/camera/frame_metadata','/cooperation/vision_quality',
+                                         *getattr(args,'publisher_inventory_topics',()))}
                 record('publisher_inventory',inventory);last_inventory=time.monotonic()
     finally:
         done.set();worker.join(timeout=2.)

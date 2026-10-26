@@ -63,6 +63,45 @@ class NamedOwnerTests(unittest.TestCase):
         item['contacts']['supports']={}
         self.assertFalse(p.task_handoff(p.raw))
 
+    def test_named_placement_query_keeps_original_deadline_and_refreshes_execution_geometry(self):
+        p=self.owner;calls=[];raw=p.raw
+        p.wall_deadline=self.case.namespace['time'].monotonic()+37.
+        execution={'mode':'one_owned_query_process','child_exited':True,'child_pid':123,
+                   'wall_budget_s':37.,'wall_remaining_s':36.}
+        def query(manifest,snapshot,centers,**kwargs):
+            calls.append((snapshot,centers,kwargs));kwargs['check']()
+            return {'report':{'execution':execution},'segments':[]}
+        self.case.namespace['query_placement']=query
+        planner=NS(refresh_placement_context=lambda snapshot,**kwargs:calls.append(('refresh',snapshot,kwargs)))
+        plan=p.placement_query(planner,raw,[[.18,0.,.06]])
+        self.assertEqual(calls[0][2]['arm_id'],'unload_b')
+        self.assertEqual(calls[0][2]['cargo_id'],'cargo_2')
+        self.assertEqual(calls[0][2]['timeout_s'],37.)
+        self.assertEqual(calls[1][0],'refresh')
+        self.assertIs(calls[1][1],raw)
+        self.assertIsNot(p.task['arm_placement_planning']['execution'],execution)
+        self.assertEqual(p.task['arm_placement_planning']['execution'],execution)
+        self.assertEqual(plan['report']['execution']['child_pid'],123)
+
+    def test_optional_delivery_checkpoint_checks_the_current_cargo(self):
+        p=self.owner;self.manifest['capture_before_delivery']=True
+        cargo=p.raw['business_entities']['cargo']['cargo_2']
+        cargo.update(position=list(p.raw['tray']['position']),quaternion_wxyz=[1.,0.,0.,0.])
+        cargo['contacts']={'supports':{'tray':{'contact_count':1,'normal_force_n':.1}},
+                           'pads':{},'other_cargo':{}}
+        p.raw.update(cargo_tray_floor_contact=False,cargo_tray_floor_contacts=0,
+                     cargo_tray_floor_normal_force_n=0.)
+        p.raw['cargo']['position_relative_tray']=[2.,2.,2.]
+        checked=[]
+        def wait(condition,**kwargs):
+            checked.append(condition(p.raw));self.assertTrue(checked[-1]);return p.raw
+        p.wait_condition=wait
+        p.request_checkpoint=lambda body:{'request_id':body['request_id']}
+        p.checkpoint_record=lambda identity:{'status':'succeeded','request_id':identity}
+        p.capture_delivery_checkpoint()
+        self.assertEqual(checked,[True])
+        self.assertEqual(p.task['delivery_checkpoint']['status'],'succeeded')
+
     def test_final_unload_receipt_reobserves_support_release_and_home(self):
         p=self.owner
         p.raw['episode_id']='controlled-episode'

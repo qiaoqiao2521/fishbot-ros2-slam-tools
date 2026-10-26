@@ -189,6 +189,11 @@ def capture(physics, *, context=None, now=None):
                   for name, arm in getattr(physics, 'business_arms', {}).items() if name != 'load'}
     if additional:
         app['additional_arm_references'] = additional
+    forces = getattr(physics, 'physical_faults', None)
+    force_context = getattr(physics, 'physical_fault_context', None)
+    if forces is not None and (forces.events or force_context is not None):
+        app['physical_faults'] = plain(forces.capture_state())
+        app['physical_fault_context'] = plain(force_context)
     app.update(odom=plain(vars(physics.odom)),
                wheels=plain(_ages(vars(physics.wheels), ['last_received'], now)),
                docking_guard=plain(vars(physics.docking_guard)),
@@ -215,6 +220,38 @@ def capture(physics, *, context=None, now=None):
                          'manifest': copy.deepcopy(physics.identity['manifest'])}}
     result['capture_copy_wall_s'] = time.monotonic()-started
     return result
+
+
+def _restore_force_adapter(physics, value, data):
+    """Validate on copied native data before restoring; no ROS admission is inferred."""
+    from cooperation_physical_faults import ForceImpulse, _context
+    app = value['application']
+    adapter = ForceImpulse(physics.model, data)
+    saved = app.get('physical_faults')
+    owner = app.get('physical_fault_context')
+    if saved is None:
+        if owner is not None:
+            raise ValueError('force owner context has no application state')
+        return adapter, None
+    if not isinstance(saved, dict) or not isinstance(saved.get('events'), dict):
+        raise ValueError('invalid force application state')
+    if owner is not None:
+        owner = _context(owner)
+        if (owner['world_session_id'] != value.get('world_session_id', app['episode_id'])
+                or owner['episode_id'] != app['episode_id']):
+            raise ValueError('force owner context differs from checkpoint world or episode')
+        validation_context = owner
+    else:
+        events = saved['events']
+        if (not events or saved.get('pending') is not None or any(
+                not isinstance(record, dict) or record.get('state') not in ('completed', 'dearmed', 'overrun')
+                for record in events.values())):
+            raise ValueError('force application state needs its explicit active owner context')
+        # A withdrawn history has no active owner. Its recorded event context
+        # is used only to validate metadata; it never resumes a pulse.
+        validation_context = _context(next(iter(events.values()))['event'])
+    adapter.restore_state(saved, context=validation_context, wrench_included=True)
+    return adapter, copy.deepcopy(owner)
 
 
 def compatibility(physics, value):
@@ -258,6 +295,10 @@ def compatibility(physics, value):
             random.Random().setstate(tuples(app['beacon']['rng']))
             if not set(vars(physics.odom)) <= app['odom'].keys():
                 raise ValueError('incomplete encoder state')
+            if 'physical_faults' in app or 'physical_fault_context' in app:
+                scratch = physics.mj.MjData(physics.model)
+                physics.mj.mj_setState(physics.model, scratch, physics.np.asarray(state), spec)
+                _restore_force_adapter(physics, value, scratch)
         except (KeyError, ValueError, TypeError) as error:
             errors.append('invalid owned application state: '+str(error))
     for key in OPTIONS:
@@ -310,6 +351,7 @@ def restore(physics, value, *, level='R1', now=None):
     b.truth = Truth(**_unage(truth, ['received'], now)) if truth else None
     physics.observation_faults.__dict__.update(_unage(
         app['observation_faults'], ['trigger_monotonic', 'start_wall'], now))
+    physics.physical_faults, physics.physical_fault_context = _restore_force_adapter(physics, value, d)
     parent_episode = physics.episode_id
     physics.world_session_id = value.get('world_session_id', parent_episode)
     if level == 'R2':
@@ -321,6 +363,8 @@ def restore(physics, value, *, level='R1', now=None):
         physics.native_actions_busy = False
         b.episode_id, b.episode_start, b.last_observation = physics.episode_id, float(d.time), None
         physics.observation_faults.begin_episode(physics.episode_id)
+        physics.physical_faults.dearm(reason='checkpoint_R2_owner_fence')
+        physics.physical_fault_context = None
     physics.identity['episode_id'] = physics.episode_id
     physics.last_wall = time.time()
     physics.refresh_snapshot()
@@ -338,6 +382,9 @@ def restore(physics, value, *, level='R1', now=None):
                 'y':float(d.xpos[physics.car_body,1]),
                 'yaw':math.atan2(float(rotation[1,0]),float(rotation[0,0]))},
             'old_motion_commands_restored': level == 'R1',
+            'physical_fault_context_source': 'explicit_owner_handoff_not_ROS_verified',
+            'physical_faults_resumed': level == 'R1' and any(record['state'] in ('armed', 'active')
+                for record in physics.physical_faults.events.values()),
             'external_components_restored': False,
             'unrestored_external_components': EXTERNAL,
             'restore_wall_s': time.monotonic()-start}

@@ -183,7 +183,7 @@ def run(args):
     from std_msgs.msg import Bool, String
     from std_srvs.srv import Empty
     from tf2_ros import Buffer, TransformListener
-    from cooperation_arm import ArmPlanner, query_approach
+    from cooperation_arm import ArmPlanner, query_approach, query_placement
 
     manifest = json.loads(args.manifest.read_text())
     scene_sha = hashlib.sha256(Path(manifest['world_xml']).read_bytes()).hexdigest()
@@ -1368,8 +1368,7 @@ def run(args):
         def capture_delivery_checkpoint(self):
             if not manifest.get('capture_before_delivery'):
                 return
-            self.wait_condition(lambda value: transport_handoff_ready(value, manifest['arm_home_qpos6']),
-                                duration=.7, timeout=8., carrying=True)
+            self.wait_condition(self.task_handoff, duration=.7, timeout=8., carrying=True)
             request = self.request_checkpoint({'request_id':str(uuid.uuid4()),
                 'context':{'purpose':'loaded_after_egress_before_delivery'}})
             deadline = time.monotonic()+10.
@@ -1407,6 +1406,28 @@ def run(args):
                     'world_session_id':raw['world_session_id'],'episode_id':raw['episode_id'],
                     'shelf_settled':True,'arm_home_quiet':True,'tray_empty_for_cargo':True}
 
+        def placement_query(self, planner, raw, centers):
+            """Keep the current owner responsive while pure IK/OMPL runs."""
+            binding = self.task['business_delivery']
+            arm_id = self.task.get('active_arm_id', binding['pickup_arm_id'])
+            pose = raw['car']['position']+raw['car']['quaternion_wxyz']
+            self.check()
+            remaining = self.wall_deadline-time.monotonic()
+            plan = query_placement(manifest, raw, centers, check=self.check,
+                timeout_s=remaining, arm_id=arm_id, cargo_id=binding['cargo_id'], car_pose=pose)
+            self.check()
+            # The live segment checker must use the same frozen measured scene
+            # as the child, not the earlier pre-grasp query model.
+            planner.refresh_placement_context(raw, car_pose=pose)
+            self.check()
+            with self.lock:
+                self.owner()
+                self.task['arm_placement_planning'] = {
+                    'source_stamp': raw['stamp'], 'arm_id': arm_id, 'cargo_id': binding['cargo_id'],
+                    'execution': copy.deepcopy(plan['report']['execution'])}
+                self.persist()
+            return plan
+
         def execute_unload(self, token):
             """Continue the same owned task/world after its original loaded route."""
             from cooperation_business import shelf_settled, placement_slot
@@ -1438,7 +1459,7 @@ def run(args):
             shelf = placement_slot(manifest,station_id,binding['cargo_id'])['center_xy_m']
             centers = station.get('placement_centers_m', [[.18,.14,.06],[.18,0.,.06],
                 [.18,-.13,.06],[*shelf,.06],[*shelf,.023]])
-            transfer = planner.prepare_placement(self.check(), centers)
+            transfer = self.placement_query(planner, self.check(), centers)
             self.check()
             self.event('arm','unload_transport','保持实际双指夹持，搬运到当前货架。')
             for segment in transfer['segments']:
@@ -1522,7 +1543,7 @@ def run(args):
                                     duration=1., timeout=5.)
                 self.event('arm','holding','双指接触与抬升已确认，正在保持货物。')
                 raw = self.check()
-                transport = (planner.prepare_placement(raw, [[.18,-.13,.06],[.18,0.,.06],
+                transport = (self.placement_query(planner, raw, [[.18,-.13,.06],[.18,0.,.06],
                     [.18,.14,.06],[.24,.14,.06],[.24,.14,.023]])
                     if binding else planner.prepare_transport(raw))
                 self.check()
