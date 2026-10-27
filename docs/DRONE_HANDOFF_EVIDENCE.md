@@ -429,3 +429,24 @@ git -C "$DRONE_REPAIR_COPY" apply --check /home/muqiao/worktrees/fishbot-workben
 
 Next/owner：根Codex补齐恢复后续观察/回退/降落中的控制RPC等待，复用现有recovery_command并区分正常降落记录，避免只保护入口。仍不把有限失败出口当安全备份或动态通过；epoch、SDK旧缓存持续TTL、完整M3与动态闭环未完，整体plan保持active。补片未应用冻结树，不解锁/飞行。
 收尾：测试所有自有child均在正常路径或fixture兜底中wait回收、管道关闭，线程join，临时源码/marker/report自动删除；锁失败用例刻意保留句柄直到fixture兜底，不冒称生产close已成功。无SDK/ROS/Gazebo实例、构建或新大产物，原失败/遥测保留。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20的调用、确认和物理验收分层，模块事实留项目，未写memory。
+
+
+## 恢复尾段与正常降落 RPC 等待（2026-10-27）
+
+继续扩展默认OFF Flight补片，仍未应用冻结树。先在上一版补片临时副本执行真实_hold_for_observation，pending setter只能由测试外层0.5s取消，未进入原恢复异常；新受控反例定位在尾段未使用已有helper，不是新SDK现场故障。现将观察悬停、retreat_to目标/中断保持/恢复推进、land验通道前保持/下降前保持、offboard.stop、action.land以及下降受阻的hold/position/start统一接现有recovery_command。预算和unknown合同沿前节；硬判据、原正常.2s降落复验与回退修复保持。
+
+ON时land的保持和offboard.stop异常向上抛，不再WARNING后继续LAND，也不在stop未确认时将self.offboard置False；OFF保持原警告继续和原等待。普通降落的调用写report.landing_rpc_attempts；只有recovering=True且有当前recovery记录才进recovery.rpc_attempts，不给正常任务捏造故障恢复。正常降落失败仍沿原run异常进入真正recover，helper自身不自动重试。
+
+下降通路失效时，hold→position→start均有本地等待预算；ON再复用原wait_until的5s模式谓词，OFFBOARD快照未满足则不置self.offboard=True；正向接管后仍抛descent_became_unverified回恢复，不恢复未经检查的下降。此谓词未增加新遥测序号/接收龄证明，不能称start后新鲜模式样本或实际停飞。
+
+[新尾段12项](../apps/fishbot-control-station/workbench-review-tests/test_drone_recovery_tail_rpc.py)提取真实_hold_for_observation/retreat_to/land/with_hover_guard，与真实run/recover组合；控制、感知和遥测明确为替身。覆盖各控制阶段pending、禁止继续下一命令、normal/recovery日志归属、模式未确认与正向接管出口、hover watcher取消向控制协程传播、OFF等待/原警告继续、正常合成落地返回。三组真实run取消→recover后段异常→原pause/cleanup/failed均完成，不能充当实际悬停/回退/落地。独立11项1.444s及最后正向出口1项0.053s通过。
+
+原18项中的降落龄期夹具只补options/helper/async依赖，原预期与阈值未改。最终原40项＋新12项＋SceneRecoveryIntegration1项，共53项5.445s通过、0跳过。包含真实已安装SDKPython/gRPC对synthetic服务取消，不启动MAVSDK二进制；Scene子进程仍为纯Python协议替身。Flight/Scene两补片apply与源编译、sender双顺序持续通过；未机械重跑Scene其余11项未变的worker回归或全机器人实验。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_command_revalidation_patch test_drone_recovery_cache_chain test_drone_recovery_rpc_guard test_drone_recovery_grpc_deadline test_drone_recovery_tail_rpc test_drone_scene_worker_deadline.SceneRecoveryIntegration -v
+```
+
+Next/owner：根Codex复用现有drone-sdk-cache-probe及官方4.0.5接口，给真实MAVSDK二进制的RPC响应注入受控失联，核本地超时/取消后的真实缓存重发与所属实例回收。仍只连synthetic本地协议端，不启动PX4/飞行；测试代理只作为诊断fixture，不进入执行架构。不得把Python/gRPC替身缓存证明升级真实SDK行为。后续候选epoch/缓存持续TTL、可行备份、原生空中采用与动态闭环保持未完成，整体plan active。
+收尾：全部临时源码/report回收，gRPC fixture端口关闭并拒绝连接，Scene自有worker/线程/pipe回收。原drone c866441/PX4 d6f12ad/GCOPTER e0444f6冻结；Scene补片未改，无ROS/Gazebo/SDKbinary/飞行或大构建产物。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20的调用/接收/实际执行分层，兼容性事实留项目不写memory。

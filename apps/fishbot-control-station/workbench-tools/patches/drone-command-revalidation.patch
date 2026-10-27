@@ -55,7 +55,35 @@ diff --git a/flight.py b/flight.py
 +                            raise RuntimeError("EGO 轨迹已结束（发送前复查）")
                  if ceiling is not None and command["position"][2] > self.ground_z+ceiling:
                      raise RuntimeError("EGO 轨迹参考点超过本任务高度上限")
-@@ -875,7 +909,37 @@
+@@ -718,5 +752,5 @@
+         if towards is not None and math.dist(position[:2], towards[:2]) > .03:
+             yaw = math.atan2(towards[1]-position[1], towards[0]-position[0])
+-        await self.setpoint(position, yaw)
++        await self.recovery_command("observation_position", self.setpoint, position, yaw)
+         stable = None
+         deadline = time.monotonic()+8
+@@ -841,5 +875,5 @@
+     async def retreat_to(self, point, after, yaw):
+         self.require_recovery_inputs()
+-        await self.setpoint(point, yaw)
++        await self.recovery_command("retreat_target", self.setpoint, point, yaw)
+         deadline = time.monotonic()+8
+         while math.dist(self.pose["position"], point) > .08:
+@@ -851,5 +885,5 @@
+             if not check.get("safe"):
+                 # Clear motion before waiting for another sensor/map response.
+-                await self.setpoint(list(self.pose["position"]), yaw)
++                await self.recovery_command("retreat_hold", self.setpoint, list(self.pose["position"]), yaw)
+                 interruption = {"kind": "retreat_interruption", "target": list(point),
+                                 "result": dict(check)}
+@@ -864,5 +898,5 @@
+                     raise RecoveryBlocked("retreat_tracking_timeout")
+                 self.require_recovery_inputs()
+-                await self.setpoint(point, yaw)
++                await self.recovery_command("retreat_resume", self.setpoint, point, yaw)
+             await asyncio.sleep(.1)
+ 
+@@ -875,7 +909,40 @@
          raise RecoveryBlocked(reason)
  
 +    async def recovery_command(self, operation, command, *args):
@@ -71,7 +99,10 @@ diff --git a/flight.py b/flight.py
 +        attempt = {"operation": operation, "wait_timeout_s": budget,
 +                   "started_wall_monotonic_s": time.monotonic(), "status": "pending",
 +                   "remote_effect": "unknown"}
-+        self.report["recovery"].setdefault("rpc_attempts", []).append(attempt)
++        recovery = self.report.get("recovery") if getattr(self, "recovering", False) else None
++        attempts = (recovery.setdefault("rpc_attempts", []) if recovery is not None
++                    else self.report.setdefault("landing_rpc_attempts", []))
++        attempts.append(attempt)
 +        try:
 +            result = await asyncio.wait_for(command(*args), timeout=budget)
 +        except asyncio.CancelledError:
@@ -93,7 +124,7 @@ diff --git a/flight.py b/flight.py
 +            self.report.update(landed=False, disarmed=False)
          self.report["recovery"] = {"trigger": reason, "outcome": "running", "checks": [],
                                     "traversed": [], "route_source": "measured_px4_positions"}
-@@ -894,7 +958,8 @@
+@@ -894,7 +961,8 @@
                      raise RecoveryBlocked("recovery_control_arm_state_unconfirmed")
                  try:
 -                    await self.drone.action.hold()
@@ -105,7 +136,7 @@ diff --git a/flight.py b/flight.py
 +                    await self.recovery_command("offboard_start", self.drone.offboard.start)
                      await self.wait_until(lambda: self.telemetry.get("flight_mode") == "OFFBOARD",
                                            5, check_operator=False)
-@@ -905,5 +970,6 @@
+@@ -905,5 +973,6 @@
              else:
                  # Stop cached PVA before any HTTP while retaining ownership.
 -                await self.setpoint(list(self.pose["position"]), self.current_yaw())
@@ -113,7 +144,38 @@ diff --git a/flight.py b/flight.py
 +                                            list(self.pose["position"]), self.current_yaw())
              await self.stop_planner()
              await self.hold_for_observation()
-@@ -981,5 +1047,6 @@
+@@ -944,5 +1013,6 @@
+             return
+         if not verified:
+-            await self.setpoint(list(self.pose["position"]), self.current_yaw())
++            await self.recovery_command("landing_validation_position", self.setpoint,
++                                        list(self.pose["position"]), self.current_yaw())
+             await self.stop_planner()
+             after, _ = await self.hold_for_observation()
+@@ -962,15 +1032,19 @@
+         if self.offboard and self.pose:
+             try:
+-                await self.setpoint(list(self.pose["position"]))
++                await self.recovery_command("landing_position", self.setpoint, list(self.pose["position"]))
+             except Exception as error:
++                if self.command_revalidation_enabled:
++                    raise
+                 self.report["errors"].append("WARNING: landing hold: "+str(error))
+         await self.stop_planner()
+         if self.offboard:
+             try:
+-                await self.drone.offboard.stop()
++                await self.recovery_command("offboard_stop", self.drone.offboard.stop)
+             except Exception as error:
++                if self.command_revalidation_enabled:
++                    raise
+                 self.report["errors"].append("WARNING: offboard stop: "+str(error))
+             self.offboard = False
+-        await self.drone.action.land()
++        await self.recovery_command("land", self.drone.action.land)
+         deadline = time.monotonic()+60
+         last_check_s = None
+@@ -981,5 +1055,6 @@
                  await self.block_recovery("localization_lost_during_descent")
              now = self.observer.simulation_s
 -            if last_check_s is None or now-last_check_s >= .2:
@@ -121,7 +183,18 @@ diff --git a/flight.py b/flight.py
 +                    or (self.command_revalidation_enabled and now < last_check_s)):
                  current = list(self.pose["position"])
                  check = await self.validate_corridor(
-@@ -1000,5 +1067,6 @@
+@@ -995,10 +1070,14 @@
+                     # Reacquire the single owner before returning to recovery.
+                     # The next state must never leave an unchecked LAND running.
+-                    await self.drone.action.hold()
+-                    await self.setpoint(current, self.current_yaw())
+-                    await self.drone.offboard.start()
++                    await self.recovery_command("descent_hold", self.drone.action.hold)
++                    await self.recovery_command("descent_position", self.setpoint, current, self.current_yaw())
++                    await self.recovery_command("descent_offboard_start", self.drone.offboard.start)
++                    if self.command_revalidation_enabled:
++                        await self.wait_until(lambda: self.telemetry.get("flight_mode") == "OFFBOARD",
++                                              5, check_operator=False)
                      self.offboard = True
                      raise RecoveryBlocked("descent_became_unverified: "+str(check.get("reason")))
 -                last_check_s = now
@@ -129,7 +202,7 @@ diff --git a/flight.py b/flight.py
 +                                and self.observer.simulation_s < now else now)
              await asyncio.sleep(.05)
          self.report["landed"] = True
-@@ -1099,4 +1167,12 @@
+@@ -1099,4 +1178,12 @@
                      self.record_failure("故障后落地未确认: "+str(cleanup_error))
          finally:
 +            if (self.command_revalidation_enabled and terminal == "cancelled"

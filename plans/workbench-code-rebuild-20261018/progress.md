@@ -501,3 +501,12 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - 验证：原silent/半行1ms请求在150ms仍阻塞先复现；新12项7.327s/0skip，实际管道/worker、Flight恢复+pause失联集成均过。独立9项及新增3项分别过；NaN max折零经审查复现修复。原Flight补片/40项未机械重跑。
 - Remaining/Next：父期限不能中断同步Popen/序列化，不是全系统实时上界；远端效果仍unknown。根Codex下一项补齐恢复后续观察/回退/降落的控制RPC等待，沿现有helper；epoch/TTL/备份/完整M3和动态仍未过。证据及复验见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
 - 收尾：自有进程/线程/管道及临时副本回收，无ROS/SDK/Gazebo/大构建产物，原失败/遥测保留。Knowledge=already_covered Wiki§20；本对话内置只读审查，无跨聊天联系。
+
+
+## 2026-10-27 恢复尾段与普通降落 RPC
+
+- Current：默认OFF Flight补片已覆盖后续观察/退回/降落控制等待，未部署冻结源；整体plan、完整M3/动态未过。
+- Done：原recovery_command包观察position、退回三段位置、降落保持/stop/land及受阻接管；normal landing单列landing_rpc_attempts，recovering留原recovery。ON未确认不继续下一降落命令，OFF保原等待/警告继续。descent mode快照谓词满足后才offboard=True，仍返回恢复；不称新鲜样本/实际控制确认。
+- 验证：尾段pending反例先复现，新12项＋原40＋Scene恢复集成1共53项5.445s/0skip过，独立尾段11项与最后出口1项过。原18降落夹具只补依赖，不改预期；未改Scene补片。真实方法/fake控制、感知与遥测；无SDKbinary/PX4/飞行新验收。
+- Next/owner：根Codex复用现有SDK cache探针，对真实SDKbinary响应做受控失联，核超时/取消后缓存与所属实例回收；仅synthetic本地协议端，不上飞机，不新造执行代理。epoch/TTL/备份/动态仍未完。详见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 收尾/Knowledge：临时副本/report、gRPC fixture和worker/线程/pipe回收，无新大产物，原失败/遥测保留。already_covered Wiki§20；本对话内置只读审查，无跨聊天联系。

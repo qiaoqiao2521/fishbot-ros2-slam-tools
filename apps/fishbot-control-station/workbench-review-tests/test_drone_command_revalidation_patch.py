@@ -204,6 +204,7 @@ class RevalidationPatch(unittest.IsolatedAsyncioTestCase):
         clock = original.Clock(10.)
         validations, actions = [], []
         owner = types.SimpleNamespace(command_revalidation_enabled=enabled,
+            options={}, recovering=False,
             telemetry={'landed': 'IN_AIR', 'armed': True},
             observer=types.SimpleNamespace(simulation_s=10., pose=None), offboard=False,
             pose={'position': [0., 0., 1.]}, home=[0., 0., 0.], report={'errors': []},
@@ -224,8 +225,11 @@ class RevalidationPatch(unittest.IsolatedAsyncioTestCase):
             owner.observer.simulation_s = clock.sim = ticks.pop(0)
         owner.stop_planner, owner.validate_corridor = stop, validate
         owner.drone = types.SimpleNamespace(action=types.SimpleNamespace(land=land))
-        namespace = dict(asyncio=types.SimpleNamespace(sleep=sleep), time=clock, RecoveryBlocked=RuntimeError)
-        method = original.methods(self.root/'flight.py', 'Flight', ('land',), namespace)['land']
+        namespace = dict(asyncio=types.SimpleNamespace(sleep=sleep, wait_for=asyncio.wait_for,
+            CancelledError=asyncio.CancelledError), time=clock, math=original.math, RecoveryBlocked=RuntimeError)
+        methods = original.methods(self.root/'flight.py', 'Flight', ('land', 'recovery_command'), namespace)
+        owner.recovery_command = types.MethodType(methods['recovery_command'], owner)
+        method = methods['land']
         with self.assertRaises(original.ProbeComplete):
             await method(owner, verified=True)
         return validations, actions
