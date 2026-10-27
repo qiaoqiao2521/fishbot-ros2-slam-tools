@@ -79,7 +79,7 @@ def stamp(message):
 def topic_stamp(topic, payload):
     if topic == 'physics': return float(payload['stamp'])
     if topic == 'clock': return stamp(payload['clock'])
-    if topic in ('truth', 'cargo', 'beacon', 'station_pose', 'station_detection', 'vision_quality', 'camera_metadata', 'camera_image', 'camera_info', 'plan', 'received_global_plan', 'lookahead_collision_arc', 'docking_trajectory', 'initialpose', 'encoder_odom', 'cmd_vel', 'amcl_pose'): return stamp(payload['header']['stamp'])
+    if topic in ('truth', 'cargo', 'beacon', 'station_pose', 'station_detection', 'vision_quality', 'camera_metadata', 'camera_image', 'camera_info', 'plan', 'received_global_plan', 'motion_target', 'transformed_global_plan', 'local_plan', 'optimal_trajectory', 'lookahead_collision_arc', 'docking_trajectory', 'initialpose', 'encoder_odom', 'cmd_vel', 'cmd_vel_nav', 'cmd_vel_smoothed', 'amcl_pose'): return stamp(payload['header']['stamp'])
     if topic == 'tf' and payload.get('transforms'):return stamp(payload['transforms'][0]['header']['stamp'])
     if topic == 'nav_feedback': return stamp(payload['feedback']['current_pose']['header']['stamp'])
     if topic == 'nav_status': return None
@@ -532,6 +532,12 @@ def observe(args):
             ('/navigate_to_pose/_action/status',GoalStatusArray,'nav_status',statusq),
             ('/navigate_to_pose/_action/feedback',NavigateToPose.Impl.FeedbackMessage,'nav_feedback',reliable),
             ('/plan',Path,'plan',reliable),('/received_global_plan',Path,'received_global_plan',reliable),
+            ('/motion_target',PoseStamped,'motion_target',reliable),
+            ('/transformed_global_plan',Path,'transformed_global_plan',reliable),
+            ('/local_plan',Path,'local_plan',reliable),
+            ('/optimal_trajectory',Path,'optimal_trajectory',reliable),
+            ('/cmd_vel_nav',TwistStamped,'cmd_vel_nav',reliable),
+            ('/cmd_vel_smoothed',TwistStamped,'cmd_vel_smoothed',reliable),
             ('/lookahead_collision_arc',Path,'lookahead_collision_arc',reliable),
             ('/docking_trajectory',Path,'docking_trajectory',reliable),
             ('/dock_robot/_action/status',GoalStatusArray,'dock_status',statusq),
@@ -600,6 +606,8 @@ def observe(args):
                                    for info in node.get_publishers_info_by_topic(topic)]
                            for topic in ('/cooperation/physics_state','/ground_truth/odom','/cooperation/cargo_pose','/clock',
                                          '/cmd_vel','/detected_dock_pose','/initialpose','/cooperation/docking_guard',
+                                         '/motion_target','/transformed_global_plan','/local_plan','/optimal_trajectory',
+                                         '/cmd_vel_nav','/cmd_vel_smoothed',
                                          '/cooperation/station_pose','/cooperation/station_detection','/cooperation/perception_status',
                                          '/cooperation/station_admission',
                                          '/cooperation/camera/image_raw','/cooperation/camera/camera_info',

@@ -52,6 +52,14 @@ def score_transport(samples):
 
 
 class PhysicalOracleTests(unittest.TestCase):
+    def test_graceful_diagnostics_keep_original_source_stamp(self):
+        for topic in ('motion_target', 'transformed_global_plan', 'local_plan',
+                      'optimal_trajectory', 'cmd_vel_nav', 'cmd_vel_smoothed'):
+            with self.subTest(topic=topic):
+                payload = {'header': {'stamp': {'sec': 257, 'nanosec': 560000000},
+                                      'frame_id': 'base_footprint'}}
+                self.assertAlmostEqual(base.topic_stamp(topic, payload), 257.56)
+
     def test_complete_synthetic_task_passes_original_and_continuous_handoff(self):
         old, strict = score_transport(physical_samples())
         self.assertTrue(old['passed'])
