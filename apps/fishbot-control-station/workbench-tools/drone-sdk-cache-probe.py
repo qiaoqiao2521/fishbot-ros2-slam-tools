@@ -61,7 +61,69 @@ async def close_sdk_process(process):
     return errors
 
 
-async def run(output):
+class PositionResponseFault:
+    """Diagnostic-only relay: delay before forwarding or after the SDK responds."""
+
+    def __init__(self, mode, upstream_port):
+        self.mode, self.upstream_port = mode, upstream_port
+        self.events = []
+        self.cancelled = asyncio.Event()
+        self.server = self.channel = None
+        self.port = None
+
+    def record(self, event, **fields):
+        self.events.append(dict(event=event, host_monotonic_ns=time.monotonic_ns(), **fields))
+
+    async def start(self):
+        import grpc
+        from mavsdk_grpc import offboard_pb2_grpc as rpc
+        from mavsdk_grpc.offboard import Offboard
+        from types import SimpleNamespace
+        owner = self
+        self.channel = grpc.aio.insecure_channel(f'127.0.0.1:{self.upstream_port}')
+        await asyncio.wait_for(self.channel.channel_ready(), 2.)
+        upstream = rpc.OffboardServiceStub(self.channel)
+
+        class Service(rpc.OffboardServiceServicer):
+            async def SetPositionNed(self, request, context):
+                owner.record('relay_received')
+                try:
+                    if owner.mode == 'after_forward':
+                        owner.record('upstream_call_started')
+                        response = await upstream.SetPositionNed(request, timeout=2.)
+                        owner.record('upstream_returned', result=int(response.offboard_result.result))
+                    # Never fabricate a successful response or retry the request.
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    owner.record('relay_handler_cancelled')
+                    owner.cancelled.set()
+                    raise
+
+        self.server = grpc.aio.server()
+        rpc.add_OffboardServiceServicer_to_server(Service(), self.server)
+        self.port = self.server.add_insecure_port('127.0.0.1:0')
+        if not self.port:
+            raise RuntimeError('Unable to bind diagnostic relay')
+        await self.server.start()
+        self.client_channel = grpc.aio.insecure_channel(f'127.0.0.1:{self.port}')
+        await asyncio.wait_for(self.client_channel.channel_ready(), 2.)
+        return Offboard(SimpleNamespace(channel=self.client_channel))
+
+    async def close(self):
+        errors = []
+        for name, resource, operation in (
+                ('client', getattr(self, 'client_channel', None), lambda r: r.close()),
+                ('server', self.server, lambda r: r.stop(0)),
+                ('upstream', self.channel, lambda r: r.close())):
+            if resource is not None:
+                try:
+                    await operation(resource)
+                except Exception as error:
+                    errors.append('relay '+name+' cleanup: '+type(error).__name__+': '+str(error))
+        return errors
+
+
+async def run(output, rpc_response_fault=None):
     from mavsdk_grpc import System
     from mavsdk_grpc.offboard import PositionNedYaw, VelocityNedYaw, AccelerationNed
     from pymavlink.dialects.v20 import common as mavlink
@@ -110,17 +172,21 @@ async def run(output):
     system = System(port=grpc_port)
     tasks = [asyncio.create_task(heartbeat()), asyncio.create_task(receive())]
     sdk_process = None
+    relay = None
+    diagnostic_checks = {}
     started = time.monotonic_ns()
 
-    async def invoke(name, function):
+    async def invoke(name, function, timeout=5., expect_timeout=False):
         row = {'method': name, 'host_start_ns': time.monotonic_ns()}
         calls.append(row)
         try:
-            await asyncio.wait_for(function(), timeout=5.)
+            await asyncio.wait_for(function(), timeout=timeout)
             row['returned'] = True
         except Exception as error:
             row['error'] = type(error).__name__+': '+str(error)
-            raise
+            row['remote_effect'] = 'unknown'
+            if not (expect_timeout and isinstance(error, TimeoutError)):
+                raise
         finally:
             row['host_end_ns'] = time.monotonic_ns()
         return row
@@ -130,7 +196,9 @@ async def run(output):
         sdk_process = system._server_process
         (output/'sdk-process.json').write_text(json.dumps({'pid': sdk_process.pid,
             'sdk_udp_port': sdk_udp, 'grpc_port': grpc_port,
-            'argv': sdk_process.args, 'scope': 'synthetic peer only'}, indent=2)+'\n')
+            'argv': sdk_process.args,
+            'start_ticks': Path(f'/proc/{sdk_process.pid}/stat').read_text().split(') ', 1)[1].split()[19],
+            'scope': 'synthetic peer only'}, indent=2)+'\n')
         listener_record = {'client_connects_to': '127.0.0.1',
                            'bind_scope_is_observation_not_client_assumption': True}
         try:
@@ -152,16 +220,26 @@ async def run(output):
         await asyncio.sleep(.65)  # No setter call during this observation window.
         position_start = time.monotonic_ns()
         phases.append(('pva_without_new_rpc', pva['host_end_ns']+100_000_000, position_start))
-        position = await invoke('set_position_ned', lambda: system.offboard.set_position_ned(PositionNedYaw(.1, .2, -.3, 15.)))
+        if rpc_response_fault:
+            relay = PositionResponseFault(rpc_response_fault, grpc_port)
+            replacement = await relay.start()
+            position = await invoke('set_position_ned', lambda: replacement.set_position_ned(
+                PositionNedYaw(.4, .5, -.6, 15.)), timeout=.25, expect_timeout=True)
+            await asyncio.wait_for(relay.cancelled.wait(), 1.)
+        else:
+            position = await invoke('set_position_ned', lambda: system.offboard.set_position_ned(PositionNedYaw(.1, .2, -.3, 15.)))
         await asyncio.sleep(.55)
         stop_start = time.monotonic_ns()
-        phases.append(('position_replaced_pva', position['host_end_ns']+100_000_000, stop_start))
+        phases.append(('after_position_timeout' if rpc_response_fault else 'position_replaced_pva',
+                       position['host_end_ns']+100_000_000, stop_start))
         stopped = await invoke('stop', system.offboard.stop)
         await asyncio.sleep(.4)
         phases.append(('after_stop', stopped['host_end_ns']+100_000_000, time.monotonic_ns()))
     except Exception as error:
         errors.append(type(error).__name__+': '+str(error))
     finally:
+        if relay is not None:
+            errors.extend(await relay.close())
         for task in tasks:
             task.cancel()
         outcomes = await asyncio.gather(*tasks, return_exceptions=True)
@@ -172,9 +250,40 @@ async def run(output):
         errors.extend(await close_sdk_process(sdk_process))
         system._server_process = None
         system = None
+    phase_results = summarize(packets, phases)
+    if rpc_response_fault and len(phases) == 3:
+        after = phase_results['after_position_timeout']
+        events = relay.events
+        rows = [p for p in packets if p['type'] == 'SET_POSITION_TARGET_LOCAL_NED'
+                and after['window_host_ns'][0] <= p['host_monotonic_ns'] <= after['window_host_ns'][1]]
+        fields = ('x', 'y', 'z', 'vx', 'vy', 'vz', 'afx', 'afy', 'afz')
+        expected = ((.1, .2, -.3, .12, -.08, .06, .03, .02, -.01)
+                    if rpc_response_fault == 'before_forward' else (.4, .5, -.6))
+        diagnostic_checks = {
+            'client_timed_out': calls[1].get('error', '').startswith('TimeoutError:'),
+            'handler_cancelled': relay.cancelled.is_set(),
+            'forwarding_matches_injection': (any(e['event'] == 'upstream_call_started' for e in events)
+                                            == (rpc_response_fault == 'after_forward')),
+            'upstream_success_if_forwarded': (rpc_response_fault == 'before_forward' or
+                any(e['event'] == 'upstream_returned' and e['result'] == 1 for e in events)),
+            'stable_wire_cache_matches': (after['packets'] >= 2 and after['masks'] ==
+                                         ([2048] if rpc_response_fault == 'before_forward' else [2552])),
+            'active_wire_values_match': bool(rows) and all(
+                math.isfinite(row[field]) and abs(row[field]-value) <= 1e-6
+                for row in rows for field, value in zip(fields, expected)),
+            'cache_payload_stable': after['distinct_pva'] == 1 and after['distinct_wire_times'] >= 2,
+            'stop_ends_observed_resend': phase_results['after_stop']['packets'] == 0,
+            'no_arm_command': not any(p.get('command') == 400 for p in packets
+                                     if p['type'] == 'COMMAND_LONG'),
+            'sdk_reaped': sdk_process is not None and sdk_process.poll() is not None,
+        }
     summary = {'scope': 'real SDK and synthetic MAVLink peer; no PX4/Gazebo/flight',
         'host_started_ns': started, 'sdk_udp_port': sdk_udp, 'grpc_port': grpc_port,
-        'rpc_calls': calls, 'phase_results': summarize(packets, phases), 'errors': errors,
+        'rpc_calls': calls, 'phase_results': phase_results, 'errors': errors,
+        'rpc_response_fault': rpc_response_fault,
+        'relay': None if relay is None else {'scope': 'diagnostic only', 'port': relay.port,
+                                            'events': relay.events},
+        'diagnostic_checks': diagnostic_checks,
         'arm_command_count': sum(p.get('command') == 400 for p in packets if p['type'] == 'COMMAND_LONG'),
         'sdk_pid': None if sdk_process is None else sdk_process.pid,
         'sdk_exit_code': None if sdk_process is None else sdk_process.poll(),
@@ -183,14 +292,16 @@ async def run(output):
     (output/'sdk-cache-probe.json').write_text(json.dumps(summary, indent=2, allow_nan=False)+'\n')
     (output/'sdk-cache-peer.jsonl').write_text(''.join(json.dumps(json_safe(p), allow_nan=False)+'\n' for p in packets))
     print(json.dumps(summary, indent=2))
-    return int(bool(errors) or len(phases) != 3)
+    return int(bool(errors) or len(phases) != 3 or not all(diagnostic_checks.values()))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--rpc-response-fault', choices=('before_forward', 'after_forward'),
+                        help='Diagnostic relay withholds the replacement response; never used for flight')
     args = parser.parse_args()
-    return asyncio.run(run(args.output.resolve()))
+    return asyncio.run(run(args.output.resolve(), args.rpc_response_fault))
 
 
 if __name__ == '__main__':

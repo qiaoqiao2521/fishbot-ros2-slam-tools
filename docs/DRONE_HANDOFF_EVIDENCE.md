@@ -450,3 +450,34 @@ PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unit
 
 Next/owner：根Codex复用现有drone-sdk-cache-probe及官方4.0.5接口，给真实MAVSDK二进制的RPC响应注入受控失联，核本地超时/取消后的真实缓存重发与所属实例回收。仍只连synthetic本地协议端，不启动PX4/飞行；测试代理只作为诊断fixture，不进入执行架构。不得把Python/gRPC替身缓存证明升级真实SDK行为。后续候选epoch/缓存持续TTL、可行备份、原生空中采用与动态闭环保持未完成，整体plan active。
 收尾：全部临时源码/report回收，gRPC fixture端口关闭并拒绝连接，Scene自有worker/线程/pipe回收。原drone c866441/PX4 d6f12ad/GCOPTER e0444f6冻结；Scene补片未改，无ROS/Gazebo/SDKbinary/飞行或大构建产物。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20的调用/接收/实际执行分层，兼容性事实留项目不写memory。
+
+
+## 真实 SDK 的响应丢失与缓存歧义（2026-10-27）
+
+复用原有限[SDK探针](../apps/fishbot-control-station/workbench-tools/drone-sdk-cache-probe.py)，增加可选--rpc-response-fault before_forward/after_forward。诊断relay仅注册位置setter，绑定127.0.0.1临时端口，不进入生产执行架构；PVA与stop仍直连原SDK。before不提交位置上游，after等待真实SDK成功返回后扣住响应。客户端原生wait_for预算.25s，handler记录实际取消，不伪造SDK成功、不重试。两种客户端结果均TimeoutError且remote_effect=unknown。
+
+| 最终run_id | 超时后的实际稳定报文 | 远端因果 / stop后 |
+| --- | --- | --- |
+| 337e5be4-26ae-474a-9fe6-5b6a36d1c9f0 | 9包/mask2048，旧P=(.1,.2,-.3)、V=(.12,-.08,.06)、A=(.03,.02,-.01) | 无upstream调用；stop后0包 |
+| 8fecabc1-c5f0-4840-bc58-fc1ed481f164 | 10包/mask2552，新P=(.4,.5,-.6)，V/A被掩码忽略 | upstream result=1早于客户端超时，取消没有回滚已接受位置；stop后0包 |
+
+每组初始仅一次PVA、仅一次位置尝试、一次stop，无start/arm/land。PVA稳定初窗分别12/10包；超时后窗口约.45s，各自payload只有1种、wire时刻9/10种。统计沿原探针排除RPC返回/超时后前100ms，只区分在途包，不是新增物理容差。当前数值核对1e-6仅匹配float32载荷编码，不改变飞行硬判据。原生SDK日志均v4.0.5，synthetic unarmed Offboard heartbeat与ACK不能当PX4或真实模式接受。
+
+先行6d7e0f06-c708-4b1f-b080-81698226e85f同before结果9/0包；审查后补具体active字段、distinct payload/wire时刻检查，并修relay首资源关闭异常跳过后续清理的缺口，再用两个新UUID跑最终版。三组自有PID702054/704483/704705均TERM退出(-15)并wait回收，/proc消失，目标UDP/gRPC/relay监听已关闭；原SDK服务绑定沿实际ss记录，不以loopback客户端推断只监听本机。三组必要原始小证据约84KiB，保留而不压缩复制，无新大构建或临时渲染；测试临时端口关闭，无PX4/Gazebo/ROS/飞行。冻结drone c866441/PX4 d6f12ad/GCOPTER e0444f6均clean。
+
+[探针局部5项](../apps/fishbot-control-station/workbench-review-tests/test_drone_sdk_cache_probe.py)0.307s/0跳过通过：原非有限字段/进程清理3项保持；新增实际gRPC relay双时序与关闭、首资源清理异常不跳过后续回收。两组SDK binary现场记录单独验收，不以单测代替。前两次执行曾因工作目录错误而未找到测试/写入目标，已纠正绝对路径和测试cwd，错误不算通过；未因此重启或重复派发同一SDK。原Flight/Scene补片未改，不重跑未变53项或全机器人实验。
+
+产物入口在忽略output/drone-committed/各UUID：sdk-cache-probe.json、sdk-cache-peer.jsonl、sdk-process.json、sdk-listeners.json、sdk.log、probe.log、invocation.json、cleanup.json、最终两组source-provenance.json。Git仅提交探针、测试与文档，不提交运行日志。复验使用新目录：
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-tools
+/home/muqiao/.cache/ros2-drone/venv/bin/python drone-sdk-cache-probe.py --output /tmp/drone-sdk-cache-before-new --rpc-response-fault before_forward
+/home/muqiao/.cache/ros2-drone/venv/bin/python drone-sdk-cache-probe.py --output /tmp/drone-sdk-cache-after-new --rpc-response-fault after_forward
+```
+
+结论：客户端超时/取消不使真实SDK缓存自动撤销；RPC未转发仍重发旧PVA，已接受后丢响应则持续新位置。当前recovery_command保unknown正确，但仅有限等待不构成缓存TTL、刹停或安全接管。
+
+Next/owner：根Codex核现有Sidecar在暂停/时钟回退/新goal后的候选身份隔离，并制作默认OFF最小epoch适配；随后处理/state等待期间旧SDK缓存持续重发的TTL缺口。沿既有发送层和恢复出口，不引入生产RPC代理，不自动重试未知效果控制。原冻结源不部署、不解锁；可行备份、原生空中采用、完整M3与动态闭环未完，整体plan active。
+Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20的调用/接收/执行分层；模块新事实留项目，无memory写入。
+
+独立只读审查按raw jsonl和RPC窗重算9/10/0计数、具体载荷与上游成功先于超时的事件顺序一致；原报文arm=0，PID/start_ticks消失及SDK/relay端口拒绝连接均独立复核。SDK实际监听0.0.0.0，不能把本机客户端写成服务仅loopback。

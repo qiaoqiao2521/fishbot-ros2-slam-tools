@@ -510,3 +510,11 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - 验证：尾段pending反例先复现，新12项＋原40＋Scene恢复集成1共53项5.445s/0skip过，独立尾段11项与最后出口1项过。原18降落夹具只补依赖，不改预期；未改Scene补片。真实方法/fake控制、感知与遥测；无SDKbinary/PX4/飞行新验收。
 - Next/owner：根Codex复用现有SDK cache探针，对真实SDKbinary响应做受控失联，核超时/取消后缓存与所属实例回收；仅synthetic本地协议端，不上飞机，不新造执行代理。epoch/TTL/备份/动态仍未完。详见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
 - 收尾/Knowledge：临时副本/report、gRPC fixture和worker/线程/pipe回收，无新大产物，原失败/遥测保留。already_covered Wiki§20；本对话内置只读审查，无跨聊天联系。
+
+
+## 2026-10-27 真实 SDK 响应丢失与缓存诊断
+
+- Current/Done：现有探针增加隔离诊断relay，非生产组件。真实SDK4.0.5、synthetic本地peer，before未转发与after成功返回后丢响应均客户端超时；旧PVA9包与新position10包分别持续，stop后均0。确认取消不回滚缓存，不扩为PX4/物理接管。
+- 验证：主线程串行两最终UUID337e5be4/8fecabc1，具体PVA字段/掩码、单一payload/新wire时刻与上游事件交叉核；5局部0.307s/0skip过。原Flight/Scene补片无改动、未重跑其53项。完整产物和复验见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 收尾：先行及最终3个自有SDK均wait回收、监听关闭，relay各资源独立清理；约84KiB必要原始小证据保留在忽略output。无PX4/Gazebo/飞行或大构建，三冻结源clean。Knowledge=already_covered Wiki§20，本对话内置审查，不联系其他聊天。
+- Next/owner：根Codex核现有Sidecar在暂停/时钟回退/新goal后的候选身份隔离，并制作默认OFF最小epoch适配；随后处理/state等待期间旧SDK缓存持续重发的TTL缺口。沿既有发送层和恢复出口，不引入生产RPC代理，不自动重试未知效果控制。原冻结源不部署、不解锁；可行备份、原生空中采用、完整M3与动态闭环未完，整体plan active。
