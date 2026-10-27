@@ -1,0 +1,73 @@
+diff --git a/flight.py b/flight.py
+--- a/flight.py
++++ b/flight.py
+@@ -3,4 +3,5 @@
+ import json
+ import math
++import os
+ import subprocess
+ import time
+@@ -199,4 +200,5 @@
+         self.station = request["station"]
+         self.options = self.station.get("flight", {})
++        self.command_revalidation_enabled = os.environ.get("DRONE_REVALIDATE_COMMAND") == "1"
+         self.acceptance = self.options.get("acceptance", {})
+         self.position_tolerance = float(self.acceptance.get("position_tolerance_m", .5))
+@@ -631,4 +633,20 @@
+                     state = await self.wait_for_future_odometry(state, deadline, operator)
+                     reached_s = truth_reached_s = None
++                if self.command_revalidation_enabled:
++                    # Recheck the existing inputs after either HTTP await, before dispatch.
++                    if self.cancel_file.exists():
++                        raise CancelFlight()
++                    if operator:
++                        self.check_operator()
++                    if time.monotonic() > deadline:
++                        raise TimeoutError(f"{self.phase}: 未在期限内到达三维航点")
++                    if self.position_received is None or time.monotonic()-self.position_received > 3:
++                        raise RuntimeError("PX4 位姿遥测断流")
++                    if self.scene.failure:
++                        raise RuntimeError("动态障碍驱动失效: "+self.scene.failure)
++                    if not self.position_valid:
++                        raise RuntimeError("PX4 本地定位无效")
++                    if self.observer.clock_received is None or time.monotonic()-self.observer.clock_received > 2:
++                        raise RuntimeError("simulation_clock_stopped")
+                 command = state.get("setpoint")
+                 matched = (command and command.get("task_id") == self.request["id"]
+@@ -642,4 +660,20 @@
+                 if not -.1 <= age <= .5:
+                     raise RuntimeError("EGO 轨迹源时间已过期")
++                if self.command_revalidation_enabled:
++                    # Preserve Sidecar.state's readiness limits and terminal-hold exception.
++                    if age > .3:
++                        raise RuntimeError("EGO 轨迹样本已过期（发送前复查）")
++                    try:
++                        source_end = float(command["source_end_sim_s"])
++                    except (KeyError, TypeError, ValueError) as error:
++                        raise RuntimeError("EGO 轨迹源期限不可用") from error
++                    if not math.isfinite(source_end):
++                        raise RuntimeError("EGO 轨迹源期限不可用")
++                    if self.observer.simulation_s - source_end > .15:
++                        terminal_hold = (math.dist(command["position"], target) <= self.position_tolerance and
++                            all(len(command[k]) == 3 and all(abs(v) < 1e-6 for v in command[k])
++                                for k in ("velocity", "acceleration")))
++                        if not terminal_hold:
++                            raise RuntimeError("EGO 轨迹已结束（发送前复查）")
+                 if ceiling is not None and command["position"][2] > self.ground_z+ceiling:
+                     raise RuntimeError("EGO 轨迹参考点超过本任务高度上限")
+@@ -981,5 +1015,6 @@
+                 await self.block_recovery("localization_lost_during_descent")
+             now = self.observer.simulation_s
+-            if last_check_s is None or now-last_check_s >= .2:
++            if (last_check_s is None or now-last_check_s >= .2
++                    or (self.command_revalidation_enabled and now < last_check_s)):
+                 current = list(self.pose["position"])
+                 check = await self.validate_corridor(
+@@ -1000,5 +1035,6 @@
+                     self.offboard = True
+                     raise RecoveryBlocked("descent_became_unverified: "+str(check.get("reason")))
+-                last_check_s = now
++                last_check_s = (None if self.command_revalidation_enabled
++                                and self.observer.simulation_s < now else now)
+             await asyncio.sleep(.05)
+         self.report["landed"] = True

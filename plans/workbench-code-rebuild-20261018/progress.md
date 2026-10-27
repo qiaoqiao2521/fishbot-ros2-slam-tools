@@ -465,3 +465,12 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - SDK：新增有限真实SDK＋既有pymavlink synthetic peer诊断，复用官方v4.0.5缓存与50ms周期。e92单PVA RPC后12重复包、position后9禁V/A、stop后0；末6dde为11/9/0，wire时间更新不代表新候选。仅三RPC、无arm；synthetic ACK不当PX4接受。ss实见SDK监听*，结束关闭，不以客户端loopback冒称bind仅本机。
 - 验证/问题：18局部检查过/0跳过（4项未修见证）。d031在cleanup后NaN日志序列化失败保留；诊断已用null＋字段名留未知，并补清理退出竞态/最终超时检查。独立读回末轮11/9/0、SDK版本/0arm与PID/端口关闭。没有重跑旧飞行/全机器人实验。
 - 收尾：保留三个UUID的必要小记录/失败/一份官方源码及来源；SDK PID455546/449011、版本探测434536退出，目标端口关闭；删1242B临时路径文件，无新大构建产物。原drone/PX4/GCOPTER clean保持。Next=根Codex准备默认关闭的发送前再校验与land回退节拍最小补片，不应用冻结树、不解锁飞行。Knowledge=already_covered，沿用Wiki§20/源时钟/CapMesh PIT-004，版本兼容事实留项目。--pick选AGY（Qoder timeout），实际45s任务超时后即内置；内置只编辑指定测试，根独立跑18项与实际SDK读回，未联系其他聊天。
+
+
+## 2026-10-27 默认关闭的发送前复查修复
+
+- Current：三处方法级修复已在独立临时副本验证，默认关闭、未部署到冻结执行源；完整M3/动态未过。补片为workbench-tools/patches/drone-command-revalidation.patch，入口docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- Done：DRONE_REVALIDATE_COMMAND仅1启用；普通/state HTTP后再核cancel/operator及原输入限制，发送时继承sidecar .3 sample和source_end+.15/零VA目标hold；land查询间/查询内回退均恢复复验，正常.2节拍保持。原Flight.run异常/恢复入口未改。
+- 验证：18局部过/0跳过，主与独立内置审查分别实跑最终版；6组deadline与真实Sidecar.state交叉核同，sender补片双应用顺序都可用。原失败ON变为拒绝/复验、OFF保旧行为；无新增时间epsilon/物理门槛。包含1项明确observed_boundary：SDK RPC内取消仍可能已有缓存，不作修复完成声明。
+- 边界/Next：未测完整run→recover链；已有缓存在HTTP等待中续发、RPC等待失效和epoch识别仍未解。根Codex下一项局部集成原错误/恢复入口，保留原数据/阈值，不解锁飞行。原三冻结源clean，临时目录已自动回收，无新服务/构建/大产物。
+- Knowledge=already_covered，沿用Wiki§20因果/源时钟及PIT-004，新事实留项目，未写memory。--pick Qoder timeout/AGY ready，但AGY实派45s超时即改本对话内置审查，不重试、不联系其他聊天；根独立核最终源码、18项及三处原异常调用链。

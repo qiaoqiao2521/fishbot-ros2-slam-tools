@@ -320,3 +320,33 @@ cd ../workbench-tools
 ```
 
 Next/owner：根Codex准备独立副本、默认关闭的最小发送前复查补片：普通/state await后重核取消/操作状态，以及源期限和原goal_hold例外；复用现有错误/恢复入口，不新造lease服务或以SDK新stamp代源合同。另修回退后的降落验证节拍重置，保留原0.2s判据；epoch身份与SDK RPC等待期间失效仍需明确。只读核查片完成，原源码未改；M2部分完成、完整M3/动态闭环仍未通过。
+
+
+## 默认关闭的发送前复查修复（2026-10-27）
+
+用户要求“开始修复”，按既有独立副本/默认关闭范围完成[修复补片](../apps/fishbot-control-station/workbench-tools/patches/drone-command-revalidation.patch)。基线为drone c866441，仅改flight.py；未应用原冻结树。创建Flight时读取DRONE_REVALIDATE_COMMAND，只有字符串1启用；其他值默认保持旧执行行为，不在运行中动态切换。没有新增ROS节点、消息协议、SDK owner或物理阈值。
+
+| 已修边界 | 开启补片后的行为 | 保留行为 |
+| --- | --- | --- |
+| 普通/state await后取消/操作变化 | 在任何PVA发送前再次查cancel/operator，以及原deadline、定位、scene和clock限制 | cancel始终检查；operator=False仍不响应返航请求；复用原CancelFlight/RuntimeError/恢复入口 |
+| ready快照中的样本或曲线已过期 | 发送时再执行原sidecar的sample>0.3s、source_end后>0.15s规则；缺失/非有限期限给当前任务明确错误 | 原Flight[-0.1,0.5]门保持；增加的是原sidecar ready复查，不新设容差；末端位置达标且VA各轴<1e-6仍允许goal_hold，不盲信mode标签 |
+| 降落验证节拍遇时钟回退 | 查询间回退立即恢复原周期检查；查询期间回退则不保存旧节拍，下一轮重验 | 正常0.2s节拍及原不安全通道处理不变，无新epsilon |
+
+[局部验证](../apps/fishbot-control-station/workbench-review-tests/test_drone_command_revalidation_patch.py)只在TemporaryDirectory复制flight.py/frames.py/sidecar.py，apply --check --whitespace=error-all与语法编译通过；提取补片前后实际方法，无ROS/SDK初始化。18项检查通过、0跳过；主Agent与本对话独立审查分别运行同一最终模块。原取消/期限/降落回退反例在ON分支转为不发PVA/恢复复验，OFF分支与旧行为一致。
+额外覆盖响应期间返航、定位/场景/clock/原执行预算失效、正常宽限、真正与伪goal_hold、无源期限/NaN/Inf、既有身份与龄期拒绝、正常降落节拍；6组期限判断直接与原Sidecar.state在同发送时刻交叉对照。sender观测补片与本片两种应用顺序均可通过并发送原PVA，不依赖前两份PX4观测补片。
+本片没有改Flight.run的异常处理。源码调用链仍为CancelFlight→原取消分支、其他异常→原失败/恢复分支；此轮未执行完整Flight.run→recover集成，因此不以方法级检查证明恢复实际完成。
+
+**仍未解决：** HTTP等待期间先前已接受的SDK缓存仍可能持续重发；PVA RPC已进入后才取消或到期也无法由发送前检查撤回，新测试明确保留这一observed_boundary。未来容差内的小回退没有被新增epoch身份替代；原-0.1s容差保持。降落回退修复只恢复复验节拍，不声称旧safe响应跨epoch仍有效，也不保证此前的动态悬停/回退净空。未新增SDK TTL或确定性备份控制器，M2部分完成、完整M3/动态闭环仍未通过。
+
+复验与后续启用只针对新建独立副本，DRONE_REPAIR_COPY不得指向冻结原树。以下只应用代码/设置开关，不启动飞行：
+
+```sh
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_command_revalidation_patch -v
+# Set DRONE_REPAIR_COPY to an independent copy of drone c866441 first.
+git -C "$DRONE_REPAIR_COPY" apply --check /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-tools/patches/drone-command-revalidation.patch
+git -C "$DRONE_REPAIR_COPY" apply /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-tools/patches/drone-command-revalidation.patch
+export DRONE_REVALIDATE_COMMAND=1
+```
+
+Next/owner：根Codex做Flight.run→recover的定向局部集成，核取消/期限异常是否按原入口替换缓存；不重复建同类网格，不解锁/飞行。原drone/PX4/GCOPTER c866441/d6f12ad/e0444f6再次确认clean。本轮无新服务、构建或大产物；测试临时副本自动回收，历史SDK/ULog/失败原件保持。
