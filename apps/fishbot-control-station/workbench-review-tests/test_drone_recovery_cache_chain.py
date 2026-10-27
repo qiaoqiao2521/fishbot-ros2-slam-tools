@@ -102,10 +102,11 @@ class RecoveryHarness(original.FlightHarness):
             resolve_position=lambda *args: [5., 0., 1.], MAX_CRUISE_POSE_GAP_S=.25,
             atomic_json=atomic_json, classify=lambda *args, **kwargs: {'scope': 'fixture'})
         namespace['asyncio'] = types.SimpleNamespace(to_thread=namespace['asyncio'].to_thread,
-            sleep=sleep, gather=asyncio.gather)
+            sleep=sleep, gather=asyncio.gather, wait_for=asyncio.wait_for,
+            CancelledError=asyncio.CancelledError)
         selected = original.methods(root/'flight.py', 'Flight',
             ('run', 'recover', 'stop_planner', 'localization_current', 'current_yaw',
-             'record_failure', 'block_recovery'), namespace)
+             'record_failure', 'block_recovery', 'recovery_command'), namespace)
         for name, method in selected.items():
             setattr(owner, name, types.MethodType(method, owner))
         owner.connect, owner.hold_for_observation, owner.close_mavsdk = connect, observation, close_sdk

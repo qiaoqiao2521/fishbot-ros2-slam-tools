@@ -381,3 +381,28 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_drone_recovery_cache_chain -v
 
 Next/owner：根Codex优先给独立副本中的恢复替换等待定义有限失败出口，核SDK未确认时能否先暂停本任务仿真并可靠进入原清理；不得把超时直接当远端撤回。另保留Task.cancel生命周期入口、源epoch与持续TTL的未知项。本轮范围未覆盖返航中二次取消/故障转接、真实恢复观测/回退/降落、SDK与PX4端接收、持续备份控制。原硬判据与补片不变，M2部分完成、完整M3/动态闭环未过。
 测试临时副本和报告自动删除，未产生新服务/构建/大文件；原SDK/ULog/失败记录保持。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20的动作、接收和实际执行分层；项目事实留本记录，不写memory。
+
+
+## 恢复入口 RPC 等待与取消终态修复（2026-10-27）
+
+本轮扩展现有默认关闭补片，仍以drone c866441为基线，仅应用于临时独立副本。DRONE_REVALIDATE_COMMAND只有1启用新增行为。recover入口复用原生asyncio.wait_for包裹hold、position和offboard_start；不新建SDK owner、后台lease或规划模式。不修改V/A/Z/净空硬判据。原冻结三源码与既有观测补片未变，未启动ROS、MAVSDK二进制、PX4/Gazebo或飞行。
+
+恢复的可选flight.recovery_rpc_timeout_s默认1.0秒，表示本地单次等待预算，不是实飞安全响应上界；无效、非正或非有限值只记WARNING后回退1.0。OFF分支仍直接await原调用，不加journal。ON分支把每次调用写入report.recovery.rpc_attempts：operation、wait_timeout_s、开始/结束宿主monotonic、status。成功返回为returned，远端效果仍not_independently_observed；异常/超时为unconfirmed，取消为cancelled，远端效果保持unknown。TimeoutError既可能由本地等待也可能由SDK抛出，本片不凭异常类型断言远端未接纳。
+
+调用未确认会转入原RecoveryBlocked→block_recovery尝试暂停本任务仿真，该调用返回或抛错后才进入原run清理；不重试、不请求后续/stop或start，不把取消Python等待当SDK缓存撤回。定位失效、已落地早退等原分支保持。wait_for依赖被等待协程响应取消；已安装gRPC aio的__await__会cancel底层call并重新抛CancelledError，实际MAVSDK Python路径已做下述受控验证，不推广为任意吞取消协程或事件循环停顿下的硬时限。
+
+另修复真实run分支中的终态误报：业务取消已进入recover时再Task.cancel，原finally可能保留cancelled并显示“已落地”，即使没有确认。首版只核report两标志，独立审查发现takeoff→land→takeoff可遗留旧True；根用同输入复现后补当前telemetry检查。ON分支在recover入口先清旧report标志，已落地早退或成功land重新确认，blocked不再沿用上一段成功；除before_takeoff外，必须同时有report.landed/disarmed=True和当前telemetry ON_GROUND/armed is False，否则清理旧report标志、标failed并记录未确认；原CancelledError仍传播，不吞取消、不宣称恢复已完成。新遥测本身的源龄期未因此获得新证明。
+
+### 验证与范围
+
+- [RPC失败出口8项](../apps/fishbot-control-station/workbench-review-tests/test_drone_recovery_rpc_guard.py)：真实run/recover/helper，fake SDK/暂停/清理；两触发的pending位置、pending hold/start、OFF兼容、无效预算、pause失败、恢复内Task.cancel及历史落地flags。两处报告负例先复现失败再修；独立7项0.597s通过；最后入口清旧标志补丁另独立3项0.159s通过，包含合法已落地早退和synthetic成功返回。
+- [真实Python/gRPC客户端1项两分支](../apps/fishbot-control-station/workbench-review-tests/test_drone_recovery_grpc_deadline.py)：已安装mavsdk-grpc==4.0.5、真实SDK类型转换及grpc aio，通过临时127.0.0.1端口连接明确synthetic service。首PVA返回后，第二position请求分别模拟接受前延迟、接受后丢响应；本地超时均进入原暂停/清理替身，服务handler实际观察到取消。两种fake cache可不同，但reference仍旧且journal均unknown。不是MAVSDK server二进制、MAVLink/PX4接收或缓存重发新实验；synthetic SUCCESS明确不作原生采用证明。
+- 前轮18项补片和13项恢复链随补片变动定向回归，连同新增8+1，共40项最终2.391s通过、0跳过；源码apply --check --whitespace=error-all、整文件编译、sender双应用顺序继续通过。asyncio调试慢回调提示保留，不能当规划延迟测量。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_command_revalidation_patch test_drone_recovery_cache_chain test_drone_recovery_rpc_guard test_drone_recovery_grpc_deadline -v
+```
+
+**未解决/Next：** 本片只覆盖recover入口的三种RPC，后续_hold_for_observation、retreat_to、land内RPC仍为原await，不能称整条recover有硬上限。Scene.pause虽给gz请求1000ms，但父进程Scene.request:185附近的stdout.readline没有父期限，worker/GIL/输出异常仍可能挡住block_recovery及后续清理。根Codex下一项优先给既有请求worker增加有界父读取和所属进程回收，沿用现有协议，不新建运行时；先复现再最小修复。源epoch、HTTP等待中旧缓存TTL、完整备份/真实动态资格仍待完成。原冻结保持，M2部分完成、完整M3/动态闭环未过，整体plan未完成。
+收尾：两轮subcase的grpc channel/server在finally关闭，测试独立确认目标端口拒绝新连接；所有临时源码/报告自动回收。无新SDK子进程/构建/大产物，原ULog/SDK/失败材料保留。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20的调用、接收、实际执行分层，模块兼容性留项目，未写memory。

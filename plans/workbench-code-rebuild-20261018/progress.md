@@ -483,3 +483,12 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - Remaining：pending位置RPC使stop/pause/finally均未到；定位/hold失效未替换，位置调用超时可能在远端接受前或后，reference不足以判断缓存；Task.cancel绕过业务恢复，实际上层入口未知。原始源码close等待server不代替落地；本轮未启动SDK。
 - Next/owner：根Codex优先在独立副本定义恢复位置调用的有限失败出口，超时后保留缓存未知，验证本仿真pause/cleanup路径。不解锁飞行、不改硬门槛；详见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
 - 收尾：TemporaryDirectory副本/报告已自动回收，无新服务/大产物，历史原件保留。Knowledge=already_covered，Wiki/ROS2 与 FishBot§20；已知外部超时直接本对话内置只读审查，无跨聊天消息，主独立实跑，未写memory。
+
+
+## 2026-10-27 恢复入口等待与取消终态修复
+
+- Current：现有默认OFF补片已增加恢复入口hold/position/start的本地等待出口，未应用冻结树；整体plan、完整M3/动态未完成。
+- Done：可选recovery_rpc_timeout_s默认1s，坏值warning/default；原生wait_for与原RecoveryBlocked路径，无重试。rpc_attempts区分returned/unconfirmed/cancelled，远端效果不明时unknown。取消恢复中Task.cancel误报已落地及旧落地flags两反例已复现修复：核report和当前遥测，recover入口先清旧flags、确认后重建；否则清旧flags+failed，保CancelledError传播。
+- 验证：18+13既有定向、8新出口及1真实SDKPython/gRPC synthetic（两时序分支）共40项2.391s/0skip通过。独立复核指出旧flags缺口，修后独立7项0.597s过，最后入口重建flags另独立3项0.159s过；真实grpc取消前轮独立也过。SDK二进制/MAVLink/PX4未启动，无真实缓存或落地新证据。
+- Next/owner：根Codex先复现Scene请求worker父stdout.readline阻塞，为现有worker加有界父读取与回收；该缺口使本轮不能称整个pause/cleanup有限。后续观测/退回/降落RPC仍有原await，TTL/epoch/备份/动态资格保持未完成。
+- 收尾：synthetic loopback端口关闭并拒绝新连接，TemporaryDirectory副本/报告回收，无新构建/SDK进程/大文件，原失败/ULog保持。Knowledge=already_covered，Wiki§20；直接本对话内置审查，不联系其他聊天，未写memory。

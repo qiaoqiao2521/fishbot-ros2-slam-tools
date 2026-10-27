@@ -55,7 +55,65 @@ diff --git a/flight.py b/flight.py
 +                            raise RuntimeError("EGO 轨迹已结束（发送前复查）")
                  if ceiling is not None and command["position"][2] > self.ground_z+ceiling:
                      raise RuntimeError("EGO 轨迹参考点超过本任务高度上限")
-@@ -981,5 +1015,6 @@
+@@ -875,7 +909,37 @@
+         raise RecoveryBlocked(reason)
+ 
++    async def recovery_command(self, operation, command, *args):
++        if not self.command_revalidation_enabled:
++            return await command(*args)
++        try:
++            budget = float(self.options.get("recovery_rpc_timeout_s", 1.))
++            if not math.isfinite(budget) or budget <= 0:
++                raise ValueError("invalid timeout")
++        except (TypeError, ValueError, OverflowError):
++            budget = 1.
++            self.report["errors"].append("WARNING: invalid recovery_rpc_timeout_s; using 1.0s")
++        attempt = {"operation": operation, "wait_timeout_s": budget,
++                   "started_wall_monotonic_s": time.monotonic(), "status": "pending",
++                   "remote_effect": "unknown"}
++        self.report["recovery"].setdefault("rpc_attempts", []).append(attempt)
++        try:
++            result = await asyncio.wait_for(command(*args), timeout=budget)
++        except asyncio.CancelledError:
++            attempt["status"] = "cancelled"
++            raise
++        except Exception as error:
++            attempt.update(status="unconfirmed", error_type=type(error).__name__, error=str(error))
++            raise RecoveryBlocked("recovery_rpc_unconfirmed: "+operation+": "+type(error).__name__) from error
++        else:
++            attempt.update(status="returned", remote_effect="not_independently_observed")
++            return result
++        finally:
++            attempt["ended_wall_monotonic_s"] = time.monotonic()
++
+     async def recover(self, reason):
+         """Retreat through measured points, with a new observation for each segment."""
+         self.recovering = True
++        if self.command_revalidation_enabled:
++            self.report.update(landed=False, disarmed=False)
+         self.report["recovery"] = {"trigger": reason, "outcome": "running", "checks": [],
+                                    "traversed": [], "route_source": "measured_px4_positions"}
+@@ -894,7 +958,8 @@
+                     raise RecoveryBlocked("recovery_control_arm_state_unconfirmed")
+                 try:
+-                    await self.drone.action.hold()
+-                    await self.setpoint(list(self.pose["position"]), self.current_yaw())
+-                    await self.drone.offboard.start()
++                    await self.recovery_command("hold", self.drone.action.hold)
++                    await self.recovery_command("position", self.setpoint,
++                                                list(self.pose["position"]), self.current_yaw())
++                    await self.recovery_command("offboard_start", self.drone.offboard.start)
+                     await self.wait_until(lambda: self.telemetry.get("flight_mode") == "OFFBOARD",
+                                           5, check_operator=False)
+@@ -905,5 +970,6 @@
+             else:
+                 # Stop cached PVA before any HTTP while retaining ownership.
+-                await self.setpoint(list(self.pose["position"]), self.current_yaw())
++                await self.recovery_command("position", self.setpoint,
++                                            list(self.pose["position"]), self.current_yaw())
+             await self.stop_planner()
+             await self.hold_for_observation()
+@@ -981,5 +1047,6 @@
                  await self.block_recovery("localization_lost_during_descent")
              now = self.observer.simulation_s
 -            if last_check_s is None or now-last_check_s >= .2:
@@ -63,7 +121,7 @@ diff --git a/flight.py b/flight.py
 +                    or (self.command_revalidation_enabled and now < last_check_s)):
                  current = list(self.pose["position"])
                  check = await self.validate_corridor(
-@@ -1000,5 +1035,6 @@
+@@ -1000,5 +1067,6 @@
                      self.offboard = True
                      raise RecoveryBlocked("descent_became_unverified: "+str(check.get("reason")))
 -                last_check_s = now
@@ -71,3 +129,16 @@ diff --git a/flight.py b/flight.py
 +                                and self.observer.simulation_s < now else now)
              await asyncio.sleep(.05)
          self.report["landed"] = True
+@@ -1099,4 +1167,12 @@
+                     self.record_failure("故障后落地未确认: "+str(cleanup_error))
+         finally:
++            if (self.command_revalidation_enabled and terminal == "cancelled"
++                    and not self.report.get("cancelled_before_takeoff")
++                    and not (self.report.get("landed") is True and self.report.get("disarmed") is True
++                             and self.telemetry.get("landed") == "ON_GROUND"
++                             and self.telemetry.get("armed") is False)):
++                terminal = "failed"
++                self.report.update(landed=False, disarmed=False)
++                self.record_failure("取消恢复结束，但未确认落地并解除电机")
+             self.finished = True
+             self.report["contact_sensors"] = self.observer.contacts
