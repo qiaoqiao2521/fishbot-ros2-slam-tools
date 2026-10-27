@@ -406,3 +406,26 @@ PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unit
 
 **未解决/Next：** 本片只覆盖recover入口的三种RPC，后续_hold_for_observation、retreat_to、land内RPC仍为原await，不能称整条recover有硬上限。Scene.pause虽给gz请求1000ms，但父进程Scene.request:185附近的stdout.readline没有父期限，worker/GIL/输出异常仍可能挡住block_recovery及后续清理。根Codex下一项优先给既有请求worker增加有界父读取和所属进程回收，沿用现有协议，不新建运行时；先复现再最小修复。源epoch、HTTP等待中旧缓存TTL、完整备份/真实动态资格仍待完成。原冻结保持，M2部分完成、完整M3/动态闭环未过，整体plan未完成。
 收尾：两轮subcase的grpc channel/server在finally关闭，测试独立确认目标端口拒绝新连接；所有临时源码/报告自动回收。无新SDK子进程/构建/大产物，原ULog/SDK/失败材料保留。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20的调用、接收、实际执行分层，模块兼容性留项目，未写memory。
+
+
+## Scene 请求 worker 父进程期限修复（2026-10-27）
+
+新增独立[Scene补片](../apps/fishbot-control-station/workbench-tools/patches/drone-scene-worker-deadline.patch)，基线仍为drone c866441。原Scene.request将timeout交给gz子进程，却用无期限stdout.readline等结果。根先用真实管道/纯Python worker复现：silent PID642041、partial PID642053均已收到1ms请求，观察150ms仍存活/阻塞；显式回收各自worker后才退出读取，退出码-9均wait确认。这是故障注入，不是Gazebo现场故障。
+
+DRONE_REVALIDATE_COMMAND在Scene创建时只有1启用，默认OFF完整保留原text管道路径。ON继续复用同一request worker、原JSON行和protobuf hex协议。父预算为原timeout毫秒转换为秒再加0.5s IPC余量；同一期限覆盖取锁、进程启动耗时、非阻塞管道写入及完整行读取。原timeout字段不重写，不能把父等待回退当成远端参数有效性证明。NaN先max折零的边界由独立审查复现，现先检查原数值有限性；坏值只WARNING，父等待退为1.5s。同步Popen/序列化不能被期限本身中断，故不称任意系统条件下的严格总墙钟上界。
+
+超时、EOF、不完整响应或解析错误在持锁期间清退旧worker后抛出，不盲目重发原命令；下一次新调用可重建，旧迟到响应不复用。只操作self.worker的Popen句柄。失败回收先TERM等待0.2s，再KILL等待1s；正常close先关stdin/EOF等待2s，再同样升级。退出未确认会报清理失败并保留句柄；close取锁最多等5s，失败不假报已回收。请求取锁超时不清退另一正在处理的worker。远端Gazebo可能已执行命令，父超时不能当撤回或未执行。
+
+[12项局部验证](../apps/fishbot-control-station/workbench-review-tests/test_drone_scene_worker_deadline.py)最终7.327s通过、0跳过，真实Popen/管道/线程、明确替身worker；没有导入gz或启动ROS/SDK/Gazebo。覆盖原silent/半行阻塞、正常/分块响应与两次复用、写满管道、超时后重建、坏JSON/hex/worker error/EOF、忽略TERM、OFF原路径、取锁失败不误杀、坏预算WARNING、close EOF→TERM→KILL及close锁失败。独立原9项4.933s过，最后新增3项2.393s过。
+
+其中一项组合前节Flight补片，执行真实run/recover/block_recovery、Scene.pause/request/close；SDK、protobuf类型与子进程Gazebo部分明确为替身。恢复position超时后，暂停worker再半行失联，父读取超时仍进入原finally/SDK清理替身；最终failed，无simulation_pause_confirmed，无落地声称。两补片apply检查及源整文件编译通过；前轮40项结果不因Scene单独补片机械重跑，Flight补片未改。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_drone_scene_worker_deadline -v
+# Apply both patches only to an independent copy of drone c866441.
+git -C "$DRONE_REPAIR_COPY" apply --check /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-tools/patches/drone-scene-worker-deadline.patch
+```
+
+Next/owner：根Codex补齐恢复后续观察/回退/降落中的控制RPC等待，复用现有recovery_command并区分正常降落记录，避免只保护入口。仍不把有限失败出口当安全备份或动态通过；epoch、SDK旧缓存持续TTL、完整M3与动态闭环未完，整体plan保持active。补片未应用冻结树，不解锁/飞行。
+收尾：测试所有自有child均在正常路径或fixture兜底中wait回收、管道关闭，线程join，临时源码/marker/report自动删除；锁失败用例刻意保留句柄直到fixture兜底，不冒称生产close已成功。无SDK/ROS/Gazebo实例、构建或新大产物，原失败/遥测保留。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20的调用、确认和物理验收分层，模块事实留项目，未写memory。

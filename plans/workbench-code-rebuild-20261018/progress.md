@@ -492,3 +492,12 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - 验证：18+13既有定向、8新出口及1真实SDKPython/gRPC synthetic（两时序分支）共40项2.391s/0skip通过。独立复核指出旧flags缺口，修后独立7项0.597s过，最后入口重建flags另独立3项0.159s过；真实grpc取消前轮独立也过。SDK二进制/MAVLink/PX4未启动，无真实缓存或落地新证据。
 - Next/owner：根Codex先复现Scene请求worker父stdout.readline阻塞，为现有worker加有界父读取与回收；该缺口使本轮不能称整个pause/cleanup有限。后续观测/退回/降落RPC仍有原await，TTL/epoch/备份/动态资格保持未完成。
 - 收尾：synthetic loopback端口关闭并拒绝新连接，TemporaryDirectory副本/报告回收，无新构建/SDK进程/大文件，原失败/ULog保持。Knowledge=already_covered，Wiki§20；直接本对话内置审查，不联系其他聊天，未写memory。
+
+
+## 2026-10-27 Scene worker 父读取/写入期限
+
+- Current：独立Scene补片defaultOFF已验证，原冻结源未改；恢复暂停worker阻塞的失败出口已接通，不代表完整恢复/动态成功。
+- Done：父预算原请求ms/1000+.5，含取锁/启动耗时和非阻塞完整write/read；原协议不改。超时/坏响应清退自有worker，TERM→KILL，下一新调用重建；close EOF→TERM→KILL，锁失败保未确认句柄。
+- 验证：原silent/半行1ms请求在150ms仍阻塞先复现；新12项7.327s/0skip，实际管道/worker、Flight恢复+pause失联集成均过。独立9项及新增3项分别过；NaN max折零经审查复现修复。原Flight补片/40项未机械重跑。
+- Remaining/Next：父期限不能中断同步Popen/序列化，不是全系统实时上界；远端效果仍unknown。根Codex下一项补齐恢复后续观察/回退/降落的控制RPC等待，沿现有helper；epoch/TTL/备份/完整M3和动态仍未过。证据及复验见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 收尾：自有进程/线程/管道及临时副本回收，无ROS/SDK/Gazebo/大构建产物，原失败/遥测保留。Knowledge=already_covered Wiki§20；本对话内置只读审查，无跨聊天联系。
