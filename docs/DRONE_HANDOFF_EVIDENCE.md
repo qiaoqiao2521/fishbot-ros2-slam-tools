@@ -270,3 +270,53 @@ cd output/drone-committed/adbbaa2d-6e06-4653-8ba9-ca158a04db20
 ```
 
 Next/owner：根Codex核已有发送边界的候选样本身份、源有效期与SDK重发缓存，复用现有失效处理。因为PX4按每次接收重打HRT、忽略wire boot，新的raw stamp不能单独证明候选仍新鲜。先明确过期/暂停/恢复/撤销合同，再准备可审查的执行适配；当前不自动解锁或飞行。此接收/地面诊断片完成，M2部分完成、完整M3与动态闭环仍未验收。
+
+
+## 候选有效期与SDK缓存核对（2026-10-27）
+
+本轮只核现有合同与边界，未应用修复到冻结源。原drone/PX4/GCOPTER保持c866441/d6f12ad/e0444f6。未启动ROS、PX4/Gazebo或飞行；另用真实mavsdk-grpc 4.0.5和现有pymavlink搭建明确标注的本地协议测试端，不将其ACK当PX4接受。
+
+### 已有保护与发送前窗口
+
+[局部核对](../apps/fishbot-control-station/workbench-review-tests/test_drone_command_validity.py)通过AST提取冻结原方法，不导入Flight/ROS，不创建线程或服务。实际保留的合同如下。
+
+| 层 | 固定实现的现有处理 | 不能据此推断 |
+| --- | --- | --- |
+| sidecar on_command | 必须有active goal、ACK、traj_id不低于floor且曲线已知，PVA/yaw有限；输出task/goal、sample stamp与曲线起止 | 原生SDK载荷具有这些身份或TTL |
+| sidecar state | sample龄期>0.3s拒绝；曲线结束后>0.15s拒绝；到目标且V/A逐轴<1e-6允许goal_hold；clock wall超2s拒绝 | 返回的ready快照在HTTP等待结束时仍有效 |
+| Flight.goto | HTTP返回后核task/goal及sample龄期[-0.1,0.5]；新goal先发position清旧PVA | 已重核source_end、取消状态或clock epoch |
+| stop/newgoal | paused clock时stop仍能清active goal/setpoint/排队请求/ACK；新goal检查当前state，再清旧样本与ACK、抬traj floor | 已同步清掉SDK缓存 |
+| recovery/land | 现有路径先用position替换PVA再做planner HTTP；land调用offboard.stop后请求降落；future-odom专用等待有await后输入复查 | 普通goto /state等待也有同样复查，或位置保持本身保证动态安全 |
+
+两处发送窗口已通过真实方法的受控反例复现，尚未修复：
+1. `flight.py:632–647`普通/state等待期间取消到达，返回后仍发一次PVA，下一轮才抛CancelFlight。不能把future-odom分支已有的post-await检查误说成不存在。
+2. sidecar在10.15sim返回ready，sample stamp10.15、source_end10.2；HTTP返回时10.4，sample age0.25仍在Flight窗内，但曲线已结束0.2s，重新执行原sidecar.state会判trajectory_expired；原goto仍发送。缺口是发送前没有按新sim重核源期限，非所有龄期检查缺失。
+另有两个时钟边界：小回退0.05s落在既有future容差内仍可发送，这只证明容差不等于epoch身份，不把容差本身改判为Bug；`land`的验证HTTP期间10→5后，旧now写入last_check_s，5.1/5.2不再触发原0.2s周期检查，须等追过旧节拍。后者为AST局部反例，不是实飞中发生的事件。
+15项原方法检查中4项明确命名observed_diagnostic，绿色代表当前边界可复现，不代表已修复；修复时应翻转这些期望，不能长期将漏洞当目标行为。其余检查确认原过期/身份/大回退拒绝、goal_hold例外、暂停stop与newgoal处理，以及reference使用发送前stamp且只在RPC成功返回后提交。
+
+### 真实SDK缓存与协议端读回
+
+复用[官方同版Offboard实现](https://github.com/mavlink/MAVSDK/blob/v4.0.5/cpp/src/mavsdk/plugins/offboard/offboard_impl.cpp)及其头文件。PVA setter保存P/V/A，登记SEND_INTERVAL_S=0.05并立即发送；后续sender从缓存读取，每次重新填wire time_boot_ms。position setter移除旧类型周期任务、切到position掩码。stop/stop_async先stop_sending_setpoints再请求Hold；heartbeat watchdog在未处Offboard且经过3s宽限时停止，不是候选TTL。未在这些接口中找到source_start/end、task/goal/sample身份或源有效期检查。
+新增[有限SDK诊断](../apps/fishbot-control-station/workbench-tools/drone-sdk-cache-probe.py)，只调用一次PVA setter、一次position setter和一次stop；协议端固定localhost、显式synthetic unarmed heartbeat/ACK，拒绝任何arm请求。未调用start/arm/land，无飞机、物理状态或真实模式验收。SDK进程日志再次确认v4.0.5；包元数据同版。不能由客户端127.0.0.1推断服务绑定：末轮ss实际见`*:56051`，退出后该监听已关闭；未改全局网络或SDK配置。
+
+| run_id | 实际结果 | 资格 |
+| --- | --- | --- |
+| d03123f8-92c9-47ec-a8b8-daf3a7c7fe03 | cleanup之后JSON序列化遇到COMMAND_LONG中的NaN而失败 | 失败日志及官方源码保留，无结构化行为验收 |
+| e92d0e9f-d10d-4b49-a81c-36f4186a1b38 | 单PVA RPC后稳定窗12报文/12 wire时刻/1 PVA；position后9报文mask2552；stop后0 | 真实SDK＋协议端观察，不是PX4消费 |
+| 6dde3304-cd32-4b80-9cff-7d21e5f04147 | 补清理竞态与监听读回后，新UUID稳定窗11/9/0，masks2048/2552/无 | 同样机制复现，非时延或安全上界 |
+
+观察窗故意排除每次RPC返回后前100ms，只用于区分稳定重发与过渡在途包，不是新物理容差。PVA阶段未再调用setter，等待0.65s；position等待0.55s；stop后等待0.4s，末次有效观察窗约0.3s。两轮均无400 arm命令，三RPC均返回；synthetic ACK不证明Hold在PX4成立。原生PX4接收重打HRT的结论沿用前节adb实测，不能将本轮协议时间换成PX4 HRT或sim。
+初轮记录错误已修为非有限协议字段写null并保nonfinite_fields，未填0、未改控制值。两条COMMAND_LONG非有限字段被保留；SDK退出竞态/最终wait超时捕获为清理错误，摘要不再因此跳过。新增3项局部检查覆盖这两类真实诊断问题；总18项检查通过、0跳过，但其中4项仍是未修控制边界见证。
+末轮SDK PID455546、前轮449011及不支持--version探测PID434536均退出，UDP49772/gRPC56051及前轮目标端口无残留。--version实际被该二进制当连接串，已关闭该自有探测，不以其退出码当版本成功；版本取实际SDK启动日志。已删除1242B临时路径文件；无新大副本/构建/渲染产物，原失败和必要小记录保留，不凭空声称释放GiB空间。
+
+复验入口：原忽略`workbench-tools/output/drone-committed/6dde3304-cd32-4b80-9cff-7d21e5f04147/`下有sdk-cache-probe.json、sdk-cache-peer.jsonl、sdk-cache-independent.json、sdk-process.json、sdk-listeners.json、sdk.log、probe.log、source-provenance.json和cleanup.json。前两UUID在同级。官方cpp/hpp仅保留一份于失败UUID目录，后续provenance引用原件；不复制vendor源码入Git。重新采集使用新输出目录；真实SDK复验仍只对synthetic peer。
+
+```sh
+cd apps/fishbot-control-station/workbench-review-tests
+python3 -m unittest test_drone_command_validity test_drone_sdk_cache_probe -v
+cd ../workbench-tools
+# Replace with a fresh local output directory; this does not launch PX4.
+/home/muqiao/.cache/ros2-drone/venv/bin/python drone-sdk-cache-probe.py --output /tmp/drone-sdk-cache-new-run
+```
+
+Next/owner：根Codex准备独立副本、默认关闭的最小发送前复查补片：普通/state await后重核取消/操作状态，以及源期限和原goal_hold例外；复用现有错误/恢复入口，不新造lease服务或以SDK新stamp代源合同。另修回退后的降落验证节拍重置，保留原0.2s判据；epoch身份与SDK RPC等待期间失效仍需明确。只读核查片完成，原源码未改；M2部分完成、完整M3/动态闭环仍未通过。

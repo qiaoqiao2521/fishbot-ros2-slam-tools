@@ -456,3 +456,12 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - 验证：27局部过/0跳过；真ON1076步与修日志增量、末OFF构建通过；独立pyulog重算并在删副本后再过。26相符不替代完整M3/动态；额外176ACK警告保留未修。
 - 收尾：已删1310269440B临时源/build/ccache、三个辅助文件、四生成链接；八所属PID/进程组无残留，完整原记录/模型/失败及精确patch归档保留。cleanup.json记录可用空间5053059072→6363344896B，恢复/复验入口在证据文档。
 - Next/owner：根Codex核已有发送边界样本身份/源有效期/SDK缓存重发；PX4新接收stamp不等于新候选。保持不解锁/飞行。Knowledge=already_covered，沿用Wiki§20/原生时钟及CapMesh PIT-004；兼容性事实留项目。Qoder/AGY --pick均ready选择Qoder，真实短审查60s超时后不重试，改本对话内置审查/局部测试；不联系其他聊天，DSH暂停。
+
+
+## 2026-10-27 候选期限与SDK缓存核查
+
+- Current：完成核查与反例，未改冻结控制源；M2部分完成、完整M3/动态未过。无ROS、PX4/Gazebo、解锁或飞行。证据入口docs/DRONE_HANDOFF_EVIDENCE.md同日新节。
+- Done：15项真实AST局部核查确认现有身份/龄期/stop/newgoal/goal_hold保护，其中4个observed_diagnostic复现普通HTTP返回后取消仍发、source_end过期但sample .25仍发、小回退在容差内、land回退后旧周期节拍。这4项均非修复通过声明，冻结源未改。
+- SDK：新增有限真实SDK＋既有pymavlink synthetic peer诊断，复用官方v4.0.5缓存与50ms周期。e92单PVA RPC后12重复包、position后9禁V/A、stop后0；末6dde为11/9/0，wire时间更新不代表新候选。仅三RPC、无arm；synthetic ACK不当PX4接受。ss实见SDK监听*，结束关闭，不以客户端loopback冒称bind仅本机。
+- 验证/问题：18局部检查过/0跳过（4项未修见证）。d031在cleanup后NaN日志序列化失败保留；诊断已用null＋字段名留未知，并补清理退出竞态/最终超时检查。独立读回末轮11/9/0、SDK版本/0arm与PID/端口关闭。没有重跑旧飞行/全机器人实验。
+- 收尾：保留三个UUID的必要小记录/失败/一份官方源码及来源；SDK PID455546/449011、版本探测434536退出，目标端口关闭；删1242B临时路径文件，无新大构建产物。原drone/PX4/GCOPTER clean保持。Next=根Codex准备默认关闭的发送前再校验与land回退节拍最小补片，不应用冻结树、不解锁飞行。Knowledge=already_covered，沿用Wiki§20/源时钟/CapMesh PIT-004，版本兼容事实留项目。--pick选AGY（Qoder timeout），实际45s任务超时后即内置；内置只编辑指定测试，根独立跑18项与实际SDK读回，未联系其他聊天。
