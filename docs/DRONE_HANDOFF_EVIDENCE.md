@@ -350,3 +350,34 @@ export DRONE_REVALIDATE_COMMAND=1
 ```
 
 Next/owner：根Codex做Flight.run→recover的定向局部集成，核取消/期限异常是否按原入口替换缓存；不重复建同类网格，不解锁/飞行。原drone/PX4/GCOPTER c866441/d6f12ad/e0444f6再次确认clean。本轮无新服务、构建或大产物；测试临时副本自动回收，历史SDK/ULog/失败原件保持。
+
+
+## Flight.run → recover 缓存替换核对（2026-10-27）
+
+本轮只增加[定向回归夹具](../apps/fishbot-control-station/workbench-review-tests/test_drone_recovery_cache_chain.py)和交接，不修改补片或飞行行为。原drone c866441冻结；临时副本应用上一节默认关闭补片，在夹具中显式启用。提取真实完整run、recover、setpoint、stop_planner、localization_current、current_yaw、record_failure和block_recovery；连接、SDK/cache、暂停、观察、模式确认、落地结果和清理均为明确标注的替身。没有导入ROS、创建HTTP线程、启动SDK或仿真。
+
+取消/期限主用例先让一个合法PVA进入fake cache，再在第二次/state响应注入取消或曲线过期；不是从空缓存起测。正常恢复前缀在观测边界主动拒绝，实际执行原blocked异常处理和run完整finally、写出临时report/telemetry/status。另有一组明确synthetic落地返回，只验证状态路由，不能作为落地或通路安全证据。
+
+| 路径（原flight.py行号） | 本轮确认的执行器行为 | 仍不能确认 |
+| --- | --- | --- |
+| 取消1057/1063；期限异常1092/1097 | 进入同一原recover；已Offboard时907位置setter返回→908 /stop→909观察；调用载荷经真实frames转换为NED | 真实SDK是否接受、PX4是否保持或已落地 |
+| 需要接管894–904 | hold返回→位置setter返回→start→OFFBOARD确认→/stop；未确认不写control_takeover | hold响应本身是否终止原模式或实际运动 |
+| 定位失效888–889 | 先block，未发位置指令、未请求/stop；pause之前fake cache仍为旧PVA | 不能称这一路已清缓存；暂停仅适用于本仿真退路 |
+| 位置setter未返回或抛错907 | 未返回时stop/pause/finally均未到；抛错后走blocked。接受前失败与接受后丢响应同为TimeoutError，却可有不同fake cache | SDK错误不能反推出缓存未变或已变；本轮未实测网络挂起 |
+| 接管hold/arm状态失败896；start/模式确认失败898–899 | 前者未替换；后者位置setter已返回但未确认控制接管；都不进入/stop | 控制权与缓存替换不能合并成一个成功字段 |
+| /stop失败689–694 | 先前位置setter已返回，保留WARNING再进入观察 | /stop只清规划器，不是SDK缓存协议 |
+| blocked/收尾869–875、1184 | pause返回后才写simulation_pause_confirmed；pause/SDK清理失败留failed及错误，不冒称落地 | close_mavsdk原源码仅析构本实例并等待server退出；本轮清理是替身，未验证真实进程/飞控停止 |
+| 已落地且armed=False884–887 | 不再替换，依据输入遥测早退；未发起arm的取消走before_takeoff | 遥测输入在夹具内是合成状态 |
+| asyncio.Task.cancel() | CancelledError绕过CancelFlight/Exception恢复分支，直接finally；未调用recover/pause/stop，取消异常仍向外传播 | 未检查实际上层是否以Task.cancel终止飞行，不能声称网页取消会走这一路 |
+
+**结论：正常前缀顺序成立，但恢复不是无条件的缓存失效保护。** 特别是replacement setter持续pending、且未收到外部协程取消时，等待本身没有进入后续暂停/清理的出口。原setpoint:528–534只在await成功返回后更新Python reference；同样的RPC错误下reference仍可为旧PVA，不能用它代替SDK缓存读回。已安装mavsdk-grpc 4.0.5的offboard.py直接await SetPositionNed(request)，该调用处未显式传deadline；这和执行器无wait_for的源码事实相符，但不是网络永远挂起的实测。既有真实SDK重发证据沿用前节，不在本轮假造新SDK实验。
+
+13项局部检查通过、0跳过；主Agent最终0.715s，本对话内置独立审查最终0.638s同模块通过。覆盖两种触发、pending/接受前后丢响应、定位失效、接管成功/hold/start/模式未确认、planner stop warning、pause与cleanup失败、未arm取消、已落地早退、synthetic恢复返回及Task.cancel边界。主Agent首次运行因AST夹具漏注入json全局失败；补齐后通过，属于夹具接线，不是生产源码问题。独立审查指出接管顺序断言未包含/stop，已补明确索引顺序；既有18项补片检查不因新增测试机械重跑。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest test_drone_recovery_cache_chain -v
+```
+
+Next/owner：根Codex优先给独立副本中的恢复替换等待定义有限失败出口，核SDK未确认时能否先暂停本任务仿真并可靠进入原清理；不得把超时直接当远端撤回。另保留Task.cancel生命周期入口、源epoch与持续TTL的未知项。本轮范围未覆盖返航中二次取消/故障转接、真实恢复观测/回退/降落、SDK与PX4端接收、持续备份控制。原硬判据与补片不变，M2部分完成、完整M3/动态闭环未过。
+测试临时副本和报告自动删除，未产生新服务/构建/大文件；原SDK/ULog/失败记录保持。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20的动作、接收和实际执行分层；项目事实留本记录，不写memory。

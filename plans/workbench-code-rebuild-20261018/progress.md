@@ -474,3 +474,12 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - 验证：18局部过/0跳过，主与独立内置审查分别实跑最终版；6组deadline与真实Sidecar.state交叉核同，sender补片双应用顺序都可用。原失败ON变为拒绝/复验、OFF保旧行为；无新增时间epsilon/物理门槛。包含1项明确observed_boundary：SDK RPC内取消仍可能已有缓存，不作修复完成声明。
 - 边界/Next：未测完整run→recover链；已有缓存在HTTP等待中续发、RPC等待失效和epoch识别仍未解。根Codex下一项局部集成原错误/恢复入口，保留原数据/阈值，不解锁飞行。原三冻结源clean，临时目录已自动回收，无新服务/构建/大产物。
 - Knowledge=already_covered，沿用Wiki§20因果/源时钟及PIT-004，新事实留项目，未写memory。--pick Qoder timeout/AGY ready，但AGY实派45s超时即改本对话内置审查，不重试、不联系其他聊天；根独立核最终源码、18项及三处原异常调用链。
+
+
+## 2026-10-27 run→recover 缓存替换核对
+
+- Current：恢复前缀定向集成核对完成，正常位置替换→/stop顺序成立；失败边界仍未修复。只新增测试/文档，原补片与drone c866441冻结不变，无ROS/SDK/仿真/飞行。
+- Done：真实run/recover/setpoint/stop等方法，首有效PVA后再触发取消或过期；SDK/cache/观测/清理均显式替身。13检查/0跳过，主与本对话独立审查均运行最终版；接管hold→position→start→模式确认→stop顺序显式断言，完整finally/report路由被执行。synthetic落地返回不升级原任务failed，未作实际落地声称。
+- Remaining：pending位置RPC使stop/pause/finally均未到；定位/hold失效未替换，位置调用超时可能在远端接受前或后，reference不足以判断缓存；Task.cancel绕过业务恢复，实际上层入口未知。原始源码close等待server不代替落地；本轮未启动SDK。
+- Next/owner：根Codex优先在独立副本定义恢复位置调用的有限失败出口，超时后保留缓存未知，验证本仿真pause/cleanup路径。不解锁飞行、不改硬门槛；详见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 收尾：TemporaryDirectory副本/报告已自动回收，无新服务/大产物，历史原件保留。Knowledge=already_covered，Wiki/ROS2 与 FishBot§20；已知外部超时直接本对话内置只读审查，无跨聊天消息，主独立实跑，未写memory。
