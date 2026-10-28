@@ -242,7 +242,7 @@ class RecoveryCacheChain(unittest.IsolatedAsyncioTestCase):
                 self.assertLess(names.index('pva.return'), names.index('trigger'))
                 self.assertLess(names.index('trigger'), names.index('observation.fixture_boundary'))
                 self.assertEqual(report['recovery']['trigger'], 'operator_cancel' if trigger == 'cancel'
-                                 else 'EGO 轨迹已结束（发送前复查）')
+                                 else 'cached_command_source_expired')
                 self.assertTrue(report['recovery']['simulation_pause_confirmed'])
                 self.assertIsNone(h.cache)
 

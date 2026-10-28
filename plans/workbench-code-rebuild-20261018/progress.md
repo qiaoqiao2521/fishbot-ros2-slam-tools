@@ -527,3 +527,12 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - 验证：20项0.842s/0skip；三补片六顺序applycompile与真实组合行为过。独立18项曾发现首PVA后新epoch空样本被宽限吞掉，三反例先红后修，独立新增/组合2项0.164s过。原53资格不扩大，无服务/飞行。
 - Remaining/Next：根Codex沿既有goto /state等待区间补并发失效观察，复用原recover处理过期/取消/回退，不自动重试未知效果RPC；用真实SDK旧缓存重发证据核等待期间的有效期边界。原生ACK→Bspline→PositionCommand顺序与单一生产者资格仍待核，不把receipt token当ROS来源证明。保持冻结、不部署、不解锁；可行备份、原生空中采用、完整M3和动态闭环未完成，整体plan active。
 - 收尾/Knowledge：临时副本自动删除，无新大产物或实例，三冻结源clean，原件/既有pycache保留；already_covered Wiki§20，本对话独立审查无跨聊天。精确入口与限制见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+
+
+## 2026-10-28 /state pending 的旧PVA失效观察
+
+- Current：默认OFF复查补片已接并发state等待观察，未部署冻结源，无飞行；完整SDK TTL/M3/动态仍未完成。
+- Done：等待内复用原输入/任务/已启用epoch检查，以上一成功PVA源stamp和原sample/end期限撤出等待；原零VA例外保留、position hold不误用旧PVA。完成与失效同刻先拒绝失效，cancel+gather本地HTTP task后由原run→recover替换位置再/stop；不在watcher另发控制。
+- 验证：pending首PVA反例先红，最终101项11.261s/0skip（原88＋新13）过，三补片六顺序与组合保持。真实HTTP线程迟到/退出/端口关闭过，SDK/物理仍替身。旧恢复测试只更新更早的expired原因；独立12＋原3项过，修source_end数值字符串保存兼容后最后2项.250s独立过。精确入口见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- Remaining/Next：根Codex复用现有SDK cache探针，把新/state等待保护接真实MAVSDK二进制和synthetic本地peer，核过期→原恢复位置替换→报文切换及迟到HTTP响应不恢复PVA；仍不启动PX4/飞行。随后覆盖普通PVA RPC自身pending/已接受丢响应期间的失败出口，不把本地wait取消当SDK撤回。原生ROS来源/ACK顺序、完整缓存期限、可行备份、原生空中采用、完整M3与动态仍未完成，整体plan active。
+- 收尾/Knowledge：临时副本、fixture HTTP/gRPC/worker与端口回收，无新大产物/ROS/SDKbinary/飞行，原件和并行清理成果保留；already_covered Wiki§20，本对话只读审查无跨聊天。
