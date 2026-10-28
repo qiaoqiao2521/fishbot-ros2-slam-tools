@@ -182,3 +182,29 @@ knowledge_status=updated：既有 Wiki/ROS2 与 FishBot.md“差速进场”补�
 证据：~/.cache/fishbot/j100-wide-20261028/，scene/为实际世界及地图，native-plan.json保留三UUID/路径/原生状态/扫掠/预算，geometry.json保留静态边界，factory-dry-run.json保留两单声明；tests.log/regression.log为4+22项，j100-wide.png为实际新模型渲染。初次import失败保留native-plan.log，成功复跑日志native-plan-b.log。只查规划与静置，未称新的完整配送通过。
 
 清理：owned原生18个身份均已退出，survivors=[]，API9140关闭；没有动107/114等旧实例。原生场景测试TemporaryDirectory已自动移除。未开启完整physics日志，本轮目录约1.7MiB，保留必要场景/截图/短日志和脚本，不产生大型训练或渲染缓存。磁盘仍约6.7GiB可用。knowledge_status=already_covered：Wiki/ROS2 与 FishBot“差速进场”已覆盖完整几何/宽处转向/预算与完整任务分层，本轮场地状态仅回写本项目。
+
+
+2026-10-28 用户要求实际运行宽场景B→A：root已派发 full-ba-a，独占170/API9140、原Factory连续模式、原360/120/180预算及物理评分。使用已验证的scene/scene-manifest.json与native-current-goal overlay，原.06/.10载货限速、默认25mm全局附加缓冲；无新参数调优。结果进行中，未计通过；原始输出~/.cache/fishbot/j100-wide-20261028/full-ba-a，接续只查询该原run，不重复派发。
+
+full-ba-a在protected_snapshot连接用户systemd bus时退出，发生于任何world launch/start之前，无动作；本会话缺XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESS。实际/run/user/1000/bus存在，显式传入后原保护单元身份可读。新full-ba-b沿用同输入/预算重新启动，a记录保留；不是重发已接受任务。
+
+
+full-ba-b实际Dock过期取消，full-ba-c完成抓放/出站但支撑丢失失败；两轮均未执行A，原任务和原生UUID、独立评分与清理回执保留。详见findings。现只补观测双龄诊断与prepare对既有terminal_stop_heartbeat的显式入口；103项BridgeRaceTests和4项原生场景检查通过，无门槛变更。
+
+full-ba-d使用scene-terminal、原170/9140和原B→A owner，task 5576f001-f38f-4dbc-bbc8-ba5cadd905d2；原输出不覆盖，结果进行中。B/C完成流gzip逐字节回读后删除展开副本，分别释放6053888/203268096字节，恢复gzip -dk <observer.jsonl.gz>；原评分和模型保留。
+
+
+## 2026-10-28 B→A实跑收尾：B跟踪已证明，完整双单未通过
+
+- D：task 5576f001-f38f-4dbc-bbc8-ba5cadd905d2，B路线49.857384墙秒，原生Nav 7269a222137d45bda02eec46bb4c75d4终态4；独立末XY29.498mm/yaw.015381rad，原装运K通过。924条transformed_global_plan、949条非零nav速度及2.549m真位移证明实际计算/运动；活动窗2387样本支撑失联0，序号缺口4处。卸货上方准备点IK失败，整任务仍false，A未执行。
+- 工位修正：prepare已显式暴露原terminal_stop_heartbeat；卸货站可配置pickup_xy_m，默认原(.24,.14)不变。宽场景采用(.24,.04)，两站各沿-X平移.10m；实际D快照的原5段抓取查询solved。6cm候选未覆盖4cm误差八方向，不晋级；10cm候选5项原生场景检查通过，另有15项多实体和103项BridgeRaceTests通过。上述合计123个不同测试，不把重复运行累加；未重复全仓前端/反馈回归。
+- E：task 987c4d9f-d81c-4fc6-a2bb-9d20af67835c在停靠源龄.30秒失败，接收龄.353秒。独立传感器仍50Hz，HTTP组装峰值与配对空档共现，因果未定。
+- F：同源码/输入复现，run 1e3eeddb-dcf6-4a2f-ba2f-e6ed9d7ccf24，task 1c184d60-bafe-41b5-ae9c-aa07862f84fb；已抓放出站，路线26.7257秒因共享物理反馈时间失效终止。Drive d90b93a0011947d5b9c61945cc9fb838状态4，Nav 23fa75de8f7e495b85176696d6412b49取消5。清理窗最后失败证据clock216.96、physics217.30，源龄-.34秒，接收龄.00204秒；它是清理时再次观察到的异常，不能冒充首次中止时刻。hold/连续静止/guard关闭与参数恢复已确认，A未执行。
+
+E/F不放宽时间、碰撞、载货、速度或评分；没有继续盲重试。D理想停车保护触发.78源秒，F .86源秒，不能称无保护辅助或视觉/真机成功。D/E/F选定源码起止一致，owned_process_survivors均空，9140已关闭。旧107/114未操作；保护配置单元前后一致且均not-found，只证明该集合不变。
+
+证据入口：~/.cache/fishbot/j100-wide-20261028/full-ba-{b,c,d,e,f}/result.json、order-1/observer、runtime/tasks/task.json；full-ba-d-controller-evidence.json记录控制活动窗；unload-failed-physics.json为实际D终态快照，unload-margin-query.json为其新工位静态查询，不是运行快照恢复或新配送成绩。scene/、scene-terminal/、scene-unload/（未晋级6cm）与scene-unload-margin/分别保留。
+
+knowledge_status=already_covered：已读回Wiki/ROS2 与 FishBot的原生终态新零目标、差速进场及第20节分层验收；本轮时序根因未定、卸货仅静态修正，有限场景结论留项目，不写成已验证通用修复。下一owner=root，最短接续见task_plan末节。
+
+收尾核验：D/F以原observer重新运行独立Oracle，整项仍false；passed、原K、目的地、业务评分和保护遥测五组字段与现场评分逐项一致，回执replay-comparison.json。93个文档本地链接无缺失，git diff --check通过。五份B–F原始流逐块核验gzip后删除展开件，分配900354048→148467712字节，释放751886336字节（717.05MiB）；保留原模型、失败快照、原始压缩流、评分、短诊断和未晋级配置。恢复gzip -dk <observer.jsonl.gz>，不会重启任务。全盘可用约5.38GiB；只统计本轮文件的实际回收，不将其冒充全盘净增量。

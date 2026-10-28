@@ -965,8 +965,14 @@ def run(args):
                 measured, received, source_stamp = self.beacon
                 stamp = measured['stamp']
                 now=self.get_clock().now().nanoseconds*1e-9
-                if time.monotonic()-received>.5 or not -.1<=now-stamp<=.25:
+                receive_age = time.monotonic()-received
+                if receive_age>.5 or not -.1<=now-stamp<=.25:
                     if optional:return None
+                    self.task['station_freshness_failure'] = {
+                        'clock_stamp_s': now, 'observation_stamp_s': stamp,
+                        'source_age_s': now-stamp, 'received_age_s': receive_age,
+                        'sequence': measured.get('sequence'),
+                        'source_age_limits_s': [-.1, .25], 'receive_age_limit_s': .5}
                     raise RuntimeError('工位相对观测已过期')
                 try:
                     validate_observation(measured, self.perception_config, identity, now,

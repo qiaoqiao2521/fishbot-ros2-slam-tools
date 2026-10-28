@@ -1660,6 +1660,8 @@ class BridgeRaceTests(unittest.TestCase):
         self.assertEqual(p.poses,[])
         measured['stamp']=9.;measured['stamp_ns']=9_000_000_000
         with self.assertRaisesRegex(RuntimeError,'过期'):p.update_station_localization()
+        self.assertGreater(p.task['station_freshness_failure']['source_age_s'], .25)
+        self.assertEqual(p.task['station_freshness_failure']['sequence'], measured['sequence'])
         self.assertEqual(p.poses,[])
 
 

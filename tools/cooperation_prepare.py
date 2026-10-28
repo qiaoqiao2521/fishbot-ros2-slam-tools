@@ -311,6 +311,8 @@ def prepare(args):
                          arena_xml=getattr(args, 'arena_xml', None))
     if getattr(args,'queued_ros_dispatch',False):
         manifest['queued_ros_dispatch']=True
+    if getattr(args,'terminal_stop_heartbeat',False):
+        manifest['terminal_stop_heartbeat']=True
     factory_path = getattr(args, 'factory_config', None)
     if factory_path:
         from cooperation_factory_scene import apply_factory_scene
@@ -513,6 +515,8 @@ def main():
                         help='Omit legacy 500 Hz native rays; preserve actual scan, point cloud and IMU producers')
     parser.add_argument('--queued-ros-dispatch',action='store_true',
                         help='Receive ROS callbacks separately; apply them on the physics owner thread')
+    parser.add_argument('--terminal-stop-heartbeat',action='store_true',
+                        help='Reuse fresh zero targets while the existing loaded terminal stop completes')
     parser.add_argument('--navigation-planner',choices=('navfn','smac-hybrid','smac-reeds-shepp','smac-lattice'),default='navfn',
                         help='Optional native planner candidate; preserves controller and physical limits')
     parser.add_argument('--planner-minimum-turning-radius',type=float,default=.20,

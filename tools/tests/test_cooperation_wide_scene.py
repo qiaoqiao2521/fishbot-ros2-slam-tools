@@ -26,7 +26,8 @@ class WideSceneTests(unittest.TestCase):
                 scene_profile=CONFIG/'j100-wide-profile.json',
                 factory_config=CONFIG/'j100-wide.json',
                 continuous_delivery=CONFIG/'j100-wide-entities.json',
-                spawn=(-.9, -1.68), omit_unused_native_rangefinders=True))
+                spawn=(-.9, -1.68), omit_unused_native_rangefinders=True,
+                terminal_stop_heartbeat=name == 'wide'))
 
     @classmethod
     def tearDownClass(cls):
@@ -56,6 +57,8 @@ class WideSceneTests(unittest.TestCase):
     def test_vehicle_contact_and_interaction_geometry_are_not_resized(self):
         import mujoco
         old, new = self.scenes['original'], self.scenes['wide']
+        self.assertNotIn('terminal_stop_heartbeat', old)
+        self.assertTrue(new['terminal_stop_heartbeat'])
         for key in ('car_footprint_xy', 'vehicle_profile', 'dock_pose', 'tray_offset',
                     'contact_assumptions', 'arm_home_qpos6'):
             self.assertEqual(old[key], new[key], key)
@@ -64,6 +67,23 @@ class WideSceneTests(unittest.TestCase):
             a,b = [m.geom(name).id for m in models]
             for field in ('geom_size','geom_friction','geom_solref','geom_solimp'):
                 self.assertTrue((getattr(models[0],field)[a] == getattr(models[1],field)[b]).all())
+
+    def test_unload_overhead_remains_reachable_with_planar_arrival_error(self):
+        import mujoco
+        import numpy as np
+        from cooperation_scene import source_modules
+        m = self.scenes['wide']
+        rig = mujoco.MjModel.from_xml_path(m['rig_xml'])
+        solve = source_modules(Path(m['so101_project']))['grasp_episode'].solve_pinch_ik
+        # Keep the original 41 mm approach rise and 40 mm parking tolerance.
+        # This is IK coverage only; live grasp/collision scoring remains separate.
+        for station in m['business_entities']['configuration']['unload_stations']:
+            x, y = station['pickup_xy_m']
+            for angle in np.linspace(0., 2*math.pi, 8, endpoint=False):
+                target = [x+.04*math.cos(angle), y+.04*math.sin(angle), .060]
+                with self.subTest(station=station['id'], angle=angle):
+                    result = solve(rig, np.array(target), np.array(m['arm_home_qpos6'][:5]))
+                    self.assertTrue(np.isfinite(result).all())
 
     def test_order_goals_match_physical_stations_and_forward_lane_is_clear(self):
         from cooperation_geometry_check import SceneGeometry

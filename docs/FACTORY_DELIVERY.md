@@ -379,8 +379,8 @@ python tools/cooperation_factory.py run \
 
 - 外墙仍是 8m 方形；南侧挡板移到北侧 y=1.8m，中央箱体移到 y=.8m。
 - 装货工位与 dock=(-1.6,-1.68,0) 保持；出生点选择 staging=(-.9,-1.68,0)。这改变了初态，不能与原远端出生点的耗时直接比较。
-- A=(0,-1.68,0)，B=(1.7,-1.68,0)，两工位间距1.7m。SO101基座、货架、任务目标一起平移；相对抓取/托盘几何保持。
-- 工位旁沿X直行或倒车离开，宽处再转向。x=2.7,y=-1.68 预留转向区；交接位全角采样最小仅1mm，未满足采样间距扣除后的保证，不能当作可掉头区。
+- A=(0,-1.68,0)，B=(1.7,-1.68,0)，两工位间距1.7m。SO101基座、货架、任务目标一起布局；车体、托盘和夹爪几何保持。卸货臂相对理想到站托盘的抓取点采用 `pickup_xy_m=[.24,.04]`，为停车误差保留可达余量。
+- 工位旁沿X直行或倒车离开，宽处再转向。x=2.7,y=-1.68 预留转向区；原交接位全角采样仅1mm；新工位也只声明直线交接，不作为掉头区。
 
 使用既有准备入口创建独立输出目录；`--arena-xml` 同时用于世界和机械臂查询模型，地图在编译新世界后生成。当前固定地图覆盖[-4.2,4.2]，本预设不扩大外墙。
 
@@ -398,7 +398,7 @@ tools/fishbot_cooperation.sh prepare \
   --spawn -.9 -1.68 --navigation-planner smac-lattice \
   --lattice-filepath tools/config/navigation_lattices/diff-r060-2cm.json \
   --lattice-allow-reversing --lattice-rotation-shim --staging-reversing \
-  --amcl-motion-model omni --omit-unused-native-rangefinders --queued-ros-dispatch
+  --amcl-motion-model omni --omit-unused-native-rangefinders --queued-ros-dispatch --terminal-stop-heartbeat
 "$FISHBOT_COOP_PYTHON" -B experiments/kaggle/f1_candidate.py \
   "$scene_out/scene-manifest.json" \
   --transport-controller-yaml experiments/kaggle/graceful-j100.yaml --lattice-smooth-path
@@ -409,3 +409,7 @@ tools/fishbot_cooperation.sh prepare \
 订单继续使用 `continuous-ba-orders.json`，`cooperation_factory.py run --manifest ... --continuous-deliveries tools/config/factory_delivery/continuous-ba-orders.json --order order-b --order order-a`，沿用原 domain/port 隔离和清理流程。首次先加 `--dry-run` 检查请求；去掉后才会执行完整任务。
 
 本轮原生 `ComputePathToPose` 到B、到A、B返回staging均status4，完整几何扫掠通过；按路径估时约49.53/21.20/49.53秒。真实车辆执行、完整载货及无reset B/A仍待验收，不把规划回执当成运动通过。相关原生场景测试为 `tools/tests/test_cooperation_wide_scene.py`。
+
+完整执行还须开启既有 `--terminal-stop-heartbeat`：原生载货动作成功后持续新零目标完成减速，再进入hold。此前只有规划的宽场景准备命令漏带该开关，完整C轮在出站终态发生支撑丢失；C轮失败保留，不追认通过。
+
+卸货工位可选 `pickup_xy_m`，表示理想到站时托盘中心在卸货臂局部坐标中的XY；缺省为原 `[.24,.14]`。宽场景改为 `[.24,.04]`，将两套卸货臂及货架沿世界X负向平移.10m，保持高度与模型尺寸。D轮实际到站偏差仍在导航门槛内，但原准备点IK不可达；新配置已检查原4cm平移误差八方向的上方41mm准备点，并以D轮快照通过原完整抓取查询。该有限IK检查不保证任意偏航/物体姿态，也不替代实际卸货。

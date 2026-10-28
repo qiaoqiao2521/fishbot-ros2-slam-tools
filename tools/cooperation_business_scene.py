@@ -67,10 +67,11 @@ def compose_business_world(manifest, configuration, output):
         arm_yaw, = _vector([station.get('arm_yaw_rad', yaw)], 1, 'arm yaw')
         shelf = _vector(station.get('shelf_xy_m', [.24, -.13]), 2, 'shelf xy')
         bridge = _vector(station.get('bridge_center_xy_m', [shelf[0]/2, shelf[1]/2]), 2, 'bridge center xy')
+        pickup = _vector(station.get('pickup_xy_m', [.24, .14]), 2, 'pickup xy')
         c, s = math.cos(yaw), math.sin(yaw)
         arm_cos, arm_sin = math.cos(arm_yaw), math.sin(arm_yaw)
-        position = [x+c*tray[0]-s*tray[1]-arm_cos*.24+arm_sin*.14,
-                    y+s*tray[0]+c*tray[1]-arm_sin*.24-arm_cos*.14, float(manifest['station_height_m'])]
+        position = [x+c*tray[0]-s*tray[1]-arm_cos*pickup[0]+arm_sin*pickup[1],
+                    y+s*tray[0]+c*tray[1]-arm_sin*pickup[0]-arm_cos*pickup[1], float(manifest['station_height_m'])]
         asset_name = f'business_arm_asset_{index}'
         ET.SubElement(assets, 'model', name=asset_name, file=manifest['arm_contact_xml'])
         prefix = arm_id+'__'
