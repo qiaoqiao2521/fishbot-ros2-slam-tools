@@ -584,3 +584,14 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 - Issues：v1步骤UI ID重建使fixture严格比较失败，未POST；仅忽略program[].id并另核唯一，导出→POST→原request仍严格。v2私有计时包装缺GNU time使worker exit127，未启动物理；v3补可选依赖/警告降级后通过。原失败和非致命sitecustomize缺wrapt警告保留。普通±10mm帮助仍未按显式开发配置改写。
 - Delivery/cleanup：两可编辑Station文档与详表位于SO101仓库plans/workcell-productization-20261024/m1a-x-web-midpoint-results.md；其忽略output/x-station-browser-20261028保存原TGZ、gzip读回、两截图和当前视频。reader压缩回读后释放30,601,216分配字节；完成上传硬链接已删、未虚报释放，无临时帧。原任务/worker终态后才TERM/wait自有preview，无本地资源抢占或实体动作。
 - Next/owner：SO101根继续第二放置工位同点验证；M2原Carry网页waiting→按钮resume→原物理仍待验，复用同QA/原API，不改控制器。Drone新的source-graph补片/探针/witness在途变动保留，由原Drone根接续；最短入口为workbench-review-tests/test_drone_source_graph_guard.py与workbench-tools/drone-native-source-probe.py，其运行边界按本计划Drone节；本次Station提交不混入。Knowledge=already_covered，Wiki《ROS2 与 FishBot》§20。
+
+
+## 2026-10-28 多来源同ID与观察式隔离
+
+- Done：原生两发布进程＋重启＋实际traj_server及Sidecar真实方法复现当前goal标签污染。最终无guard57f379a4四阶段均ready，389条PVA唯一CPP关联、237个外来位置沿goal-A；观察guard d773五阶段357条全部关联、旧goal外来采用0，新goal-B/ACK可恢复。始终只有一个PVA GID，不能只信输出进程。
+- 修复：默认OFF EPOCH新增DRONE_SOURCE_GRAPH及runtime唯一节点名，观察三类endpoint数量/名字/GID变化即清当前goal/ACK/曲线/队列/setpoint并换epoch。OFF保原行为；完整来源仍false，已消失来源的排队消息本地负例仍会穿过当前图判断，未冒称闭合。
+- 验证：最终56项4.953s/0skip，含known-gap和OFF见证；六应用顺序/组合过。首轮probe曲线已过期，仅当缓存污染证据保留；补片上下文冲突/cwd错误保留，经最终修正后通过。实际原生进程试验单列，无SDK/PX4/Gazebo/飞行。
+- 收尾/Next：自有进程全回收，五组约2.1MiB原证据与当前95.9MiB CMake缓存保留，临时副本回收，冻结未部署。SO101在途17行diff/语法已核、E2E未验，继续保留。当前根Codex下一项接逐消息来源准入/排队旧消息负例，全链TTL/备份/M3/动态未完。详见docs/DRONE_HANDOFF_EVIDENCE.md末节。
+- Knowledge=updated：原Wiki/ROS2与FishBot来源链段落及入口触发词已写并读回；知识库大批既有dirty保留待原任务整合，不写memory、不跨聊天。
+
+收尾更新：共享工作树的SO101既有任务已将Station17行与自身进度提交为8fc0569；已定点读两文件diff和交付说明，本无人机轮只做语法核对，不把其物理/E2E结论计入本轮验收。保留该提交，本轮串行追加，不覆盖、不跨聊天联系。

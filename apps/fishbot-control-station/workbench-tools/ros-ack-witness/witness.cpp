@@ -22,7 +22,11 @@ public:
       });
     curve_ = create_subscription<traj_utils::msg::Bspline>(prefix+"/bspline", 50,
       [this](traj_utils::msg::Bspline::ConstSharedPtr message, const rclcpp::MessageInfo & info) {
+        Json points = Json::array();
+        for (const auto & point : message->pos_pts)
+          points.push_back({point.x, point.y, point.z});
         emit("bspline", {{"traj_id", message->traj_id}, {"order", message->order},
+             {"knots", message->knots}, {"control_points", points},
              {"start_sim_s", message->start_time.sec+message->start_time.nanosec*1e-9}}, info);
       });
     command_ = create_subscription<quadrotor_msgs::msg::PositionCommand>(prefix+"/position", 50,

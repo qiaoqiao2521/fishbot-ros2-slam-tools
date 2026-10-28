@@ -59,16 +59,24 @@ diff --git a/flight.py b/flight.py
 diff --git a/ego/sidecar.py b/ego/sidecar.py
 --- a/ego/sidecar.py
 +++ b/ego/sidecar.py
-@@ -37,2 +37,3 @@
+@@ -36,4 +36,5 @@
+ from perception import fixed_collision_boxes, flattened_boxes, points_in_boxes
  from motion_budget import configure_motion_budget
 +from command_epoch import CommandEpoch
  
-@@ -57,2 +58,4 @@
+ 
+@@ -56,4 +57,9 @@
+         self.lock = threading.RLock()
          self.requests = queue.Queue()
 +        self.command_epoch = CommandEpoch()
 +        self.pending_ack_curves = {}
++        suffix = self.command_epoch.token.replace("-", "")[:12]
++        self.source_expected_nodes = {"ack": "ego_planner_"+suffix,
++            "bspline": "ego_planner_"+suffix, "position": "traj_server_"+suffix}
          self.history = deque(maxlen=300)
-@@ -478,2 +481,26 @@
+         self.processes = []
+@@ -477,4 +483,71 @@
+                           pose_bracket_sim_s=[before[0], after[0]])
  
 +    def rotate_command_epoch(self, reason):
 +        self.command_epoch.rotate(reason)
@@ -94,10 +102,57 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +        if old_stamp is not None:
 +            self.stop_pub.publish(String(data=str(old_stamp)))
 +
++    def observe_source_graph(self):
++        """Invalidate the current goal on observed producer discontinuity, not DDS attestation."""
++        if not getattr(self.command_epoch, "source_graph_enabled", False):
++            return True
++        topics = {"ack": "/drone/ego/goal_ack", "bspline": "/drone/ego/bspline",
++                  "position": "/drone/ego/position_cmd"}
++        observed, reason = {}, None
++        try:
++            for kind, topic in topics.items():
++                observed[kind] = sorted((entry.node_name, entry.node_namespace,
++                    bytes(entry.endpoint_gid).hex()) for entry in self.get_publishers_info_by_topic(topic))
++                if len(observed[kind]) != 1:
++                    reason = reason or "source_graph_"+("missing_" if not observed[kind] else "ambiguous_")+kind
++                elif observed[kind][0][0] != self.source_expected_nodes[kind] or observed[kind][0][1] != "/":
++                    reason = reason or "source_graph_unexpected_"+kind
++                elif not any(bytes.fromhex(observed[kind][0][2])):
++                    reason = reason or "source_graph_gid_unavailable_"+kind
++        except Exception as error:
++            reason = "source_graph_unavailable"
++            observed["error"] = type(error).__name__+": "+str(error)
++        binding = None if reason else observed
++        previous = getattr(self, "source_graph_endpoints", None)
++        if not reason and previous is not None and binding != previous:
++            reason = "source_graph_changed"
++        if reason:
++            signature = (reason, repr(observed))
++            if signature != getattr(self, "source_graph_failure_signature", None):
++                old_stamp = self.goal_stamp_ns
++                self.rotate_command_epoch(reason)
++                self.active_goal, self.setpoint = None, None
++                self.goal_acknowledged = False
++                self.goal_stamp_ns = self.planning_since = None
++                while not self.requests.empty():
++                    self.requests.get_nowait()
++                if old_stamp is not None:
++                    self.stop_pub.publish(String(data=str(old_stamp)))
++            self.source_graph_failure_signature = signature
++        else:
++            self.source_graph_failure_signature = None
++        self.source_graph_observed = observed
++        self.source_graph_endpoints, self.source_graph_reason = binding, reason
++        return reason is None
++
      def on_bspline(self, msg):
-@@ -487,2 +514,20 @@
+         # Match UniformBspline::getTimeSpan: u[p] through u[m-p].
+@@ -486,4 +559,24 @@
+             return
          with self.lock:
 +            self.observe_command_epoch()
++            if getattr(self.command_epoch, "source_graph_enabled", False):
++                self.observe_source_graph()
 +            replayed = None
 +            if self.command_epoch.enabled:
 +                if not self.active_goal:
@@ -116,7 +171,9 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +                    return
 +                replayed = pending.pop(msg.traj_id, None)
              previous = self.latest_trajectory
-@@ -498,5 +543,7 @@
+             self.trajectory_times[msg.traj_id] = (start, start + duration)
+@@ -497,7 +590,9 @@
+             pva = [curve(begin).tolist(), curve.derivative()(begin).tolist(),
                     curve.derivative(2)(begin).tolist()]
 -            event = dict(trajectory, received_sim_s=self.sim_now(),
 +            event = dict(trajectory, received_sim_s=(replayed["received_sim_s"] if replayed else self.sim_now()),
@@ -125,20 +182,30 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +            if replayed:
 +                event["ack_replayed_sim_s"] = self.sim_now()
              if previous and previous["start_sim_s"] <= start <= previous["start_sim_s"] + previous["duration_s"]:
-@@ -519,2 +566,3 @@
+                 prior = BSpline(previous["knots"], previous["control_points"], previous["order"])
+@@ -518,4 +613,7 @@
+     def on_command(self, msg):
          with self.lock:
 +            self.observe_command_epoch()
++            if getattr(self.command_epoch, "source_graph_enabled", False):
++                self.observe_source_graph()
              self.last_trajectory_id = max(self.last_trajectory_id, msg.trajectory_id)
-@@ -537,2 +585,4 @@
+             if not self.active_goal or not self.goal_acknowledged or msg.trajectory_id < self.min_trajectory_id:
+@@ -536,4 +634,6 @@
+                                  task_id=self.active_goal.get("task_id"),
                                   goal_id=self.active_goal.get("goal_id"))
 +            if self.command_epoch.enabled:
 +                self.setpoint["command_epoch"] = self.command_epoch.token
  
-@@ -544,2 +594,3 @@
+     def on_goal_ack(self, msg):
+@@ -543,7 +643,19 @@
+             return
          with self.lock:
 +            self.observe_command_epoch()
++            if getattr(self.command_epoch, "source_graph_enabled", False):
++                self.observe_source_graph()
              if self.active_goal and stamp == self.goal_stamp_ns:
-@@ -547,2 +598,11 @@
+                 self.min_trajectory_id = trajectory_id + 1
                  self.goal_acknowledged = True
 +                if self.command_epoch.enabled:
 +                    pending = getattr(self, "pending_ack_curves", {})
@@ -150,30 +217,67 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +                        # The RLock keeps goal/epoch checks and replay in one callback transaction.
 +                        self.on_bspline(entry["message"])
  
-@@ -620,2 +680,4 @@
+     def on_planner_state(self, msg):
+@@ -614,4 +726,7 @@
+                       "-r", "planning/bspline:=/drone/ego/bspline",
+                       "-r", "/position_cmd:=/drone/ego/position_cmd"]
++        if getattr(self.command_epoch, "source_graph_enabled", False):
++            planner.extend(["-r", "__node:="+self.source_expected_nodes["ack"]])
++            trajectory.extend(["-r", "__node:="+self.source_expected_nodes["position"]])
+         for name, command in (("planner", planner), ("trajectory", trajectory)):
+             self.spawn(name, command)
+@@ -619,4 +734,8 @@
+ 
      def tick(self):
 +        with self.lock:
 +            self.observe_command_epoch()
++            if getattr(self.command_epoch, "source_graph_enabled", False):
++                self.observe_source_graph()
          self.flush_depth()
-@@ -639,2 +701,4 @@
+         self.flush_lidar()
+@@ -638,4 +757,6 @@
+             while not self.requests.empty():
                  command = self.requests.get_nowait()
 +                if self.command_epoch.enabled and command.get("command_epoch") != self.command_epoch.token:
 +                    continue
                  if command["type"] == "stop":
-@@ -668,2 +732,3 @@
+                     self.active_goal = None
+@@ -667,4 +788,7 @@
+     def state(self):
          with self.lock:
 +            self.observe_command_epoch()
++            if getattr(self.command_epoch, "source_graph_enabled", False):
++                self.observe_source_graph()
              now, wall = self.sim_now(), time.monotonic()
-@@ -699,2 +764,4 @@
+             with getattr(self, "native_depth_lock", self.lock):
+@@ -674,4 +798,6 @@
+             depth_age = None if self.depth_stamp is None else max(0.0, now - self.depth_stamp)
+             reason = self.planner_error
++            if getattr(self.command_epoch, "source_graph_enabled", False):
++                reason = reason or getattr(self, "source_graph_reason", "source_graph_unavailable")
+             if not reason and wall - self.last_clock_wall > 2:
+                 reason = "simulation_clock_stopped"
+@@ -698,4 +824,6 @@
+                 reason = "waiting_for_planner"
              point = self.setpoint
 +            if self.command_epoch.enabled and point and point.get("command_epoch") != self.command_epoch.token:
 +                reason = reason or "command_epoch_mismatch"
              if not reason and point and now - point["stamp_sim_s"] > 0.3:
-@@ -720,2 +787,3 @@
+                 reason = "trajectory_stale"
+@@ -719,4 +847,11 @@
+                 reason = "planning_timeout"
              return {"ready": reason is None, "simulation_s": now,
 +                    **({"command_epoch": self.command_epoch.token} if self.command_epoch.enabled else {}),
++                    **({"source_graph": {"reason": getattr(self, "source_graph_reason", None),
++                        "expected_nodes": self.source_expected_nodes,
++                        "observed": getattr(self, "source_graph_observed", {}),
++                        "endpoints": getattr(self, "source_graph_endpoints", None),
++                        "scope": "Observed graph continuity only; queued per-message origin remains unproven"}}
++                        if getattr(self.command_epoch, "source_graph_enabled", False) else {}),
                      "runtime_identity": {"pid": os.getpid(), "start_ticks": start_ticks(os.getpid()),
-@@ -942,2 +1010,9 @@
+                         "world": getattr(self.args, "world", None), "model": getattr(self.args, "model", None),
+@@ -941,4 +1076,11 @@
+                     return
                  with node.lock:
 +                    node.observe_command_epoch()
 +                    if node.command_epoch.enabled and body["type"] == "goal":
@@ -183,23 +287,31 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +                            self.send(503, {"error": current["reason"]})
 +                            return
                      if body["type"] == "stop":
-@@ -947,2 +1022,4 @@
+                         if (body.get("task_id") and node.owner_task_id and
+@@ -946,4 +1088,6 @@
+                             self.send(409, {"error": "active_task_mismatch"})
                              return
 +                        if node.command_epoch.enabled:
 +                            node.rotate_command_epoch("stop")
                          # Cancellation must work even while Gazebo /clock is paused.
-@@ -957,2 +1034,4 @@
+                         while not node.requests.empty():
+@@ -956,4 +1100,6 @@
+                             node.stop_pub.publish(String(data=str(node.goal_stamp_ns)))
                      else:
 +                        if node.command_epoch.enabled:
 +                            node.rotate_command_epoch("goal")
                          node.active_goal = body
-@@ -962,2 +1041,5 @@
+                         node.owner_task_id = body.get("task_id")
+@@ -961,4 +1107,7 @@
+                         node.goal_sequence += 1
                          node.goal_stamp_ns = node.get_clock().now().nanoseconds + node.goal_sequence
 +                        if node.command_epoch.enabled:
 +                            node.goal_stamp_ns = node.command_epoch.next_goal_stamp(node.goal_stamp_ns)
 +                            body["command_epoch"] = node.command_epoch.token
                          node.planning_since = node.goal_stamp
-@@ -967,4 +1049,6 @@
+                         node.min_trajectory_id = node.last_trajectory_id + 1
+@@ -966,6 +1115,8 @@
+                         node.setpoint = None
                          node.requests.put(body)
 +                    reply_epoch = node.command_epoch.token
                  self.send(202, {"accepted": True, "task_id": body.get("task_id"),
@@ -207,11 +319,12 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +                                "goal_id": body.get("goal_id"),
 +                                **({"command_epoch": reply_epoch} if node.command_epoch.enabled else {})})
              except (ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
+                 self.send(400, {"error": str(error)})
 diff --git a/command_epoch.py b/command_epoch.py
 new file mode 100644
 --- /dev/null
 +++ b/command_epoch.py
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,39 @@
 +"""Opt-in local candidate epochs; not a native ROS or SDK cancellation token."""
 +import os
 +import uuid
@@ -219,7 +332,8 @@ new file mode 100644
 +
 +class CommandEpoch:
 +    def __init__(self):
-+        self.enabled = os.environ.get("DRONE_COMMAND_EPOCH") == "1"
++        self.source_graph_enabled = os.environ.get("DRONE_SOURCE_GRAPH") == "1"
++        self.enabled = os.environ.get("DRONE_COMMAND_EPOCH") == "1" or self.source_graph_enabled
 +        self.token = str(uuid.uuid4())
 +        self.last_sim = self.progress_wall = None
 +        self.stalled = False

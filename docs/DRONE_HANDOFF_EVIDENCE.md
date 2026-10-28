@@ -740,3 +740,47 @@ Next/owner：根Codex在隔离ROS入口补多生产者/重启后候选失效与�
 Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析构：先核真实释放时机”，同步开发知识入口新触发词；具体运行事实留项目，不写memory。
 
 知识库交付边界：两原页除本次小段外已有大量跨任务未提交内容（ROS2页总diff为516增/1删）。本次知识段和入口已本地读回；不盲提交整页或其它Wiki。保留全部存量，由根Codex后续按知识库原任务审阅整合，最短入口为两文件git diff；工作台/研究源码交付独立执行。
+
+
+## 多来源与重启：同ID曲线污染及观察式隔离（2026-10-28）
+
+新增drone-native-source-probe.py，复用独立traj_server生命周期候选、CPP收包器和临时Sidecar真实方法夹具。两个独立rclpy发布进程发同一traj_id=1、相同start10s但X几何分别偏移0/10/20/30m的诊断曲线；原生traj_server实际求值并发布PVA，Sidecar真实on_goal_ack/on_bspline/on_command/state参与。clock话题最终隔离到唯一prefix；domain186与全部命令topic隔离。无EGO真实规划、SDK/PX4/Gazebo或飞行，感知/位姿/状态新鲜度为显式健康替身，不能写成完整Sidecar/真实地图闭环。
+
+首轮8e06b0dc-bd77-4b4b-9976-c0f037397b8b只证明回调缓存污染：短曲线已过源有效期，未检查/state ready。保留该记录，不用其exit0声称控制候选可用。后续只把诊断曲线时域改到[10,40]并保持替身感知新鲜，以隔离来源问题；没有改变原sample/end/速度/高度/占据门限。
+
+| 最终同版探针UUID | 模式与实际结果 |
+| --- | --- |
+| 57f379a4-5b26-494f-b127-918eae2a519d | guard OFF：预期A、第二B、B同名重启、A同名重启未新ACK四阶段均沿用goal-A且/state ready；四个Bspline GID不同，PVA始终来自同一原生轨迹服务 |
+| d77309ed-2e39-42fd-a4f7-d27e2464021f | guard ON：预期A正常采用；观察到额外/变化来源后清目标/ACK/曲线/setpoint并轮换epoch；三故障阶段未复活goal-A。恢复单一预期来源后，新goal-B＋新ACK可采用 |
+
+独立raw复核：baseline389条PVA、guard357条PVA全部唯一匹配CPP源时间/序号/完整载荷，每组仅一个PVA GID。baseline有237个外来位置样本继承goal-A；guard本轮0个。计数只描述本轮序列，不是成功率、性能或任意乱序保证。CPP witness新增曲线knots与control_points；曲线按全几何匹配，避免同ID/起始时间但不同几何误归属。ACK baseline仅123:0；guard另有新目标18050000000:0。原始链与进程身份见各目录ros-events.jsonl、witness.log、native-source-probe.json、independent-source-audit.json。
+
+### 默认OFF补片边界
+
+扩展现有EPOCH补片，新增DRONE_SOURCE_GRAPH=1；该开关同时启用原局部epoch。Sidecar构造生成本runtime唯一规划器/轨迹节点名，start_planner显式remap。三类输入的图查询要求每类恰一个非零GID、预期节点名及根namespace；在ACK/曲线/PVA回调、tick与/state读点观察。缺失/多发布者/不符/查询失败或已绑定GID变化时，按原单机owner清当前任务队列、待ACK曲线、曲线时间、目标、ACK与setpoint，轮换epoch并通知旧goal stop；不增加SDK写入口。连续相同故障不重复轮换，输入恢复后可接新目标，没有全工作台前序锁。
+
+/state仅在开启时增加source_graph诊断与原始观察/异常；OFF保留原行为/schema。Flight已有epoch检查用于拒旧goal回复；图观察不直接取消SDK已接受指令，恢复仍沿原run→recover。
+
+**未闭合：** 该guard只处理已经观察到的图变化。发布者已消失但消息仍在DDS队列时，rclpy回调缺逐消息GID，当前图可能又是正常单一来源，外来旧曲线仍可进入。新局部检查明确保留这个known-gap见证；source_provenance_verified始终false。完整Sidecar构造/进程启动、消息来源准入、state分布式窗口及空中采用未验证；不得把观察式隔离当完整来源证明或Safety Shield。
+
+最终56项4.953s/0skip通过：source graph7、原epoch20、首曲线7、native收包4、原revalidation18；其中含上述known-gap及OFF原行为见证，不是56项飞行验收。原三补片六顺序check/apply/compile与组合通过。初次重生成补片扩宽了flight.py未改区域上下文，导致REPAIR先应用时649行冲突；恢复原flight补片片段后最终全过，未改Flight行为或测试标准。一次临时修补命令cwd错误已纠正，失败输出不当成功。
+
+```sh
+source /opt/ros/jazzy/setup.bash
+source /home/muqiao/.cache/ros2-drone/ego_ws/install/setup.bash
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-tools
+cmake --build /home/muqiao/.cache/ros2-drone/ros-ack-witness-build --target drone_ros_ack_witness --parallel 2
+# 使用两个新UUID目录；不加开关是旧路径反例，加开关验证观察式失效。
+/usr/bin/python3 drone-native-source-probe.py --output /tmp/drone-source-baseline-new
+/usr/bin/python3 drone-native-source-probe.py --output /tmp/drone-source-guard-new --source-graph-guard
+cd ../workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_source_graph_guard test_drone_command_epoch_patch test_drone_ack_curve_buffer test_drone_ros_ack_probe test_drone_command_revalidation_patch -q
+```
+
+收尾：本轮五组共约2.1MiB小证据原地忽略保留（包括首次时域不足和两组修复中间对照），独立CMake缓存约95.9MiB含当前两个可复用binary/object，旧object同路径被重建替代，无重复大包/渲染。全部自有ROS进程已回收、最终两组各六进程均exit0；临时执行源自动删除，未部署冻结源。SO101在途station-execution.cjs本轮从13行扩为17行，新增编辑step id导入对照逻辑；定点diff与node --check通过，原E2E未验，完整保留不抢先提交、不联系其它聊天。
+
+Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot第19节的来源链段落，同步开发知识入口“可信PVA接收外来曲线/traj_id重用/同名发布者重启”；具体实验留项目，不写memory。两知识原页已有大量跨任务dirty，保留本地修订，按既有根知识库任务整合，不盲提交整页。
+
+Next/owner：根Codex核逐消息来源准入，优先复用现有CPP MessageInfo完整曲线收包与已有epoch/原输入接口；验证“图已正常但队列仍有旧来源消息”的负例。必须同时核曲线、ACK、PVA链，不能只信最终PVA发布进程。冻结源不部署，不解锁；全链TTL/可行备份/生产关闭/原生空中采用/M3和动态闭环仍未完成，整体goal active。
+
+收尾更新：共享工作树的SO101既有任务已将Station17行与自身进度提交为8fc0569；已定点读两文件diff和交付说明，本无人机轮只做语法核对，不把其物理/E2E结论计入本轮验收。保留该提交，本轮串行追加，不覆盖、不跨聊天联系。
