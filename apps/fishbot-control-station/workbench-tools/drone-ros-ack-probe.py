@@ -36,7 +36,8 @@ def audit_receipts(events, receipts, graph):
     return checks
 
 
-def run(output, workspace, domain_id, receipt_witness=None):
+def run(output, workspace, domain_id, receipt_witness=None,
+        trajectory_executable=None, release_trajectory_publisher=False):
     import rclpy
     from geometry_msgs.msg import PoseStamped
     from nav_msgs.msg import Odometry
@@ -105,7 +106,7 @@ def run(output, workspace, domain_id, receipt_witness=None):
     next_send = started
     try:
         planner = workspace/'install/ego_planner/lib/ego_planner/ego_planner_node'
-        trajectory = workspace/'install/ego_planner/lib/ego_planner/traj_server'
+        trajectory = trajectory_executable or workspace/'install/ego_planner/lib/ego_planner/traj_server'
         commands = [
             ('planner', [str(planner),'--ros-args','--params-file',str(output/'planner-runtime.yaml'),
                 '-r','__node:='+names['planner'], '-r','/move_base_simple/goal:='+topics['goal'],
@@ -115,6 +116,8 @@ def run(output, workspace, domain_id, receipt_witness=None):
             ('trajectory', [str(trajectory),'--ros-args','-p','use_sim_time:=true',
                 '-p','traj_server/time_forward:=0.6','-r','__node:='+names['trajectory'],
                 '-r','planning/bspline:='+topics['bspline'], '-r','/position_cmd:='+topics['position']])]
+        if release_trajectory_publisher:
+            commands[1][1].extend(['-p','diagnostics/release_publisher_on_exit:=true'])
         if receipt_witness is not None:
             commands.append(('receipt',[str(receipt_witness),'--ros-args','-p','prefix:='+prefix,
                 '-r','__node:=receipt_'+token]))
@@ -212,7 +215,8 @@ def run(output, workspace, domain_id, receipt_witness=None):
             errors.append('receipt audit: '+type(error).__name__+': '+str(error))
             receipt_checks={'cpp_receipts_readable':False}
         checks.update(receipt_checks)
-    result={'scope':'native installed EGO/traj_server and ROS transport; synthetic odometry, clock and explicit cloud',
+    result={'scope':'native EGO/selected trajectory server and ROS transport; synthetic odometry, clock and explicit cloud',
+        'trajectory_executable':str(trajectory), 'release_trajectory_publisher':release_trajectory_publisher,
         'domain_id':domain_id,'prefix':prefix,'publisher_graph':graph,'diagnostic_checks':checks,'errors':errors,
         'python_callback_publisher_gid_available':all(e['publisher_gid'] is not None for e in events if e['kind'] in ('ack','bspline','position')),
         'cpp_per_message_publisher_verified':bool(receipt_checks) and all(receipt_checks.values()),
@@ -231,7 +235,12 @@ def main():
     parser.add_argument('--workspace',type=Path,default=Path('/home/muqiao/.cache/ros2-drone/ego_ws'))
     parser.add_argument('--domain-id',type=int,default=183)
     parser.add_argument('--receipt-witness',type=Path)
+    parser.add_argument('--trajectory-executable',type=Path,
+        help='Use an isolated copied trajectory server; default keeps the installed binary')
+    parser.add_argument('--release-trajectory-publisher',action='store_true',
+        help='Enable the optional publisher-release parameter on the copied server')
     args=parser.parse_args()
-    return run(args.output.resolve(),args.workspace.resolve(),args.domain_id,args.receipt_witness)
+    return run(args.output.resolve(),args.workspace.resolve(),args.domain_id,args.receipt_witness,
+        args.trajectory_executable,args.release_trajectory_publisher)
 
 if __name__=='__main__':raise SystemExit(main())

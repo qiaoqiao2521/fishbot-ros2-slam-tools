@@ -41,6 +41,41 @@ class EvidenceChecks(unittest.TestCase):
         rows.append(dict(rows[-1], host_monotonic_ns=301))
         self.assertFalse(probe.wire_checks(rows, phases)['after_stop'])
 
+    def fault_fixture(self, mode):
+        rows, phases = self.fixture()
+        names = {'position_before_late': 'cache_after_unconfirmed',
+                 'position_after_late': 'cache_after_late_response'}
+        phases = [(names.get(name, name), start, end) for name, start, end in phases]
+        if mode == 'before_forward':
+            payload = {k: v for k, v in rows[0].items()
+                       if k not in ('host_monotonic_ns', 'time_boot_ms')}
+            for row in rows[3:]:
+                row.update(payload)
+        return rows, phases
+
+    def test_recovery_response_loss_preserves_two_distinct_remote_outcomes(self):
+        for mode, other in (('before_forward', 'after_forward'), ('after_forward', 'before_forward')):
+            with self.subTest(mode=mode):
+                rows, phases = self.fault_fixture(mode)
+                self.assertTrue(all(probe.wire_checks(rows, phases, mode).values()))
+                self.assertFalse(probe.wire_checks(rows, phases, other)['cache_after_unconfirmed'])
+
+    def test_late_distinct_pva_cannot_pass_as_retained_cache(self):
+        for mode in ('before_forward', 'after_forward'):
+            with self.subTest(mode=mode):
+                rows, phases = self.fault_fixture(mode)
+                # Same old PVA mask is insufficient: the late response has a new position.
+                rows[-1].update(type_mask=2048, x=2., y=3., z=-1.5)
+                self.assertFalse(probe.wire_checks(rows, phases, mode)['cache_after_late_response'])
+
+    def test_fault_injection_still_requires_every_window_and_explicit_stop(self):
+        for mode in ('before_forward', 'after_forward'):
+            with self.subTest(mode=mode):
+                rows, phases = self.fault_fixture(mode)
+                self.assertFalse(probe.wire_checks(rows, phases[:-1], mode)['all_windows_observed'])
+                rows.append(dict(rows[-1], host_monotonic_ns=301))
+                self.assertFalse(probe.wire_checks(rows, phases, mode)['after_stop'])
+
 
 if __name__ == '__main__':
     unittest.main()

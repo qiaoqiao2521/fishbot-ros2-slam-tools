@@ -565,3 +565,13 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - Issues：最终traj_server SIGINT后datawriter/publisher析构，exit-11；另早期两组-6、无GID组SIGTERM后-15。三个最终PID均回收仅说明资源释放，native_shutdown_ok=false。保留原summary/失败日志，新增独立cleanup审计；当前探针不再把回收等同正常退出。原生生命周期验收未过。
 - 边界/收尾：synthetic clock/odom/单点cloud，非Gazebo、深度或飞行；无SDK/PX4/解锁。临时源码回收、六组约0.3MiB原证据及4.7MiB当前收包器构建缓存保留，无重复大副本，三冻结源clean且未部署，原ego_ws dirty不改。Knowledge=already_covered Wiki§20，兼容事实留项目，不写memory；本对话审查无跨聊天。
 - Next/owner：根Codex先定位原生traj_server退出时publisher/datawriter生命周期异常，制作最小独立修补与无解锁复验；保留原退出失败。随后沿当前逐消息GID取证，补多生产者/重启下的候选失效与在线来源绑定。完整缓存期限、可行备份、原生空中采用、完整M3和动态闭环仍未完成，不解冻部署。 整体plan active。
+
+
+## 2026-10-28 恢复setter真SDK与原生退出修补
+
+- Done：现有state-wait探针增加可选恢复position relay。before未接受后缓存PVA、after接受丢响应后缓存position，两组应用均unknown/failed，原run/recover不重试；HTTP迟到实读不复派PVA。最终3ee2ab75/df7aefd7/7fea4075原包3/3/4/0、2/2/4/0、2/2/4/0，保初轮af53网络.8s超时失败。未改飞行行为或执行补片。
+- Native：GDB705594aa确认静态退出经PublisherBase/NodeBase/RMW崩溃；新默认OFF publisher生命周期补片在独立LF副本应用。同新binary OFF51bf为-11、ONf450为0；ON两目标a29a中ACK2/曲线2/PVA15逐条CPP关联，三进程均exit0，native_shutdown_ok=true。原installed未替换，完整goal/session与来源准入false。OpenMP链接缺口已按原静态库补齐，未重建上游。
+- 验证/收尾：26项1.506s/0skip、独立原包/进程/端口/构建读回通过；所有本次SDK/native/GDB回收，无PX4/Gazebo/飞行。8组约408KiB证据及约49.4MiB当前可复用构建保留，无重复大包；三冻结源clean，ego既有dirty/SO101在途修改不动。详见docs/DRONE_HANDOFF_EVIDENCE.md两末节。
+- Next：当前根Codex核多生产者/重启下候选失效和在线来源绑定；可行备份/全链TTL/原生空中采用/M3/动态仍未完成。保持默认OFF，不解冻部署，不跨聊天协作。
+
+Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析构：先核真实释放时机”，同步开发知识入口新触发词；具体运行事实留项目，不写memory。

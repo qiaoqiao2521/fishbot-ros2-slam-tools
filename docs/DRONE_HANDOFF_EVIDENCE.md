@@ -664,3 +664,79 @@ PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unit
 Remaining/Next：恢复位置setter自身延迟/接受后丢响应尚无同级真实SDK故障注入证据，替身已覆盖但不可升级为远端缓存已知；生产SDK关闭及实际停稳/落地也未获本轮证明。下一步可复用既有position relay注入，在无解锁synthetic peer里走真实run→recover的恢复setter失败分支。原生traj_server退出异常仍是另一未完成项，本轮未处理；完整缓存期限、可行备份、M3和动态闭环仍未通过。owner为当前根Codex。
 
 收尾：临时源码由既有TemporaryDirectory夹具清理，无新运行服务、大文件或可删重复产物；历史原包保留。SO101在途station-execution.cjs修改完整保留，不并入此次文档交付。Knowledge=already_covered，沿用Wiki/ROS2与FishBot§20的回执/缓存/物理结果分层，不写memory。
+
+
+## 恢复位置RPC未知效果：真实SDK注入（2026-10-28）
+
+扩展现有drone-sdk-state-wait-probe.py的可选--recovery-response-fault，复用原PositionResponseFault relay，仅恢复位置setter走relay。初始位置与首PVA仍直连；planner HTTP/to_thread和原run/recover均实际执行，pose/clock/armed/场景暂停为显式夹具。原冻结执行源和默认OFF REPAIR未修改、未部署；没有PX4/Gazebo或飞行。
+
+| UUID（忽略output/drone-committed/下） | 注入 | pending／恢复未确认后／迟到HTTP后／显式stop后 |
+| --- | --- | --- |
+| 3ee2ab75-6a32-4fea-8e83-5f2e4517d473 | 恢复位置未转发 | 3 PVA／3 PVA／4 PVA／0 |
+| df7aefd7-f841-4c6f-ab76-de18c0079240 | SDK接受位置后扣响应 | 2 PVA／2 position／4 position／0 |
+| 7fea4075-ae75-4160-a635-20088d945b36 | 原默认无故障对照 | 2 PVA／2 position／4 position／0 |
+
+PVA为mask2048、NED P=(0,1,-1)、V=(.1,.2,0)、A=(0,.01,0)、yaw≈π/2-.25；position为mask2552、P=(0,0,-1)、yaw≈π/2；frame1、target7/component1。原包独立重算窗口计数、活动值及恢复顺序一致。窗口排除前100ms，只用于稳定观察，不是容差或控制上界。
+
+两故障组恢复RPC均只尝试1次、未返回；host调用约500.618/501.536ms，使用本探针显式.5s选项，非生产硬期限。after组原relay记录SDK result1；应用两组均unconfirmed/remote_effect=unknown，reference仍旧PVA，未调用planner /stop，随后recovery_blocked并经过原finally。无故障组位置返回后reference才切position，/stop恰1次。report的fake wall100不可用于实耗时；原包/host时间与SDK result分别保留。
+
+故障组在恢复setter等待期间释放新鲜且数值不同的迟到HTTP响应，原client实际读完、无错误；只有原1条PVA调用，未因迟到响应重新派发。前轮未确认恢复时的旧PVA持续重发已在真实SDK复现；synthetic pause不停止SDK报文，不能据此声称实际暂停、制动或落地。生产close_mavsdk仍刻意延后给探针owner，本组不验证生产清理。
+
+首轮af53fb7b-d3e0-4477-8589-4c6ba58e716a保留failed证据：恢复.5s后再等.22s释放HTTP，加上此前.24s，超原/state .8s网络超时；fresh_late_response_received=false使整组exit1。修复仅将故障组释放HTTP前移到恢复RPC等待期间，不改原网络超时、恢复预算或验收门槛。
+
+局部新3项覆盖两种远端结果、迟到异值PVA、缺窗口及stop后多包；相关最终检查与下节原生检查合计26项1.506s/0skip通过。drone-sdk-state-wait-probe.py不加选项仍是原成功替换场景，已实际新SDK复验。三最终SDK版本均4.0.5，arm=0、failed无落地，PID304923/305240/305501均wait回收exit-15，SDK/HTTP/relay端口关闭；初始失败PID301769也已回收。独立读回见各目录independent-recovery-audit.json。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-tools
+# 使用新UUID目录；另将before_forward换成after_forward复验另一种效果。
+/home/muqiao/.cache/ros2-drone/venv/bin/python drone-sdk-state-wait-probe.py --output /tmp/drone-recovery-new --recovery-response-fault before_forward
+```
+
+该组补上恢复setter超时的SDK缓存证据，不授予完整TTL、实际安全备份或动态资格。
+
+
+## traj_server静态publisher析构：独立修补与原生A/B（2026-10-28）
+
+完整GDB记录705594aa-d060-4fc7-89ad-b14a410a447a无曲线输入也复现SIGSEGV。回溯进入__run_exit_handlers → PublisherBase析构 → NodeBase析构 → rcl_node_fini/rmw_destroy_node → FastDDS destroy_participant，再于pthread_mutex_lock崩溃。GDB本身退出0不代表inferior正常；原installed binary及此前-11/-6/-15失败均保留。
+
+新增默认OFF的patches/drone-traj-publisher-lifetime.patch：仅在spin返回、局部node仍存在时可选pos_cmd_pub.reset()，避免全局publisher等到静态退出才释放。它不宣称在Context shutdown前执行，因为SIGINT可能已先关闭Context；不改变轨迹计算或发送。没有重写类/执行器，也未扩大到其它ROS对象清理。
+
+现有ros-ack-witness/CMakeLists.txt增加默认OFF的DRONE_BUILD_TRAJ_LIFETIME_PROBE目标，使用明确提供的临时traj_server.cpp路径及已安装bspline_opt。原上游为CRLF，准备时仅规范独立副本为LF后应用补片；实际副本与当前原源规范化＋补片结果逐字节一致，原源无新lifetime参数。首次链接因原静态bspline库OpenMP符号未导出失败，显式链接OpenMP::OpenMP_CXX后成功；只编译该目标，没有重建EGO workspace。现有ConstPtr弃用警告保留。
+
+| 证据目录UUID | 对照 | 实际结果 |
+| --- | --- | --- |
+| 51bfecd3-7271-47d7-b90d-1d22aa7536aa | 新二进制，开关false，无输入 | ready后SIGINT，exit-11，复现datawriter/datareader析构错误 |
+| f4500d83-c36c-4da1-836d-98544bde43d7 | 同二进制，仅开关true，无输入 | ready后SIGINT，exit0，无上述错误 |
+| a29a6356-a42a-4d96-8fd2-c333b9b05f91 | 同二进制ON＋原native两目标＋CPP见证 | ACK2/曲线2/PVA15唯一匹配CPP源时间/序号/载荷及graph GID；planner/trajectory/receipt均exit0、/proc不存在，native_shutdown_ok=true |
+
+只把这组Jazzy/FastDDS退出复现晋级为已验证独立候选，不宣称修复所有RMW退出问题。原native收包器仍用现有二进制；本次建出的trajectory路径、参数、编译/链接配置及独立回执/退出核对保存于最终目录independent-native-lifetime-audit.json。probe新增可选--trajectory-executable与--release-trajectory-publisher，默认仍运行原installed binary。
+
+```sh
+# 在独立目录创建规范化副本；这些路径的旧测试进程须已停止。
+source /opt/ros/jazzy/setup.bash
+source /home/muqiao/.cache/ros2-drone/ego_ws/install/setup.bash
+python3 - <<'COPY_SOURCE'
+from pathlib import Path
+source = Path('/home/muqiao/.cache/ros2-drone/ego_ws/src/ego-planner-swarm/src/planner/plan_manage/src/traj_server.cpp')
+copy = Path('/home/muqiao/.cache/ros2-drone/traj-lifetime-source/traj_server.cpp')
+copy.parent.mkdir(parents=True, exist_ok=True)
+copy.write_text(source.read_text())
+COPY_SOURCE
+cd /home/muqiao/.cache/ros2-drone/traj-lifetime-source
+git apply --check --whitespace=error-all /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-tools/patches/drone-traj-publisher-lifetime.patch
+git apply /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-tools/patches/drone-traj-publisher-lifetime.patch
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-tools
+cmake -S ros-ack-witness -B /home/muqiao/.cache/ros2-drone/ros-ack-witness-build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDRONE_BUILD_TRAJ_LIFETIME_PROBE=ON -DDRONE_TRAJ_SERVER_SOURCE=/home/muqiao/.cache/ros2-drone/traj-lifetime-source/traj_server.cpp
+cmake --build /home/muqiao/.cache/ros2-drone/ros-ack-witness-build --target drone_traj_lifetime_probe --parallel 2
+/usr/bin/python3 drone-ros-ack-probe.py --output /tmp/drone-lifetime-new --receipt-witness /home/muqiao/.cache/ros2-drone/ros-ack-witness-build/drone_ros_ack_witness --trajectory-executable /home/muqiao/.cache/ros2-drone/ros-ack-witness-build/drone_traj_lifetime_probe --release-trajectory-publisher
+```
+
+最终26项1.506s/0skip覆盖state-wait wire6、原SDK relay5、恢复RPC8、PVA wire3、native收包/退出4；补片在规范化临时副本check/apply通过，代码/文档diff检查通过。原生A/B和两目标属于实际进程试验，单列于测试计数之外。完整来源仍source_provenance_verified=false：逐消息生产者回执不等goal/session或在线来源准入；多生产者/重启仍是下一项。
+
+全部自有SDK/native/GDB进程已回收，不杀其它任务；八组新增小证据约408KiB忽略保留，必要失败/原包不删。现有独立CMake缓存从约4.7MiB增至约49.4MiB，保留当前可复用binary/object及12KiB规范化源，失败链接中间文件已被同一路径成功构建替代，无重复大包。冻结drone c866441/PX4 d6f12ad/GCOPTER e0444f6均clean；ego_ws既有dirty保留，原traj_server仍只有既有时钟改动、未部署lifetime补片。SO101 station-execution.cjs在途改动保留。
+
+Next/owner：根Codex在隔离ROS入口补多生产者/重启后候选失效与在线来源绑定，保留安装版退出失败和独立候选边界。可行备份、原生空中采用、完整M3与动态闭环仍未完成，整体plan active。
+
+Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析构：先核真实释放时机”，同步开发知识入口新触发词；具体运行事实留项目，不写memory。
+
+知识库交付边界：两原页除本次小段外已有大量跨任务未提交内容（ROS2页总diff为516增/1删）。本次知识段和入口已本地读回；不盲提交整页或其它Wiki。保留全部存量，由根Codex后续按知识库原任务审阅整合，最短入口为两文件git diff；工作台/研究源码交付独立执行。
