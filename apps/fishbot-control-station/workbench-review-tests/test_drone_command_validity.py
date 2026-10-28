@@ -82,8 +82,10 @@ class FlightHarness:
         exec(compile(ast.Module(body=frame_methods, type_ignores=[]), str(DRONE/'frames.py'), 'exec'), namespace)
         selected = ['goto', 'setpoint', 'wait_for_future_odometry']
         flight_tree = ast.parse((DRONE/'flight.py').read_text())
-        if any(isinstance(n, ast.AsyncFunctionDef) and n.name == 'await_planner_state' for n in ast.walk(flight_tree)):
-            selected.append('await_planner_state')
+        for helper in ('await_planner_state', 'await_pva_command', 'check_command_wait'):
+            if any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == helper
+                   for n in ast.walk(flight_tree)):
+                selected.append(helper)
         extracted = methods(DRONE/'flight.py', 'Flight', selected, namespace)
         self.owner = types.SimpleNamespace(acceptance={'max_altitude_m': 2.2}, ground_z=0.,
             pose={'position': [0., 0., 1.]}, position_tolerance=.15,

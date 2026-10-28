@@ -565,3 +565,38 @@ cd ../workbench-tools
 收尾：两串行SDK进程100888/start_ticks214744及126386均wait回收、exit-15，/proc身份已消失，SDK/HTTP监听关闭；HTTP serve/handler/client-read线程均退出。临时源码自动清理，小原始证据原地保留于忽略output，无新增大构建、视频或重复数据包。冻结drone c866441/PX4 d6f12ad/GCOPTER e0444f6均clean，历史失败/遥测保留。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20；兼容性事实留项目，不写memory。本对话独立审查，无跨聊天联系。
 
 Next/owner：根Codex接续普通PVA setter RPC自身pending及已接受后丢响应的失败出口，复用既有发送层和run→recover；不把Python取消当SDK撤回，不自动重试效果未知的控制请求。原生ROS来源/ACK顺序、完整SDK缓存期限、可行备份、原生空中采用、完整M3与动态闭环仍未完成。
+
+
+## 普通PVA RPC等待保护与取消终态（2026-10-28）
+
+原默认OFF[REPAIR补片](../apps/fishbot-control-station/workbench-tools/patches/drone-command-revalidation.patch)此前只保护/state等待和恢复RPC，普通PVA仍直接等待SDK。[新反例](../apps/fishbot-control-station/workbench-review-tests/test_drone_pva_rpc_guard.py)分别模拟未接受、已接受后丢响应，两者超过测试外部350ms仍不退出，先红后修。新增await_pva_command仍调用原setpoint，不增加控制owner、不重试；共享check_command_wait复用原输入/取消/operator/局部clock epoch和sample/end/零VA例外，同时核上一成功reference与当前在途候选。
+
+等待保存旧reference对象，避免setter返回后self.reference切换为尚未补源元数据的新对象造成误判。失效与RPC完成同turn时先拒失效；command_rpc_timeout_s默认1s，非法/非正/非有限值警告并回退1s，loop.time提供独立于仿真时间的预算。20ms轮询与finally gather均依赖事件循环及底层协程配合取消，不是任意RPC实现的硬实时/强杀期限。command_rpc_attempts把应用status、rpc_returned和remote_effect分别记录；取消/超时效果unknown，确认返回也只记not_independently_observed。
+
+SENDER补片为组合兼容，把候选身份存于goto读到当前command的位置，由setpoint在PVA且没有显式context时读取；position不继承旧PVA身份，显式context优先。未改变坐标、飞行门限或实际SDK发送入口。三补片六种应用顺序apply/compile、组合epoch/取消/源期限行为通过；首轮组合失败来自补片callsite上下文重叠，修正后复验，未忽略失败。
+
+新增[真实SDK探针](../apps/fishbot-control-station/workbench-tools/drone-sdk-pva-wait-probe.py)，复用原诊断relay，仅增加method=pva；默认position注入行为不变。原包与relay事件独立重算如下，窗口均排除前100ms，只用于稳定观察：
+
+| UUID（忽略output/drone-committed/下） | 故障注入与触发 | pending／恢复位置／显式stop后 |
+| --- | --- | --- |
+| 19798d4f-cfdf-475b-8479-81ad58c083cc | 未转发PVA；推进夹具sim10.15→10.4触发源过期 | 3个旧position／4个position／0 |
+| 31e56157-1bc8-4436-8df0-8322483ebc40 | SDK result1后扣响应；同样源过期 | 4个PVA／4个position／0 |
+| 73b6bb73-a5ac-4b06-85f2-69d85fefb1cf | SDK result1后扣响应；夹具sim保持10.15，用.5s RPC预算退出 | 3个PVA／3个position／0 |
+
+PVA为mask2048、NED P=(0,1,-1)、V=(.1,.2,0)、A=(0,.01,0)、yaw≈π/2-.25；position为mask2552、P=(0,0,-1)、yaw≈π/2，均frame1/target7/component1。每窗wire time变化、活动载荷单一。每轮只有1次PVA尝试，RPC没有返回；恢复位置返回后完整raw中PVA为0。before无upstream调用，after两轮result1均早于取消；真实顺序为本地等待取消→recovery_hover→开始位置setter，远端relay handler的取消回执稍后到、早于位置setter返回，不能写成“等远端撤销成功才恢复”。wall组实际PVA await约500.77ms，仅该轮host观测；helper fake wall100不可计算实耗时。
+
+**独立审查发现并修复原终态误报：** 旧landed/disarmed/visits存在时，外部Task.cancel虽然传播，原run finally仍可能status=succeeded/passed=True，而telemetry=armed/IN_AIR。先补普通巡航负例，再补except ReturnHome中实际return_home/goto的同类负例，均先红。主try取消标记＋共同finally检查当前task.cancelling，ON时统一failed、清未确认landed/disarmed、记task_cancelled并保原异常传播与清理；不自动发业务recover。只加同级except不能覆盖handler内部取消，已被第二负例证伪。OFF保留原行为。
+
+最终相关检查：124项14.122s、0跳过通过（含原冻结基线已知缺口见证，不是飞行验收）。新增PVA12项覆盖接受前后未知效果、真实墙钟预算、在途及旧cached优先过期、zeroVA sample、epoch、原输入/取消、同turn竞争、数值字符串与非法预算、外部取消及两个旧落地报告负例；另新wire3项检查注入阶段差异/错误mask与frame/多包/漏窗。[协议检查](../apps/fishbot-control-station/workbench-review-tests/test_drone_sdk_pva_wait_probe.py)不启动SDK。独立最初18项/组合3项后，补缺口新10项1.370s；最后取消/组合5项0.492s通过，并独立重算上述三组原包与回收。保留初始组合失败、测试trigger名称误写及ReturnHome负例的发现过程，不把此前119/123绿色当最终资格。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_pva_rpc_guard test_drone_sdk_pva_wait_probe -v
+# 单独建唯一output；--trigger可选source_expiry或rpc_timeout。
+cd ../workbench-tools
+/home/muqiao/.cache/ros2-drone/venv/bin/python drone-sdk-pva-wait-probe.py --output /tmp/drone-pva-wait-new --rpc-response-fault after_forward --trigger rpc_timeout
+```
+
+边界与收尾：日志均MAVSDK v4.0.5，真实二进制/gRPC/MAVLink缓存；planner、pose、telemetry、clock、pause与恢复观测为synthetic，三轮仍failed/landedFalse/disarmedFalse。实际SDK关闭由探针owner延后执行以观测缓存，不验证生产close、物理制动或落地。无PX4/ROS/Gazebo、arm/start/land。SDK实际监听*，本地客户端不等监听仅loopback。161287/start308277、161404/start308490、167035/start321990均wait回收exit-15，六个SDK/relay TCP端口关闭，原包arm=0；临时源码自动回收，约200KiB小原始证据原地保留，未生成重复大副本。三冻结源c866441/d6f12ad/e0444f6 clean，补片未部署，旧失败与遥测保留。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20；事实留项目，不写memory，本对话审查无跨聊天。
+
+Next/owner：根Codex先核原生ACK→Bspline→PositionCommand的来源与跨topic顺序活性，并定点确认固定运行依赖，选现有无解锁入口取证。完整缓存期限、分布式state窗口、可行备份、原生空中采用、完整M3与动态闭环仍未完成；不把本地RPC保护当完整Safety Shield。 整体plan active。

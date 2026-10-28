@@ -1,34 +1,20 @@
 diff --git a/flight.py b/flight.py
 --- a/flight.py
 +++ b/flight.py
-@@ -14,6 +14,7 @@
- from scene import Scene
- from diagnosis import classify, record_clearance
+@@ -16,2 +16,3 @@
  from preflight import inspect as preflight_inspect, process_alive
 +from handoff_observation import HandoffObservation
  
- 
- MAX_CRUISE_POSE_GAP_S = .25
-@@ -202,6 +203,7 @@
-         self.position_tolerance = float(self.acceptance.get("position_tolerance_m", .5))
-         self.clearance_required = float(self.acceptance.get("min_clearance_m", 0.))
+@@ -204,2 +205,3 @@
          self.output = Path(output)
 +        self.handoff_observation = HandoffObservation.from_environment(output, request["id"])
          self.cancel_file = Path(cancel_file)
-         self.return_home_file = Path(return_home_file)
-         self.runtime = runtime
-@@ -515,7 +517,7 @@
-         self.observer.body_radius = envelope["radius_m"]
-         self.report["obstacles"] = self.scene.records
+@@ -517,3 +519,3 @@
  
 -    async def setpoint(self, position, yaw=0., velocity=None, acceleration=None):
 +    async def setpoint(self, position, yaw=0., velocity=None, acceleration=None, observation_context=None):
          from mavsdk_grpc.offboard import PositionNedYaw, VelocityNedYaw, AccelerationNed
-         p = enu_to_ned([a-b for a,b in zip(position, self.origin)])
-         y = enu_yaw_to_ned_degrees(yaw)
-@@ -524,12 +526,29 @@
-                      "acceleration": list(acceleration or [0,0,0]) if velocity is not None else None,
-                      "yaw_rad": yaw, "simulation_s": self.observer.simulation_s,
+@@ -526,8 +528,27 @@
                       "mode": "position" if velocity is None else "position_velocity_acceleration"}
 -        if velocity is None:
 -            await self.drone.offboard.set_position_ned(PositionNedYaw(*p, y))
@@ -37,6 +23,8 @@ diff --git a/flight.py b/flight.py
 -                PositionNedYaw(*p, y), VelocityNedYaw(*enu_to_ned(velocity), y),
 -                AccelerationNed(*enu_to_ned(acceleration or [0,0,0])))
 +        trace = self.handoff_observation
++        if observation_context is None and velocity is not None:
++            observation_context = getattr(self, "handoff_candidate_context", None)
 +        sequence = trace.next_sequence() if trace is not None else None
 +        if trace is not None:
 +            trace.emit("rpc_start", sequence, self.observer.simulation_s,
@@ -60,20 +48,12 @@ diff --git a/flight.py b/flight.py
 +        if trace is not None:
 +            trace.emit("rpc_return", sequence, self.observer.simulation_s)
          self.command_position = list(position)
-         self.reference = reference
- 
-@@ -644,7 +663,10 @@
-                 if ceiling is not None and command["position"][2] > self.ground_z+ceiling:
-                     raise RuntimeError("EGO 轨迹参考点超过本任务高度上限")
-                 await self.setpoint(command["position"], command["yaw_rad"],
--                                    command["velocity"], command["acceleration"])
-+                                    command["velocity"], command["acceleration"],
-+                                    observation_context={"goal_id": goal_id,
-+                                        "trajectory_id": command["trajectory_id"],
-+                                        "command_stamp_sim_s": command["stamp_sim_s"]})
-                 self.reference.update(trajectory_id=command["trajectory_id"],
-                     task_id=self.request["id"], goal_id=goal_id,
-                     command_stamp_sim_s=command["stamp_sim_s"])
+@@ -633,2 +654,5 @@
+                 command = state.get("setpoint")
++                self.handoff_candidate_context = ({"goal_id": goal_id,
++                    "trajectory_id": command.get("trajectory_id"),
++                    "command_stamp_sim_s": command.get("stamp_sim_s")} if command else None)
+                 matched = (command and command.get("task_id") == self.request["id"]
 diff --git a/handoff_observation.py b/handoff_observation.py
 new file mode 100644
 --- /dev/null

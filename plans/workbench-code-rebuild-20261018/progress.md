@@ -545,3 +545,13 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - 边界：飞行遥测、pose、pause均synthetic，故意观测阻塞终态failed，无landed；SDK清理延后由探针owner负责以观测缓存，不是生产close验收。未启动PX4/ROS/Gazebo或发arm/start/land；真实SDK缓存证据不授予完整TTL、物理接管或动态资格。
 - 收尾/Knowledge：两个SDK回收、端口与HTTP线程关闭，临时源码自动清理，小证据保留忽略output，未产生大副本；三冻结源clean，历史原件保留。already_covered Wiki§20，项目事实不写memory；本对话审查无跨聊天。
 - Next/owner：根Codex接续普通PVA setter RPC自身pending及已接受后丢响应的失败出口，复用既有发送层和run→recover；不把Python取消当SDK撤回，不自动重试效果未知的控制请求。原生ROS来源/ACK顺序、完整SDK缓存期限、可行备份、原生空中采用、完整M3与动态闭环仍未完成。 整体plan active。
+
+
+## 2026-10-28 普通PVA RPC与外部取消终态
+
+- Current/Done：默认OFF REPAIR新增普通PVA等待保护，仍用原setpoint/单一owner；共享原输入和期限判据，同时核旧cached与在途候选，有限墙钟预算，失败unknown且不重试，沿原run→recover。SENDER候选身份读点适配后六顺序/组合过，冻结源未部署。
+- 实证：真实SDK4.0.5三串行UUID19798d4f/31e56157/73b6bb73，before转发源过期3/4/0、after接受丢响应源过期4/4/0、after墙钟超时3/3/0；raw坐标/掩码/frame/target/yaw及上游/取消/恢复时序独立重算一致，只有1次PVA请求，恢复返回后无PVA，arm=0。helper fake wall不可算实耗时，relay取消回执稍晚于恢复开始。精确入口见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 修复自发现问题：旧落地证据会使Task.cancel后的run误报succeeded/passedTrue；普通PVA和ReturnHome handler两负例先红，统一finally标failed/清落地字段后过，保异常传播及原清理、不自动业务恢复。OFF不变。
+- 验证：124项14.122s、0跳过通过（含原冻结基线已知缺口见证，不是飞行验收）；独立新10项1.370s、最后取消/组合5项.492s过。首轮组合冲突与旧判词/新增返航负例均定位后修，不拿中途119/123绿色替代最终检查。
+- 边界/收尾：planner/位姿/遥测/clock/pause为synthetic，生产SDK清理刻意延后探针owner，仍failed无landed，不构成停稳或飞行验收。三SDK进程/六TCP端口回收、临时源码自动删除，小原始证据约200KiB忽略保留，无PX4/ROS/Gazebo/大构建，三冻结源clean。Knowledge=already_covered Wiki§20，项目事实不写memory；本对话独立审查无跨聊天。
+- Next/owner：根Codex先核原生ACK→Bspline→PositionCommand的来源与跨topic顺序活性，并定点确认固定运行依赖，选现有无解锁入口取证。完整缓存期限、分布式state窗口、可行备份、原生空中采用、完整M3与动态闭环仍未完成；不把本地RPC保护当完整Safety Shield。 整体plan active。

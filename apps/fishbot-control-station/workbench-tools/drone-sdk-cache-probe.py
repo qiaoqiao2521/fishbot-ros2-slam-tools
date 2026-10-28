@@ -64,10 +64,10 @@ async def close_sdk_process(process):
 class PositionResponseFault:
     """Diagnostic-only relay: delay before forwarding or after the SDK responds."""
 
-    def __init__(self, mode, upstream_port):
-        self.mode, self.upstream_port = mode, upstream_port
+    def __init__(self, mode, upstream_port, method="position"):
+        self.mode, self.upstream_port, self.method = mode, upstream_port, method
         self.events = []
-        self.cancelled = asyncio.Event()
+        self.cancelled, self.received, self.forwarded = asyncio.Event(), asyncio.Event(), asyncio.Event()
         self.server = self.channel = None
         self.port = None
 
@@ -84,20 +84,32 @@ class PositionResponseFault:
         await asyncio.wait_for(self.channel.channel_ready(), 2.)
         upstream = rpc.OffboardServiceStub(self.channel)
 
+        async def delayed(request, call):
+            owner.record('relay_received', method=owner.method)
+            owner.received.set()
+            try:
+                if owner.mode == 'after_forward':
+                    owner.record('upstream_call_started')
+                    response = await call(request, timeout=2.)
+                    owner.record('upstream_returned', result=int(response.offboard_result.result))
+                    owner.forwarded.set()
+                # Never fabricate a successful response or retry the request.
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                owner.record('relay_handler_cancelled')
+                owner.cancelled.set()
+                raise
+
         class Service(rpc.OffboardServiceServicer):
             async def SetPositionNed(self, request, context):
-                owner.record('relay_received')
-                try:
-                    if owner.mode == 'after_forward':
-                        owner.record('upstream_call_started')
-                        response = await upstream.SetPositionNed(request, timeout=2.)
-                        owner.record('upstream_returned', result=int(response.offboard_result.result))
-                    # Never fabricate a successful response or retry the request.
-                    await asyncio.Event().wait()
-                except asyncio.CancelledError:
-                    owner.record('relay_handler_cancelled')
-                    owner.cancelled.set()
-                    raise
+                if owner.method == 'position':
+                    return await delayed(request, upstream.SetPositionNed)
+                return await upstream.SetPositionNed(request, timeout=2.)
+
+            async def SetPositionVelocityAccelerationNed(self, request, context):
+                if owner.method == 'pva':
+                    return await delayed(request, upstream.SetPositionVelocityAccelerationNed)
+                return await upstream.SetPositionVelocityAccelerationNed(request, timeout=2.)
 
         self.server = grpc.aio.server()
         rpc.add_OffboardServiceServicer_to_server(Service(), self.server)

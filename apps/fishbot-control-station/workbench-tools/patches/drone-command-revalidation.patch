@@ -9,8 +9,104 @@ diff --git a/flight.py b/flight.py
          self.options = self.station.get("flight", {})
 +        self.command_revalidation_enabled = os.environ.get("DRONE_REVALIDATE_COMMAND") == "1"
          self.acceptance = self.options.get("acceptance", {})
-@@ -547,2 +549,68 @@
+@@ -547,2 +549,133 @@
  
++    def check_command_wait(self, target, deadline, operator, clock_epoch,
++                           command=None, cached_reference=None):
++        """Use the same input and source limits during HTTP and PVA RPC waits."""
++        if self.cancel_file.exists():
++            raise CancelFlight()
++        if operator:
++            self.check_operator()
++        if time.monotonic() > deadline:
++            raise TimeoutError(f"{self.phase}: 未在期限内到达三维航点")
++        if self.position_received is None or time.monotonic()-self.position_received > 3:
++            raise RuntimeError("PX4 位姿遥测断流")
++        if self.scene.failure:
++            raise RuntimeError("动态障碍驱动失效: "+self.scene.failure)
++        if not self.position_valid:
++            raise RuntimeError("PX4 本地定位无效")
++        if self.observer.clock_received is None or time.monotonic()-self.observer.clock_received > 2:
++            raise RuntimeError("simulation_clock_stopped")
++        epoch = getattr(self.observer, "command_epoch", None)
++        if clock_epoch is not None and epoch is not None and epoch.token != clock_epoch:
++            raise RuntimeError("command_clock_epoch_changed")
++        references = [("cached_command", self.reference if cached_reference is None else cached_reference)]
++        if command is not None:
++            try:
++                end = float(command["source_end_sim_s"])
++            except (KeyError, TypeError, ValueError, OverflowError):
++                end = None
++            references.append(("inflight_command", dict(command,
++                mode="position_velocity_acceleration", command_stamp_sim_s=command.get("stamp_sim_s"),
++                source_end_sim_s=end)))
++        for label, reference in references:
++            if reference.get("mode") != "position_velocity_acceleration":
++                continue
++            stamp = reference.get("command_stamp_sim_s")
++            end = reference.get("source_end_sim_s")
++            if not all(isinstance(value, (int, float)) and math.isfinite(value)
++                       for value in (stamp, end)):
++                raise RuntimeError(label+"_source_unavailable")
++            now = self.observer.simulation_s
++            if not -.1 <= now-stamp <= .3:
++                raise RuntimeError(label+"_sample_expired")
++            terminal_hold = (math.dist(reference["position"], target) <= self.position_tolerance and
++                all(len(reference[key]) == 3 and all(abs(v) < 1e-6 for v in reference[key])
++                    for key in ("velocity", "acceleration")))
++            if now-end > .15 and not terminal_hold:
++                raise RuntimeError(label+"_source_expired")
++
++    async def await_pva_command(self, command, target, deadline, operator):
++        if not self.command_revalidation_enabled:
++            return await self.setpoint(command["position"], command["yaw_rad"],
++                                       command["velocity"], command["acceleration"])
++        import asyncio as async_runtime
++        try:
++            budget = float(getattr(self, "options", {}).get("command_rpc_timeout_s", 1.))
++            if not math.isfinite(budget) or budget <= 0:
++                raise ValueError("invalid timeout")
++        except (TypeError, ValueError, OverflowError):
++            budget = 1.
++            self.report.setdefault("errors", []).append("WARNING: invalid command_rpc_timeout_s; using 1.0s")
++        epoch = getattr(self.observer, "command_epoch", None)
++        clock_epoch = epoch.token if epoch is not None and epoch.enabled else None
++        previous = self.reference
++        loop = async_runtime.get_running_loop()
++        expires = loop.time()+budget
++        attempt = {"operation": "pva", "status": "pending", "remote_effect": "unknown",
++                   "wait_timeout_s": budget, "started_wall_monotonic_s": time.monotonic()}
++        self.report.setdefault("command_rpc_attempts", []).append(attempt)
++        send = None
++        try:
++            self.check_command_wait(target, deadline, operator, clock_epoch, command, previous)
++            send = async_runtime.create_task(self.setpoint(command["position"], command["yaw_rad"],
++                                                         command["velocity"], command["acceleration"]))
++            while True:
++                # A response cannot override an invalidation in the same event-loop turn.
++                self.check_command_wait(target, deadline, operator, clock_epoch, command, previous)
++                remaining = expires-loop.time()
++                if remaining <= 0:
++                    raise TimeoutError("command_rpc_timeout")
++                if send.done():
++                    result = await send
++                    attempt.update(status="returned", remote_effect="not_independently_observed")
++                    return result
++                await async_runtime.wait({send}, timeout=min(.02, remaining))
++        except (Exception, async_runtime.CancelledError) as error:
++            attempt.update(status="cancelled" if isinstance(error, async_runtime.CancelledError) else "unconfirmed",
++                           reason=str(error) or type(error).__name__, error_type=type(error).__name__)
++            raise
++        finally:
++            attempt["rpc_returned"] = (send is not None and send.done() and not send.cancelled()
++                                        and send.exception() is None)
++            if send is not None:
++                if not send.done():
++                    send.cancel()
++                # Cancelling the client wait is not a remote cache rollback.
++                await async_runtime.gather(send, return_exceptions=True)
++            attempt["ended_wall_monotonic_s"] = time.monotonic()
++
 +    async def await_planner_state(self, target, deadline, operator):
 +        """Watch the last accepted reference while the read-only HTTP call waits."""
 +        if not self.command_revalidation_enabled:
@@ -25,38 +121,7 @@ diff --git a/flight.py b/flight.py
 +        query = async_runtime.create_task(asyncio.to_thread(self.ego_request, "/state"))
 +        try:
 +            while True:
-+                # A completed response must not bypass a simultaneous invalidation.
-+                if self.cancel_file.exists():
-+                    raise CancelFlight()
-+                if operator:
-+                    self.check_operator()
-+                if time.monotonic() > deadline:
-+                    raise TimeoutError(f"{self.phase}: 未在期限内到达三维航点")
-+                if self.position_received is None or time.monotonic()-self.position_received > 3:
-+                    raise RuntimeError("PX4 位姿遥测断流")
-+                if self.scene.failure:
-+                    raise RuntimeError("动态障碍驱动失效: "+self.scene.failure)
-+                if not self.position_valid:
-+                    raise RuntimeError("PX4 本地定位无效")
-+                if self.observer.clock_received is None or time.monotonic()-self.observer.clock_received > 2:
-+                    raise RuntimeError("simulation_clock_stopped")
-+                if clock_epoch is not None and epoch.token != clock_epoch:
-+                    raise RuntimeError("command_clock_epoch_changed")
-+                reference = self.reference
-+                if reference.get("mode") == "position_velocity_acceleration":
-+                    stamp = reference.get("command_stamp_sim_s")
-+                    end = reference.get("source_end_sim_s")
-+                    if not all(isinstance(value, (int, float)) and math.isfinite(value)
-+                               for value in (stamp, end)):
-+                        raise RuntimeError("cached_command_source_unavailable")
-+                    now = self.observer.simulation_s
-+                    if not -.1 <= now-stamp <= .3:
-+                        raise RuntimeError("cached_command_sample_expired")
-+                    terminal_hold = (math.dist(reference["position"], target) <= self.position_tolerance and
-+                        all(len(reference[key]) == 3 and all(abs(v) < 1e-6 for v in reference[key])
-+                            for key in ("velocity", "acceleration")))
-+                    if now-end > .15 and not terminal_hold:
-+                        raise RuntimeError("cached_command_source_expired")
++                self.check_command_wait(target, deadline, operator, clock_epoch)
 +                if query.done():
 +                    return await query
 +                await async_runtime.wait({query}, timeout=.02)
@@ -78,12 +143,12 @@ diff --git a/flight.py b/flight.py
 +            await async_runtime.gather(query, return_exceptions=True)
 +
      async def wait_for_future_odometry(self, state, deadline, operator=True):
-@@ -628,3 +696,3 @@
+@@ -628,3 +761,3 @@
              if use_ego:
 -                state = await asyncio.to_thread(self.ego_request, "/state")
 +                state = await self.await_planner_state(target, deadline, operator)
                  if state.get("reason") == "odometry_unavailable":
-@@ -632,2 +700,18 @@
+@@ -632,2 +765,18 @@
                      reached_s = truth_reached_s = None
 +                if self.command_revalidation_enabled:
 +                    # Recheck the existing inputs after either HTTP await, before dispatch.
@@ -102,7 +167,7 @@ diff --git a/flight.py b/flight.py
 +                    if self.observer.clock_received is None or time.monotonic()-self.observer.clock_received > 2:
 +                        raise RuntimeError("simulation_clock_stopped")
                  command = state.get("setpoint")
-@@ -643,2 +727,18 @@
+@@ -643,6 +792,21 @@
                      raise RuntimeError("EGO 轨迹源时间已过期")
 +                if self.command_revalidation_enabled:
 +                    # Preserve Sidecar.state's readiness limits and terminal-hold exception.
@@ -121,32 +186,37 @@ diff --git a/flight.py b/flight.py
 +                        if not terminal_hold:
 +                            raise RuntimeError("EGO 轨迹已结束（发送前复查）")
                  if ceiling is not None and command["position"][2] > self.ground_z+ceiling:
-@@ -651,2 +751,4 @@
+                     raise RuntimeError("EGO 轨迹参考点超过本任务高度上限")
+-                await self.setpoint(command["position"], command["yaw_rad"],
+-                                    command["velocity"], command["acceleration"])
++                await self.await_pva_command(command, target, deadline, operator)
+                 self.reference.update(trajectory_id=command["trajectory_id"],
+@@ -651,2 +815,4 @@
              sim_s = self.observer.simulation_s
 +            if use_ego and self.command_revalidation_enabled:
 +                self.reference["source_end_sim_s"] = source_end
              distance = math.dist(self.pose["position"], target)
-@@ -719,3 +821,3 @@
+@@ -719,3 +885,3 @@
              yaw = math.atan2(towards[1]-position[1], towards[0]-position[0])
 -        await self.setpoint(position, yaw)
 +        await self.recovery_command("observation_position", self.setpoint, position, yaw)
          stable = None
-@@ -842,3 +944,3 @@
+@@ -842,3 +1008,3 @@
          self.require_recovery_inputs()
 -        await self.setpoint(point, yaw)
 +        await self.recovery_command("retreat_target", self.setpoint, point, yaw)
          deadline = time.monotonic()+8
-@@ -852,3 +954,3 @@
+@@ -852,3 +1018,3 @@
                  # Clear motion before waiting for another sensor/map response.
 -                await self.setpoint(list(self.pose["position"]), yaw)
 +                await self.recovery_command("retreat_hold", self.setpoint, list(self.pose["position"]), yaw)
                  interruption = {"kind": "retreat_interruption", "target": list(point),
-@@ -865,3 +967,3 @@
+@@ -865,3 +1031,3 @@
                  self.require_recovery_inputs()
 -                await self.setpoint(point, yaw)
 +                await self.recovery_command("retreat_resume", self.setpoint, point, yaw)
              await asyncio.sleep(.1)
-@@ -876,2 +978,33 @@
+@@ -876,2 +1042,33 @@
  
 +    async def recovery_command(self, operation, command, *args):
 +        if not self.command_revalidation_enabled:
@@ -180,12 +250,12 @@ diff --git a/flight.py b/flight.py
 +            attempt["ended_wall_monotonic_s"] = time.monotonic()
 +
      async def recover(self, reason):
-@@ -879,2 +1012,4 @@
+@@ -879,2 +1076,4 @@
          self.recovering = True
 +        if self.command_revalidation_enabled:
 +            self.report.update(landed=False, disarmed=False)
          self.report["recovery"] = {"trigger": reason, "outcome": "running", "checks": [],
-@@ -895,5 +1030,6 @@
+@@ -895,5 +1094,6 @@
                  try:
 -                    await self.drone.action.hold()
 -                    await self.setpoint(list(self.pose["position"]), self.current_yaw())
@@ -195,19 +265,19 @@ diff --git a/flight.py b/flight.py
 +                                                list(self.pose["position"]), self.current_yaw())
 +                    await self.recovery_command("offboard_start", self.drone.offboard.start)
                      await self.wait_until(lambda: self.telemetry.get("flight_mode") == "OFFBOARD",
-@@ -906,3 +1042,4 @@
+@@ -906,3 +1106,4 @@
                  # Stop cached PVA before any HTTP while retaining ownership.
 -                await self.setpoint(list(self.pose["position"]), self.current_yaw())
 +                await self.recovery_command("position", self.setpoint,
 +                                            list(self.pose["position"]), self.current_yaw())
              await self.stop_planner()
-@@ -945,3 +1082,4 @@
+@@ -945,3 +1146,4 @@
          if not verified:
 -            await self.setpoint(list(self.pose["position"]), self.current_yaw())
 +            await self.recovery_command("landing_validation_position", self.setpoint,
 +                                        list(self.pose["position"]), self.current_yaw())
              await self.stop_planner()
-@@ -963,4 +1101,6 @@
+@@ -963,4 +1165,6 @@
              try:
 -                await self.setpoint(list(self.pose["position"]))
 +                await self.recovery_command("landing_position", self.setpoint, list(self.pose["position"]))
@@ -215,7 +285,7 @@ diff --git a/flight.py b/flight.py
 +                if self.command_revalidation_enabled:
 +                    raise
                  self.report["errors"].append("WARNING: landing hold: "+str(error))
-@@ -969,7 +1109,9 @@
+@@ -969,7 +1173,9 @@
              try:
 -                await self.drone.offboard.stop()
 +                await self.recovery_command("offboard_stop", self.drone.offboard.stop)
@@ -227,13 +297,13 @@ diff --git a/flight.py b/flight.py
 -        await self.drone.action.land()
 +        await self.recovery_command("land", self.drone.action.land)
          deadline = time.monotonic()+60
-@@ -982,3 +1124,4 @@
+@@ -982,3 +1188,4 @@
              now = self.observer.simulation_s
 -            if last_check_s is None or now-last_check_s >= .2:
 +            if (last_check_s is None or now-last_check_s >= .2
 +                    or (self.command_revalidation_enabled and now < last_check_s)):
                  current = list(self.pose["position"])
-@@ -996,8 +1139,12 @@
+@@ -996,8 +1203,12 @@
                      # The next state must never leave an unchecked LAND running.
 -                    await self.drone.action.hold()
 -                    await self.setpoint(current, self.current_yaw())
@@ -250,8 +320,24 @@ diff --git a/flight.py b/flight.py
 +                last_check_s = (None if self.command_revalidation_enabled
 +                                and self.observer.simulation_s < now else now)
              await asyncio.sleep(.05)
-@@ -1100,2 +1247,10 @@
+@@ -1056,2 +1267,7 @@
+             self.report["program_completed"] = not preflight_only
++        except asyncio.CancelledError:
++            if self.command_revalidation_enabled:
++                self.report["task_cancelled"] = True
++            # Infrastructure cancellation keeps its original propagation and cleanup.
++            raise
+         except CancelFlight:
+@@ -1100,2 +1316,18 @@
          finally:
++            if self.command_revalidation_enabled:
++                import asyncio as task_runtime
++                flight_task = task_runtime.current_task()
++                if self.report.get("task_cancelled") or (flight_task is not None and flight_task.cancelling()):
++                    # Cancellation inside an except/return-home handler also reaches this finalizer.
++                    terminal = "failed"
++                    self.report.update(landed=False, disarmed=False, task_cancelled=True)
++                    self.record_failure("flight_task_cancelled: 任务等待被取消，当前落地与解除电机未确认")
 +            if (self.command_revalidation_enabled and terminal == "cancelled"
 +                    and not self.report.get("cancelled_before_takeoff")
 +                    and not (self.report.get("landed") is True and self.report.get("disarmed") is True
