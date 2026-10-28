@@ -171,3 +171,14 @@ knowledge_status=updated：既有 Wiki/ROS2 与 FishBot.md“差速进场”补M
 2026-10-27 本轮空间收尾：三份固定路径观察流逐块比对gzip后删除展开件，分配410603520→110497792字节，释放300105728字节；恢复 `gzip -dk <observations.jsonl.gz>`。原动作/物理报告、代价文件、10档原始采样、快照/路径和失败记录保留。所有本轮隔离实例已停止，端口9138已释放。
 
 knowledge_status=updated：既有 Wiki/ROS2 与 FishBot.md“差速进场”补卡点小角速和Shim/MPPI交接，Wiki/开发知识入口加触发词，均已读回；其它知识库改动保持。
+
+
+## 2026-10-28 J100宽场景已接入，完整配送待运行
+
+实现：可选--arena-xml已接既有prepare/build_scene，新增j100-wide场地、车型/传感器、订单目标及连续实体四份配置。原窄场地/默认配置保留。J100后续正常业务验证入口改为docs/FACTORY_DELIVERY.md“J100宽场景”，完整两单仍复用原Factory/Workflow和continuous-ba-orders。
+
+验收：新增4项原生场景测试通过；原厂区场景/连续任务回归22项通过，0失败/跳过。新场景43qpos/40qvel/22ctrl，1000步静止禁碰0。真实ROS170/API9140三次规划均status4，完整几何扫掠和120秒预算估算均通过；保留408条物理观察全部hold，未发运动Goal。完整B/A dry-run已接受新的实体绑定和订单顺序，未实际派发；完整载货/卸货/无reset双单继续pending，owner=root。下一步从独立新输出目录运行原Factory，不复用旧失败UUID。
+
+证据：~/.cache/fishbot/j100-wide-20261028/，scene/为实际世界及地图，native-plan.json保留三UUID/路径/原生状态/扫掠/预算，geometry.json保留静态边界，factory-dry-run.json保留两单声明；tests.log/regression.log为4+22项，j100-wide.png为实际新模型渲染。初次import失败保留native-plan.log，成功复跑日志native-plan-b.log。只查规划与静置，未称新的完整配送通过。
+
+清理：owned原生18个身份均已退出，survivors=[]，API9140关闭；没有动107/114等旧实例。原生场景测试TemporaryDirectory已自动移除。未开启完整physics日志，本轮目录约1.7MiB，保留必要场景/截图/短日志和脚本，不产生大型训练或渲染缓存。磁盘仍约6.7GiB可用。knowledge_status=already_covered：Wiki/ROS2 与 FishBot“差速进场”已覆盖完整几何/宽处转向/预算与完整任务分层，本轮场地状态仅回写本项目。

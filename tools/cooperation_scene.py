@@ -213,7 +213,7 @@ def car_footprint(common_model, radius=.13, vehicle=None):
 def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
                 spawn=(0., -2.), station=DEFAULT_STATION, spawn_yaw=0., camera=False, camera_light_scale=1.,
                 tag_lateral_offset=.03, scene_profile=None, omit_unused_native_rangefinders=False,
-                continuous_delivery=None):
+                continuous_delivery=None, arena_xml=None):
     import numpy as np
 
     so101_project, fishbot_project, output = map(lambda path: Path(path).resolve(),
@@ -232,7 +232,8 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
 
     source = so101_project / "workspaces/so101_ws/src/so101_mujoco/models/so101.xml"
     fish_xml = fishbot_project / "workspaces/fishbot_mujoco_ws/src/fishbot_mujoco/mjcf/fishbot.xml"
-    arena_xml = fish_xml.parent / "arena.xml"
+    arena_xml = (Path(arena_xml).resolve() if arena_xml is not None
+                 else fish_xml.parent / "arena.xml")
     _, _, generated = modules["grasp_episode"].build_contact_scene(
         source, output / "source-contact", jaw_force_cap_nm=.15, noslip_iterations=10)
     local_root = _fixture_workcell(ET.parse(generated).getroot())
@@ -345,6 +346,7 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
                 "station_height_m": float(station[2]),
                 "display_cameras": {"overview": "cooperation_overview", "arm_detail": "overview"},
                 "spawn": spawn.tolist(), "dock_pose": list(dock),
+                "arena_xml": str(arena_xml),
                 "tray_offset": list(vehicle['tray_offset_m']),
                 "initial_tray_floor_top_world_m": float(initial_tray_top[2]),
                 "arm_home_qpos6": home.tolist(), "initial_arm_q6": home.tolist(),

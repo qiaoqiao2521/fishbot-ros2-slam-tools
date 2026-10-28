@@ -307,7 +307,8 @@ def prepare(args):
                          tag_lateral_offset=getattr(args,'tag_lateral_offset',.03),
                          scene_profile=scene_profile,
                          omit_unused_native_rangefinders=getattr(args,'omit_unused_native_rangefinders',False),
-                         continuous_delivery=business)
+                         continuous_delivery=business,
+                         arena_xml=getattr(args, 'arena_xml', None))
     if getattr(args,'queued_ros_dispatch',False):
         manifest['queued_ros_dispatch']=True
     factory_path = getattr(args, 'factory_config', None)
@@ -504,6 +505,8 @@ def main():
                         help='Editable vehicle/sensors/task JSON; creates a new independent scene')
     parser.add_argument('--continuous-delivery',type=Path,
                         help='Finite cargo slots and physical unload stations JSON')
+    parser.add_argument('--arena-xml',type=Path,
+                        help='Static arena XML shared by physics, arm collision queries and generated maps')
     parser.add_argument('--factory-config',type=Path,
                         help='Editable delivery stations, orders and physical channel occupancy')
     parser.add_argument('--omit-unused-native-rangefinders',action='store_true',

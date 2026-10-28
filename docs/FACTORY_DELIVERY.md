@@ -372,3 +372,40 @@ python tools/cooperation_factory.py run \
 原生卸货使用实际双指抓取、抬升、搬运、释放、货架支撑与机械臂回位。清理完成后还要以新物理帧连续复核 0.7 源秒，才将该 cargo 库存记为 delivered。`unload_receipt` 保存实际源时间、序号、世界、episode 与分配货位。
 
 独立 Oracle 使用 `--business-manifest PATH` 订阅 `/cooperation/cargo/<cargo_id>/pose`，旧 `/cooperation/cargo_pose` 保留。评分分别检查原装运、完整货物足迹、卸货抬升、落稳、全部夹指释放、回位和清理；HTTP 成功与库存回执只作身份对账。命名位姿的发布端 GID 核验尚未加入。当前原生分项不替代 B/B、B/A 无重置双订单验收，最新状态见[计划进度](../plans/continuous-twin-regression-20261024/progress.md)。
+
+## J100 宽场景（2026-10-28）
+
+当前 J100 正常业务验证改用显式 `j100-wide` 场景。旧 FishBot 窄场地及历史结果保留为困难对照，不覆盖默认场地，也不追认旧失败。该场景仍使用原订单、J100＋3D 雷达、SO101 和物理评分。
+
+- 外墙仍是 8m 方形；南侧挡板移到北侧 y=1.8m，中央箱体移到 y=.8m。
+- 装货工位与 dock=(-1.6,-1.68,0) 保持；出生点选择 staging=(-.9,-1.68,0)。这改变了初态，不能与原远端出生点的耗时直接比较。
+- A=(0,-1.68,0)，B=(1.7,-1.68,0)，两工位间距1.7m。SO101基座、货架、任务目标一起平移；相对抓取/托盘几何保持。
+- 工位旁沿X直行或倒车离开，宽处再转向。x=2.7,y=-1.68 预留转向区；交接位全角采样最小仅1mm，未满足采样间距扣除后的保证，不能当作可掉头区。
+
+使用既有准备入口创建独立输出目录；`--arena-xml` 同时用于世界和机械臂查询模型，地图在编译新世界后生成。当前固定地图覆盖[-4.2,4.2]，本预设不扩大外墙。
+
+```bash
+export FISHBOT_COOP_PYTHON="$HOME/.cache/so101-colab/planning-venv/bin/python"
+export PYTHONPATH="/usr/lib/python3/dist-packages:${PYTHONPATH:-}"
+source /opt/ros/jazzy/setup.bash
+scene_out="$HOME/.cache/fishbot/j100-wide-next/scene"
+tools/fishbot_cooperation.sh prepare \
+  --so101-project ../so101 --output "$scene_out" \
+  --arena-xml tools/config/factory_delivery/j100-wide-arena.xml \
+  --scene-profile tools/config/factory_delivery/j100-wide-profile.json \
+  --factory-config tools/config/factory_delivery/j100-wide.json \
+  --continuous-delivery tools/config/factory_delivery/j100-wide-entities.json \
+  --spawn -.9 -1.68 --navigation-planner smac-lattice \
+  --lattice-filepath tools/config/navigation_lattices/diff-r060-2cm.json \
+  --lattice-allow-reversing --lattice-rotation-shim --staging-reversing \
+  --amcl-motion-model omni --omit-unused-native-rangefinders --queued-ros-dispatch
+"$FISHBOT_COOP_PYTHON" -B experiments/kaggle/f1_candidate.py \
+  "$scene_out/scene-manifest.json" \
+  --transport-controller-yaml experiments/kaggle/graceful-j100.yaml --lattice-smooth-path
+```
+
+配置复用原显式 `.06m/s / .10rad/s` 载货速度，原加减速、碰撞、停车评分保持；本场景用默认25mm全局附加缓冲，不沿用旧窄场景的5mm例外。原路线120秒、装运360秒、卸货180秒仍保持。运行时仍需现有补丁 overlay，见上文原生缓存修复。
+
+订单继续使用 `continuous-ba-orders.json`，`cooperation_factory.py run --manifest ... --continuous-deliveries tools/config/factory_delivery/continuous-ba-orders.json --order order-b --order order-a`，沿用原 domain/port 隔离和清理流程。首次先加 `--dry-run` 检查请求；去掉后才会执行完整任务。
+
+本轮原生 `ComputePathToPose` 到B、到A、B返回staging均status4，完整几何扫掠通过；按路径估时约49.53/21.20/49.53秒。真实车辆执行、完整载货及无reset B/A仍待验收，不把规划回执当成运动通过。相关原生场景测试为 `tools/tests/test_cooperation_wide_scene.py`。
