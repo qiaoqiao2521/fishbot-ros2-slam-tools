@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import tempfile
 import threading
+import time
 import types
 import unittest
 from urllib.request import Request, urlopen
@@ -27,17 +28,24 @@ def http_source(h, before_send=None):
     source_request = h.source_request
 
     class Handler(BaseHTTPRequestHandler):
-        def respond(self, body):
+        def respond(self, body, status=200):
             if before_send:
                 before_send(self.path, body)
             data = json.dumps(body).encode()
-            self.send_response(200)
+            self.send_response(status)
             self.send_header('Content-Length', str(len(data)))
             self.end_headers()
             self.wfile.write(data)
 
         def do_GET(self):
-            self.respond(source_request(self.path))
+            if self.path.split('?', 1)[0] == '/command-epoch':
+                original.methods(h.root/'ego/sidecar.py', 'Handler', ('do_GET',),
+                    dict(node=h.source.node, time=time))['do_GET'](self)
+            else:
+                self.respond(source_request(self.path))
+
+        def send(self, status, body):
+            self.respond(body, status)
 
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
@@ -103,7 +111,7 @@ class StateEpochWindow(unittest.IsolatedAsyncioTestCase):
             if first and ordering == 'before_snapshot':
                 source.node.invalidate_command_source('fixture_source_changed')
             snapshot = copy.deepcopy(source.node.state())
-            if first and ordering != 'before_snapshot':
+            if first and ordering in ('after_snapshot', 'sample_expired'):
                 source.node.invalidate_command_source('fixture_source_changed')
                 if ordering == 'sample_expired':
                     flight.advance(10.5)  # Original .3s sample gate, no tolerance change.

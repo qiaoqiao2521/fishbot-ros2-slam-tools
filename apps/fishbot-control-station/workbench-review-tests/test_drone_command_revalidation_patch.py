@@ -25,7 +25,7 @@ def apply(root, patchfile):
 
 
 def copy_source(root):
-    for name in ('flight.py', 'frames.py', 'ego/sidecar.py'):
+    for name in ('flight.py', 'frames.py', 'ego/sidecar.py', 'ego/run_sidecar.sh'):
         path = root/name
         path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(original.DRONE/name, path)

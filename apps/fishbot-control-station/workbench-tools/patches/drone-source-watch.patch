@@ -1,0 +1,196 @@
+diff --git a/flight.py b/flight.py
+--- a/flight.py
++++ b/flight.py
+@@ -9,6 +9,7 @@
+ from pathlib import Path
+ from urllib.request import Request, urlopen
+ from command_epoch import CommandEpoch
++from source_epoch_watch import SourceEpochWatch
+ 
+ from frames import enu_to_ned, ned_to_enu, enu_yaw_to_ned_degrees, ned_frd_to_enu_flu, resolve_position
+ from collision_geometry import official_collision_envelope, sphere_box_clearance
+@@ -203,7 +204,8 @@
+         self.request = request
+         self.station = request["station"]
+         self.options = self.station.get("flight", {})
+-        self.command_revalidation_enabled = os.environ.get("DRONE_REVALIDATE_COMMAND") == "1"
++        self.command_revalidation_enabled = (os.environ.get("DRONE_REVALIDATE_COMMAND") == "1" or
++                                             os.environ.get("DRONE_SOURCE_WATCH") == "1")
+         self.acceptance = self.options.get("acceptance", {})
+         self.position_tolerance = float(self.acceptance.get("position_tolerance_m", .5))
+         self.clearance_required = float(self.acceptance.get("min_clearance_m", 0.))
+@@ -551,6 +553,26 @@
+         with urlopen(request, timeout=timeout) as response:
+             return json.load(response)
+ 
++    async def start_source_watch(self, expected_epoch):
++        import asyncio as source_runtime
++        previous = getattr(self, "source_epoch_watch", None)
++        if previous is not None and previous.task is not None:
++            previous.task.cancel()
++            await source_runtime.gather(previous.task, return_exceptions=True)
++        record = {}
++        self.report.setdefault("source_epoch_watches", []).append(record)
++        watch = self.source_epoch_watch = SourceEpochWatch(self.ego_request, expected_epoch, record)
++        watch.task = source_runtime.create_task(watch.run())
++        self.tasks.append(watch.task)
++        await watch.ready.wait()
++        watch.check()
++
++    def check_source_watch(self):
++        watch = getattr(self, "source_epoch_watch", None)
++        if watch is None:
++            raise RuntimeError("command_source_watch_unavailable")
++        watch.check()
++
+     def check_command_wait(self, target, deadline, operator, clock_epoch,
+                            command=None, cached_reference=None):
+         """Use the same input and source limits during HTTP and PVA RPC waits."""
+@@ -571,6 +593,8 @@
+         epoch = getattr(self.observer, "command_epoch", None)
+         if clock_epoch is not None and epoch is not None and epoch.token != clock_epoch:
+             raise RuntimeError("command_clock_epoch_changed")
++        if epoch is not None and getattr(epoch, "source_watch_enabled", False):
++            self.check_source_watch()
+         references = [("cached_command", self.reference if cached_reference is None else cached_reference)]
+         if command is not None:
+             try:
+@@ -751,6 +775,8 @@
+                 goal_epoch = goal_reply.get("command_epoch")
+                 if not isinstance(goal_epoch, str) or not goal_epoch:
+                     raise RuntimeError("command_epoch_unavailable")
++                if getattr(epoch, "source_watch_enabled", False):
++                    await self.start_source_watch(goal_epoch)
+         else:
+             await self.setpoint(target)
+         deadline = time.monotonic()+100
+diff --git a/ego/sidecar.py b/ego/sidecar.py
+--- a/ego/sidecar.py
++++ b/ego/sidecar.py
+@@ -58,6 +58,9 @@
+         self.lock = threading.RLock()
+         self.requests = queue.Queue()
+         self.command_epoch = CommandEpoch()
++        if self.command_epoch.source_watch_enabled:
++            self.command_epoch_condition = threading.Condition(self.lock)
++            self.command_epoch.on_rotate = self.notify_command_epoch
+         self.pending_ack_curves = {}
+         suffix = self.command_epoch.token.replace("-", "")[:12]
+         self.source_expected_nodes = {"ack": "ego_planner_"+suffix,
+@@ -487,6 +490,10 @@
+                           max_published_gap_s=max(counts.get("max_published_gap_s", 0.), stamp-previous),
+                           pose_bracket_sim_s=[before[0], after[0]])
+ 
++    def notify_command_epoch(self):
++        with self.command_epoch_condition:
++            self.command_epoch_condition.notify_all()
++
+     def rotate_command_epoch(self, reason):
+         self.command_epoch.rotate(reason)
+         getattr(self, "pending_ack_curves", {}).clear()
+@@ -1082,7 +1089,18 @@
+             self.wfile.write(payload)
+ 
+         def do_GET(self):
+-            if self.path == "/state":
++            if (self.path.split("?", 1)[0] == "/command-epoch" and
++                    getattr(node.command_epoch, "source_watch_enabled", False)):
++                from urllib.parse import urlsplit, parse_qs
++                after = parse_qs(urlsplit(self.path).query).get("after", [""])[0]
++                with node.command_epoch_condition:
++                    node.command_epoch_condition.wait_for(
++                        lambda: node.command_epoch.token != after, timeout=.5)
++                    current = node.state()
++                    reply = {"command_epoch": current["command_epoch"], "ready": current["ready"],
++                             "reason": current["reason"], "observed_monotonic_ns": time.monotonic_ns()}
++                self.send(200, reply)
++            elif self.path == "/state":
+                 self.send(200, node.state())
+             elif self.path == "/trajectory":
+                 with node.lock:
+diff --git a/command_epoch.py b/command_epoch.py
+--- a/command_epoch.py
++++ b/command_epoch.py
+@@ -5,9 +5,10 @@
+ 
+ class CommandEpoch:
+     def __init__(self):
++        self.source_watch_enabled = os.environ.get("DRONE_SOURCE_WATCH") == "1"
+         self.native_receipts_enabled = os.environ.get("DRONE_NATIVE_RECEIPTS") == "1"
+         self.source_graph_enabled = os.environ.get("DRONE_SOURCE_GRAPH") == "1" or self.native_receipts_enabled
+-        self.enabled = os.environ.get("DRONE_COMMAND_EPOCH") == "1" or self.source_graph_enabled
++        self.enabled = os.environ.get("DRONE_COMMAND_EPOCH") == "1" or self.source_graph_enabled or self.source_watch_enabled
+         self.token = str(uuid.uuid4())
+         self.last_sim = self.progress_wall = None
+         self.stalled = False
+@@ -16,6 +17,9 @@
+ 
+     def rotate(self, reason):
+         self.token, self.reason = str(uuid.uuid4()), reason
++        notify = getattr(self, "on_rotate", None)
++        if notify is not None:
++            notify()
+ 
+     def next_goal_stamp(self, proposed):
+         # Native ACK echoes this correlation stamp, not the HTTP UUID.
+diff --git a/source_epoch_watch.py b/source_epoch_watch.py
+new file mode 100644
+--- /dev/null
++++ b/source_epoch_watch.py
+@@ -0,0 +1,56 @@
++"""Opt-in epoch notification at the existing SDK owner; not atomic revocation."""
++import asyncio
++import time
++from urllib.parse import quote
++
++
++class SourceEpochWatch:
++    request_timeout_s = .8
++    observation_max_age_ns = 2_000_000_000
++
++    def __init__(self, request, expected_epoch, record):
++        self.request, self.expected_epoch, self.record = request, expected_epoch, record
++        self.ready = asyncio.Event()
++        self.failure, self.last_epoch, self.last_received_ns, self.task = None, None, None, None
++        record.update(expected_epoch=expected_epoch, started_monotonic_ns=time.monotonic_ns(),
++                      status="starting", observations=0)
++
++    async def run(self):
++        try:
++            while True:
++                path = "/command-epoch?after="+quote(self.last_epoch or "", safe="")
++                value = await asyncio.wait_for(asyncio.to_thread(self.request, path), self.request_timeout_s)
++                received = time.monotonic_ns()
++                epoch, observed = value.get("command_epoch"), value.get("observed_monotonic_ns")
++                if not isinstance(epoch, str) or not epoch or type(observed) is not int:
++                    raise ValueError("epoch notification metadata unavailable")
++                if not 0 <= received-observed <= self.observation_max_age_ns:
++                    raise ValueError("epoch notification observation expired")
++                self.last_epoch, self.last_received_ns = epoch, received
++                self.record.update(status="watching", latest_epoch=epoch,
++                    latest_observed_monotonic_ns=observed, latest_received_monotonic_ns=received,
++                    latest_reason=value.get("reason"), observations=self.record["observations"]+1)
++                if epoch != self.expected_epoch:
++                    self.failure = "command_source_epoch_changed"
++                elif value.get("ready") is not True:
++                    self.failure = "command_source_unready: "+str(value.get("reason"))
++                if self.failure:
++                    self.record.update(status="invalidated", failure=self.failure)
++                    return
++                self.ready.set()
++        except asyncio.CancelledError:
++            self.record["status"] = "cancelled"
++            raise
++        except Exception as error:
++            self.failure = "command_source_watch_unavailable: "+type(error).__name__+": "+str(error)
++            self.record.update(status="unavailable", failure=self.failure)
++        finally:
++            self.ready.set()
++            self.record["ended_monotonic_ns"] = time.monotonic_ns()
++
++    def check(self):
++        if self.failure:
++            raise RuntimeError(self.failure)
++        if (self.last_received_ns is None or self.task is None or self.task.done() or
++                not 0 <= time.monotonic_ns()-self.last_received_ns <= self.observation_max_age_ns):
++            raise RuntimeError("command_source_watch_unavailable")

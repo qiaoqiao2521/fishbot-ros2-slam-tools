@@ -881,3 +881,44 @@ PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unit
 收尾：三SDK实例均已回收，最终端口与线程关闭；三组约208KiB独有小原包/记录保留，无新大缓存或临时帧，测试临时源自动回收。共享station-execution.cjs出现119增/3删的Carry QA在途改动，定点初读/语法检查通过、完整E2E未审；完整保留不混入本次提交、不联系其他聊天。三冻结源不变，不新增控制行为、默认开关不变。
 
 Next/owner：当前根Codex沿已有MAVSDK owner等待/停止接口核失效传播与可观察时限，让源失效能到达实际发送/缓存owner；先核可复用通道及剩余窗口，不把二次GET或本地epoch比较宣称原子撤销。随后继续晚到远端PVA和可行备份/实际状态地图终端资格；本轮生产server关闭正例不代替安全停稳、落地、M3或动态闭环。Knowledge=updated，原Wiki来源链及入口补“自洽旧快照不等当前授权、SDK析构kill与外层terminate分开”，项目运行数值只留项目，知识库大dirty保留。
+
+## 既有HTTP变更等待 → Flight单owner恢复候选（2026-10-28）
+
+新增默认OFF `drone-source-watch.patch`，在既有EPOCH＋REPAIR后应用；含SENDER的六种既有应用顺序也通过。`DRONE_SOURCE_WATCH=1` 才启用并启用原epoch/RPC等待复查。冻结源与installed入口未部署。
+
+复用选择：MAVSDK setter是现有唯一写入口，不携带Sidecar epoch；原普通state快照已证有读取/使用窗口。因此复用现有Sidecar HTTP服务器、RLock和Python Condition增加 `/command-epoch?after=...` 变更等待，不新增服务、数据库或另一套控制owner。CommandEpoch.rotate通知等待者，含目标/stop、来源失效及源时钟换代；Condition等待释放原锁，回复写socket前也释放锁。
+
+服务端最长.5s等待后重新取原state健康；客户端沿原.8s HTTP预算等待，保存服务端原单调观测时刻、实际接收时刻及epoch。2s观测年龄沿用已有本机输入新鲜度边界，不是飞行容差。客户端协程超时依赖事件循环和可取消await，非硬实时证明。
+
+Flight在新目标后先建立监视，后续复用原 `check_command_wait` 在state/PVA RPC等待期间检查。监视器只锁存失效，不写飞控；换代、健康失效、丢失/过旧元数据、通道错误均抛回原run→recover。已在途RPC的远端效果继续unknown，不重试。原tasks owner负责取消/收拢；新目标清理旧watch，迟到旧响应不能给新watch重新绑定。关闭开关时已应用补片仍保留旧快照缺口，作为OFF对照。
+
+### 本轮证据
+
+| UUID（忽略output/drone-committed） | 结果与边界 |
+| --- | --- |
+| 82514df8-4490-48d4-a992-65e6e5035db4 | 首轮真实SDK通知传播通过；后只调整诊断命名，保留原件 |
+| b9dd64b7-7db1-49db-9cda-2cddbb4ad215 | 最终ON：有效epoch下原PVA 3包；失效至生产关闭窗2包均为position/mask2552；关闭后0包。旧state响应仍被扣留时已完成恢复/生产close，之后原旧响应实际读完也未再派发PVA |
+| 91705b89-ffd1-4f84-8e2a-12cecc5b6a50 | 最终OFF：原旧快照仍派发1次PVA RPC并重发4包，等待新epoch state释放后才恢复，关闭后0包；未把旧缺口伪装通过 |
+| 945adb19-83cc-494e-8d0f-eb757167d13d | 完整原Sidecar构造＋真实HTTP＋native EGO/CPP：两目标/三段原回执成立；探针见证自有Condition确有等待者后POST stop，等待请求收到与stop回执相同的新epoch。三原生进程exit0、HTTP关闭；无SDK/PX4 |
+
+最终ON的同机原时间读回：失效标记→通知接收1.405816ms，→恢复position RPC返回13.630359ms，→生产SDK关闭33.305390ms。这是该轮测量；.15s有效缓存建立、原state扣留和观测窗口均为显式夹具，不用于承诺端到端最坏时限或零旧包。初始快照与发送之间仍非原子，已远端接受请求也不能回滚；`distributed_epoch_gap_fixed=false` 仍保留。相对上轮，已证明无需等待被扣留的普通state响应，通知可驱动当前SDK owner恢复。
+
+ON/OFF实际SDK均为4.0.5，PVA/position原活动字段、NED轴序、frame/target/yaw独立重算。ON仅1次派发时epoch匹配的初始PVA RPC，旧state在SDK关闭后才真正读完；无迟到再派发。探针的initial_valid_pva仅指身份/源龄期匹配，不代表该替身通过完整动力学/占据资格。SDK PID581542/581703及首轮573405均由原生产close kill+wait为-9并回收。原任务均failed、无落地；源图/ACK曲线/pose/clock/armed/暂停为替身，合成peer拒arm，arm命令0。此SDK试验与完整native Sidecar试验分别取证，未冒称同一完整ROS→PX4闭环。
+
+三个最终目录各有 `independent-source-watch-audit.json`：ON17项、OFF12项、native18项原包/epoch/RPC时序/端口读回通过。native两个目标的ACK/曲线/PVA各唯一匹配原CPP GID与序号；自有PID578972/578997/578998均正常退出且/proc无残留。探针只在当前自有Condition上读Python `_waiters` 见证测试条件，生产补片不依赖该私有属性。
+
+最终六相关模块 **75项10.193s/0skip通过**，新增watch12项含：无控制写的锁存、旧state挂起时恢复、PVA等待中断（接受前/后替身）、协议缺失/旧观测拒绝、同epoch健康失效、源时钟换代、通道断开、新目标取消旧watch、已应用但OFF原行为、真实shell导入与六补片顺序。首轮新目标测试仅手工换epoch却保留旧setpoint，被原健康检查正确拒绝；已改用真实目标Handler，未削弱检查。原生与SDK试验不计单测或飞行。
+
+启动入口补核发现实际接线缺口：EPOCH新增根目录模块，原ego/run_sidecar.sh只将脚本目录交给Python。1c4d17fb-59d1-4b8f-af79-820b1dfda06d在空初始PYTHONPATH、真实shell --help下复现ModuleNotFoundError: command_epoch。EPOCH补片增加一行根目录PYTHONPATH，脚本目录仍优先；同条件复验exit0并含--runtime选项。原失败/修补后JSON与最终测试日志保留；--help不初始化ROS或启动飞行，不代替完整构造试验。测试copy_source仅补原launcher文件，CLI夹具另复制三既有ego模块，不编写替代实现。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_source_watch test_drone_state_epoch_window test_drone_command_epoch_patch test_drone_state_wait_guard test_drone_pva_rpc_guard test_drone_recovery_cache_chain -q
+# workbench-tools目录下，两个输出各使用新UUID；native命令先加载Jazzy/ego_ws环境。
+/home/muqiao/.cache/ros2-drone/venv/bin/python drone-sdk-production-close-probe.py --source-watch --output "$SDK_WATCH_OUTPUT"
+python3 drone-sidecar-native-probe.py --source-watch --domain-id 188 --output "$NATIVE_WATCH_OUTPUT"
+```
+
+收尾：五组约384KiB独有小原包/CLI记录保留，临时执行源自动回收，无新大型缓存或渲染。一次相对路径补片写入及一次跨文件系统日志移动失败，均未改冻结源；改用绝对路径、日志copy/读回/unlink后完成。全部自有进程、HTTP/gRPC端口与worker已结束；三冻结源不变，Station Carry QA在途119增/3删保留不混提交、不跨聊天。Knowledge=updated，原Wiki来源链及入口补“变更等待由单控制owner消费、通知/缓存替换/物理结果分层”，实际读回记录在计划，知识库原大dirty保留，不写memory。
+
+Next/owner：当前根Codex核在途PVA远端迟交与新通知共存：客户端取消不等远端撤销，复用现有before/after relay和本轮watch，确认恢复位置是否可能被后来接受的PVA覆盖。随后接实际状态/地图/终端和可行备份资格；不重复扩大普通GET/监视层，不把本轮传播候选升级为硬TTL、原子授权、安全降落或M3/动态通过。整体目标仍active。

@@ -16,7 +16,7 @@ sys.dont_write_bytecode=True
 TOOLS=Path(__file__).resolve().parent
 
 
-def run(output,domain):
+def run(output,domain,source_watch=False):
     import rclpy
     from geometry_msgs.msg import TransformStamped
     from tf2_msgs.msg import TFMessage
@@ -31,12 +31,16 @@ def run(output,domain):
 
     output.mkdir(parents=True,exist_ok=True)
     os.environ.update(DRONE_NATIVE_RECEIPTS='1',ROS_DOMAIN_ID=str(domain),ROS_AUTOMATIC_DISCOVERY_RANGE='LOCALHOST')
+    os.environ['DRONE_SOURCE_WATCH']='1' if source_watch else '0'
     events,errors=[],[]
     node=observer=server=worker=None
     result={'scope':'actual Sidecar/HTTP/native planner with ideal ROS poses, explicit cloud and synthetic camera/depth health',
             'sdk_started':False,'px4_started':False,'flight_accepted':False,'goals':[]}
     with tempfile.TemporaryDirectory() as directory:
         tmp=Path(directory);copy_source(tmp);apply(tmp,TOOLS/'patches/drone-command-epoch.patch')
+        if source_watch:
+            apply(tmp,TOOLS/'patches/drone-command-revalidation.patch')
+            apply(tmp,TOOLS/'patches/drone-source-watch.patch')
         (tmp/'ego/planner.yaml').write_bytes(Path('/home/muqiao/dev/ros2/projects/drone/ego/planner.yaml').read_bytes())
         sys.path[:0]=[str(tmp/'ego'),'/home/muqiao/dev/ros2/projects/drone/ego',str(tmp)]
         spec=importlib.util.spec_from_file_location('sidecar_native_runtime',tmp/'ego/sidecar.py')
@@ -116,6 +120,23 @@ def run(output,domain):
                 all_pva_have_cpp_receipts=all(all(g['state']['setpoint'].get('native_source',{}).get(k)
                     for k in ('ack','curve','position')) for g in result['goals']),
                 pva_admitted=node.native_receipts.counts['admitted_position']>0)
+            if source_watch:
+                from concurrent.futures import ThreadPoolExecutor
+                expected=result['goals'][-1]['reply']['command_epoch']
+                def wait_epoch():
+                    with urlopen(f'http://127.0.0.1:{server.server_port}/command-epoch?after='+expected,timeout=2.) as response:
+                        return dict(reply=json.load(response),received_monotonic_ns=time.monotonic_ns())
+                with ThreadPoolExecutor(max_workers=1) as pool:
+                    waiting=pool.submit(wait_epoch)
+                    # Inspect this owned Condition only to witness an actual pending wait.
+                    pump(lambda:bool(node.command_epoch_condition._waiters),seconds=1.)
+                    stop=Request(f'http://127.0.0.1:{server.server_port}/stop',json.dumps({'task_id':task}).encode(),headers={'Content-Type':'application/json'})
+                    with urlopen(stop,timeout=2.) as response:stop_reply=json.load(response)
+                    notice=waiting.result(timeout=1.)
+                result['source_watch_notification']=dict(expected_epoch=expected,
+                    pending_wait_observed=True,stop_reply=stop_reply,**notice)
+                result['checks']['native_source_epoch_notifies_waiter']=(notice['reply']['command_epoch']!=expected
+                    and notice['reply']['command_epoch']==stop_reply['command_epoch'])
         except Exception as error:
             errors.append(type(error).__name__+': '+str(error))
             if node:
@@ -140,7 +161,8 @@ def run(output,domain):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True);p.add_argument('--domain-id',type=int,default=188)
-    args=p.parse_args();return run(args.output.resolve(),args.domain_id)
+    p.add_argument('--source-watch',action='store_true')
+    args=p.parse_args();return run(args.output.resolve(),args.domain_id,args.source_watch)
 
 
 if __name__=='__main__':raise SystemExit(main())

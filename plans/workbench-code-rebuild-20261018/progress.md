@@ -618,3 +618,12 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 - 范围：只证明有限失败恢复路径中的SDK server生产关闭；clock/pose/armed/图/暂停是显式替身，新响应约.3wall扣留仅可视化缓存，不当真实延迟、飞控消费或物理停稳。gap_fixed=false，分布式快照缺口未关闭，源冻结未部署。
 - Next/owner：当前根Codex核已有MAVSDK owner等待/停止能力及源失效传达，定义可观察失效时限；不靠多加一次GET或另造状态存储声称原子撤销。晚到远端PVA、可行备份、实际状态/地图/终端、在线MINCO/M3与动态仍未完。
 - 收尾/Knowledge：三SDK与端口/线程回收，约208KiB小原包保留、临时副本自动清理，无新大产物。station-execution.cjs新119增/3删Carry QA在途，初读/语法过、完整E2E未审，保留由原任务owner/根Codex接续，不混提交。updated：原Wiki/ROS2与FishBot来源链及入口补自洽旧快照与SDK析构kill边界，已读回；知识库大dirty保留，不写memory、不跨聊天。
+
+## 2026-10-28 变更等待到单SDK owner的传播候选
+
+- Done：新增默认OFF source-watch补片，在EPOCH＋REPAIR后复用原HTTP/RLock/Condition等待epoch；监视器只锁存，原Flight等待检查→recover负责控制。目标/stop/源失效/源时钟均通知；通道或观测失效明确拒绝，原tasks收拢，新目标不被旧watch迟交重新绑定。未新增服务/数据库，未部署冻结源。
+- 真实SDK最终ON b9dd64b7：原有效PVA 3包，失效至关闭2包仅position/mask2552，关闭后0；原state仍扣留即完成恢复，随后旧state实际读完不再派发PVA。源标记→接收通知1.405816ms/position返回13.630359ms/close33.305390ms，仅本轮观测非硬界。OFF91705b89保留旧缺口4PVA/0；两个SDK由生产close回收-9、端口/worker关，arm0、failed无落地。
+- Native：945adb19完整实际Sidecar构造/HTTP/native两目标通过；见证自有Condition等待者后stop，新epoch通知与stop回执相同，三进程exit0。独立原CPP回执/原包/RPC/epoch/端口三审计通过。两层试验未拼成完整ROS→SDK/PX4飞行；传感/源状态范围分别明示。
+- 验证：最终六模块75项10.193s/0skip，新增watch12项，含OFF已应用、六既有补片顺序、state/PVA等待、同epoch健康、源时钟、通道断开及旧watch收拢。原launcher空PYTHONPATH --help复现缺command_epoch，EPOCH补片增加一行根目录路径后同条件exit0；1c4d17fb两原记录/最终测试log保留，--help非ROS/飞行。首轮手工换epoch保留旧setpoint夹具改用真实goal Handler后过，未松门槛；首轮SDK82514原件保留。
+- Remaining/Next：当前根Codex用原before/after relay核在途PVA迟交与通知共存，远端接受不能因客户端取消宣称撤回，确认是否覆盖恢复位置。不重复加监视层；原子授权/全链硬TTL、可行备份、真实状态地图终端、MINCO在线/M3和动态仍未过。
+- 收尾/Knowledge：五小证据组约384KiB保留，临时源自动回收，9808字节测试log已copy读回后删临时副本；无新大缓存，所有自有进程/端口/worker结束。相对路径写补片/跨文件系统rename两命令失败已纠正，未动冻结源；Station119增/3删在途保留。updated：原Wiki来源链与入口补Condition通知与单owner/分层边界并读回，大dirty保留不盲整页提交，不写memory、不跨聊天。

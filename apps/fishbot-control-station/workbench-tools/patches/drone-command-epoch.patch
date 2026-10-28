@@ -588,3 +588,11 @@ new file mode 100644
 +            self.reject(node,'native_receipt_stream_unavailable: '+type(error).__name__)
 +        reason=self.reason()
 +        if reason and (node.active_goal or node.setpoint):self.reject(node,reason)
+diff --git a/ego/run_sidecar.sh b/ego/run_sidecar.sh
+--- a/ego/run_sidecar.sh
++++ b/ego/run_sidecar.sh
+@@ -11,3 +11,4 @@
+ fi
+ source "$ego_ws/install/setup.bash"
++export PYTHONPATH="$ego_here/..${PYTHONPATH:+:$PYTHONPATH}"
+ exec /usr/bin/python3 "$ego_here/sidecar.py" "$@"
