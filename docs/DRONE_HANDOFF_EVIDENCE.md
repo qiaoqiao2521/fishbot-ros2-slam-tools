@@ -634,3 +634,33 @@ cmake --build /home/muqiao/.cache/ros2-drone/ros-ack-witness-build --parallel 2
 没有SDK/PX4/Gazebo、解锁或飞行；原三冻结源c866441/d6f12ad/e0444f6 clean，EPOCH修补未部署。临时源码自动回收，六组约0.3MiB小原始证据保留忽略output；约4.7MiB独立构建缓存仅含当前可复用收包器与元数据，无重复大包或新渲染。原缓存源码的既有dirty、旧失败和遥测保留。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20；Jazzy回调差异等兼容事实留项目，不写memory。本对话独立审查，无跨聊天。
 
 Next/owner：根Codex先定位原生traj_server退出时publisher/datawriter生命周期异常，制作最小独立修补与无解锁复验；保留原退出失败。随后沿当前逐消息GID取证，补多生产者/重启下的候选失效与在线来源绑定。完整缓存期限、可行备份、原生空中采用、完整M3和动态闭环仍未完成，不解冻部署。 整体plan active。
+
+
+## Flight.run → recover 缓存替换链路复核（2026-10-28）
+
+按用户指定链路复核冻结flight.py与既有默认OFF REPAIR补片。本轮只读执行源码、复验现有夹具并重算历史SDK原包；未修改飞行行为、未部署补片、未启动SDK/PX4/ROS/Gazebo或飞行。
+
+| 分支 | 实际顺序与缓存结论 |
+| --- | --- |
+| 业务取消/普通故障 | run捕获CancelFlight或Exception；满足drone与armed/arm_requested条件后进入recover。PVA等待helper先取消并收拢本地await，不将它当作远端撤回 |
+| 仍持有Offboard | recovery_hover → 核定位 → 当前位置setpoint → setter返回并更新command_position/reference → planner /stop → 新观测与回退/降落验证。/stop不是SDK缓存清理接口 |
+| 已失去Offboard | 确认armed → action.hold → 位置setter → offboard.start → 遥测确认OFFBOARD → planner /stop。位置缓存替换与重新获得控制权分别确认 |
+| 恢复setter pending/报错 | reference仍可能是旧PVA；SDK可能尚未接受，也可能已接受但丢响应。补片用recovery_command记录unknown并走block_recovery暂停/清理，不继续planner /stop或声称落地；OFF维持原等待行为 |
+| 定位不可用 | 当前位置指令尚未下发就进入block_recovery；因此此时旧PVA仍可能保留，不能声称恢复一开始就清缓存 |
+| 已落地且disarmed | recover提前返回，不必替换PVA；依赖后续SDK关闭，单独的落地状态不等于缓存为空 |
+| 外部Task.cancel() | CancelledError传播并进finally清理，不自动业务recover；ON清旧landed/disarmed，标failed/task_cancelled。不能把它等同网页业务取消 |
+
+setpoint只在SDK调用成功返回后更新Python reference；报错时不能由reference反推SDK真实缓存。旧PVA与当前在途候选的期限保护不等于原生SDK硬TTL。恢复RPC的wait_for依赖协程配合取消，也不是对远端执行的回滚或绝对截止保证。生产close_mavsdk调用原owner的析构并wait服务器；历史SDK探针刻意将该关闭延后，故不构成生产清理链验证。
+
+本轮现有六模块共51项7.611s、0跳过通过：recovery_cache_chain、recovery_rpc_guard、recovery_tail_rpc、pva_rpc_guard、sdk_state_wait_probe、sdk_pva_wait_probe。覆盖真实run/recover方法与显式替身；asyncio慢任务提示不作为控制延迟实测。复验入口：
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_recovery_cache_chain test_drone_recovery_rpc_guard test_drone_recovery_tail_rpc test_drone_pva_rpc_guard test_drone_sdk_state_wait_probe test_drone_sdk_pva_wait_probe -q
+```
+
+对前述65850c7c、19798d4f、31e56157、73b6bb73四UUID的sdk-cache-peer.jsonl按各自原phase_results窗口重新调用现有wire_checks，全部通过，计数分别2/2/4/0、3/4/0、4/4/0、3/3/0，arm=0。此次是历史原包重算，不是新SDK试验；坐标、mask/frame/target/yaw及窗口完整性沿用既有检查。没有新发现需改写发送/恢复逻辑的反例。
+
+Remaining/Next：恢复位置setter自身延迟/接受后丢响应尚无同级真实SDK故障注入证据，替身已覆盖但不可升级为远端缓存已知；生产SDK关闭及实际停稳/落地也未获本轮证明。下一步可复用既有position relay注入，在无解锁synthetic peer里走真实run→recover的恢复setter失败分支。原生traj_server退出异常仍是另一未完成项，本轮未处理；完整缓存期限、可行备份、M3和动态闭环仍未通过。owner为当前根Codex。
+
+收尾：临时源码由既有TemporaryDirectory夹具清理，无新运行服务、大文件或可删重复产物；历史原包保留。SO101在途station-execution.cjs修改完整保留，不并入此次文档交付。Knowledge=already_covered，沿用Wiki/ROS2与FishBot§20的回执/缓存/物理结果分层，不写memory。
