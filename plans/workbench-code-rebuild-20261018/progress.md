@@ -610,3 +610,11 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 - 验证：六模块70项4.477s/0skip通过，含14项native、OFF/graph-only known-gap、ACK顺序与六补片组合。CPP当前目标单独增量构建过；两最终忽略目录各独立审计json通过。完整探针理想ROS pose/clock/单点cloud，相机/depth健康显式替身；trajectory使用独立release候选binary，原installed未换，无SDK/PX4/Gazebo/解锁或飞行。
 - Remaining/Next：来源与曲线数值准入不等原生goal/session/所有上游输入、yaw、SDK TTL或备份资格。当前根Codex下一项核/state快照到Flight使用间的epoch/时间窗口，复用既有迟交与缓存夹具；晚到远端PVA、生产关闭、M3/动态仍未闭合，三冻结源不部署。
 - 收尾/Knowledge：原小失败证据保留，临时源码回收，当前96.6MiB CPP缓存复用；比对确认native_receipts源码已完整嵌入补片后删除冗余scratch，释放12288分配字节，无重复大包。updated：原Wiki/ROS2与FishBot来源链新增数值同一性/三类就绪分层，开发知识入口补排队旧来源与FSM INIT触发；实际读回通过。知识库已有跨任务大dirty保留，不盲提交整页，不写memory、不联系其他聊天。
+
+## 2026-10-28 快照epoch缺口与原SDK关闭
+
+- Done：真实Flight/Sidecar方法、独立epoch与loopback HTTP复现旧快照A已生成、源失效B后仍能派发1条旧PVA，下一state才恢复；快照前失效/样本过期均拒绝。4新增检查明确含known-gap，不称修复；五相关模块63项5.960s/0skip。首轮仅测试预期拦截层文本错误，已按实际goto复查修正，未改飞行行为。
+- 真实SDK：复用transport和原run→recover→finally→close_mavsdk，最终193049a0-eab1-4bcc-a913-c309d65d0298旧PVA稳定窗4包、生产close后0包，原NED PVA/frame/target/yaw独立匹配。1条PVA RPC后SDK持续重发；新epoch响应释放后位置RPC成功，原close按4.0.5析构kill+wait读回PID534708/-9，并先于外层兜底回收。独立原包/时序15项过，HTTP/gRPC/worker关闭，arm0、任务failed无落地；两先行小回合保留。
+- 范围：只证明有限失败恢复路径中的SDK server生产关闭；clock/pose/armed/图/暂停是显式替身，新响应约.3wall扣留仅可视化缓存，不当真实延迟、飞控消费或物理停稳。gap_fixed=false，分布式快照缺口未关闭，源冻结未部署。
+- Next/owner：当前根Codex核已有MAVSDK owner等待/停止能力及源失效传达，定义可观察失效时限；不靠多加一次GET或另造状态存储声称原子撤销。晚到远端PVA、可行备份、实际状态/地图/终端、在线MINCO/M3与动态仍未完。
+- 收尾/Knowledge：三SDK与端口/线程回收，约208KiB小原包保留、临时副本自动清理，无新大产物。station-execution.cjs新119增/3删Carry QA在途，初读/语法过、完整E2E未审，保留由原任务owner/根Codex接续，不混提交。updated：原Wiki/ROS2与FishBot来源链及入口补自洽旧快照与SDK析构kill边界，已读回；知识库大dirty保留，不写memory、不跨聊天。

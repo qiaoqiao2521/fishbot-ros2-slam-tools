@@ -839,3 +839,45 @@ python3 drone-sidecar-native-probe.py --domain-id 188 --output "$SIDECAR_OUTPUT"
 收尾：小原包/失败记录原地保留，不提交Git；当前可复用CPP构建缓存约96.6MiB保留，测试临时源回收，无新大包或渲染。逐消息候选六文件在途工作本轮完成审阅、局部验证与原生入口核对后串行交付，仍默认OFF；冻结源未部署，未恢复其他聊天/子Agent。Knowledge=updated，原Wiki/ROS2与FishBot来源链段落及开发知识入口补逐消息数值核对与FSM就绪触发，实际读回见项目进度；知识库既有跨任务dirty保留，不盲整页提交。
 
 Next/owner：当前根Codex核HTTP `/state` 快照到Flight使用之间的epoch/时间窗口，复用已有迟到HTTP与SDK缓存夹具，先闭合跨组件失效传播；继续核生产关闭与晚到远端PVA，不复派效果未知的控制请求。全链TTL、可行备份、实际状态/地图/终端资格、MINCO在线采用、M3与动态飞行仍未完成；本片不解除冻结、不将局部成功替代整体目标。
+
+## 分布式快照缺口与生产SDK关闭见证（2026-10-28）
+
+### 已确认缺口，尚未修复
+
+新增 `test_drone_state_epoch_window.py`，复用原source-graph/ACK与RecoveryHarness，临时应用既有EPOCH＋REPAIR；Flight和Sidecar各持独立epoch对象。真实方法与真实loopback HTTP均复现：
+
+1. `/goal`回执为epoch A，`/state`生成ready/A快照，PVA也标A。
+2. 快照生成后，Sidecar真实 `invalidate_command_source` 旋转为B并清目标/曲线/队列/setpoint；随后才将旧快照交给Flight。
+3. Flight本地clock epoch未变，样本源时刻与其仿真时刻均10.15，旧快照内部身份全部一致，仍派发一次PVA。
+4. 下一次读到B才抛 `command_epoch_mismatch`，进入原recover，位置替换后 `/stop`。最终failed，观测在显式夹具边界终止，无落地。
+
+反向对照：失效在快照生成前，0条PVA；样本到达时已过原.3s发送前门槛，同样0条PVA。首轮过期用例原预期写成helper错误，但实际先被goto发送前复查拦截；仅修正测试预期，未改执行器。局部known-gap测试成功意味着缺口被稳定观察，不是缺口已关闭。追加普通GET只移动最后一次读取/使用的窗口，不提供原子授权；这轮不靠重复请求或新状态存储伪装修复。
+
+### 真实SDK、HTTP与原Flight finally
+
+`drone-sdk-production-close-probe.py`复用既有SDK cache transport、上述源节点夹具和原HTTP读取函数。Flight实际运行临时EPOCH＋REPAIR组合的run/goto/setpoint/recover/finally；其 `close_mavsdk` 及 `atomic_json` 从冻结源码原样提取，代替原探针刻意延迟关闭的替身。RPC包装只记录调用并转给实际System；探针不调用解锁，合成peer拒绝所有arm请求。源图、ACK/曲线、pose/clock/armed/Offboard遥测、暂停仍是显式替身，无ROS/Gazebo/PX4。
+
+| UUID（忽略output/drone-committed） | 原报文窗口：旧PVA／生产关闭后 | 自有SDK结果 |
+| --- | --- | --- |
+| c9fe05d2-8733-4588-9a22-2155f3f8decb | 5／0；首版仅mask判别，原包保留 | PID528582、exit-9 |
+| 45110d28-4c3b-41f9-aad2-4a26df39d3d6 | 4／0；补完整活动PVA、frame/target/yaw判别 | PID530990、exit-9 |
+| 193049a0-eab1-4bcc-a913-c309d65d0298 | 最终4／0；另保存HTTP端口/worker身份供独立复核 | PID534708、exit-9 |
+
+固定新epoch响应被显式扣留约.3墙秒，让SDK缓存重发可见；不是自然延迟或实飞时限。最终旧PVA在约.20s稳定窗内4包，mask2048/frame1/target7:1，ENU转NED三阶量和yaw均匹配原旧快照。只调用1次PVA RPC；释放新epoch响应后恢复position RPC成功，原run finally调用生产close，之后约.25s窗0包。两窗口各排除前100ms仅用于观察对齐，不放宽任何控制/飞行门槛。快照里的cache字段仍为夹具，真实SDK结论只来自原报文和实际RPC。
+
+已安装mavsdk-grpc4.0.5的System析构实现是kill自有server并重新初始化Python实例，因此-9是该路径的预期结束方式，不称正常退出或受控降落。原close在析构前保留Popen，再wait并写mavsdk-process.json；最终记录pid/argv/task、stop_requested_by_executor和cleanup_wait_confirmed与原sdk-process一致。生产close返回前已读回-9；外层transport的兜底清理此时只见已退出实例。本轮补上该有限失败/恢复场景的真实生产SDK server关闭，未证明所有清理异常或空中停稳。
+
+最终 `independent-production-close-audit.json` 独立重读sdk-cache-peer.jsonl、RPC/event时间、两epoch快照与生产记录，15项通过：数值/序号与4／0窗口一致、失效先于PVA调用、原owner被生产close回收、恢复RPC→close→观察窗顺序成立，/proc不存在、HTTP/gRPC端口已关、worker已结束、arm命令0。原任务failed/未落地，`gap_fixed=false` 与 `flight_accepted=false` 保留。
+
+相关最终五模块 **63项5.960s/0skip通过**（其中4项新增，含两条known-gap见证），真实SDK回合不算单测或飞行。复验：
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_state_epoch_window test_drone_command_epoch_patch test_drone_state_wait_guard test_drone_pva_rpc_guard test_drone_recovery_cache_chain -q
+# 在workbench-tools目录，OUTPUT指向新UUID目录；只接合成peer，不连接飞控。
+/home/muqiao/.cache/ros2-drone/venv/bin/python drone-sdk-production-close-probe.py --output "$OUTPUT"
+```
+
+收尾：三SDK实例均已回收，最终端口与线程关闭；三组约208KiB独有小原包/记录保留，无新大缓存或临时帧，测试临时源自动回收。共享station-execution.cjs出现119增/3删的Carry QA在途改动，定点初读/语法检查通过、完整E2E未审；完整保留不混入本次提交、不联系其他聊天。三冻结源不变，不新增控制行为、默认开关不变。
+
+Next/owner：当前根Codex沿已有MAVSDK owner等待/停止接口核失效传播与可观察时限，让源失效能到达实际发送/缓存owner；先核可复用通道及剩余窗口，不把二次GET或本地epoch比较宣称原子撤销。随后继续晚到远端PVA和可行备份/实际状态地图终端资格；本轮生产server关闭正例不代替安全停稳、落地、M3或动态闭环。Knowledge=updated，原Wiki来源链及入口补“自洽旧快照不等当前授权、SDK析构kill与外层terminate分开”，项目运行数值只留项目，知识库大dirty保留。
