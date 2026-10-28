@@ -600,3 +600,37 @@ cd ../workbench-tools
 边界与收尾：日志均MAVSDK v4.0.5，真实二进制/gRPC/MAVLink缓存；planner、pose、telemetry、clock、pause与恢复观测为synthetic，三轮仍failed/landedFalse/disarmedFalse。实际SDK关闭由探针owner延后执行以观测缓存，不验证生产close、物理制动或落地。无PX4/ROS/Gazebo、arm/start/land。SDK实际监听*，本地客户端不等监听仅loopback。161287/start308277、161404/start308490、167035/start321990均wait回收exit-15，六个SDK/relay TCP端口关闭，原包arm=0；临时源码自动回收，约200KiB小原始证据原地保留，未生成重复大副本。三冻结源c866441/d6f12ad/e0444f6 clean，补片未部署，旧失败与遥测保留。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20；事实留项目，不写memory，本对话审查无跨聊天。
 
 Next/owner：根Codex先核原生ACK→Bspline→PositionCommand的来源与跨topic顺序活性，并定点确认固定运行依赖，选现有无解锁入口取证。完整缓存期限、分布式state窗口、可行备份、原生空中采用、完整M3与动态闭环仍未完成；不把本地RPC保护当完整Safety Shield。 整体plan active。
+
+
+## 原生ACK取证与首曲线有限缓存（2026-10-28）
+
+本机Jazzy与固定ego_ws消息接口可用，source /opt/ros/jazzy/setup.bash及ego_ws/install/setup.bash后两原生可执行文件的动态依赖可解析；未安装新依赖或重建原算法。使用/usr/bin/python3导入rclpy/traj_utils/quadrotor_msgs，避免把未source时的ldd缺库当环境损坏。原缓存树23a8d5a＋既有Jazzy/算法改动保持，实际运行对象是现有install下ego_planner_node、traj_server，不把源码HEAD代替二进制溯源。
+
+[ROS探针](../apps/fishbot-control-station/workbench-tools/drone-ros-ack-probe.py)在独立domain183、唯一topic前缀，向现有C++节点提供显式synthetic /clock、固定odom和远离目标的单点scene cloud；不是Gazebo深度或飞行。两个目标(2,0,1)与(0,2,1)收到原生ACK、Bspline与PositionCommand。最终UUID7d33e778-f0ef-45a5-950b-b7528b6c78ee中ACK为11120000000:0→curve1/PVA1、11160000001:1→curve2/PVA2；callback顺序均ACK先，未观察实际网络乱序。ACK仅说明接收时ID floor，不是路径/优化成功。
+
+rclpy当前callback info实测dict仅含source_timestamp、received_timestamp及两序号，不暴露publisher_gid。先行4d21f8b2/3acb183e因误认接口形状失败，修正后4fb6cfba正向链成立但只得到publisher graph，未升级逐消息来源。已比较本机rclcpp MessageInfo::get_rmw_message_info，可读取16字节RMW GID；新增只读[原生收包器](../apps/fishbot-control-station/workbench-tools/ros-ack-witness/witness.cpp)与[独立CMake目标](../apps/fishbot-control-station/workbench-tools/ros-ack-witness/CMakeLists.txt)，复用已装rclcpp/消息/nlohmann_json，不改消息、规划器或执行器，也不新造控制协议。
+
+最终原生记录ros-events.jsonl与witness.jsonl分别包含Python/CPP回执。ACK2/2、曲线2/2、PositionCommand16/16按(source_timestamp,publication_sequence_number)唯一关联，CPP所载字段与Python一致，三个实际publisher_gid均匹配预期节点的唯一graph endpoint。独立重算一致。cpp_per_message_publisher_verified=true只授予本次连续已知实例的收包归属；source_provenance_verified仍false：原生消息无goal/session，未部署在线来源筛选，重启/多writer仍未证明。
+
+**首曲线活性修复：** 原EPOCH补片在未ACK时直接return，若接收处理顺序为Bspline→ACK，曲线记录永久丢失，之后PositionCommand(id)无法补回。新[7项缓存检查](../apps/fishbot-control-station/workbench-review-tests/test_drone_ack_curve_buffer.py)首反例先红；默认ON增加最多20条待ACK缓存，沿现有轨迹历史容量，不限制任务次数。ACK同RLock核epoch、goal_stamp、ID floor后重放；goal/stop/clock失效清缓存。原source start/end、traj_id及received_sim_s保持，重放另记ack_replayed_sim_s，不把等待时间刷新成感知新鲜度。OFF保持旧schema/行为。
+
+[原生记录回放器](../apps/fishbot-control-station/workbench-tools/drone-ack-order-replay.py)以f3de761的旧EPOCH补片作基线，临时源码分别只交付一次曲线和一次命令，两个目标×ACK先/曲线先×旧/新共8组合。最终回放UUID b7dcf580-857e-4d9e-92ca-c925935f4a02：旧版ACK先2/2登记、曲线先0/2；新版两顺序均2/2登记，时间与载荷不改。该处理乱序是受控注入，不宣称现场网络曾乱序；接收样本登记也不是PX4采用。早期无GID记录回放fc6fe477保留，不替代最终来源证据。
+
+验证：7缓存＋4收包/退出审计＋原20 epoch共31项1.889s、0skip；包含三补片六应用顺序/compile与真实组合、OFF、floor/错ACK、goal/clock清理、原receipt、错误GID/缺回执/序号/载荷及空图反例。独立最初6缓存＋20 epoch共26项1.526s过；独立CPP/Python原包关联和3收包局部过。不重跑未改124项或全机器人实验。ACK早于planNextWaypoint的失败分支是语义边界；固定planGlobalTraj至少构造两点，其cols<2返回false对合法当前输入未证明可达，未作为已native复现缺陷。
+
+**收尾异常未掩盖：** 最终三个自有PID241317/planner、241318/trajectory、241319/receipt均已wait回收、/proc消失；planner/witness exit0，但traj_server exit-11，日志在SIGINT后报datawriter与publisher handle析构错误。旧两失败组trajectory为-6，无GID正向组为SIGTERM后-15。原报告曾仅processes_reaped=true/exit0，独立审核指出其不代表正常退出；原始summary不改写，新增independent-cleanup-audit.json，全部native_shutdown_ok=false。当前探针分开检查正常退出，非零退出不再仅因回收成功而返回诊断通过；已有最终收包关联仍有效，整个原生生命周期验收未过。
+
+```sh
+source /opt/ros/jazzy/setup.bash
+source /home/muqiao/.cache/ros2-drone/ego_ws/install/setup.bash
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-tools
+cmake -S ros-ack-witness -B /home/muqiao/.cache/ros2-drone/ros-ack-witness-build -DCMAKE_BUILD_TYPE=Release
+cmake --build /home/muqiao/.cache/ros2-drone/ros-ack-witness-build --parallel 2
+/usr/bin/python3 drone-ros-ack-probe.py --output /tmp/drone-native-ack-new --receipt-witness /home/muqiao/.cache/ros2-drone/ros-ack-witness-build/drone_ros_ack_witness
+# 无需ROS节点；对已保留的原生记录进行受控处理乱序回放。
+/home/muqiao/.cache/ros2-drone/venv/bin/python drone-ack-order-replay.py --recording output/drone-committed/7d33e778-f0ef-45a5-950b-b7528b6c78ee --output /tmp/drone-ack-replay-new
+```
+
+没有SDK/PX4/Gazebo、解锁或飞行；原三冻结源c866441/d6f12ad/e0444f6 clean，EPOCH修补未部署。临时源码自动回收，六组约0.3MiB小原始证据保留忽略output；约4.7MiB独立构建缓存仅含当前可复用收包器与元数据，无重复大包或新渲染。原缓存源码的既有dirty、旧失败和遥测保留。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20；Jazzy回调差异等兼容事实留项目，不写memory。本对话独立审查，无跨聊天。
+
+Next/owner：根Codex先定位原生traj_server退出时publisher/datawriter生命周期异常，制作最小独立修补与无解锁复验；保留原退出失败。随后沿当前逐消息GID取证，补多生产者/重启下的候选失效与在线来源绑定。完整缓存期限、可行备份、原生空中采用、完整M3和动态闭环仍未完成，不解冻部署。 整体plan active。

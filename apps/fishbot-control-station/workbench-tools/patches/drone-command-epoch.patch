@@ -63,14 +63,16 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
  from motion_budget import configure_motion_budget
 +from command_epoch import CommandEpoch
  
-@@ -57,2 +58,3 @@
+@@ -57,2 +58,4 @@
          self.requests = queue.Queue()
 +        self.command_epoch = CommandEpoch()
++        self.pending_ack_curves = {}
          self.history = deque(maxlen=300)
-@@ -478,2 +480,24 @@
+@@ -478,2 +481,26 @@
  
 +    def rotate_command_epoch(self, reason):
 +        self.command_epoch.rotate(reason)
++        getattr(self, "pending_ack_curves", {}).clear()
 +        self.trajectory_times.clear()
 +        self.latest_trajectory = None
 +
@@ -81,6 +83,7 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +        if not reason:
 +            return
 +        old_stamp = self.goal_stamp_ns
++        getattr(self, "pending_ack_curves", {}).clear()
 +        self.active_goal, self.setpoint = None, None
 +        self.goal_acknowledged = False
 +        self.goal_stamp_ns = self.planning_since = None
@@ -92,50 +95,85 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +            self.stop_pub.publish(String(data=str(old_stamp)))
 +
      def on_bspline(self, msg):
-@@ -487,2 +511,6 @@
+@@ -487,2 +514,20 @@
          with self.lock:
 +            self.observe_command_epoch()
-+            if self.command_epoch.enabled and (not self.active_goal or not self.goal_acknowledged or
-+                                               msg.traj_id < self.min_trajectory_id):
-+                return
++            replayed = None
++            if self.command_epoch.enabled:
++                if not self.active_goal:
++                    return
++                pending = getattr(self, "pending_ack_curves", None)
++                if pending is None:
++                    pending = self.pending_ack_curves = {}
++                if not self.goal_acknowledged:
++                    pending[msg.traj_id] = {"message": msg, "epoch": self.command_epoch.token,
++                        "goal_stamp_ns": self.goal_stamp_ns, "received_sim_s": self.sim_now()}
++                    for old_id in sorted(pending)[:-20]:
++                        del pending[old_id]
++                    return
++                if msg.traj_id < self.min_trajectory_id:
++                    pending.pop(msg.traj_id, None)
++                    return
++                replayed = pending.pop(msg.traj_id, None)
              previous = self.latest_trajectory
-@@ -519,2 +547,3 @@
+@@ -498,5 +543,7 @@
+                    curve.derivative(2)(begin).tolist()]
+-            event = dict(trajectory, received_sim_s=self.sim_now(),
++            event = dict(trajectory, received_sim_s=(replayed["received_sim_s"] if replayed else self.sim_now()),
+                          task_id=(self.active_goal or {}).get("task_id"),
+                          goal_id=(self.active_goal or {}).get("goal_id"), start_pva=pva)
++            if replayed:
++                event["ack_replayed_sim_s"] = self.sim_now()
+             if previous and previous["start_sim_s"] <= start <= previous["start_sim_s"] + previous["duration_s"]:
+@@ -519,2 +566,3 @@
          with self.lock:
 +            self.observe_command_epoch()
              self.last_trajectory_id = max(self.last_trajectory_id, msg.trajectory_id)
-@@ -537,2 +566,4 @@
+@@ -537,2 +585,4 @@
                                   goal_id=self.active_goal.get("goal_id"))
 +            if self.command_epoch.enabled:
 +                self.setpoint["command_epoch"] = self.command_epoch.token
  
-@@ -544,2 +575,3 @@
+@@ -544,2 +594,3 @@
          with self.lock:
 +            self.observe_command_epoch()
              if self.active_goal and stamp == self.goal_stamp_ns:
-@@ -620,2 +652,4 @@
+@@ -547,2 +598,11 @@
+                 self.goal_acknowledged = True
++                if self.command_epoch.enabled:
++                    pending = getattr(self, "pending_ack_curves", {})
++                    for identity, entry in sorted(list(pending.items())):
++                        if (entry["epoch"] != self.command_epoch.token or
++                                entry["goal_stamp_ns"] != self.goal_stamp_ns or identity < self.min_trajectory_id):
++                            pending.pop(identity, None)
++                            continue
++                        # The RLock keeps goal/epoch checks and replay in one callback transaction.
++                        self.on_bspline(entry["message"])
+ 
+@@ -620,2 +680,4 @@
      def tick(self):
 +        with self.lock:
 +            self.observe_command_epoch()
          self.flush_depth()
-@@ -639,2 +673,4 @@
+@@ -639,2 +701,4 @@
                  command = self.requests.get_nowait()
 +                if self.command_epoch.enabled and command.get("command_epoch") != self.command_epoch.token:
 +                    continue
                  if command["type"] == "stop":
-@@ -668,2 +704,3 @@
+@@ -668,2 +732,3 @@
          with self.lock:
 +            self.observe_command_epoch()
              now, wall = self.sim_now(), time.monotonic()
-@@ -699,2 +736,4 @@
+@@ -699,2 +764,4 @@
              point = self.setpoint
 +            if self.command_epoch.enabled and point and point.get("command_epoch") != self.command_epoch.token:
 +                reason = reason or "command_epoch_mismatch"
              if not reason and point and now - point["stamp_sim_s"] > 0.3:
-@@ -720,2 +759,3 @@
+@@ -720,2 +787,3 @@
              return {"ready": reason is None, "simulation_s": now,
 +                    **({"command_epoch": self.command_epoch.token} if self.command_epoch.enabled else {}),
                      "runtime_identity": {"pid": os.getpid(), "start_ticks": start_ticks(os.getpid()),
-@@ -942,2 +982,9 @@
+@@ -942,2 +1010,9 @@
                  with node.lock:
 +                    node.observe_command_epoch()
 +                    if node.command_epoch.enabled and body["type"] == "goal":
@@ -145,23 +183,23 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +                            self.send(503, {"error": current["reason"]})
 +                            return
                      if body["type"] == "stop":
-@@ -947,2 +994,4 @@
+@@ -947,2 +1022,4 @@
                              return
 +                        if node.command_epoch.enabled:
 +                            node.rotate_command_epoch("stop")
                          # Cancellation must work even while Gazebo /clock is paused.
-@@ -957,2 +1006,4 @@
+@@ -957,2 +1034,4 @@
                      else:
 +                        if node.command_epoch.enabled:
 +                            node.rotate_command_epoch("goal")
                          node.active_goal = body
-@@ -962,2 +1013,5 @@
+@@ -962,2 +1041,5 @@
                          node.goal_stamp_ns = node.get_clock().now().nanoseconds + node.goal_sequence
 +                        if node.command_epoch.enabled:
 +                            node.goal_stamp_ns = node.command_epoch.next_goal_stamp(node.goal_stamp_ns)
 +                            body["command_epoch"] = node.command_epoch.token
                          node.planning_since = node.goal_stamp
-@@ -967,4 +1021,6 @@
+@@ -967,4 +1049,6 @@
                          node.requests.put(body)
 +                    reply_epoch = node.command_epoch.token
                  self.send(202, {"accepted": True, "task_id": body.get("task_id"),

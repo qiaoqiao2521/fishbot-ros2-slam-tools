@@ -555,3 +555,13 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - 验证：124项14.122s、0跳过通过（含原冻结基线已知缺口见证，不是飞行验收）；独立新10项1.370s、最后取消/组合5项.492s过。首轮组合冲突与旧判词/新增返航负例均定位后修，不拿中途119/123绿色替代最终检查。
 - 边界/收尾：planner/位姿/遥测/clock/pause为synthetic，生产SDK清理刻意延后探针owner，仍failed无landed，不构成停稳或飞行验收。三SDK进程/六TCP端口回收、临时源码自动删除，小原始证据约200KiB忽略保留，无PX4/ROS/Gazebo/大构建，三冻结源clean。Knowledge=already_covered Wiki§20，项目事实不写memory；本对话独立审查无跨聊天。
 - Next/owner：根Codex先核原生ACK→Bspline→PositionCommand的来源与跨topic顺序活性，并定点确认固定运行依赖，选现有无解锁入口取证。完整缓存期限、分布式state窗口、可行备份、原生空中采用、完整M3与动态闭环仍未完成；不把本地RPC保护当完整Safety Shield。 整体plan active。
+
+
+## 2026-10-28 原生ACK与首曲线活性
+
+- Current/Done：原生installed EGO＋traj_server处理两synthetic ROS目标，ACK floor0→curve1/PVA1、floor1→curve2/PVA2；新增只读rclcpp MessageInfo收包器补Jazzy rclpy缺GID接口。最终UUID7d33e778中ACK2/2、曲线2/2、PVA16/16按源时间/序号/载荷关联CPP GID，匹配预期graph，独立复核一致；不等原生goal/session或在线准入已闭合。
+- 修复：默认OFF EPOCH补片新增有限待ACK缓存，ACK同锁按epoch/goalstamp/floor重放；原receipt和source时间不刷新，goal/stop/clock失效清。原native记录受控乱序8组合b7dcf580：旧ACK先2/2、曲线先0/2，新两顺序均2/2登记；网络实际乱序未观察，不发控制。
+- 验证：最终31项1.889s/0skip（缓存7/收包退出4/原epoch20），含六顺序及组合。CPP独立cache编译成功；独立26项1.526s与收包3项过。未重跑未改124项。详见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- Issues：最终traj_server SIGINT后datawriter/publisher析构，exit-11；另早期两组-6、无GID组SIGTERM后-15。三个最终PID均回收仅说明资源释放，native_shutdown_ok=false。保留原summary/失败日志，新增独立cleanup审计；当前探针不再把回收等同正常退出。原生生命周期验收未过。
+- 边界/收尾：synthetic clock/odom/单点cloud，非Gazebo、深度或飞行；无SDK/PX4/解锁。临时源码回收、六组约0.3MiB原证据及4.7MiB当前收包器构建缓存保留，无重复大副本，三冻结源clean且未部署，原ego_ws dirty不改。Knowledge=already_covered Wiki§20，兼容事实留项目，不写memory；本对话审查无跨聊天。
+- Next/owner：根Codex先定位原生traj_server退出时publisher/datawriter生命周期异常，制作最小独立修补与无解锁复验；保留原退出失败。随后沿当前逐消息GID取证，补多生产者/重启下的候选失效与在线来源绑定。完整缓存期限、可行备份、原生空中采用、完整M3和动态闭环仍未完成，不解冻部署。 整体plan active。
