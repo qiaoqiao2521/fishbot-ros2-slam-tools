@@ -981,3 +981,18 @@ DRONE_SOURCE_WATCH=1 /home/muqiao/.cache/ros2-drone/venv/bin/python ../workbench
 Next/owner：当前根Codex在独立分区、无飞机的最小Gazebo世界核真实暂停回执与仿真时钟/物理状态停止；保留拒绝/超时负例。随后再接实际状态/地图/终端和可行备份。源失效到关闭前有旧PVA，不能凭本轮清理可达性称控制安全、原子撤销、M3或动态闭环已过；三冻结源未部署。
 
 收尾：自有SDK/worker回收、HTTP/gRPC/relay端口关闭；独有失败与原包保留，临时源自动清理、两/tmp测试log复制读回后删除。原Station Carry QA119增/3删保留，未混交/跨聊天；Knowledge=updated，原Wiki及入口补原生超时/IPC/阻塞线程分层并读回，知识库大dirty保留，不写memory。
+
+
+## 真实网页静态OFF/ON与动态A/B（2026-10-28）
+
+用户已要求停止新增离线工具/合成夹具，跳过专门无飞机暂停实验。本轮复用原5186网页、drone-ego-execution.cjs和drone-execution.cjs真实运行：9轮飞行、1轮失败预演，MINCO不参与。完整Task ID、视频目录、有效配置和原生时间表见[研究交接](/home/muqiao/文档/ChatGPT/ros2/plans/factory-air-ground-arm-20261024/progress.md#用户收紧后直接飞行2026-10-28)。本节取代上一节Next，不要求先做无飞机暂停。
+
+- 简化1m宽/4m高墙OFF任务21ae28f5、ON子集6ca4265e均四到点/完成/landed/disarmed/passed；最大真值速度1.739975/1.729125m/s，最小净空.764880/.729241m。原4m宽墙a7ed8b79仍失败，不能合并成绩。
+- 两ON返航末端389ff93d/f60a3cc8被cached_command_source_expired误杀，关闭cached_reference期限拦截后通过；新在途候选检查与epoch/graph/watch/RPC限时保留，NATIVE_RECEIPTS=0。不称全套拦截集成。补片保持默认OFF；历史85项未重跑或借用为本次通过项。
+- 地图查询等待只调ROS6s/HTTP7s/通路8s，原速度/高度/净空和安全返回不变。动态新目标等待15s只是已实跑配置，未解决紧停。
+- 动态A首轮86fe4b8e到10m后返航超时，恢复落地但failed。同版A a3d5a7d9/B957c871b（0/50ms、drop0、seed17）均去程planner_emergency，恢复occupied_space阻断，未确认落地/disarm；B高2.209894m还超2.2m。原始失败保留，不归因延迟单因素。
+- 当前已有原生日志发送→PX4 ingress→控制used对应。A曲线5：Flight25.512sim，ingress25512000µs、used25528000µs；B曲线9：Flight25.248sim，ingress25248000µs、used25256000µs。跨域不直接相减，源曲线起点不冒充精确publish；最近深度融合尚未对应移动柱格，hazard→safe仍未闭合。
+- 原QA增加真实录屏与原生MCAP seek/play/pause/rewind；成功ON流程7项通过。切换观测PX4 cache后再次用现有replay-only入口，3项通过、模型200、零控制写/零WS/零页面错误。非飞行回合不算新Task。
+- 真实录像：`apps/fishbot-control-station/workbench-tools/output/drone-live/2d0db740-28a3-4f8e-a646-6f94f45577aa/static-on-flight.mp4`，H264/1280×880/96.720s。原WebM、MCAP、Task报告及失败视频保留，ego-success.png已目视；不是生成动画。
+
+Next/owner：当前聊天根Codex只读本轮A原planner.log的首次refine_collision分支，最小变更后同场景复飞再同版B；不新增评估脚本/夹具。原drone/PX4/GCOPTER冻结树clean，实际改动在既有drone仓分支codex/live-baseline-20261028；自有仿真/SDK已回收，5186网页保留，SO101 Station既有119增/3删不混交。Knowledge=already_covered；项目事实留项目，整体计划未完成。

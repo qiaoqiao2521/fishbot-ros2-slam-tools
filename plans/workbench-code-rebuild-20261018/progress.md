@@ -1,5 +1,11 @@
 # 实施进度
 
+## 2026-10-28 无人机实际网页飞行交付
+
+- 已跳过专门无飞机暂停；复用5186、原任务入口/预演/录像/MCAP。简化1m宽/4m高墙OFF21ae28f5、ON子集6ca4265e均完成并落地/disarm，原生回放通过；缓存期限误杀项关闭、NATIVE_RECEIPTS=0，不能称全保护通过。
+- 动态A a3d5a7d9/B957c871b仍紧停、恢复阻断且未确认落地，B另超高；已有发送→PX4接收→used，移动柱特定入图因果仍缺。完整新ID/原包/录像及四步表见研究计划factory-air-ground-arm-20261024/progress.md末节和docs/DRONE_HANDOFF_EVIDENCE.md末节。
+- 本轮只修改原QA录屏/回放与两现有补片的缓存拦截策略，没有新增离线工具/合成夹具，也未重跑历史85项。原Station Carry QA119增/3删保留不混交。下一步当前聊天根Codex从本轮EGO直接失败分支最小修改复飞，MINCO冻结。Knowledge=already_covered。
+
 ## 2026-10-25 M2六阶段事件与时钟夹具
 
 - Current：外部离线合同34声明case期望全吻合，6一致/28不成立/未评分0。全部actual_execution_admission=not_performed；M2部分完成、M3冻结、动态未过、goal active。

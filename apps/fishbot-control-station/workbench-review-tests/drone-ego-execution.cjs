@@ -49,7 +49,8 @@ const readTask = async (request, id) => {
 };
 (async () => {
   const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true, args: ['--no-sandbox'] });
-  const page = await browser.newPage({ viewport: { width: 1600, height: 1100 }, acceptDownloads: true });
+  const page = await browser.newPage({ viewport: { width: 1600, height: 1100 }, acceptDownloads: true,
+    recordVideo: { dir: output, size: { width: 1280, height: 880 } } });
   let activeId;
   page.on('pageerror', error => { result.pageErrors.push(error.message); save(); });
   for (const event of ['request', 'response', 'requestfailed']) page.on(event, value => {
@@ -193,6 +194,29 @@ const readTask = async (request, id) => {
     assert.equal(result.planPosts.length, 1, 'Reload must not submit a second plan');
     assert.deepEqual(result.pageErrors, []);
     checked('completed-ego-task-and-history-survive-refresh-with-one-total-task-post');
+    const replayQuery = new URLSearchParams({ ds: 'remote-file',
+      'ds.url': new URL(task.artifacts.mcap, base).href,
+      layoutUrl: `${base}/layouts/drone-review.json` });
+    const replayUrl = `${base}/?${replayQuery}`;
+    await page.goto(replayUrl);
+    const playbackTime = page.getByTestId('PlaybackTime-text').locator('input');
+    await expect(playbackTime).toBeVisible({ timeout: 90000 });
+    await expect(page.getByTestId('play-button')).toBeEnabled();
+    const first = task.report.visits[0].simulation_s;
+    const middle = (first + task.report.visits.at(-1).simulation_s) / 2;
+    const seek = async seconds => {
+      await playbackTime.fill(seconds.toFixed(3)); await playbackTime.press('Enter'); await playbackTime.blur();
+      await expect.poll(async () => Number(await playbackTime.inputValue()), { timeout: 15000 }).toBeCloseTo(seconds, 2);
+    };
+    await seek(middle);
+    await page.getByTestId('play-button').click();
+    await expect.poll(async () => Number(await playbackTime.inputValue()), { timeout: 10000 }).toBeGreaterThan(middle + .5);
+    await page.getByTestId('play-button').click();
+    await seek(first);
+    await page.screenshot({ path: path.join(output, 'native-replay.png'), fullPage: true });
+    assert.equal(result.posts.length, 1, 'Replay seek/play/rewind must not submit control requests');
+    result.replay = { url: replayUrl, seekPlayRewind: true, controlTaskPosts: result.posts.length - 1 };
+    checked('native-mcap-seek-play-rewind-without-new-control-task');
     result.passed = true;
     save();
     console.log(JSON.stringify({ passed: true, id: task.id, checks: result.checks, output }));

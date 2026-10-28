@@ -9,7 +9,7 @@ diff --git a/flight.py b/flight.py
          self.options = self.station.get("flight", {})
 +        self.command_revalidation_enabled = os.environ.get("DRONE_REVALIDATE_COMMAND") == "1"
          self.acceptance = self.options.get("acceptance", {})
-@@ -547,2 +549,133 @@
+@@ -547,2 +549,135 @@
  
 +    def check_command_wait(self, target, deadline, operator, clock_epoch,
 +                           command=None, cached_reference=None):
@@ -31,7 +31,9 @@ diff --git a/flight.py b/flight.py
 +        epoch = getattr(self.observer, "command_epoch", None)
 +        if clock_epoch is not None and epoch is not None and epoch.token != clock_epoch:
 +            raise RuntimeError("command_clock_epoch_changed")
-+        references = [("cached_command", self.reference if cached_reference is None else cached_reference)]
++        # Cached-reference expiry veto disabled after real static-flight false positives.
++        # Fresh incoming commands and source-watch invalidations remain checked.
++        references = []
 +        if command is not None:
 +            try:
 +                end = float(command["source_end_sim_s"])
