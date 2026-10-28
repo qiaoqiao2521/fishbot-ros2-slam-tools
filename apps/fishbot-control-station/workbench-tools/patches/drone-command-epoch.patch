@@ -59,14 +59,12 @@ diff --git a/flight.py b/flight.py
 diff --git a/ego/sidecar.py b/ego/sidecar.py
 --- a/ego/sidecar.py
 +++ b/ego/sidecar.py
-@@ -36,4 +36,5 @@
- from perception import fixed_collision_boxes, flattened_boxes, points_in_boxes
+@@ -37,2 +37,4 @@
  from motion_budget import configure_motion_budget
 +from command_epoch import CommandEpoch
++from native_receipts import NativeReceipts
  
- 
-@@ -56,4 +57,9 @@
-         self.lock = threading.RLock()
+@@ -57,2 +59,7 @@
          self.requests = queue.Queue()
 +        self.command_epoch = CommandEpoch()
 +        self.pending_ack_curves = {}
@@ -74,9 +72,24 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +        self.source_expected_nodes = {"ack": "ego_planner_"+suffix,
 +            "bspline": "ego_planner_"+suffix, "position": "traj_server_"+suffix}
          self.history = deque(maxlen=300)
-         self.processes = []
-@@ -477,4 +483,71 @@
-                           pose_bracket_sim_s=[before[0], after[0]])
+@@ -148,8 +155,12 @@
+                                      lambda msg: self.on_info(msg, True), qos_profile_sensor_data)
+-        self.create_subscription(PositionCommand, "/drone/ego/position_cmd",
+-                                 self.on_command, 10)
+-        self.create_subscription(Bspline, "/drone/ego/bspline", self.on_bspline, 10)
++        if not self.command_epoch.native_receipts_enabled:
++            self.create_subscription(PositionCommand, "/drone/ego/position_cmd",
++                                     self.on_command, 10)
++            self.create_subscription(Bspline, "/drone/ego/bspline", self.on_bspline, 10)
+         self.create_subscription(String, "/drone/ego/planner_state", self.on_planner_state, 10)
+-        self.create_subscription(String, "/drone/ego/goal_ack", self.on_goal_ack, 10)
++        if not self.command_epoch.native_receipts_enabled:
++            self.create_subscription(String, "/drone/ego/goal_ack", self.on_goal_ack, 10)
+         self.timer = self.create_timer(0.05, self.tick)
++        if self.command_epoch.native_receipts_enabled:
++            self.start_native_receipts()
+         if not args.no_bridge:
+@@ -478,3 +489,96 @@
  
 +    def rotate_command_epoch(self, reason):
 +        self.command_epoch.rotate(reason)
@@ -101,6 +114,36 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +            self.requests.get_nowait()
 +        if old_stamp is not None:
 +            self.stop_pub.publish(String(data=str(old_stamp)))
++
++    def invalidate_command_source(self, reason):
++        with self.lock:
++            old_stamp = self.goal_stamp_ns
++            self.rotate_command_epoch(reason)
++            self.active_goal, self.setpoint = None, None
++            self.goal_acknowledged = False
++            self.goal_stamp_ns = self.planning_since = None
++            while not self.requests.empty():
++                self.requests.get_nowait()
++            if old_stamp is not None:
++                self.stop_pub.publish(String(data=str(old_stamp)))
++
++    def start_native_receipts(self):
++        self.native_receipts = NativeReceipts(self.args.runtime / "native-receipts.log")
++        binary = Path(os.environ.get("DRONE_NATIVE_RECEIPT_BINARY",
++            Path(os.environ.get("DRONE_CACHE", Path.home()/".cache/ros2-drone")) /
++            "ros-ack-witness-build/drone_ros_ack_witness"))
++        if not binary.is_file() or not os.access(binary, os.X_OK):
++            self.get_logger().warning("Native receipt executable unavailable: "+str(binary))
++            return
++        self.spawn("native-receipts", [str(binary), "--ros-args", "-p", "prefix:=/drone/ego",
++            "-p", "emit_heartbeat:=true", "-r", "/drone/ego/ack:=/drone/ego/goal_ack",
++            "-r", "/drone/ego/position:=/drone/ego/position_cmd",
++            "-r", "__node:=receipt_"+self.source_expected_nodes["position"]])
++        self.native_receipts.process = self.processes[-1]
++
++    def consume_native_receipts(self):
++        with self.lock:
++            self.native_receipts.poll(self)
 +
 +    def observe_source_graph(self):
 +        """Invalidate the current goal on observed producer discontinuity, not DDS attestation."""
@@ -129,15 +172,7 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +        if reason:
 +            signature = (reason, repr(observed))
 +            if signature != getattr(self, "source_graph_failure_signature", None):
-+                old_stamp = self.goal_stamp_ns
-+                self.rotate_command_epoch(reason)
-+                self.active_goal, self.setpoint = None, None
-+                self.goal_acknowledged = False
-+                self.goal_stamp_ns = self.planning_since = None
-+                while not self.requests.empty():
-+                    self.requests.get_nowait()
-+                if old_stamp is not None:
-+                    self.stop_pub.publish(String(data=str(old_stamp)))
++                self.invalidate_command_source(reason)
 +            self.source_graph_failure_signature = signature
 +        else:
 +            self.source_graph_failure_signature = None
@@ -146,9 +181,12 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +        return reason is None
 +
      def on_bspline(self, msg):
++        if (getattr(self.command_epoch, "native_receipts_enabled", False) and
++                not getattr(self, "_native_receipt_dispatch", False)):
++            self.invalidate_command_source("native_receipt_unattested_callback")
++            return
          # Match UniformBspline::getTimeSpan: u[p] through u[m-p].
-@@ -486,4 +559,24 @@
-             return
+@@ -487,2 +591,22 @@
          with self.lock:
 +            self.observe_command_epoch()
 +            if getattr(self.command_epoch, "source_graph_enabled", False):
@@ -171,9 +209,7 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +                    return
 +                replayed = pending.pop(msg.traj_id, None)
              previous = self.latest_trajectory
-             self.trajectory_times[msg.traj_id] = (start, start + duration)
-@@ -497,7 +590,9 @@
-             pva = [curve(begin).tolist(), curve.derivative()(begin).tolist(),
+@@ -498,5 +622,7 @@
                     curve.derivative(2)(begin).tolist()]
 -            event = dict(trajectory, received_sim_s=self.sim_now(),
 +            event = dict(trajectory, received_sim_s=(replayed["received_sim_s"] if replayed else self.sim_now()),
@@ -182,30 +218,36 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +            if replayed:
 +                event["ack_replayed_sim_s"] = self.sim_now()
              if previous and previous["start_sim_s"] <= start <= previous["start_sim_s"] + previous["duration_s"]:
-                 prior = BSpline(previous["knots"], previous["control_points"], previous["order"])
-@@ -518,4 +613,7 @@
+@@ -518,3 +644,10 @@
      def on_command(self, msg):
-         with self.lock:
+-        with self.lock:
++        if (getattr(self.command_epoch, "native_receipts_enabled", False) and
++                not getattr(self, "_native_receipt_dispatch", False)):
++            self.invalidate_command_source("native_receipt_unattested_callback")
++            return
++        with self.lock:
 +            self.observe_command_epoch()
 +            if getattr(self.command_epoch, "source_graph_enabled", False):
 +                self.observe_source_graph()
              self.last_trajectory_id = max(self.last_trajectory_id, msg.trajectory_id)
-             if not self.active_goal or not self.goal_acknowledged or msg.trajectory_id < self.min_trajectory_id:
-@@ -536,4 +634,6 @@
-                                  task_id=self.active_goal.get("task_id"),
+@@ -537,4 +670,10 @@
                                   goal_id=self.active_goal.get("goal_id"))
 +            if self.command_epoch.enabled:
 +                self.setpoint["command_epoch"] = self.command_epoch.token
  
      def on_goal_ack(self, msg):
-@@ -543,7 +643,19 @@
-             return
++        if (getattr(self.command_epoch, "native_receipts_enabled", False) and
++                not getattr(self, "_native_receipt_dispatch", False)):
++            self.invalidate_command_source("native_receipt_unattested_callback")
++            return
+         try:
+@@ -544,2 +683,5 @@
          with self.lock:
 +            self.observe_command_epoch()
 +            if getattr(self.command_epoch, "source_graph_enabled", False):
 +                self.observe_source_graph()
              if self.active_goal and stamp == self.goal_stamp_ns:
-                 self.min_trajectory_id = trajectory_id + 1
+@@ -547,2 +689,11 @@
                  self.goal_acknowledged = True
 +                if self.command_epoch.enabled:
 +                    pending = getattr(self, "pending_ack_curves", {})
@@ -217,55 +259,47 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +                        # The RLock keeps goal/epoch checks and replay in one callback transaction.
 +                        self.on_bspline(entry["message"])
  
-     def on_planner_state(self, msg):
-@@ -614,4 +726,7 @@
-                       "-r", "planning/bspline:=/drone/ego/bspline",
+@@ -615,2 +766,5 @@
                        "-r", "/position_cmd:=/drone/ego/position_cmd"]
 +        if getattr(self.command_epoch, "source_graph_enabled", False):
 +            planner.extend(["-r", "__node:="+self.source_expected_nodes["ack"]])
 +            trajectory.extend(["-r", "__node:="+self.source_expected_nodes["position"]])
          for name, command in (("planner", planner), ("trajectory", trajectory)):
-             self.spawn(name, command)
-@@ -619,4 +734,8 @@
- 
+@@ -620,2 +774,8 @@
      def tick(self):
 +        with self.lock:
 +            self.observe_command_epoch()
 +            if getattr(self.command_epoch, "source_graph_enabled", False):
 +                self.observe_source_graph()
++            if getattr(self.command_epoch, "native_receipts_enabled", False):
++                self.consume_native_receipts()
          self.flush_depth()
-         self.flush_lidar()
-@@ -638,4 +757,6 @@
-             while not self.requests.empty():
+@@ -639,2 +799,4 @@
                  command = self.requests.get_nowait()
 +                if self.command_epoch.enabled and command.get("command_epoch") != self.command_epoch.token:
 +                    continue
                  if command["type"] == "stop":
-                     self.active_goal = None
-@@ -667,4 +788,7 @@
-     def state(self):
+@@ -668,2 +830,5 @@
          with self.lock:
 +            self.observe_command_epoch()
 +            if getattr(self.command_epoch, "source_graph_enabled", False):
 +                self.observe_source_graph()
              now, wall = self.sim_now(), time.monotonic()
-             with getattr(self, "native_depth_lock", self.lock):
-@@ -674,4 +798,6 @@
-             depth_age = None if self.depth_stamp is None else max(0.0, now - self.depth_stamp)
+@@ -675,2 +840,8 @@
              reason = self.planner_error
 +            if getattr(self.command_epoch, "source_graph_enabled", False):
 +                reason = reason or getattr(self, "source_graph_reason", "source_graph_unavailable")
++            if getattr(self.command_epoch, "native_receipts_enabled", False):
++                reason = reason or self.native_receipts.reason()
++                if self.planner_state == "INIT":
++                    reason = reason or "planner_waiting_for_odometry"
              if not reason and wall - self.last_clock_wall > 2:
-                 reason = "simulation_clock_stopped"
-@@ -698,4 +824,6 @@
-                 reason = "waiting_for_planner"
+@@ -699,2 +868,4 @@
              point = self.setpoint
 +            if self.command_epoch.enabled and point and point.get("command_epoch") != self.command_epoch.token:
 +                reason = reason or "command_epoch_mismatch"
              if not reason and point and now - point["stamp_sim_s"] > 0.3:
-                 reason = "trajectory_stale"
-@@ -719,4 +847,11 @@
-                 reason = "planning_timeout"
+@@ -720,2 +891,11 @@
              return {"ready": reason is None, "simulation_s": now,
 +                    **({"command_epoch": self.command_epoch.token} if self.command_epoch.enabled else {}),
 +                    **({"source_graph": {"reason": getattr(self, "source_graph_reason", None),
@@ -274,10 +308,10 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +                        "endpoints": getattr(self, "source_graph_endpoints", None),
 +                        "scope": "Observed graph continuity only; queued per-message origin remains unproven"}}
 +                        if getattr(self.command_epoch, "source_graph_enabled", False) else {}),
++                    **({"native_receipts": self.native_receipts.diagnostics()}
++                        if getattr(self.command_epoch, "native_receipts_enabled", False) else {}),
                      "runtime_identity": {"pid": os.getpid(), "start_ticks": start_ticks(os.getpid()),
-                         "world": getattr(self.args, "world", None), "model": getattr(self.args, "model", None),
-@@ -941,4 +1076,11 @@
-                     return
+@@ -942,2 +1122,9 @@
                  with node.lock:
 +                    node.observe_command_epoch()
 +                    if node.command_epoch.enabled and body["type"] == "goal":
@@ -287,31 +321,23 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +                            self.send(503, {"error": current["reason"]})
 +                            return
                      if body["type"] == "stop":
-                         if (body.get("task_id") and node.owner_task_id and
-@@ -946,4 +1088,6 @@
-                             self.send(409, {"error": "active_task_mismatch"})
+@@ -947,2 +1134,4 @@
                              return
 +                        if node.command_epoch.enabled:
 +                            node.rotate_command_epoch("stop")
                          # Cancellation must work even while Gazebo /clock is paused.
-                         while not node.requests.empty():
-@@ -956,4 +1100,6 @@
-                             node.stop_pub.publish(String(data=str(node.goal_stamp_ns)))
+@@ -957,2 +1146,4 @@
                      else:
 +                        if node.command_epoch.enabled:
 +                            node.rotate_command_epoch("goal")
                          node.active_goal = body
-                         node.owner_task_id = body.get("task_id")
-@@ -961,4 +1107,7 @@
-                         node.goal_sequence += 1
+@@ -962,2 +1153,5 @@
                          node.goal_stamp_ns = node.get_clock().now().nanoseconds + node.goal_sequence
 +                        if node.command_epoch.enabled:
 +                            node.goal_stamp_ns = node.command_epoch.next_goal_stamp(node.goal_stamp_ns)
 +                            body["command_epoch"] = node.command_epoch.token
                          node.planning_since = node.goal_stamp
-                         node.min_trajectory_id = node.last_trajectory_id + 1
-@@ -966,6 +1115,8 @@
-                         node.setpoint = None
+@@ -967,4 +1161,6 @@
                          node.requests.put(body)
 +                    reply_epoch = node.command_epoch.token
                  self.send(202, {"accepted": True, "task_id": body.get("task_id"),
@@ -319,12 +345,11 @@ diff --git a/ego/sidecar.py b/ego/sidecar.py
 +                                "goal_id": body.get("goal_id"),
 +                                **({"command_epoch": reply_epoch} if node.command_epoch.enabled else {})})
              except (ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
-                 self.send(400, {"error": str(error)})
 diff --git a/command_epoch.py b/command_epoch.py
 new file mode 100644
 --- /dev/null
 +++ b/command_epoch.py
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,40 @@
 +"""Opt-in local candidate epochs; not a native ROS or SDK cancellation token."""
 +import os
 +import uuid
@@ -332,7 +357,8 @@ new file mode 100644
 +
 +class CommandEpoch:
 +    def __init__(self):
-+        self.source_graph_enabled = os.environ.get("DRONE_SOURCE_GRAPH") == "1"
++        self.native_receipts_enabled = os.environ.get("DRONE_NATIVE_RECEIPTS") == "1"
++        self.source_graph_enabled = os.environ.get("DRONE_SOURCE_GRAPH") == "1" or self.native_receipts_enabled
 +        self.enabled = os.environ.get("DRONE_COMMAND_EPOCH") == "1" or self.source_graph_enabled
 +        self.token = str(uuid.uuid4())
 +        self.last_sim = self.progress_wall = None
@@ -364,3 +390,201 @@ new file mode 100644
 +            self.progress_wall, self.stalled = wall, False
 +        self.last_sim = now
 +        return reason
+diff --git a/native_receipts.py b/native_receipts.py
+new file mode 100644
+--- /dev/null
++++ b/native_receipts.py
+@@ -0,0 +1,193 @@
++"""Opt-in local C++ receipt ingress; not a native goal/session or flight proof."""
++import json
++import math
++from pathlib import Path
++import time
++from types import SimpleNamespace as Obj
++
++from scipy.interpolate import BSpline
++
++
++class NativeReceipts:
++    # Numerical identity of two evaluations, not a flight acceptance tolerance.
++    pva_numeric_tolerance = 1e-6
++
++    def __init__(self, path, clock_ns=None):
++        self.path, self.process = Path(path), None
++        self.clock_ns = clock_ns or time.monotonic_ns
++        self.started_ns = self.clock_ns()
++        self.offset, self.fragment = 0, b''
++        self.heartbeat_ns, self.publisher_counts = None, {}
++        self.error, self.last_error = None, None
++        self.last_epoch, self.ack_receipt = None, None
++        self.curves, self.sequences = {}, {}
++        self.counts = dict(admitted_ack=0, admitted_bspline=0, admitted_position=0,
++                           rejected=0, ignored=0, log_lines=0)
++
++    def reason(self):
++        if self.process is None or self.process.poll() is not None:
++            return 'native_receipt_process_unavailable'
++        if self.heartbeat_ns is None:
++            return 'native_receipt_waiting'
++        if not 0 <= self.clock_ns()-self.heartbeat_ns <= 2_000_000_000:
++            return 'native_receipt_stale'
++        if any(self.publisher_counts.get(k) != 1 for k in ('ack','bspline','position')):
++            return 'native_receipt_connections_unready'
++        return self.error
++
++    def diagnostics(self):
++        return dict(reason=self.reason(), last_error=self.last_error, counts=dict(self.counts),
++                    publisher_counts=dict(self.publisher_counts), heartbeat_ns=self.heartbeat_ns, started_ns=self.started_ns,
++                    scope='C++ per-message source admission and PVA identity; upstream acceptance/session unproven')
++
++    def reject(self, node, reason):
++        self.counts['rejected'] += 1
++        if self.error != reason or node.active_goal or node.setpoint:
++            node.invalidate_command_source(reason)
++        self.error = self.last_error = reason
++        self.curves.clear()
++
++    def sync_epoch(self, node):
++        if self.last_epoch != node.command_epoch.token:
++            self.curves.clear()
++            self.ack_receipt = None
++            self.last_epoch = node.command_epoch.token
++
++    @staticmethod
++    def stamp(value):
++        if type(value) is not int or value < 0:
++            raise ValueError('source_stamp_ns')
++        return Obj(sec=value//1_000_000_000, nanosec=value%1_000_000_000)
++
++    @staticmethod
++    def vector(value):
++        if len(value) != 3 or not all(type(x) in (int,float) and math.isfinite(x) for x in value):
++            raise ValueError('vector')
++        return Obj(x=value[0],y=value[1],z=value[2])
++
++    def feed(self, node, event):
++        """Consume the original envelope; never refresh its source or receipt times."""
++        try:
++            self.sync_epoch(node)
++            kind, received = event['kind'], event['host_monotonic_ns']
++            if type(received) is int and received < self.started_ns:
++                self.counts['ignored'] += 1
++                return
++            if type(received) is not int or not 0 <= self.clock_ns()-received <= 2_000_000_000:
++                raise ValueError('receipt_age')
++            if kind == 'heartbeat':
++                self.heartbeat_ns = received
++                self.publisher_counts = dict(event['publisher_counts'])
++                if all(self.publisher_counts.get(k)==1 for k in ('ack','bspline','position')):
++                    self.error = None
++                return
++            if kind not in ('ack','bspline','position'):
++                raise ValueError('kind')
++            if not node.observe_source_graph():
++                self.counts['ignored'] += 1
++                return
++            bindings = node.source_graph_endpoints
++            gid = event['publisher_gid']
++            if gid != bindings[kind][0][2]:
++                self.reject(node, 'native_receipt_source_mismatch_'+kind)
++                return
++            sequence = event['publication_sequence_number']
++            if type(sequence) is not int or sequence < 0 or type(event['source_timestamp']) is not int or event['source_timestamp'] <= 0:
++                raise ValueError('dds_metadata')
++            key = (kind,gid)
++            self.sequences = {k:v for k,v in self.sequences.items() if k[1] in {x[0][2] for x in bindings.values()}}
++            if sequence <= self.sequences.get(key,-1):
++                self.counts['ignored'] += 1
++                return
++            self.sequences[key] = sequence
++            body = event['message']
++            receipt = {k:event[k] for k in ('publisher_gid','host_monotonic_ns','source_timestamp','publication_sequence_number')}
++            epoch = node.command_epoch.token
++            curve_info = None
++            if kind == 'ack':
++                stamp, _ = map(int,body['data'].split(':'))
++                message = Obj(data=body['data'])
++            elif kind == 'bspline':
++                if not node.active_goal:
++                    self.counts['ignored'] += 1
++                    return
++                points = [self.vector(p) for p in body['control_points']]
++                source_ns = event['source_stamp_ns']
++                message = Obj(traj_id=body['traj_id'],order=body['order'],knots=body['knots'],
++                    start_time=self.stamp(source_ns),pos_pts=points)
++                if type(message.traj_id) is not int or type(message.order) is not int or message.order < 2:
++                    raise ValueError('curve_identity')
++                if not all(type(x) in (int,float) and math.isfinite(x) for x in message.knots):
++                    raise ValueError('knots')
++                curve = BSpline(message.knots,body['control_points'],message.order)
++                begin, end = message.knots[message.order],message.knots[-1-message.order]
++                if not end > begin:raise ValueError('curve_duration')
++                curve_info = dict(curve=curve,source_ns=source_ns,begin=begin,duration=end-begin,receipt=receipt)
++            else:
++                identity = body['trajectory_id']
++                if type(identity) is not int or identity < 0:raise ValueError('trajectory_id')
++                if not node.active_goal or not node.goal_acknowledged or identity < node.min_trajectory_id or identity not in node.trajectory_times:
++                    self.counts['ignored'] += 1
++                    return
++                info = self.curves.get(identity)
++                if info is None:
++                    self.counts['ignored'] += 1
++                    return
++                source_ns = event['source_stamp_ns']
++                message = Obj(trajectory_id=identity,header=Obj(stamp=self.stamp(source_ns)),
++                    **{k:self.vector(body[k]) for k in ('position','velocity','acceleration')},yaw=body['yaw'])
++                if not math.isfinite(message.yaw):raise ValueError('yaw')
++                t = (source_ns-info['source_ns'])*1e-9
++                if t < 0:raise ValueError('pva_before_curve')
++                curve, begin, duration = info['curve'],info['begin'],info['duration']
++                expected = [curve(begin+min(t,duration)),curve.derivative()(begin+t) if t<duration else [0.,0.,0.],
++                    curve.derivative(2)(begin+t) if t<duration else [0.,0.,0.]]
++                if not all(math.isfinite(float(v)) for values in expected for v in values):
++                    raise ValueError('curve_evaluation')
++                if any(abs(value-target)>self.pva_numeric_tolerance for k,values in zip(('position','velocity','acceleration'),expected)
++                       for value,target in zip(body[k],values)):
++                    self.reject(node,'native_pva_curve_mismatch')
++                    return
++            node._native_receipt_dispatch = True
++            try:
++                getattr(node,{'ack':'on_goal_ack','bspline':'on_bspline','position':'on_command'}[kind])(message)
++            finally:
++                node._native_receipt_dispatch = False
++            if node.command_epoch.token != epoch:
++                self.sync_epoch(node)
++                return
++            if kind == 'ack' and node.active_goal and stamp == node.goal_stamp_ns and node.goal_acknowledged:
++                self.ack_receipt = receipt
++            elif kind == 'bspline' and node.active_goal:
++                self.curves[message.traj_id] = curve_info
++                for old in sorted(self.curves)[:-20]:del self.curves[old]
++            elif kind == 'position' and node.setpoint:
++                node.setpoint['native_source'] = dict(position=receipt,curve=info['receipt'],ack=self.ack_receipt,
++                    scope='Per-message C++ receipt and numerical PVA/curve identity only')
++            self.counts['admitted_'+kind] += 1
++        except (KeyError,TypeError,ValueError,IndexError,OverflowError) as error:
++            self.reject(node,'native_receipt_malformed: '+str(error))
++
++    def poll(self, node):
++        if self.process is None or self.process.poll() is not None:
++            if node.active_goal or node.setpoint:self.reject(node,'native_receipt_process_unavailable')
++            return
++        try:
++            with self.path.open('rb') as stream:
++                if stream.seek(0,2) < self.offset:
++                    self.offset,self.fragment=0,b''
++                    self.reject(node,'native_receipt_stream_restarted')
++                stream.seek(self.offset)
++                chunk=stream.read(1024*1024)
++                self.offset=stream.tell()
++            lines=(self.fragment+chunk).split(b'\n');self.fragment=lines.pop()
++            for line in lines:
++                if not line.startswith(b'{'):
++                    self.counts['log_lines'] += bool(line)
++                    continue
++                try:self.feed(node,json.loads(line))
++                except (json.JSONDecodeError,UnicodeDecodeError):self.reject(node,'native_receipt_invalid_json')
++        except OSError as error:
++            self.reject(node,'native_receipt_stream_unavailable: '+type(error).__name__)
++        reason=self.reason()
++        if reason and (node.active_goal or node.setpoint):self.reject(node,reason)

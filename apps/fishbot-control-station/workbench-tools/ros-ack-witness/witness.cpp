@@ -27,7 +27,8 @@ public:
           points.push_back({point.x, point.y, point.z});
         emit("bspline", {{"traj_id", message->traj_id}, {"order", message->order},
              {"knots", message->knots}, {"control_points", points},
-             {"start_sim_s", message->start_time.sec+message->start_time.nanosec*1e-9}}, info);
+             {"start_sim_s", message->start_time.sec+message->start_time.nanosec*1e-9}}, info,
+             static_cast<int64_t>(message->start_time.sec)*1000000000LL+message->start_time.nanosec);
       });
     command_ = create_subscription<quadrotor_msgs::msg::PositionCommand>(prefix+"/position", 50,
       [this](quadrotor_msgs::msg::PositionCommand::ConstSharedPtr message, const rclcpp::MessageInfo & info) {
@@ -36,17 +37,29 @@ public:
              {"position", {message->position.x,message->position.y,message->position.z}},
              {"velocity", {message->velocity.x,message->velocity.y,message->velocity.z}},
              {"acceleration", {message->acceleration.x,message->acceleration.y,message->acceleration.z}},
-             {"yaw", message->yaw}}, info);
+             {"yaw", message->yaw}}, info,
+             static_cast<int64_t>(message->header.stamp.sec)*1000000000LL+message->header.stamp.nanosec);
+      });
+    if (declare_parameter<bool>("emit_heartbeat", false))
+      heartbeat_ = create_wall_timer(std::chrono::milliseconds(100), [this]() {
+        const Json event = {{"kind","heartbeat"}, {"host_monotonic_ns", steady_ns()},
+          {"publisher_counts", {{"ack",ack_->get_publisher_count()},
+            {"bspline",curve_->get_publisher_count()}, {"position",command_->get_publisher_count()}}}};
+        std::cout << event.dump() << std::endl;
       });
   }
 private:
-  void emit(const std::string & kind, const Json & body, const rclcpp::MessageInfo & info) {
+  static int64_t steady_ns() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch()).count();
+  }
+  void emit(const std::string & kind, const Json & body, const rclcpp::MessageInfo & info,
+            int64_t source_stamp_ns = 0) {
     const auto & raw = info.get_rmw_message_info();
     std::ostringstream gid;
     for (auto value : raw.publisher_gid.data)
       gid << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(value);
-    const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now().time_since_epoch()).count();
-    const Json event = {{"kind",kind}, {"host_monotonic_ns",ns}, {"message",body},
+    const Json event = {{"kind",kind}, {"host_monotonic_ns",steady_ns()}, {"message",body},
+      {"source_stamp_ns",source_stamp_ns},
       {"publisher_gid",gid.str()}, {"source_timestamp",raw.source_timestamp},
       {"received_timestamp",raw.received_timestamp},
       {"publication_sequence_number",raw.publication_sequence_number},
@@ -56,6 +69,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr ack_;
   rclcpp::Subscription<traj_utils::msg::Bspline>::SharedPtr curve_;
   rclcpp::Subscription<quadrotor_msgs::msg::PositionCommand>::SharedPtr command_;
+  rclcpp::TimerBase::SharedPtr heartbeat_;
 };
 
 int main(int argc, char ** argv) {

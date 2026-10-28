@@ -31,8 +31,9 @@ class SourceGraphGuard(unittest.TestCase):
         topics={'/drone/ego/goal_ack':'ack','/drone/ego/bspline':'bspline','/drone/ego/position_cmd':'position'}
         h.node.get_publishers_info_by_topic=lambda topic: h.graph[topics[topic]]
         ns=h.node.state.__func__.__globals__
-        h.node.observe_source_graph=types.MethodType(original.methods(self.fixture.root/'ego/sidecar.py',
-            'Sidecar',('observe_source_graph',),ns)['observe_source_graph'],h.node)
+        for name,method in original.methods(self.fixture.root/'ego/sidecar.py',
+            'Sidecar',('observe_source_graph','invalidate_command_source'),ns).items():
+            setattr(h.node,name,types.MethodType(method,h.node))
         h.ack();h.node.on_bspline(h.curve());h.node.on_command(h.command())
         return h
 

@@ -602,3 +602,11 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 - Remaining：定位失效可在位置替换前阻断；setter 报错远端效果 unknown。取消在途 await 不证明远端撤回，迟到远端 PVA 覆盖、生产 SDK 关闭与物理停稳/落地仍待验。动态/M3未通过，冻结未解除。
 - 保留在途：此前 native receipts 的四个已跟踪文件变动及两个新文件（source_graph 测试、native-source-probe、EPOCH、witness、native_receipts 测试、sidecar-native-probe）未混入本次提交。受控原包延迟准入试验 adfb41fb 已有结果；完整 Sidecar 74a7ecec 仍失败（planner exit250、无曲线、超时），不是功能通过。其三自有PID480811/480826/480827本次核对/proc均不存在；原日志保留，不因换到本次核对而重跑或删除。owner=当前根Codex；最短入口为该 UUID 的 sidecar-native-probe.json/runtime/planner.log 与现有 test_drone_native_receipts，先定位原 planner 错误再决定下一次运行。
 - 收尾：本次测试临时副本自动清理，无新增服务或大产物；源仓未改，在途补片保留。Knowledge=already_covered，详见 docs/DRONE_HANDOFF_EVIDENCE.md 指定链路复验段；不写memory、不跨聊天。
+
+## 2026-10-28 C++逐消息准入候选与完整HTTP入口
+
+- Done：六文件native receipts在途候选已串行核对。默认OFF EPOCH新增实际CPP收包入站，关闭Python三直收入口；GID/源时间/序号与可信曲线PVA同一性分别核。原图已正常而旧来源包仍排队的受控原包adfb41fb，225.930112ms接收年龄内被拒、清goal/setpoint并换epoch；独立原包/数学审计通过，七进程均0并回收，不冒称自然网络乱序。
+- 完整入口：74a7原日志std::length_error、ready时FSM仍INIT；探针等待WAIT_TARGET的0e668ad6两目标过。将INIT未就绪检查落入默认OFF候选后，f745e04d-ee15-4541-a179-3a3dc09a54f8不靠额外等待，真实Sidecar构造/原HTTP两次202/原生ACK2、曲线2、准入PVA3通过，两个目标各三段原CPP回执唯一匹配，PVA重算到数值精度。三自有PID499106/499121/499122均exit0且/proc不存在，HTTP关闭；未取得旧崩溃栈，不完全定案异常数学根因。
+- 验证：六模块70项4.477s/0skip通过，含14项native、OFF/graph-only known-gap、ACK顺序与六补片组合。CPP当前目标单独增量构建过；两最终忽略目录各独立审计json通过。完整探针理想ROS pose/clock/单点cloud，相机/depth健康显式替身；trajectory使用独立release候选binary，原installed未换，无SDK/PX4/Gazebo/解锁或飞行。
+- Remaining/Next：来源与曲线数值准入不等原生goal/session/所有上游输入、yaw、SDK TTL或备份资格。当前根Codex下一项核/state快照到Flight使用间的epoch/时间窗口，复用既有迟交与缓存夹具；晚到远端PVA、生产关闭、M3/动态仍未闭合，三冻结源不部署。
+- 收尾/Knowledge：原小失败证据保留，临时源码回收，当前96.6MiB CPP缓存复用；比对确认native_receipts源码已完整嵌入补片后删除冗余scratch，释放12288分配字节，无重复大包。updated：原Wiki/ROS2与FishBot来源链新增数值同一性/三类就绪分层，开发知识入口补排队旧来源与FSM INIT触发；实际读回通过。知识库已有跨任务大dirty保留，不盲提交整页，不写memory、不联系其他聊天。

@@ -794,3 +794,48 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot第19节的来源链�
 Next/owner：根Codex核逐消息来源准入，优先复用现有CPP MessageInfo完整曲线收包与已有epoch/原输入接口；验证“图已正常但队列仍有旧来源消息”的负例。必须同时核曲线、ACK、PVA链，不能只信最终PVA发布进程。冻结源不部署，不解锁；全链TTL/可行备份/生产关闭/原生空中采用/M3和动态闭环仍未完成，整体goal active。
 
 收尾更新：共享工作树的SO101既有任务已将Station17行与自身进度提交为8fc0569；已定点读两文件diff和交付说明，本无人机轮只做语法核对，不把其物理/E2E结论计入本轮验收。保留该提交，本轮串行追加，不覆盖、不跨聊天联系。
+
+## C++逐消息入站与完整Sidecar入口（2026-10-28）
+
+复用现有只读rclcpp MessageInfo见证器、原epoch/ACK缓存和Sidecar进程owner。在默认OFF的EPOCH补片内新增 `native_receipts.py`；只有 `DRONE_NATIVE_RECEIPTS=1` 才启用，并同时启用原epoch与source graph观察。未修改或部署冻结drone c866441、PX4 d6f12ad、GCOPTER e0444f6；既有EGO算法缓存dirty保留。
+
+### 实现边界
+
+- C++保留三类消息的原始DDS GID、source timestamp、publication sequence及同机单调接收时刻；新增曲线/PVA精确整数 `source_stamp_ns`。可选100ms心跳携带实际订阅匹配数，默认关闭；CPP不发布应用控制命令。
+- 启用后不创建Python的ACK/Bspline/PVA直收订阅，三类回调直接调用也被拒绝。Sidecar用既有spawn/close管理CPP子进程，并从原日志按增量读取完整回执；缺binary、进程退出、连接未就绪、心跳过旧、日志截断或必需字段错误均明确未就绪，不静默回退到旧输入。
+- 逐消息GID需匹配当前已绑定endpoint，保留原时间与序号，不让重复序号或上轮旧日志刷新有效性。当前图健康而消息仍来自已离图旧生产者时，清当前goal/ACK/候选/队列/setpoint并换epoch；健康恢复后允许独立新目标和新ACK，不设跨任务锁。
+- 登记可信完整曲线后，以PVA原header整数时间重算位置/速度/加速度，含末端零VA保持；三阶数值不对应即 `native_pva_curve_mismatch`。`1e-6`仅为两个求值器的数值同一性容差，不更改V/A/Z/占据或飞行净空硬界。保留ACK先到/曲线先到的原缓存机制。
+- 原生输出来源和曲线数值关系仍不等于完整上游输入合同。yaw只检查有限值，未证明原生goal/session、未来地图、完整原生输入接纳、SDK缓存TTL、飞行跟踪或备份安全。`source_provenance_verified` 与 `flight_accepted` 继续false。
+
+### 原生证据与失败保留
+
+| UUID（均在忽略output/drone-committed下） | 结果与范围 |
+| --- | --- |
+| a44f726b-d705-4f4a-9886-69f64391dbb9 | 首轮新输入已准入108条PVA，但图恢复时CPP连接仍未匹配，新目标正确拒绝；探针失败。仅将探针等待改为实际channel健康，未放宽门槛 |
+| adfb41fb-7a73-446a-98d5-a2cdbcd59ece | 原生轨迹服务＋多个ROS生产者/重启五阶段通过；独立受控投递一条真实CPP旧来源曲线，接收年龄225930112ns，当前图单一正常，仍因GID不符拒绝，goal/setpoint清空、epoch变化。原包全部字段保持，非自然网络乱序 |
+| 3b8cd813-13dd-4840-a958-18e707f66ec4 | 完整Sidecar探针未复制冻结planner.yaml，未启动规划器；已补复制，失败原件保留。另首次临时import路径顺序不符在构造前失败，无ROS进程 |
+| 74a7ecec-c6fa-4980-989f-fb911e1c5057 | 完整构造中ready时FSM仍INIT，目标后抛std::length_error，planner exit250、无曲线。未取得旧崩溃栈，不能把数学成因定案 |
+| 0e668ad6-64c1-4c7d-9018-a4a6859d9893 | 仅探针等待原生WAIT_TARGET后，完整HTTP两目标通过，三个进程均0；对照支持启动竞态解释，非飞行 |
+| f745e04d-ee15-4541-a179-3a3dc09a54f8 | 最终候选自身在INIT返回planner_waiting_for_odometry，探针无额外FSM等待；实际构造/HTTP两次202/原生ACK2、曲线2、准入PVA3通过，三自有进程均0并回收，HTTP端口已关 |
+
+最终完整探针复用原CLI解析、Sidecar构造、start_planner、HTTP Handler和close；trajectory仅替换为既有独立生命周期候选binary并显式开启release参数，原installed未换。输入为真实ROS transport的理想静止pose/clock/单点cloud，相机内参与depth健康为明确替身；未运行ros_gz、真实深度、MAVSDK、PX4或Gazebo，未证明到点或任务飞行。
+
+最终入站模式在INIT拒新目标且不排队，观测到WAIT_TARGET后才允许；此健康检查仅本候选ON生效，OFF与原graph-only行为保留。FSM状态仍由原通道观测，非新增逐消息身份认证；本次WAIT_TARGET来自自有原生规划器记录，不升级为所有来源场景的完整健康证明。
+
+两最终目录各保存 `independent-native-admission-audit.json`。独立读取原CPP日志，确认受控旧包逐字段相同、未超原2s接收窗、当前GID不同；新目标的ACK/曲线/PVA各能唯一关联原GID/序号/时间，按精确源时间重算PVA。完整两目标的最大数值误差≤1.12e-16（位置）/2.78e-17（速度）/9.87e-32（加速度）；旧包前的可信点亦到数值精度。原生7＋3进程正常退出、当前/proc无自有PID；历史诊断计数不当物理结果。
+
+### 最小复验
+
+最终六相关模块 **70项、4.477s、0skip通过**，包括native ingress14项、graph-only known-gap、OFF行为、ACK顺序和六补片应用顺序/组合。CPP当前目标单独增量构建成功。无需重跑其他机器人实验。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_native_receipts test_drone_source_graph_guard test_drone_command_epoch_patch test_drone_ack_curve_buffer test_drone_ros_ack_probe test_drone_command_revalidation_patch -q
+# 原生无飞控探针，在workbench-tools目录、已加载Jazzy/ego_ws环境执行；OUTPUT使用新UUID目录。
+python3 drone-native-source-probe.py --native-receipts --domain-id 186 --output "$SOURCE_OUTPUT"
+python3 drone-sidecar-native-probe.py --domain-id 188 --output "$SIDECAR_OUTPUT"
+```
+
+收尾：小原包/失败记录原地保留，不提交Git；当前可复用CPP构建缓存约96.6MiB保留，测试临时源回收，无新大包或渲染。逐消息候选六文件在途工作本轮完成审阅、局部验证与原生入口核对后串行交付，仍默认OFF；冻结源未部署，未恢复其他聊天/子Agent。Knowledge=updated，原Wiki/ROS2与FishBot来源链段落及开发知识入口补逐消息数值核对与FSM就绪触发，实际读回见项目进度；知识库既有跨任务dirty保留，不盲整页提交。
+
+Next/owner：当前根Codex核HTTP `/state` 快照到Flight使用之间的epoch/时间窗口，复用已有迟到HTTP与SDK缓存夹具，先闭合跨组件失效传播；继续核生产关闭与晚到远端PVA，不复派效果未知的控制请求。全链TTL、可行备份、实际状态/地图/终端资格、MINCO在线采用、M3与动态飞行仍未完成；本片不解除冻结、不将局部成功替代整体目标。
