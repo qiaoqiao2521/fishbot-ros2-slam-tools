@@ -28,7 +28,7 @@ P1 已完成。当前接 P2：借用 RoboDK 的场景树、平移坐标系、目
 
 ## Next Step
 
-2026-10-28接续：已核Flight.run→recover受控迟交可覆盖恢复position；默认OFF source-watch补片将unknown已启动PVA转原停仿真/生产SDK关闭，未派发/已返回保留普通恢复。五真实SDK组/原包独立读回与77局部检查通过，无PX4/Gazebo/飞行。下一步当前根Codex核真实scene.pause失败/超时到finally的关闭链与关闭前缓存窗口；不新增监视层，不称原子撤销或安全降落。三冻结源未部署，真实状态/地图/终端、可行备份、MINCO在线、M3和动态仍未完成。证据与复验见工作台docs/DRONE_HANDOFF_EVIDENCE.md末节。
+2026-10-28接续：Scene父进程锁/pipe无界阻塞已由原真实方法＋SDK复现并在默认OFF候选补有限预算/自有worker回收；85局部检查与四组SDK对照通过。下一步当前根Codex用独立分区、无飞机的最小Gazebo世界核真实暂停回执和clock/physics停止，不部署三冻结源或启动飞行。关闭前仍会重发旧PVA，真实状态/地图/终端、可行备份、MINCO在线、M3与动态仍未完成。复验与交接见工作台docs/DRONE_HANDOFF_EVIDENCE.md末节。
 
 2026-10-24接续：原生进程复用和迟交时效已核，同#7三对系数/硬审计不变，含生命周期wall中位2.891→1.825s，108检查/86独立读回过；主成本仍467次Python极值，11显式sim情景不替代真实deadline。根Codex核官方GCOPTER已有连续极值接口能否复用于每次候选评估，优先减少当前主耗时的重复求根；先核接口与同系数对照，不自写新求根器，不减少或跳过最终硬门。真实A/J、有效地图、终端及按时采用仍未获资格，c866441冻结，M2部分完成、M3不启动。 方法与CLI见docs/DRONE_RECORDED_STATE.md末节。
 

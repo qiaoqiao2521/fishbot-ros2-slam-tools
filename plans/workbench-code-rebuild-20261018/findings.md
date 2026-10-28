@@ -164,3 +164,8 @@ agent-link现已加载，qoder同步调用180s超时且get_status确认无活会
 
 单独取消客户端await不能撤回接收端已保留的请求。受控relay保存同一原protobuf，恢复position已经成功后只迟交一次，真实SDK从mask2552回到2048，Python reference却仍position；接受在恢复前/仅响应丢失对照则保持位置。此为受控非协作队列反例，不是自然gRPC乱序概率或生产网络结论。
 默认OFF候选在unknown已启动PVA时用原停仿真策略/生产SDK关闭，不谎称缓存被原子清除；rpc_started只表示发送task已创建。真实SDK后窗0、原进程回收和合成pause结果分开，不能替代空中刹停。已返回请求与未派发拒绝保留原recover。五组与77局部检查见工作台docs/DRONE_HANDOFF_EVIDENCE.md末节；真实暂停异常/超时及关闭前窗口继续核。Knowledge=updated：采用原Wiki来源链的通知/缓存/物理分层，本轮补接收顺序反例并读回，具体数字留项目。
+
+## 原生超时不覆盖父进程管道（2026-10-28）
+
+Scene.pause的1000ms传给Gazebo子进程Node.request_raw，但父进程持request_lock后readline没有时限，子进程半行即可让Scene.close同锁等待、原SDK继续发PVA。用真实Scene/SDK受控worker原反例证明；服务不存在的原生负例能返回，不足以排除IPC阻塞。
+默认OFF候选复用原timeout给父进程锁、pipe写入和完整行读取共用预算；超时回收原worker，不靠取消to_thread假装线程已退出、不自动重试未知请求。完整响应复用与半行/写满/锁竞争分别测试。85局部检查与四组真实SDK核清理可达性，关闭前仍有旧PVA，不晋级控制安全；真实世界暂停/clock/physics仍待核。Knowledge=updated，原Wiki和入口补此边界，数字与失败回源交接记录。

@@ -219,3 +219,90 @@ new file mode 100644
 +        if (self.last_received_ns is None or self.task is None or self.task.done() or
 +                not 0 <= time.monotonic_ns()-self.last_received_ns <= self.observation_max_age_ns):
 +            raise RuntimeError("command_source_watch_unavailable")
+diff --git a/scene.py b/scene.py
+--- a/scene.py
++++ b/scene.py
+@@ -173,17 +173,29 @@
+         # gz-transport's synchronous Python call can wait while subscriber
+         # callbacks in the same interpreter need the GIL. Keep the official
+         # request API in a child with no Python subscriptions.
+-        with self.request_lock:
++        import os
++        bounded = os.environ.get("DRONE_SOURCE_WATCH") == "1"
++        # Native timeout is milliseconds; also bound parent lock/pipe waits.
++        deadline = time.monotonic()+float(timeout)/1000.+.5 if bounded else None
++        acquired = (self.request_lock.acquire(timeout=max(0., deadline-time.monotonic()))
++                    if bounded else self.request_lock.acquire())
++        if not acquired:
++            raise TimeoutError("Gazebo request lock deadline exceeded")
++        try:
+             if self.worker is None:
+                 self.worker = subprocess.Popen(
+                     [sys.executable, str(Path(__file__).resolve()), "--request-worker"],
+                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+-            self.worker.stdin.write(json.dumps({"service": service,
++            payload = json.dumps({"service": service,
+                 "request": request.SerializeToString().hex(),
+                 "request_type": request_type.DESCRIPTOR.full_name,
+-                "response_type": response_type.DESCRIPTOR.full_name, "timeout": timeout})+"\n")
+-            self.worker.stdin.flush()
+-            line = self.worker.stdout.readline()
++                "response_type": response_type.DESCRIPTOR.full_name, "timeout": timeout})+"\n"
++            if bounded:
++                line = self.request_line(payload, deadline)
++            else:
++                self.worker.stdin.write(payload)
++                self.worker.stdin.flush()
++                line = self.worker.stdout.readline()
+             if not line:
+                 raise RuntimeError("Gazebo 请求进程已退出")
+             result = json.loads(line)
+@@ -192,6 +204,48 @@
+             response = response_type()
+             response.ParseFromString(bytes.fromhex(result["response"]))
+             return result["ok"], response
++        except Exception as error:
++            if bounded and self.worker is not None:
++                worker = self.worker
++                try:
++                    if worker.poll() is None:
++                        worker.kill()
++                    worker.wait(timeout=2.)
++                    worker.stdin.close()
++                    worker.stdout.close()
++                    self.worker = None
++                except Exception as cleanup_error:
++                    raise RuntimeError(str(error)+"; Gazebo worker cleanup: "+str(cleanup_error)) from error
++            raise
++        finally:
++            self.request_lock.release()
++
++    def request_line(self, payload, deadline):
++        """One framed response with the same budget for write and full read."""
++        import os
++        import select
++        incoming, outgoing = self.worker.stdout.fileno(), self.worker.stdin.fileno()
++        os.set_blocking(incoming, False)
++        os.set_blocking(outgoing, False)
++        pending = memoryview(payload.encode())
++        received = bytearray()
++        while pending or b"\n" not in received:
++            remaining = deadline-time.monotonic()
++            if remaining <= 0:
++                raise TimeoutError("Gazebo request pipe deadline exceeded")
++            readable, writable, _ = select.select(
++                [] if pending else [incoming], [outgoing] if pending else [], [], remaining)
++            try:
++                if writable:
++                    pending = pending[os.write(outgoing, pending):]
++                elif readable:
++                    chunk = os.read(incoming, 65536)
++                    if not chunk:
++                        raise RuntimeError("Gazebo 请求进程已退出")
++                    received.extend(chunk)
++            except BlockingIOError:
++                continue
++        return received.decode()
+ 
+     def close(self):
+         with self.request_lock:

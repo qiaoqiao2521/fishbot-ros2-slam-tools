@@ -92,7 +92,7 @@ class SourceWatchPropagation(unittest.IsolatedAsyncioTestCase):
                 root = Path(d); copy_source(root)
                 for p in (*order, WATCH):
                     apply(root, p)
-                for name in ('flight.py', 'ego/sidecar.py', 'command_epoch.py', 'source_epoch_watch.py'):
+                for name in ('flight.py', 'ego/sidecar.py', 'command_epoch.py', 'source_epoch_watch.py', 'scene.py'):
                     compile((root/name).read_text(), str(root/name), 'exec')
 
     async def test_applied_patch_disabled_preserves_old_snapshot_gap(self):

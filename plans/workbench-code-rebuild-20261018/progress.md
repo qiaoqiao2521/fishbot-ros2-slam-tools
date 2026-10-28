@@ -636,3 +636,12 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 - 产物/交接：工作台docs/DRONE_HANDOFF_EVIDENCE.md末节列五UUID与CLI，67fe目录留最终测试log，8476保留原watch补片。自有SDK五个均kill+wait回收，HTTP/gRPC/relay关闭；约267KiB独有证据保留，临时源和/tmp测试log已清理。Station Carry QA在途保留、不混提交；三冻结源未部署。
 - Next/owner：当前根Codex核真实scene.pause失败/超时到finally的关闭链及剩余缓存窗口，不再加监视层。实际状态/地图/终端、可行备份、MINCO在线、M3与动态仍未完成；整体目标继续。
 - Knowledge：updated，原Wiki/ROS2与FishBot及入口补取消与接收顺序边界、已读回；知识库大dirty保留，不写memory、不跨聊天。
+
+## Scene IPC阻塞与关闭链（2026-10-28）
+
+- Done：原Scene.pause的1000ms只到原生请求，父进程持锁readline无界。34325半行原请求实际让run/SDK/worker停留，1.7s窗34旧PVA，外部kill才关闭；不是生产自愈。
+- 修补：默认OFF source-watch的Scene.request沿原timeout+.5s为锁/写入/完整行读取设共同预算，用标准os/select；超时回收自有worker，不自动重发。完整回复仍复用worker，锁超时不杀其他持锁请求，不改原run关闭顺序或硬控制界。
+- 验证：七模块85项17.623s/0skip/六补片顺序过。原反例＋半行候选/受控拒绝/原生缺服务四真实SDK组，独立18/19/19/19项原包与时序/报告/进程端口过。候选半行1.506s结束，worker与SDK回收、后窗0；期间仍30旧PVA。原生缺服务1.067s未确认，非世界暂停成功。全部无arm、failed未落地，无PX4/Gazebo世界/飞行；三个冻结源未部署。
+- 失败保留：95d1旧protobuf优先导致导入失败，未启SDK；a817未传Scene开关导致原OFF阻塞、探针超时才回收；首版Boolean夹具字段及快速拒绝2ms窗口审计要求均按原始证据修正，不计生产通过。原记录/初失败log/最终log在忽略输出，完整UUID/命令见工作台docs/DRONE_HANDOFF_EVIDENCE.md末节。
+- Next/owner：当前根Codex用独立分区无飞机最小Gazebo世界核真实暂停回执与clock/physics停止，再续真实资格。当前只是修清理无限等待，不宣称关闭前缓存安全、原子撤销、可行备份、M3或动态闭环。整体目标继续。
+- 收尾/Knowledge：本轮自有SDK与worker均回收、端口关；独有证据保留，临时源与两个/tmp日志已清理，Station在途119增/3删保留。updated：Wiki/ROS2与FishBot和入口补原生超时不等父进程IPC界，已读回；知识库大dirty保留，不写memory、不跨聊天。

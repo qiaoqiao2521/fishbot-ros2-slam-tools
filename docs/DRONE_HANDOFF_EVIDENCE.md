@@ -951,3 +951,33 @@ PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unit
 Next/owner：当前根Codex优先核原scene.pause真实调用的失败/超时是否仍能到达finally关闭，继续明确源失效到SDK关闭间的缓存窗口；不凭本轮停仿真策略晋级可行备份或M3。真实状态/地图/终端、MINCO在线与动态闭环仍未通过，三冻结源未部署。
 
 收尾：五组独有证据约267KiB保留，临时源自动清理；最终测试log复制读回后删除/tmp副本。一次生成脚本SyntaxError在写入前失败，改正后成功，无冻结源变动。Station Carry QA在途119增/3删保留，不混提交、不跨聊天；知识页跨任务dirty原位保留。Knowledge=updated：原Wiki/ROS2与FishBot来源链及开发知识入口补“取消/接收端迟交/缓存顺序分层”，已读回，不写memory。
+
+## Scene.pause 失败、父进程IPC超时与SDK关闭（2026-10-28）
+
+原Scene.pause给原生Gazebo请求1000ms，但Scene.request父进程使用无超时readline并持request_lock；Scene.close获取同一把锁。受控worker读到真实WorldControl请求后只写半行，原run无法完成recover/finally，SDK继续重发。原生请求超时不是父进程IPC超时；给to_thread外层wait_for也不撤回阻塞线程。
+
+| UUID / 条件 | 实际观察 |
+| --- | --- |
+| 34325d64-eb54-4cb7-91fb-018d30b1c305，原Scene半行回复 | 1.802776s暂停调用未结束，1.7s稳定窗34条PVA（整个调用36条）；run/SDK/worker都活。探针外部kill worker后才到原SDK关闭。独立18项过，这是反例，不是生产自愈 |
+| 1c19e7ab-757c-4c4f-a29b-7e859442229a，候选半行回复 | 1.506066s父进程TimeoutError，worker728690/-9回收，Scene.close返回后生产close收回SDK728608/-9；无探针外部释放，后窗0。暂停等待内仍有30条旧PVA |
+| d0a4c0d8-76ee-4949-b271-27cea3ef0762，受控完整拒绝 | 1.907ms明确未确认；worker729860正常0、SDK729750/-9，后窗0；过短区间无采样，不强求该2ms内出现报文，另核此前真实缓存。首版独立审计的错误采样要求保留后改正，未改控制门限 |
+| 17b97e0d-574a-42e7-adfa-032b706dcb5b，原生Gazebo服务不存在 | 实际Scene.pause/worker/Node请求在1.066989s未确认，worker730053正常0、SDK729937/-9，后窗0；暂停等待内21条旧PVA。未启动任何世界，不是模拟服务回执 |
+
+默认OFF的source-watch补片只扩展Scene.request：沿用原timeout毫秒，父进程锁、非阻塞pipe写入、完整行读取共用timeout/1000+.5s预算，使用Python标准os/select；超时/协议错误后kill+wait自己拥有的worker，再释放锁，下一次显式请求由原入口建worker，不自动重发。完整回复复用原worker；锁超时不擅杀另一个已持锁请求。原run清理顺序未重构，关闭失败仍保留错误。不是硬实时或所有进程/线程故障保证；进程创建、调度、回收还有耗时，SDK关闭前仍有旧PVA。
+
+七模块85项17.623s/0skip通过，含Scene八项：原部分行/应用但OFF反例、无回复/半行、写满pipe、锁竞争、完整拒绝、双请求复用、原生缺服务；六补片组合编译增加scene.py。四SDK组独立原包/数值/报告/时序/进程端口18/19/19/19项过。源/pose/clock/armed还是夹具，SDK/HTTP/Scene方法和RPC真实；没有PX4/Gazebo世界/解锁/飞行。simulation_pause_confirmed均不为true，failed/landed=false/disarmed=false。原生服务未发现与真实世界已暂停分别验收，不能混同。
+
+探针失败保留：95d1b923因PYTHONPATH把系统旧protobuf排在SDK前，ImportError、未启动SDK；a81753d5未向真实Scene传DRONE_SOURCE_WATCH=1，走原OFF阻塞，探针超时后才回收自有SDK725990/worker726114。均不算通过。另局部测试首版成功Boolean误写0801，按已安装官方Boolean(data=True)读回1001修正，仅修夹具；初失败log与最终log留1c19目录。复验时SDK site-packages放在系统dist-packages前，不装包或改全局环境。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONPATH=/home/muqiao/.cache/ros2-drone/venv/lib/python3.12/site-packages:/usr/lib/python3/dist-packages
+/home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_scene_request_deadline test_drone_source_watch test_drone_state_epoch_window test_drone_command_epoch_patch test_drone_state_wait_guard test_drone_pva_rpc_guard test_drone_recovery_cache_chain -q
+DRONE_SOURCE_WATCH=1 /home/muqiao/.cache/ros2-drone/venv/bin/python ../workbench-tools/drone-sdk-late-pva-probe.py --mode after_forward --expect pause --scene-fault partial_reply --output "$SCENE_FAILURE_OUTPUT"
+# 对照可用 --scene-fault reject / native_unavailable。旧反例用34325目录baseline补片及 --scene-expect stalled，保留外部释放证据。
+```
+
+Next/owner：当前根Codex在独立分区、无飞机的最小Gazebo世界核真实暂停回执与仿真时钟/物理状态停止；保留拒绝/超时负例。随后再接实际状态/地图/终端和可行备份。源失效到关闭前有旧PVA，不能凭本轮清理可达性称控制安全、原子撤销、M3或动态闭环已过；三冻结源未部署。
+
+收尾：自有SDK/worker回收、HTTP/gRPC/relay端口关闭；独有失败与原包保留，临时源自动清理、两/tmp测试log复制读回后删除。原Station Carry QA119增/3删保留，未混交/跨聊天；Knowledge=updated，原Wiki及入口补原生超时/IPC/阻塞线程分层并读回，知识库大dirty保留，不写memory。

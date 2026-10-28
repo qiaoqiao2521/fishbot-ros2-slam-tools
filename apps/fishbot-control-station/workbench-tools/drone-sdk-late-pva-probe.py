@@ -36,7 +36,8 @@ def wire_matches(rows, point, pva):
             zip(('x','y','z','vx','vy','vz','afx','afy','afz'),values)) for p in rows)
 
 
-async def scenario(system, invoke, calls, packets, phases, output, mode, expected, watch_patch):
+async def scenario(system, invoke, calls, packets, phases, output, mode, expected, watch_patch,
+                   scene_fault=None, scene_expected='bounded'):
     if watch_patch:
         with patch.object(watches, 'WATCH', watch_patch):
             watches.SourceWatchPropagation.setUpClass()
@@ -50,12 +51,35 @@ async def scenario(system, invoke, calls, packets, phases, output, mode, expecte
         json.loads((output/'sdk-process.json').read_text())['grpc_port'], method='pva')
     observation_entered, release_observation = asyncio.Event(), asyncio.Event()
     events, task = [], None
+    worker_fault = None
     result = {'scope':'real SDK/RPC/HTTP and original Flight methods; source/pose/clock/armed/pause are fixtures',
         'fault_model':'late_forward retains one original received protobuf after client cancellation; NOT natural direct-channel reordering',
         'mode':mode, 'expected_observation':expected, 'flight_accepted':False,'physical_pause_confirmed':False}
 
     def mark(event, **fields):
         events.append(dict(event=event,host_monotonic_ns=time.monotonic_ns(),**fields))
+
+    if scene_fault:
+        from test_drone_scene_request_deadline import SceneWorkerFault
+        worker_fault = SceneWorkerFault(h.root, output, scene_fault)
+        def pause():
+            mark('scene_pause_begin')
+            try:
+                worker_fault.scene.pause()
+                mark('scene_pause_confirmed')
+            except Exception as error:
+                mark('scene_pause_error',error_type=type(error).__name__,reason=str(error))
+                raise
+            finally:
+                if worker_fault.process is None:
+                    worker_fault.process = worker_fault.scene.worker
+        def scene_close():
+            mark('scene_close_begin')
+            worker_fault.scene.close()
+            mark('scene_close_return')
+        h.owner.scene.pause, h.owner.scene.close = pause, scene_close
+        result.update(scope='real SDK/RPC/HTTP/Scene IPC and original Flight; source/pose/clock/armed fixtures',
+            scene_worker_fault=scene_fault,scene_expected=scene_expected)
 
     async def window(name, begin=None):
         start = (time.monotonic_ns() if begin is None else begin)+100_000_000
@@ -95,6 +119,15 @@ async def scenario(system, invoke, calls, packets, phases, output, mode, expecte
             mark('source_invalidated',epoch=h.source.node.command_epoch.token)
             await asyncio.wait_for(relay.cancelled.wait(),1.)
             if expected=='pause':
+                if scene_expected=='stalled':
+                    lo=time.monotonic_ns()+100_000_000
+                    await asyncio.sleep(1.8)
+                    phases.append(('scene_pause_stalled',lo,time.monotonic_ns()))
+                    result['stall_observation'] = dict(run_pending=not task.done(),
+                        sdk_live=system._server_process.poll() is None,
+                        worker_live=worker_fault.process.poll() is None)
+                    mark('scene_worker_released_by_probe')
+                    worker_fault.release()
                 await asyncio.wait_for(asyncio.shield(task),8.)
                 mark('guard_finished_before_late_release')
             else:
@@ -109,6 +142,10 @@ async def scenario(system, invoke, calls, packets, phases, output, mode, expecte
             release_observation.set()
             await asyncio.wait_for(asyncio.shield(task),8.)
             await window('after_production_close')
+            if worker_fault:
+                phases.append(('scene_pause_attempt',
+                    next(e['host_monotonic_ns'] for e in events if e['event']=='scene_pause_begin'),
+                    next(e['host_monotonic_ns'] for e in events if e['event']=='scene_pause_error')))
         point = h.snapshots[0]['snapshot']['setpoint']
         scoped = {name:[p for p in packets if p['type']=='SET_POSITION_TARGET_LOCAL_NED' and lo<=p['host_monotonic_ns']<=hi]
                   for name,lo,hi in phases}
@@ -125,6 +162,14 @@ async def scenario(system, invoke, calls, packets, phases, output, mode, expecte
                 blocked_before_observation=not observation_entered.is_set() and h.owner.phase=='recovery_blocked',
                 late_request_cannot_reach_closed_backend=(mode!='late_forward' or relay.late_error_code=='UNAVAILABLE'),
                 no_late_cache_after_guard=not scoped['after_late_release'])
+        if worker_fault:
+            checks.update(scene_pause_not_falsely_confirmed=not h.owner.report['recovery'].get('simulation_pause_confirmed',False),
+                scene_close_before_sdk_close=next(e['host_monotonic_ns'] for e in events if e['event']=='scene_close_return') <
+                    next(e['host_monotonic_ns'] for e in events if e['event']=='production_close_begin'))
+            if scene_expected=='stalled':
+                checks['original_stall_observed']=all(result['stall_observation'].values()) and wire_matches(scoped['scene_pause_stalled'],point,mode=='after_forward')
+            else:
+                checks['no_probe_worker_release']=not any(e['event']=='scene_worker_released_by_probe' for e in events)
         else:
             checks.update(recovery_position_returned=any(c['method']=='recovery_position' and c.get('returned') for c in calls),
                 position_before_late_request=wire_matches(scoped['recovery_position'],point,False),
@@ -140,12 +185,16 @@ async def scenario(system, invoke, calls, packets, phases, output, mode, expecte
         return result
     finally:
         release_observation.set()
+        if worker_fault and task is not None and not task.done():worker_fault.release()
         if task is not None and not task.done():task.cancel()
         if task is not None:await asyncio.gather(task,return_exceptions=True)
         cleanup_errors = await relay.close()
+        if worker_fault:
+            worker_fault.close()
+            result['scene_worker'] = dict(pid=worker_fault.process.pid,exit_code=worker_fault.process.poll()) if worker_fault.process else None
         with socket.socket() as s:relay_closed=relay.port is not None and s.connect_ex(('127.0.0.1',relay.port))!=0
         result.setdefault('diagnostic_checks',{}).update(relay_closed=relay_closed,relay_cleanup_ok=not cleanup_errors)
-        result.update(relay_events=relay.events,relay_port=relay.port,cleanup_errors=cleanup_errors)
+        result.update(events=events,relay_events=relay.events,relay_port=relay.port,cleanup_errors=cleanup_errors)
         (output/'late-pva-scenario.json').write_text(json.dumps(result,indent=2)+'\n')
         fixture.doCleanups()
         watches.SourceWatchPropagation.tearDownClass()
@@ -157,9 +206,12 @@ def main():
     parser.add_argument('--mode',choices=('before_forward','after_forward','late_forward'),required=True)
     parser.add_argument('--expect',choices=('hold','overwrite','pause'),default='pause')
     parser.add_argument('--watch-patch',type=Path)
+    parser.add_argument('--scene-fault',choices=('reject','no_reply','partial_reply','no_reader','native_unavailable'))
+    parser.add_argument('--scene-expect',choices=('bounded','stalled'),default='bounded')
     args=parser.parse_args()
     return asyncio.run(transport.run(args.output.resolve(),scenario=partial(scenario,mode=args.mode,
-        expected=args.expect,watch_patch=args.watch_patch)))
+        expected=args.expect,watch_patch=args.watch_patch,scene_fault=args.scene_fault,
+        scene_expected=args.scene_expect)))
 
 
 if __name__=='__main__':raise SystemExit(main())
