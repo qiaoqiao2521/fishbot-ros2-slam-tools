@@ -529,3 +529,39 @@ PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unit
 
 Next/owner：根Codex复用现有SDK cache探针，把新/state等待保护接真实MAVSDK二进制和synthetic本地peer，核过期→原恢复位置替换→报文切换及迟到HTTP响应不恢复PVA；仍不启动PX4/飞行。随后覆盖普通PVA RPC自身pending/已接受丢响应期间的失败出口，不把本地wait取消当SDK撤回。原生ROS来源/ACK顺序、完整缓存期限、可行备份、原生空中采用、完整M3与动态仍未完成，整体plan active。
 收尾/Knowledge：所有临时副本、HTTP handler/读取/serve线程及本地端口回收，真实gRPC/Scene定向夹具按原退出回收；无ROS/Gazebo/PX4/SDKbinary或新大产物，原三冻结源保持。历史遥测/失败与并行空间清理任务保留，already_covered Wiki/ROS2 与 FishBot§20，兼容性事实留项目不写memory；本对话内置只读审查，无跨聊天联系。
+
+
+## Flight.run → recover 的真实SDK缓存替换（2026-10-28）
+
+本轮只扩展诊断，复用[原SDK探针](../apps/fishbot-control-station/workbench-tools/drone-sdk-cache-probe.py)的进程、synthetic MAVLink peer、报文捕获与清理；新增[等待恢复场景](../apps/fishbot-control-station/workbench-tools/drone-sdk-state-wait-probe.py)，提取原HTTP夹具供复用。默认OFF执行补片及冻结源码未改；临时源码副本只应用既有REPAIR。真实MAVSDK二进制日志为v4.0.5，HTTP及ego_request/to_thread真实；pose、armed/IN_AIR/OFFBOARD状态、场景暂停和恢复观测边界均为夹具，未启动PX4、ROS或Gazebo。
+
+**实际链路：** 首PVA setter成功 → 第二/state挂起且SDK仍重发PVA → 夹具时钟10.15推进至10.4，sample age .25仍合格而source_end10.2超过原.15 → await_planner_state抛cached_command_source_expired → 原Flight.run进入recover → 成功位置setter替换SDK缓存 → HTTP /stop → 夹具恢复观测边界failed，无landed。随后释放原HTTP工作线程读取一条新鲜、任务匹配、数值不同的PVA，未再次派发PVA；最后由探针显式调用SDK offboard.stop，区分位置替换与停止发送。
+
+主要原始证据位于忽略目录apps/fishbot-control-station/workbench-tools/output/drone-committed/65850c7c-4ac3-457b-b056-62e46a886f06/：sdk-cache-peer.jsonl、sdk-cache-probe.json、flight-events.jsonl、http-late-response.json、guard-recovery-scenario.json及raw-wire-audit.json。四窗排除前100ms，仅为稳定报文观测窗，不是控制容差或延迟上界。
+
+| 窗口 | 实收包数 | 掩码与活动字段 |
+| --- | ---: | --- |
+| /state pending | 2 | mask2048，NED P=(0,1,-1)，V=(.1,.2,0)，A=(0,.01,0)，yaw≈1.32079637rad |
+| 恢复位置成功后、释放迟到HTTP前 | 2 | mask2552，NED P=(0,0,-1)，yaw≈π/2；VA字段不活动 |
+| 原HTTP线程读到新鲜迟到响应后 | 4 | 同一位置报文；没有PVA重新激活 |
+| 显式SDK stop后 | 0 | 该观察窗无setpoint |
+
+所有报文frame1、target7/component1；重发有不同wire time，单一活动载荷。只有一次PVA RPC；恢复位置RPC返回之后原始记录中PVA为0。迟到响应stamp10.4/end11.2、trajectory8，ENU P=(3,2,1.5)、V=(.5,-.2,0)、A=(-.01,.02,.03)、yaw=-.4，与旧PVA和位置保持均可区分；实际HTTP client读取完成且无错误，不能用“它本来过期”解释未发送。
+
+独立审查由raw jsonl重算2/2/4/0及坐标、掩码、yaw、target和时序一致。首恢复位置包比夹具时钟推进晚约5.92ms，比迟到响应释放早约223ms；这是本次host收包观察，不是硬实时保证或PX4采用证明。恢复phase为进入recover的时序证据；helper日志的fake wall=100不得用于真实耗时。
+
+[局部测试](../apps/fishbot-control-station/workbench-review-tests/test_drone_sdk_state_wait_probe.py)检查正确四窗、迟到PVA/错误frame/错误位置及stop后多包反例。最终原state-wait13＋SDK probe5＋新wire3共21项2.109s、0跳过通过；独立相关9项0.426s过。未改执行补片，不重跑未变101项。原探针默认三RPC路径另串行复验UUID bef96002-9d76-4f27-9eb4-786544865c41，原始报文重算PVA11/位置9/stop后0，原参数转换一致；该默认模式diagnostic_checks为空，结论来自原报文复核，不以exit0冒充字段审计。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_state_wait_guard test_drone_sdk_cache_probe test_drone_sdk_state_wait_probe -v
+# 另建唯一output目录；诊断仅synthetic peer，无PX4/飞行。
+cd ../workbench-tools
+/home/muqiao/.cache/ros2-drone/venv/bin/python drone-sdk-state-wait-probe.py --output /tmp/drone-state-wait-new
+```
+
+**证据边界：** 原Flight.close_mavsdk在该夹具中延后交由探针owner，目的是观察run结束后的缓存与迟到响应；这不验证生产清理。实际暂停、制动、落地均未验证，终态仍failed。监视器20ms轮询不是硬TTL；普通PVA RPC自身pending、其他await、恢复RPC未知效果和分布式观测窗口仍可能留下旧缓存，不能宣称全链限期或安全接管。SDK实际监听0.0.0.0/*，仅客户端与synthetic peer在本机，不声称监听仅loopback。
+
+收尾：两串行SDK进程100888/start_ticks214744及126386均wait回收、exit-15，/proc身份已消失，SDK/HTTP监听关闭；HTTP serve/handler/client-read线程均退出。临时源码自动清理，小原始证据原地保留于忽略output，无新增大构建、视频或重复数据包。冻结drone c866441/PX4 d6f12ad/GCOPTER e0444f6均clean，历史失败/遥测保留。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20；兼容性事实留项目，不写memory。本对话独立审查，无跨聊天联系。
+
+Next/owner：根Codex接续普通PVA setter RPC自身pending及已接受后丢响应的失败出口，复用既有发送层和run→recover；不把Python取消当SDK撤回，不自动重试效果未知的控制请求。原生ROS来源/ACK顺序、完整SDK缓存期限、可行备份、原生空中采用、完整M3与动态闭环仍未完成。

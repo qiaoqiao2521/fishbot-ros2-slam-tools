@@ -123,7 +123,7 @@ class PositionResponseFault:
         return errors
 
 
-async def run(output, rpc_response_fault=None):
+async def run(output, rpc_response_fault=None, scenario=None):
     from mavsdk_grpc import System
     from mavsdk_grpc.offboard import PositionNedYaw, VelocityNedYaw, AccelerationNed
     from pymavlink.dialects.v20 import common as mavlink
@@ -174,6 +174,7 @@ async def run(output, rpc_response_fault=None):
     sdk_process = None
     relay = None
     diagnostic_checks = {}
+    scenario_result = None
     started = time.monotonic_ns()
 
     async def invoke(name, function, timeout=5., expect_timeout=False):
@@ -213,28 +214,31 @@ async def run(output, rpc_response_fault=None):
                 if state.is_connected:
                     return
         await asyncio.wait_for(connected(), timeout=10.)
-        pva = await invoke('set_position_velocity_acceleration_ned', lambda:
-            system.offboard.set_position_velocity_acceleration_ned(
-                PositionNedYaw(.1, .2, -.3, 15.), VelocityNedYaw(.12, -.08, .06, 15.),
-                AccelerationNed(.03, .02, -.01)))
-        await asyncio.sleep(.65)  # No setter call during this observation window.
-        position_start = time.monotonic_ns()
-        phases.append(('pva_without_new_rpc', pva['host_end_ns']+100_000_000, position_start))
-        if rpc_response_fault:
-            relay = PositionResponseFault(rpc_response_fault, grpc_port)
-            replacement = await relay.start()
-            position = await invoke('set_position_ned', lambda: replacement.set_position_ned(
-                PositionNedYaw(.4, .5, -.6, 15.)), timeout=.25, expect_timeout=True)
-            await asyncio.wait_for(relay.cancelled.wait(), 1.)
+        if scenario is not None:
+            scenario_result = await scenario(system, invoke, calls, packets, phases, output)
         else:
-            position = await invoke('set_position_ned', lambda: system.offboard.set_position_ned(PositionNedYaw(.1, .2, -.3, 15.)))
-        await asyncio.sleep(.55)
-        stop_start = time.monotonic_ns()
-        phases.append(('after_position_timeout' if rpc_response_fault else 'position_replaced_pva',
-                       position['host_end_ns']+100_000_000, stop_start))
-        stopped = await invoke('stop', system.offboard.stop)
-        await asyncio.sleep(.4)
-        phases.append(('after_stop', stopped['host_end_ns']+100_000_000, time.monotonic_ns()))
+            pva = await invoke('set_position_velocity_acceleration_ned', lambda:
+                system.offboard.set_position_velocity_acceleration_ned(
+                    PositionNedYaw(.1, .2, -.3, 15.), VelocityNedYaw(.12, -.08, .06, 15.),
+                    AccelerationNed(.03, .02, -.01)))
+            await asyncio.sleep(.65)  # No setter call during this observation window.
+            position_start = time.monotonic_ns()
+            phases.append(('pva_without_new_rpc', pva['host_end_ns']+100_000_000, position_start))
+            if rpc_response_fault:
+                relay = PositionResponseFault(rpc_response_fault, grpc_port)
+                replacement = await relay.start()
+                position = await invoke('set_position_ned', lambda: replacement.set_position_ned(
+                    PositionNedYaw(.4, .5, -.6, 15.)), timeout=.25, expect_timeout=True)
+                await asyncio.wait_for(relay.cancelled.wait(), 1.)
+            else:
+                position = await invoke('set_position_ned', lambda: system.offboard.set_position_ned(PositionNedYaw(.1, .2, -.3, 15.)))
+            await asyncio.sleep(.55)
+            stop_start = time.monotonic_ns()
+            phases.append(('after_position_timeout' if rpc_response_fault else 'position_replaced_pva',
+                           position['host_end_ns']+100_000_000, stop_start))
+            stopped = await invoke('stop', system.offboard.stop)
+            await asyncio.sleep(.4)
+            phases.append(('after_stop', stopped['host_end_ns']+100_000_000, time.monotonic_ns()))
     except Exception as error:
         errors.append(type(error).__name__+': '+str(error))
     finally:
@@ -277,22 +281,30 @@ async def run(output, rpc_response_fault=None):
                                      if p['type'] == 'COMMAND_LONG'),
             'sdk_reaped': sdk_process is not None and sdk_process.poll() is not None,
         }
+    if scenario_result is not None:
+        diagnostic_checks = scenario_result.get('diagnostic_checks', {})
+        diagnostic_checks.update(
+            no_arm_command=not any(p.get('command') == 400 for p in packets if p['type'] == 'COMMAND_LONG'),
+            sdk_reaped=sdk_process is not None and sdk_process.poll() is not None)
     summary = {'scope': 'real SDK and synthetic MAVLink peer; no PX4/Gazebo/flight',
         'host_started_ns': started, 'sdk_udp_port': sdk_udp, 'grpc_port': grpc_port,
         'rpc_calls': calls, 'phase_results': phase_results, 'errors': errors,
         'rpc_response_fault': rpc_response_fault,
         'relay': None if relay is None else {'scope': 'diagnostic only', 'port': relay.port,
                                             'events': relay.events},
-        'diagnostic_checks': diagnostic_checks,
+        'diagnostic_checks': diagnostic_checks, 'scenario_result': scenario_result,
         'arm_command_count': sum(p.get('command') == 400 for p in packets if p['type'] == 'COMMAND_LONG'),
         'sdk_pid': None if sdk_process is None else sdk_process.pid,
         'sdk_exit_code': None if sdk_process is None else sdk_process.poll(),
-        'candidate_expiry_enforced': 'not_implemented_by_this_probe', 'px4_acceptance': 'not_tested',
+        'candidate_expiry_enforced': ('application_wait_veto_only' if scenario is not None
+                                      else 'not_implemented_by_this_probe'), 'px4_acceptance': 'not_tested',
         'synthetic_peer_acknowledgements': True, 'flight_accepted': False}
     (output/'sdk-cache-probe.json').write_text(json.dumps(summary, indent=2, allow_nan=False)+'\n')
     (output/'sdk-cache-peer.jsonl').write_text(''.join(json.dumps(json_safe(p), allow_nan=False)+'\n' for p in packets))
     print(json.dumps(summary, indent=2))
-    return int(bool(errors) or len(phases) != 3 or not all(diagnostic_checks.values()))
+    complete = (len(phases) == 3 if scenario is None else
+                bool(scenario_result) and bool(diagnostic_checks) and bool(phases))
+    return int(bool(errors) or not complete or not all(diagnostic_checks.values()))
 
 
 def main():

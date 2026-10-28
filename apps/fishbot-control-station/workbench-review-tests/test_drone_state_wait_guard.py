@@ -15,6 +15,76 @@ from test_drone_recovery_cache_chain import RecoveryHarness, ReturnHome
 import test_drone_command_validity as original
 
 
+class PendingStateHttp:
+    """Synthetic planner HTTP; no ROS or aircraft state is supplied by it."""
+    def __init__(self, h, root):
+        self.entered, self.release, self.finished = threading.Event(), threading.Event(), threading.Event()
+        entered, release, finished = self.entered, self.release, self.finished
+        self.client_read_finished = threading.Event()
+        client_read_finished = self.client_read_finished
+        self.late_response = self.late_error = None
+        reads = 0
+        class Handler(BaseHTTPRequestHandler):
+            def respond(self, value):
+                data = json.dumps(value).encode()
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                try:
+                    self.wfile.write(data)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass  # Fixture response may outlive its cancelled client await.
+            def do_GET(self):
+                nonlocal reads
+                reads += 1
+                if reads == 2:
+                    entered.set()
+                    try:
+                        release.wait(2.)
+                        self.respond(h.response)
+                    finally:
+                        finished.set()
+                else:
+                    self.respond(h.response)
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get('Content-Length', '0')))
+                h.note('real_http', path=self.path)
+                self.respond({'accepted': True})
+            def log_message(self, *_):
+                pass
+        self.server = server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.worker = worker = threading.Thread(target=lambda: server.serve_forever(poll_interval=.01), daemon=True)
+        worker.start()
+        ns = h.owner.goto.__func__.__globals__
+        ns.update(Request=Request, urlopen=urlopen)
+        ns['asyncio'].to_thread = asyncio.to_thread
+        h.owner.ego_url = f'http://127.0.0.1:{server.server_port}'
+        method = original.methods(root/'flight.py', 'Flight', ('ego_request',), ns)['ego_request']
+        def real_request(path, body=None):
+            try:
+                result = method(h.owner, path, body)
+                if path == '/state' and entered.is_set():
+                    self.late_response = result
+                return result
+            except Exception as error:
+                if path == '/state' and entered.is_set():
+                    self.late_error = type(error).__name__+': '+str(error)
+                raise
+            finally:
+                if path == '/state' and entered.is_set():
+                    client_read_finished.set()
+        h.owner.ego_request = real_request
+
+    async def close(self):
+        self.release.set()
+        await asyncio.to_thread(self.server.shutdown)
+        self.server.server_close()
+        await asyncio.to_thread(self.worker.join, 1.)
+        if self.entered.is_set():
+            await asyncio.to_thread(self.finished.wait, 1.)
+            await asyncio.to_thread(self.client_read_finished.wait, 1.)
+
+
 class StateWaitGuard(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
@@ -254,52 +324,10 @@ class StateWaitGuard(unittest.IsolatedAsyncioTestCase):
 
     async def test_real_http_thread_can_finish_late_without_dispatching_late_pva(self):
         h, _, _, _ = self.harness()
-        entered, release, finished = threading.Event(), threading.Event(), threading.Event()
-        client_read_finished = threading.Event()
-        reads = 0
-        class Handler(BaseHTTPRequestHandler):
-            def respond(self, value):
-                data = json.dumps(value).encode()
-                self.send_response(200)
-                self.send_header('Content-Length', str(len(data)))
-                self.end_headers()
-                try:
-                    self.wfile.write(data)
-                except (BrokenPipeError, ConnectionResetError):
-                    pass  # Fixture response may outlive its cancelled client await.
-            def do_GET(self):
-                nonlocal reads
-                reads += 1
-                if reads == 2:
-                    entered.set()
-                    try:
-                        release.wait(2.)
-                        self.respond(h.response)
-                    finally:
-                        finished.set()
-                else:
-                    self.respond(h.response)
-            def do_POST(self):
-                self.rfile.read(int(self.headers.get('Content-Length', '0')))
-                h.note('real_http', path=self.path)
-                self.respond({'accepted': True})
-            def log_message(self, *_):
-                pass
-        server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-        worker = threading.Thread(target=lambda: server.serve_forever(poll_interval=.01), daemon=True)
-        worker.start()
-        ns = h.owner.goto.__func__.__globals__
-        ns.update(Request=Request, urlopen=urlopen)
-        ns['asyncio'].to_thread = asyncio.to_thread
-        h.owner.ego_url = f'http://127.0.0.1:{server.server_port}'
-        method = original.methods(self.root/'flight.py', 'Flight', ('ego_request',), ns)['ego_request']
-        def real_request(path, body=None):
-            try:
-                return method(h.owner, path, body)
-            finally:
-                if path == '/state' and entered.is_set():
-                    client_read_finished.set()
-        h.owner.ego_request = real_request
+        fixture = PendingStateHttp(h, self.root)
+        entered, release, finished = fixture.entered, fixture.release, fixture.finished
+        client_read_finished = fixture.client_read_finished
+        server, worker = fixture.server, fixture.worker
         task = asyncio.create_task(h.run())
         try:
             self.assertTrue(await asyncio.to_thread(entered.wait, 1.))
@@ -315,9 +343,7 @@ class StateWaitGuard(unittest.IsolatedAsyncioTestCase):
             release.set()
             if not task.done(): task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-            await asyncio.to_thread(server.shutdown)
-            server.server_close()
-            await asyncio.to_thread(worker.join, 1.)
+            await fixture.close()
             self.assertTrue(await asyncio.to_thread(finished.wait, 1.))
             self.assertTrue(await asyncio.to_thread(client_read_finished.wait, 1.))
             self.assertEqual(len(h.rows('pva.return')), 1)

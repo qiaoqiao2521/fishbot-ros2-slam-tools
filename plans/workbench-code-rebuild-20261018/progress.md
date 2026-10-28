@@ -536,3 +536,12 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - 验证：pending首PVA反例先红，最终101项11.261s/0skip（原88＋新13）过，三补片六顺序与组合保持。真实HTTP线程迟到/退出/端口关闭过，SDK/物理仍替身。旧恢复测试只更新更早的expired原因；独立12＋原3项过，修source_end数值字符串保存兼容后最后2项.250s独立过。精确入口见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
 - Remaining/Next：根Codex复用现有SDK cache探针，把新/state等待保护接真实MAVSDK二进制和synthetic本地peer，核过期→原恢复位置替换→报文切换及迟到HTTP响应不恢复PVA；仍不启动PX4/飞行。随后覆盖普通PVA RPC自身pending/已接受丢响应期间的失败出口，不把本地wait取消当SDK撤回。原生ROS来源/ACK顺序、完整缓存期限、可行备份、原生空中采用、完整M3与动态仍未完成，整体plan active。
 - 收尾/Knowledge：临时副本、fixture HTTP/gRPC/worker与端口回收，无新大产物/ROS/SDKbinary/飞行，原件和并行清理成果保留；already_covered Wiki§20，本对话只读审查无跨聊天。
+
+
+## 2026-10-28 run→recover真实SDK缓存链核对
+
+- Current/Done：沿默认OFF REPAIR临时副本走真实goto/run/recover，真实SDK4.0.5＋HTTP/to_thread＋synthetic本地peer；source过期后位置setter替换PVA，fresh迟到HTTP实际读完仍无PVA恢复。未改生产执行补片、冻结源未部署。
+- 验证：UUID65850c7c-4ac3-457b-b056-62e46a886f06原包四窗2/2/4/0，掩码2048→2552，NED PVA/姿态角及frame/target独立重算一致，只有1次PVA RPC。原默认探针新UUID bef96002-9d76-4f27-9eb4-786544865c41三窗11/9/0亦复核。最终21项2.109s/0skip，独立相关9项.426s通过；未重跑未改101项。精确时序、数值及复验见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 边界：飞行遥测、pose、pause均synthetic，故意观测阻塞终态failed，无landed；SDK清理延后由探针owner负责以观测缓存，不是生产close验收。未启动PX4/ROS/Gazebo或发arm/start/land；真实SDK缓存证据不授予完整TTL、物理接管或动态资格。
+- 收尾/Knowledge：两个SDK回收、端口与HTTP线程关闭，临时源码自动清理，小证据保留忽略output，未产生大副本；三冻结源clean，历史原件保留。already_covered Wiki§20，项目事实不写memory；本对话审查无跨聊天。
+- Next/owner：根Codex接续普通PVA setter RPC自身pending及已接受后丢响应的失败出口，复用既有发送层和run→recover；不把Python取消当SDK撤回，不自动重试效果未知的控制请求。原生ROS来源/ACK顺序、完整SDK缓存期限、可行备份、原生空中采用、完整M3与动态闭环仍未完成。 整体plan active。
