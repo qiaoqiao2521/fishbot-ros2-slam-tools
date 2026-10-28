@@ -6,7 +6,7 @@ const {chromium,expect}=upstream('@playwright/test');
 const base=process.env.STATION_TEST_URL ?? 'http://127.0.0.1:5187';
 (async()=>{
  const out=process.env.STATION_QA_OUTPUT ?? path.join(__dirname,'output/station-execution');fs.mkdirSync(out,{recursive:true});
- const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
+ const browser=await chromium.launch({executablePath:process.env.STATION_CHROME_BIN ?? '/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
  const result={passed:false,tasks:[],posts:[],pageErrors:[]};
  const save=()=>fs.writeFileSync(path.join(out,'result.json'),JSON.stringify(result,null,2));
  try{
@@ -22,6 +22,21 @@ const base=process.env.STATION_TEST_URL ?? 'http://127.0.0.1:5187';
    const name=samples[process.env.STATION_SAMPLE];
    assert(name,'Unknown STATION_SAMPLE; no task submitted');
    await panel.getByRole('button',{name,exact:true}).click();
+  }
+  if(process.env.STATION_DOCUMENT){
+   const fixture=path.resolve(process.env.STATION_DOCUMENT);
+   const document=JSON.parse(fs.readFileSync(fixture,'utf8'));
+   await panel.locator('input[type=file]').setInputFiles(fixture);
+   await expect(panel.getByLabel('工作站名称',{exact:true})).toHaveValue(document.station.name);
+   const downloaded=page.waitForEvent('download');
+   await panel.getByRole('button',{name:'导出 JSON',exact:true}).click();
+   const exported=path.join(out,'browser-export.json');await(await downloaded).saveAs(exported);
+   const imported=JSON.parse(fs.readFileSync(exported,'utf8')).station;
+   const stepIds=imported.program.map(step=>step.id);
+   assert(stepIds.every(id=>typeof id==='string' && id.length>0) && new Set(stepIds).size===stepIds.length,'Imported steps must keep unique editor IDs');
+   const executionContent=station=>({...station,program:station.program.map(({id,...step})=>step)});
+   assert.deepEqual(executionContent(imported),executionContent(document.station),'Import/export must preserve every field except regenerated step editor IDs');
+   result.importedFixture=fixture;result.browserExport=exported;result.importComparison={ignoredFields:['program[].id'],uniqueStepIds:true};save();
   }
   const submitted=page.waitForResponse(response=>response.url()===base+'/api/so101/tasks' && response.request().method()==='POST');
   await run.click();const first=await(await submitted).json();result.tasks.push({id:first.id});save();

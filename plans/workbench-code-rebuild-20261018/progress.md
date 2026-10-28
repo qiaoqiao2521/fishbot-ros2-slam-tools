@@ -575,3 +575,12 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - Next：当前根Codex核多生产者/重启下候选失效和在线来源绑定；可行备份/全链TTL/原生空中采用/M3/动态仍未完成。保持默认OFF，不解冻部署，不跨聊天协作。
 
 Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析构：先核真实释放时机”，同步开发知识入口新触发词；具体运行事实留项目，不写memory。
+
+
+## 2026-10-28 SO101 固定红盘X中点网页整链
+
+- Current/Done：既有Station QA新增STATION_DOCUMENT导入/导出核对和可选Chrome路径。原产品UI/API/执行器不改；左X−15.5mm原60mm/.5、右X＋15.5mm显式54mm/.35经真实浏览器各1次POST、刷新不重发，完成原MuJoCo抓放/释放/脱离/回位2/2。任务9e4059a7-3f24-4852-a8d5-c071ab92fd8b、d2e1ca4e-8226-4e01-9d46-7f411a2e842b，原源261e3e6。
+- Evidence：Kaggle so101-x-station-browser-20261028 v3终态。左75.16sim/92.82process-wall/94.48CPU，右78.32/92.91/94.94。原1mm、完整244/246扫掠、自由物体与90sim120wall保持；独立91项无失败，原monitor/skill/release精确重放，实视频470/490帧。根已看原网页截图，UUID/完成状态/蓝盘内物体可见。完整周期无EpisodeTiming，50Hz unknown；不是性能A/B或连续域通过。
+- Issues：v1步骤UI ID重建使fixture严格比较失败，未POST；仅忽略program[].id并另核唯一，导出→POST→原request仍严格。v2私有计时包装缺GNU time使worker exit127，未启动物理；v3补可选依赖/警告降级后通过。原失败和非致命sitecustomize缺wrapt警告保留。普通±10mm帮助仍未按显式开发配置改写。
+- Delivery/cleanup：两可编辑Station文档与详表位于SO101仓库plans/workcell-productization-20261024/m1a-x-web-midpoint-results.md；其忽略output/x-station-browser-20261028保存原TGZ、gzip读回、两截图和当前视频。reader压缩回读后释放30,601,216分配字节；完成上传硬链接已删、未虚报释放，无临时帧。原任务/worker终态后才TERM/wait自有preview，无本地资源抢占或实体动作。
+- Next/owner：SO101根继续第二放置工位同点验证；M2原Carry网页waiting→按钮resume→原物理仍待验，复用同QA/原API，不改控制器。Drone新的source-graph补片/探针/witness在途变动保留，由原Drone根接续；最短入口为workbench-review-tests/test_drone_source_graph_guard.py与workbench-tools/drone-native-source-probe.py，其运行边界按本计划Drone节；本次Station提交不混入。Knowledge=already_covered，Wiki《ROS2 与 FishBot》§20。
