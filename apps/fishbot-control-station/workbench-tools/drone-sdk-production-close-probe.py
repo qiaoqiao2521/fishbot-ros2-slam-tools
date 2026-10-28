@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import types
 from functools import partial
 
 sys.dont_write_bytecode = True
@@ -25,6 +26,15 @@ import test_drone_command_validity as original
 spec = importlib.util.spec_from_file_location('production_close_transport', TOOLS/'drone-sdk-cache-probe.py')
 transport = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(transport)
+
+
+def production_close_method(root, owner):
+    namespace = dict(asyncio=asyncio, subprocess=subprocess, json=json)
+    atomic = next(n for n in ast.parse((root/'flight.py').read_text()).body
+                  if isinstance(n, ast.FunctionDef) and n.name == 'atomic_json')
+    exec(compile(ast.Module(body=[atomic], type_ignores=[]), str(root/'flight.py'), 'exec'), namespace)
+    method = original.methods(root/'flight.py', 'Flight', ('close_mavsdk',), namespace)['close_mavsdk']
+    return types.MethodType(method, owner)
 
 
 async def scenario(system, invoke, calls, packets, phases, output, source_watch=False):
@@ -43,11 +53,7 @@ async def scenario(system, invoke, calls, packets, phases, output, source_watch=
     h.owner.drone = system
     h.sdk_modules = nullcontext
     h.owner.recovering = False
-    namespace = dict(asyncio=asyncio, subprocess=subprocess, json=json)
-    atomic = next(n for n in ast.parse((h.root/'flight.py').read_text()).body
-                  if isinstance(n, ast.FunctionDef) and n.name == 'atomic_json')
-    exec(compile(ast.Module(body=[atomic], type_ignores=[]), str(h.root/'flight.py'), 'exec'), namespace)
-    close = original.methods(h.root/'flight.py', 'Flight', ('close_mavsdk',), namespace)['close_mavsdk']
+    close = production_close_method(h.root, h.owner)
     process = system._server_process
     old_position = system.offboard.set_position_ned
     old_pva = system.offboard.set_position_velocity_acceleration_ned
@@ -68,7 +74,7 @@ async def scenario(system, invoke, calls, packets, phases, output, source_watch=
 
     async def production_close():
         mark('production_close_begin', pid=process.pid, poll=process.poll())
-        await close(h.owner)
+        await close()
         mark('production_close_return', pid=process.pid, poll=process.poll())
 
     system.offboard.set_position_ned = position

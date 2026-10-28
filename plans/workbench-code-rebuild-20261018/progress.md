@@ -627,3 +627,12 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 - 验证：最终六模块75项10.193s/0skip，新增watch12项，含OFF已应用、六既有补片顺序、state/PVA等待、同epoch健康、源时钟、通道断开及旧watch收拢。原launcher空PYTHONPATH --help复现缺command_epoch，EPOCH补片增加一行根目录路径后同条件exit0；1c4d17fb两原记录/最终测试log保留，--help非ROS/飞行。首轮手工换epoch保留旧setpoint夹具改用真实goal Handler后过，未松门槛；首轮SDK82514原件保留。
 - Remaining/Next：当前根Codex用原before/after relay核在途PVA迟交与通知共存，远端接受不能因客户端取消宣称撤回，确认是否覆盖恢复位置。不重复加监视层；原子授权/全链硬TTL、可行备份、真实状态地图终端、MINCO在线/M3和动态仍未过。
 - 收尾/Knowledge：五小证据组约384KiB保留，临时源自动回收，9808字节测试log已copy读回后删临时副本；无新大缓存，所有自有进程/端口/worker结束。相对路径写补片/跨文件系统rename两命令失败已纠正，未动冻结源；Station119增/3删在途保留。updated：原Wiki来源链与入口补Condition通知与单owner/分层边界并读回，大dirty保留不盲整页提交，不写memory、不跨聊天。
+
+## 在途PVA缓存替换核对（2026-10-28）
+
+- Done：原候选受控迟交复现恢复position之后被原PVA覆盖，Python reference仍position；接受在先/仅丢响应的对照没有该覆盖。新增真实SDK迟交探针，原protobuf只投递一次，不称自然直连乱序。
+- 修补：默认OFF source-watch记录本地rpc_started；unknown已启动PVA进入recover时先用原block_recovery暂停，再由原finally关闭SDK，跳过未证实的recovery_hover。未派发、明确返回及OFF保持原路径；原远端效果仍unknown。
+- 验证：六模块77项18.039s/0skip过；原迟交/接受对照、修补迟交/接受对照和成功返回后源失效五SDK组，独立原包/时序/数值/进程端口20/18/19/17/14项全过。修补迟交释放晚于原SDK关闭，UNAVAILABLE、后窗0；正常分支PVA3→仅position2→0。全部arm0、failed未落地；源/pose/clock/armed/暂停为替身，无PX4/Gazebo/飞行。
+- 产物/交接：工作台docs/DRONE_HANDOFF_EVIDENCE.md末节列五UUID与CLI，67fe目录留最终测试log，8476保留原watch补片。自有SDK五个均kill+wait回收，HTTP/gRPC/relay关闭；约267KiB独有证据保留，临时源和/tmp测试log已清理。Station Carry QA在途保留、不混提交；三冻结源未部署。
+- Next/owner：当前根Codex核真实scene.pause失败/超时到finally的关闭链及剩余缓存窗口，不再加监视层。实际状态/地图/终端、可行备份、MINCO在线、M3与动态仍未完成；整体目标继续。
+- Knowledge：updated，原Wiki/ROS2与FishBot及入口补取消与接收顺序边界、已读回；知识库大dirty保留，不写memory、不跨聊天。

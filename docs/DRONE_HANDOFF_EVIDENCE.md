@@ -922,3 +922,32 @@ python3 drone-sidecar-native-probe.py --source-watch --domain-id 188 --output "$
 收尾：五组约384KiB独有小原包/CLI记录保留，临时执行源自动回收，无新大型缓存或渲染。一次相对路径补片写入及一次跨文件系统日志移动失败，均未改冻结源；改用绝对路径、日志copy/读回/unlink后完成。全部自有进程、HTTP/gRPC端口与worker已结束；三冻结源不变，Station Carry QA在途119增/3删保留不混提交、不跨聊天。Knowledge=updated，原Wiki来源链及入口补“变更等待由单控制owner消费、通知/缓存替换/物理结果分层”，实际读回记录在计划，知识库原大dirty保留，不写memory。
 
 Next/owner：当前根Codex核在途PVA远端迟交与新通知共存：客户端取消不等远端撤销，复用现有before/after relay和本轮watch，确认恢复位置是否可能被后来接受的PVA覆盖。随后接实际状态/地图/终端和可行备份资格；不重复扩大普通GET/监视层，不把本轮传播候选升级为硬TTL、原子授权、安全降落或M3/动态通过。整体目标仍active。
+
+## Flight.run → recover：在途PVA与缓存替换（2026-10-28）
+
+结论：位置RPC返回不构成迟交PVA的顺序屏障。原补片下，SDK已发位置保持，之后一次原PVA迟交可覆盖缓存；Python reference仍显示position。使用受控非协作relay保留已经收到的同一protobuf，跨客户端取消后只投递一次，不重建或重试；这不是自然直连gRPC乱序的证明。
+
+| 对照 / UUID | 原报文与结果 |
+| --- | --- |
+| 原候选 late_forward / 8476f799-c937-4be9-93fa-69556b552920 | pending位置4包 → 恢复位置5包mask2552 → 原请求迟交后PVA4包mask2048 → 生产关闭后0；PID686499/-9 |
+| 原候选 after_forward / de65bccb-57bc-45bd-be6c-89c876501916 | PVA接受但响应丢失：4PVA → 恢复位置4 → 后窗4位置 → 关闭0；PID690218/-9，不能据此认为所有迟交已排除 |
+| 修补候选 late_forward / 67fe1e61-29c5-4c90-9b0d-2302b6c48738 | unknown在途PVA走recovery_blocked，不写恢复position、不进入观察等待；原生产关闭PID700233/-9后才释放原请求，UNAVAILABLE、两个后窗均0 |
+| 修补候选 after_forward / 5afeb7d8-8a95-4c9c-acd2-57db1204e474 | 原SDK已接受但客户端未确认，仍按unknown暂停/关闭；pending4PVA，关闭后0；PID701448/-9 |
+| 明确返回后源失效 / d8199f73-a20d-45c2-8b22-9fb30c4b8d92 | 保留普通恢复：有效PVA3包 → 失效至关闭2包仅position → 关闭0；PID702107/-9 |
+
+最小改动只在默认OFF的drone-source-watch.patch：await_pva_command记录rpc_started（本地发送任务已创建，不等于远端收到）；recover在recovery_hover之前检查最后一条已启动且unconfirmed/cancelled、rpc_returned=false、remote_effect=unknown的PVA。没有接收端epoch fence时，保存unfenced_pva，调用已有block_recovery暂停仿真，再由原run finally关闭SDK。保留原触发原因、failed/未落地，不宣称安全悬停。未派发拒绝、已返回PVA后发生源故障及开关OFF均保留原路径；不新增服务、监视器或生产开关。
+
+SDK探针使用真实mavsdk-grpc4.0.5、实际RPC、loopback HTTP、原run/goto/recover/finally/close_mavsdk，MAVLink对端是合成peer。源/pose/clock/armed/暂停均为显式夹具，report中的simulation_pause_confirmed仅为替身结果；本轮没有PX4/Gazebo/解锁/飞行。原System析构kill及Popen wait证实本轮进程回收，不能替代物理暂停、空中停稳、落地、端到端硬TTL或原子撤销。暂停失败/进程死亡/已过暂停点的迟交窗口仍不具备完整保护证明。
+
+五目录各independent-late-pva-audit.json重新读取原jsonl、RPC、报告、时序及端口/进程，20/18/19/17/14项全部通过；完整活动三阶量、frame/target/yaw与mask分别核，不用Python reference代替SDK缓存。五个自有SDK均原生产close为-9、/proc不存在、HTTP/gRPC/relay端口关闭；所有arm=0、failed且landed/disarmed=false。最终六模块77项18.039s/0skip通过，新增两项覆盖未派发及明确返回分支，六补片顺序仍过。工具expect仅选诊断判据，不改变被测恢复策略；baseline-source-watch.patch留在8476目录可回放原缺口。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_source_watch test_drone_state_epoch_window test_drone_command_epoch_patch test_drone_state_wait_guard test_drone_pva_rpc_guard test_drone_recovery_cache_chain -q
+# 每次选新输出目录。复现旧反例另加 --watch-patch 指向8476目录保留的baseline补片，并设 --expect overwrite。
+/home/muqiao/.cache/ros2-drone/venv/bin/python ../workbench-tools/drone-sdk-late-pva-probe.py --mode late_forward --expect pause --output "$LATE_PVA_OUTPUT"
+```
+
+Next/owner：当前根Codex优先核原scene.pause真实调用的失败/超时是否仍能到达finally关闭，继续明确源失效到SDK关闭间的缓存窗口；不凭本轮停仿真策略晋级可行备份或M3。真实状态/地图/终端、MINCO在线与动态闭环仍未通过，三冻结源未部署。
+
+收尾：五组独有证据约267KiB保留，临时源自动清理；最终测试log复制读回后删除/tmp副本。一次生成脚本SyntaxError在写入前失败，改正后成功，无冻结源变动。Station Carry QA在途119增/3删保留，不混提交、不跨聊天；知识页跨任务dirty原位保留。Knowledge=updated：原Wiki/ROS2与FishBot来源链及开发知识入口补“取消/接收端迟交/缓存顺序分层”，已读回，不写memory。

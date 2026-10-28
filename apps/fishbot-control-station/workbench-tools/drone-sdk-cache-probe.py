@@ -68,6 +68,8 @@ class PositionResponseFault:
         self.mode, self.upstream_port, self.method = mode, upstream_port, method
         self.events = []
         self.cancelled, self.received, self.forwarded = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        self.late_release, self.late_forward_task = asyncio.Event(), None
+        self.late_finished, self.late_error_code = asyncio.Event(), None
         self.server = self.channel = None
         self.port = None
 
@@ -88,6 +90,26 @@ class PositionResponseFault:
             owner.record('relay_received', method=owner.method)
             owner.received.set()
             try:
+                if owner.mode == 'late_forward':
+                    # Explicit non-cooperative queue fixture: retain ONE original
+                    # protobuf across client cancellation; never regenerate/retry it.
+                    snapshot = request.__class__()
+                    snapshot.CopyFrom(request)
+                    owner.record('late_request_captured', protobuf_hex=snapshot.SerializeToString().hex())
+                    async def forward_later():
+                        await owner.late_release.wait()
+                        owner.record('late_upstream_call_started', protobuf_hex=snapshot.SerializeToString().hex())
+                        try:
+                            response = await call(snapshot, timeout=2.)
+                            owner.record('late_upstream_returned', result=int(response.offboard_result.result))
+                            owner.forwarded.set()
+                        except Exception as error:
+                            code = error.code().name if callable(getattr(error, 'code', None)) else type(error).__name__
+                            owner.late_error_code = code
+                            owner.record('late_upstream_error', code=code, error=str(error))
+                        finally:
+                            owner.late_finished.set()
+                    owner.late_forward_task = asyncio.create_task(forward_later())
                 if owner.mode == 'after_forward':
                     owner.record('upstream_call_started')
                     response = await call(request, timeout=2.)
@@ -123,6 +145,11 @@ class PositionResponseFault:
 
     async def close(self):
         errors = []
+        if self.late_forward_task is not None:
+            if not self.late_forward_task.done():
+                self.late_forward_task.cancel()
+            results = await asyncio.gather(self.late_forward_task, return_exceptions=True)
+            errors.extend('late request: '+str(value) for value in results if isinstance(value, Exception))
         for name, resource, operation in (
                 ('client', getattr(self, 'client_channel', None), lambda r: r.close()),
                 ('server', self.server, lambda r: r.stop(0)),

@@ -159,12 +159,58 @@ class SourceWatchPropagation(unittest.IsolatedAsyncioTestCase):
                         attempt = h.owner.report['command_rpc_attempts'][0]
                         self.assertEqual(attempt['reason'], 'command_source_epoch_changed')
                         self.assertEqual(attempt['remote_effect'], 'unknown')
+                        self.assertTrue(attempt['rpc_started'])
                         self.assertFalse(attempt['rpc_returned'])
                         self.assertEqual(h.owner.report['recovery']['trigger'], 'command_source_epoch_changed')
-                        self.assertEqual(h.rows('scene.pause')[0]['cache']['mode'], 'position')
+                        self.assertEqual(h.owner.report['recovery']['reason'],
+                            'unconfirmed_pva_without_native_epoch_fence')
+                        self.assertEqual(h.owner.report['recovery']['unfenced_pva'], attempt)
+                        self.assertFalse(any(r['recovery'] for r in h.rows('position.begin')))
+                        self.assertEqual(h.rows('observation.fixture_boundary'), [])
+                        self.assertEqual(h.rows('scene.pause')[0]['cache']['mode'],
+                            'unconfirmed_pva' if accepted else 'position')
+                        self.assertEqual(h.owner.status, 'failed')
+                        self.assertFalse(h.owner.report.get('landed', False))
                     finally:
                         if not task.done(): task.cancel()
                         await asyncio.gather(task, return_exceptions=True)
+
+    async def test_pre_dispatch_veto_still_uses_original_recovery(self):
+        h = self.bridge()
+        check = h.owner.check_command_wait
+        def veto(*args, **kwargs):
+            command = args[4] if len(args)>4 else kwargs.get('command')
+            if command is not None:
+                raise RuntimeError('fixture_pre_dispatch_veto')
+            return check(*args, **kwargs)
+        h.owner.check_command_wait = veto
+        with http_source(h):
+            await h.run()
+        attempt = h.owner.report['command_rpc_attempts'][0]
+        self.assertFalse(attempt['rpc_started'])
+        self.assertFalse(attempt['rpc_returned'])
+        self.assertEqual(h.rows('pva.return'), [])
+        self.assertTrue(any(r['recovery'] for r in h.rows('position.return')))
+        self.assertNotIn('unfenced_pva', h.owner.report['recovery'])
+        self.assertEqual(len(h.rows('observation.fixture_boundary')), 1)
+
+    async def test_returned_pva_then_source_failure_keeps_original_recovery(self):
+        h = self.bridge()
+        request = h.source_request
+        def invalidate_on_next_state(path, body=None):
+            if path=='/state' and h.rows('pva.return'):
+                h.source.node.invalidate_command_source('fixture_source_changed')
+            return request(path, body)
+        h.source_request = invalidate_on_next_state
+        with http_source(h):
+            await h.run()
+        attempt = h.owner.report['command_rpc_attempts'][0]
+        self.assertTrue(attempt['rpc_started'])
+        self.assertTrue(attempt['rpc_returned'])
+        self.assertEqual(attempt['status'], 'returned')
+        self.assertNotIn('unfenced_pva', h.owner.report['recovery'])
+        self.assertTrue(any(r['recovery'] for r in h.rows('position.return')))
+        self.assertEqual(h.rows('scene.pause')[0]['cache']['mode'], 'position')
 
     async def test_missing_invalid_or_old_notification_blocks_before_pva(self):
         for body in ({}, {'command_epoch':'epoch', 'observed_monotonic_ns':0},
@@ -249,6 +295,9 @@ class SourceWatchPropagation(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(asyncio.shield(task), 1.)
             self.assertIn('command_source_watch_unavailable: OSError', h.owner.report['recovery']['trigger'])
             self.assertEqual(h.owner.report['command_rpc_attempts'][0]['remote_effect'], 'unknown')
+            self.assertEqual(h.owner.report['recovery']['reason'],
+                'unconfirmed_pva_without_native_epoch_fence')
+            self.assertFalse(any(r['recovery'] for r in h.rows('position.begin')))
         finally:
             release.set()
             if not task.done(): task.cancel()

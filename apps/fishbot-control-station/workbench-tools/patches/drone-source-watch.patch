@@ -55,7 +55,15 @@ diff --git a/flight.py b/flight.py
          references = [("cached_command", self.reference if cached_reference is None else cached_reference)]
          if command is not None:
              try:
-@@ -751,6 +775,8 @@
+@@ -638,6 +662,7 @@
+                            reason=str(error) or type(error).__name__, error_type=type(error).__name__)
+             raise
+         finally:
++            attempt["rpc_started"] = send is not None
+             attempt["rpc_returned"] = (send is not None and send.done() and not send.cancelled()
+                                         and send.exception() is None)
+             if send is not None:
+@@ -751,6 +776,8 @@
                  goal_epoch = goal_reply.get("command_epoch")
                  if not isinstance(goal_epoch, str) or not goal_epoch:
                      raise RuntimeError("command_epoch_unavailable")
@@ -64,6 +72,23 @@ diff --git a/flight.py b/flight.py
          else:
              await self.setpoint(target)
          deadline = time.monotonic()+100
+@@ -1101,6 +1128,16 @@
+             self.report.update(landed=False, disarmed=False)
+         self.report["recovery"] = {"trigger": reason, "outcome": "running", "checks": [],
+                                    "traversed": [], "route_source": "measured_px4_positions"}
++        epoch = getattr(self.observer, "command_epoch", None)
++        attempts = self.report.get("command_rpc_attempts") or []
++        last = attempts[-1] if attempts else None
++        if (getattr(epoch, "source_watch_enabled", False) and last is not None and
++                last.get("operation") == "pva" and last.get("rpc_started") is True and
++                last.get("status") in ("unconfirmed", "cancelled") and
++                not last.get("rpc_returned") and last.get("remote_effect") == "unknown"):
++            # A local cancellation cannot fence a late PVA behind position hold.
++            self.report["recovery"]["unfenced_pva"] = dict(last)
++            await self.block_recovery("unconfirmed_pva_without_native_epoch_fence")
+         self.set_phase("recovery_hover", "正在悬停，重新观测已飞过的回退通路")
+         try:
+             if self.telemetry.get("landed") == "ON_GROUND" and self.telemetry.get("armed") is False:
 diff --git a/ego/sidecar.py b/ego/sidecar.py
 --- a/ego/sidecar.py
 +++ b/ego/sidecar.py
