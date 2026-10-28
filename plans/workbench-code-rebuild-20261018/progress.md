@@ -595,3 +595,10 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 - Knowledge=updated：原Wiki/ROS2与FishBot来源链段落及入口触发词已写并读回；知识库大批既有dirty保留待原任务整合，不写memory、不跨聊天。
 
 收尾更新：共享工作树的SO101既有任务已将Station17行与自身进度提交为8fc0569；已定点读两文件diff和交付说明，本无人机轮只做语法核对，不把其物理/E2E结论计入本轮验收。保留该提交，本轮串行追加，不覆盖、不跨聊天联系。
+
+## 2026-10-28 指定 Flight.run → recover 缓存链复验
+
+- Done：冻结 c866441 与默认 OFF REPAIR 定点核对；现有 recovery_cache_chain 增补返航嵌套取消/故障两个子例。原 PVA → 位置 setter 返回/reference 更新 → planner /stop 顺序成立。六相关模块55项5.331s/0skip通过；替身与历史真实 SDK 报文证据分开，未改飞行行为、未启动飞行。
+- Remaining：定位失效可在位置替换前阻断；setter 报错远端效果 unknown。取消在途 await 不证明远端撤回，迟到远端 PVA 覆盖、生产 SDK 关闭与物理停稳/落地仍待验。动态/M3未通过，冻结未解除。
+- 保留在途：此前 native receipts 的四个已跟踪文件变动及两个新文件（source_graph 测试、native-source-probe、EPOCH、witness、native_receipts 测试、sidecar-native-probe）未混入本次提交。受控原包延迟准入试验 adfb41fb 已有结果；完整 Sidecar 74a7ecec 仍失败（planner exit250、无曲线、超时），不是功能通过。其三自有PID480811/480826/480827本次核对/proc均不存在；原日志保留，不因换到本次核对而重跑或删除。owner=当前根Codex；最短入口为该 UUID 的 sidecar-native-probe.json/runtime/planner.log 与现有 test_drone_native_receipts，先定位原 planner 错误再决定下一次运行。
+- 收尾：本次测试临时副本自动清理，无新增服务或大产物；源仓未改，在途补片保留。Knowledge=already_covered，详见 docs/DRONE_HANDOFF_EVIDENCE.md 指定链路复验段；不写memory、不跨聊天。

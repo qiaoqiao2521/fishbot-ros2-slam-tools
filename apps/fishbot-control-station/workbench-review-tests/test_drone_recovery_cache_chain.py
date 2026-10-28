@@ -261,6 +261,36 @@ class RecoveryCacheChain(unittest.IsolatedAsyncioTestCase):
             await task
         self.assert_finished_failed(h)
 
+    async def test_return_home_nested_faults_use_same_replacement_before_stop(self):
+        for cancel, trigger in ((True, 'cancel_during_return_home'), (False, 'return_home_fault')):
+            with self.subTest(cancel=cancel):
+                h = self.harness()
+
+                def request_return():
+                    raise ReturnHome()
+
+                async def return_home(*, operator):
+                    h.note('return_home.fixture', operator=operator)
+                    if cancel:
+                        raise original.CancelFlight()
+                    raise RuntimeError('fixture_return_home_fault')
+
+                h.owner.check_operator = request_return
+                h.owner.return_home = return_home
+                with h.sdk_modules():
+                    # Prime the actual setter/reference path before the operator event.
+                    await h.owner.setpoint([1., 0., 1.], .25, [.2, .1, 0.], [.01, 0., 0.])
+                    await h.owner.run()
+                report = self.assert_finished_failed(h)
+                self.assertEqual(report['recovery']['trigger'], trigger)
+                self.assertFalse(h.rows('return_home.fixture')[0]['operator'])
+                self.assertEqual(len(h.rows('pva.return')), 1)
+                stop = next(row for row in h.rows('http') if row['path'] == '/stop')
+                self.assertEqual(stop['cache']['mode'], 'position')
+                self.assertEqual(stop['reference']['mode'], 'position')
+                self.assertEqual(stop['cache']['payload'], [[0., 0., -1., 90.]])
+                self.assertEqual(len([row for row in h.rows('position.return') if row['recovery']]), 1)
+
     async def test_failed_setter_does_not_prove_cache_was_or_was_not_replaced(self):
         for fault, cache_mode in (('setter_before_accept', 'pva'), ('setter_after_accept', 'position')):
             with self.subTest(fault=fault):

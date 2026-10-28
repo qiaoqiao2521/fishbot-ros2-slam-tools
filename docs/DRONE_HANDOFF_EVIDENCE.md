@@ -665,6 +665,16 @@ Remaining/Next：恢复位置setter自身延迟/接受后丢响应尚无同级�
 
 收尾：临时源码由既有TemporaryDirectory夹具清理，无新运行服务、大文件或可删重复产物；历史原包保留。SO101在途station-execution.cjs修改完整保留，不并入此次文档交付。Knowledge=already_covered，沿用Wiki/ROS2与FishBot§20的回执/缓存/物理结果分层，不写memory。
 
+### 本次指定链路复验：补返航嵌套出口（2026-10-28）
+
+再次定点读取冻结 `flight.py` 的 `setpoint/run/recover/close_mavsdk` 及既有默认 OFF REPAIR。冻结源仍为 c866441，未修改、未部署；本次只增加现有恢复夹具的一项回归，包含返航中业务取消、返航故障两个子例。首 PVA 经真实 `Flight.setpoint` 方法写入显式替身缓存，然后由 `run` 捕获操作员返航，分别进入 `cancel_during_return_home`、`return_home_fault`。两子例均先成功位置替换并更新 reference，再执行 `/stop`，各只替换一次；恢复观测在明确夹具边界结束，最终 failed、无落地证明。
+
+相关六模块本次 **55 项、5.331s、0 跳过通过**，命令沿用上节。其余检查覆盖业务取消、源期限失效、位置 setter pending/接受前失败/接受后丢响应、定位失效、控制接管失败、暂停和清理失败、已落地与外部 Task.cancel。SDK 报文结论沿用下节已录真实原包，不把本次替身复验写成新 SDK 试验。
+
+缓存链结论保持：`run` 业务异常 → `recover` 核定位 → 位置 setter 成功 → Python reference 更新 → planner `/stop`；已失控时另需 hold/start/遥测确认。定位失效可在替换前阻断；RPC 失败时远端效果未知。`/stop` 不是 SDK 清缓存，Python await 取消也不是远端撤回；未确认的远端 PVA 请求是否可能迟到覆盖恢复位置，仍不由本组证明排除。生产 SDK 关闭、实际停稳和安全落地继续单列待验，原界未放宽，动态闭环未通过。
+
+本次未启动 ROS/SDK/PX4/Gazebo 或飞行。测试临时副本自动清理。Knowledge=already_covered，沿用既有回执/缓存/物理结果分层；具体状态只更新项目记录。
+
 
 ## 恢复位置RPC未知效果：真实SDK注入（2026-10-28）
 
