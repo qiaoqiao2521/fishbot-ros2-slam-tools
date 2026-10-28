@@ -481,3 +481,26 @@ Next/owner：根Codex核现有Sidecar在暂停/时钟回退/新goal后的候选�
 Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20的调用/接收/执行分层；模块新事实留项目，无memory写入。
 
 独立只读审查按raw jsonl和RPC窗重算9/10/0计数、具体载荷与上游成功先于超时的事件顺序一致；原报文arm=0，PID/start_ticks消失及SDK/relay端口拒绝连接均独立复核。SDK实际监听0.0.0.0，不能把本机客户端写成服务仅loopback。
+
+
+## 默认关闭的候选 epoch 隔离（2026-10-28）
+
+新增独立[epoch补片](../apps/fishbot-control-station/workbench-tools/patches/drone-command-epoch.patch)，未应用冻结源。DRONE_COMMAND_EPOCH仅1启用，执行器/Sidecar需同启用；单侧缺goal token时报告command_epoch_unavailable，不改写/伪造token。OFF保原HTTP字段与原小回退行为；建议后续隔离验证同时使用原DRONE_REVALIDATE_COMMAND补片。所有源码、helper和控制流只在TemporaryDirectory副本提取/编译，不导入ROS，不启动节点/SDK/仿真/飞行。
+
+CommandEpoch使用随机UUID区分候选，不用内容hash或可回退的sim时间作身份。GazeboObserver的真实on_clock回调，以及Sidecar的state/tick/command/curve/ACK入口观察时钟：回退或原2s无进展使epoch失效一次，恢复时钟不能重用旧token。Sidecar清目标/ACK/样本/已登记曲线/排队请求，保存旧关联值后发送原stop；重复暂停不反复刷新预算。新goal与匹配owner的stop再rotate；wrong-owner stop不使有效epoch轮换。目标接受锁内重核state、入队token并捕获reply，tick比较token与goal_id，避免复用同goal_id的旧队列发出。
+
+固定原生补片ego/upstream-jazzy.patch:2392–2406、2457–2469将PoseStamped stamp作为目标接受、取消floor与ACK关联，未用于该目标轨迹采样。原sim_ns+sequence在回退时可能重复，现ON用进程内递增floor保持关联值唯一；不改变曲线的start/knots/采样时间。旧ACK在新目标下拒绝，未ACK或低于既有floor的曲线不登记。ACK与curve跨topic交付仍可能先曲线后ACK，首曲线会被拒绝，需要原生顺序/活性验收，不能据此宣称可运行闭环。
+
+Flight固定保存/goal回复token与独立observer token，HTTP等待之后核验；state token在readiness/matched宽限前核，sample token在存在后核。独立审查曾复现首PVA后新epoch+空样本先走旧宽限，主线程三分支反例先红再修：空样本、其他goal、readyFalse均直接进入epoch故障，不能继续按原宽限等10s。原发送前取消、sample .3/source_end+.15与零VA goal_hold判据保留，未改变V/A/Z/净空门槛。成功RPC后将goal/clock epoch写入原reference便于回看；RPC未确认不提前改reference。
+
+[20项局部检查](../apps/fishbot-control-station/workbench-review-tests/test_drone_command_epoch_patch.py)0.842s/0跳过通过；含新鲜正例、缺/错token、回退追回同值、暂停恢复、真实observer回调、确切native ACK碰撞、同goal_id队列、锁后并发目标回复归属的受控重入、旧ACK/未ACK曲线拒绝。真实三补片EPOCH/REPAIR/SENDER六种顺序apply/compile通过，并执行组合后的epoch/取消/源期限行为。独立原18项0.641s过并发现宽限缺口，修后新增和组合2项0.164s独立通过；不把先前18绿色当完整资格。未改原三补片/冻结树，不重跑未变53项或全机器人实验。
+
+**边界仍在：** Bspline/PositionCommand没有原生epoch字段；本地收到消息时打token不等生产者来源证明，ACK后迟到高ID/多生产者/重启需另外核。state快照生成后服务器再次失效而客户端尚无对应观测，仍存在分布式窗口。RPC中途已经被SDK接受的指令不能由token撤回；/state等待内旧SDK缓存持续重发、可行备份及动态闭环未解决。当前只完成本地候选合同切片。
+
+```sh
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station/workbench-review-tests
+PYTHONDONTWRITEBYTECODE=1 /home/muqiao/.cache/ros2-drone/venv/bin/python -m unittest test_drone_command_epoch_patch -v
+```
+
+Next/owner：根Codex沿既有goto /state等待区间补并发失效观察，复用原recover处理过期/取消/回退，不自动重试未知效果RPC；用真实SDK旧缓存重发证据核等待期间的有效期边界。原生ACK→Bspline→PositionCommand顺序与单一生产者资格仍待核，不把receipt token当ROS来源证明。保持冻结、不部署、不解锁；可行备份、原生空中采用、完整M3和动态闭环未完成，整体plan active。
+收尾：TemporaryDirectory副本自动回收，无运行实例/新大产物，历史遥测/失败和既有pycache未动。原drone c866441/PX4 d6f12ad/GCOPTER e0444f6均clean。Knowledge=already_covered，沿用Wiki/ROS2 与 FishBot§20的来源/确认/实际执行分层；新兼容性事实留项目，无memory写入。本对话内置独立审查，不联系其他聊天。

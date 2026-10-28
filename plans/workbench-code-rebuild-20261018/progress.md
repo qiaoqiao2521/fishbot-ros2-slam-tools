@@ -518,3 +518,12 @@ Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及
 - 验证：主线程串行两最终UUID337e5be4/8fecabc1，具体PVA字段/掩码、单一payload/新wire时刻与上游事件交叉核；5局部0.307s/0skip过。原Flight/Scene补片无改动、未重跑其53项。完整产物和复验见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
 - 收尾：先行及最终3个自有SDK均wait回收、监听关闭，relay各资源独立清理；约84KiB必要原始小证据保留在忽略output。无PX4/Gazebo/飞行或大构建，三冻结源clean。Knowledge=already_covered Wiki§20，本对话内置审查，不联系其他聊天。
 - Next/owner：根Codex核现有Sidecar在暂停/时钟回退/新goal后的候选身份隔离，并制作默认OFF最小epoch适配；随后处理/state等待期间旧SDK缓存持续重发的TTL缺口。沿既有发送层和恢复出口，不引入生产RPC代理，不自动重试未知效果控制。原冻结源不部署、不解锁；可行备份、原生空中采用、完整M3与动态闭环未完，整体plan active。
+
+
+## 2026-10-28 默认关闭的本地候选 epoch
+
+- Current：新增DRONE_COMMAND_EPOCH=1薄补片，未应用冻结源；默认OFF保原schema/行为，本地切片有进展，完整M3/动态未完。
+- Done：暂停/回退使候选、ACK、已登记曲线和队列失效；goal/stop轮换、原生关联stamp进程内递增，锁内重核/捕获reply，队列token+goal_id过滤。Flight固定goal/observer身份，先核state token再走就绪宽限，样本存在后核sample token。
+- 验证：20项0.842s/0skip；三补片六顺序applycompile与真实组合行为过。独立18项曾发现首PVA后新epoch空样本被宽限吞掉，三反例先红后修，独立新增/组合2项0.164s过。原53资格不扩大，无服务/飞行。
+- Remaining/Next：根Codex沿既有goto /state等待区间补并发失效观察，复用原recover处理过期/取消/回退，不自动重试未知效果RPC；用真实SDK旧缓存重发证据核等待期间的有效期边界。原生ACK→Bspline→PositionCommand顺序与单一生产者资格仍待核，不把receipt token当ROS来源证明。保持冻结、不部署、不解锁；可行备份、原生空中采用、完整M3和动态闭环未完成，整体plan active。
+- 收尾/Knowledge：临时副本自动删除，无新大产物或实例，三冻结源clean，原件/既有pycache保留；already_covered Wiki§20，本对话独立审查无跨聊天。精确入口与限制见docs/DRONE_HANDOFF_EVIDENCE.md最新节。

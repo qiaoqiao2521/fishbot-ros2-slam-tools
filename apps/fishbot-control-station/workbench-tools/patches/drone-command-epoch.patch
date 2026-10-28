@@ -1,0 +1,214 @@
+diff --git a/flight.py b/flight.py
+--- a/flight.py
++++ b/flight.py
+@@ -9,2 +9,3 @@
+ from urllib.request import Request, urlopen
++from command_epoch import CommandEpoch
+ 
+@@ -65,2 +66,3 @@
+         self.simulation_s = None
++        self.command_epoch = CommandEpoch()
+         self.pose = None
+@@ -115,4 +117,6 @@
+         stamp = message.sim.sec + message.sim.nsec*1e-9
++        wall = time.monotonic()
++        self.command_epoch.observe(stamp, wall)
+         if stamp != self.simulation_s:
+-            self.clock_received = time.monotonic()
++            self.clock_received = wall
+         self.simulation_s = stamp
+@@ -598,2 +602,6 @@
+         goal_id = str(uuid.uuid4())
++        epoch = getattr(self.observer, "command_epoch", None)
++        epoch_enabled = epoch is not None and epoch.enabled
++        clock_epoch = epoch.token if epoch_enabled else None
++        goal_epoch = None
+         if use_ego:
+@@ -602,3 +610,3 @@
+             await self.setpoint(list(self.pose["position"]))
+-            await asyncio.to_thread(self.ego_request, "/goal",
++            goal_reply = await asyncio.to_thread(self.ego_request, "/goal",
+                                     dict(zip(("x","y","z"),target), task_id=self.request["id"],
+@@ -606,2 +614,8 @@
+                                          position_tolerance_m=self.position_tolerance))
++            if epoch_enabled:
++                if epoch.token != clock_epoch:
++                    raise RuntimeError("command_clock_epoch_changed")
++                goal_epoch = goal_reply.get("command_epoch")
++                if not isinstance(goal_epoch, str) or not goal_epoch:
++                    raise RuntimeError("command_epoch_unavailable")
+         else:
+@@ -635,2 +649,7 @@
+                            and command.get("goal_id") == goal_id)
++                if epoch_enabled:
++                    if epoch.token != clock_epoch:
++                        raise RuntimeError("command_clock_epoch_changed")
++                    if state.get("command_epoch") != goal_epoch:
++                        raise RuntimeError("command_epoch_mismatch")
+                 if state.get("ready") and not matched and time.monotonic() < deadline-90:
+@@ -640,2 +659,4 @@
+                     raise RuntimeError("EGO 规划未就绪: "+str(state.get("reason")))
++                if epoch_enabled and command.get("command_epoch") != goal_epoch:
++                    raise RuntimeError("command_epoch_mismatch")
+                 age = self.observer.simulation_s-command["stamp_sim_s"]
+@@ -650,2 +671,4 @@
+                     command_stamp_sim_s=command["stamp_sim_s"])
++                if epoch_enabled:
++                    self.reference.update(command_epoch=goal_epoch, clock_epoch=clock_epoch)
+             sim_s = self.observer.simulation_s
+diff --git a/ego/sidecar.py b/ego/sidecar.py
+--- a/ego/sidecar.py
++++ b/ego/sidecar.py
+@@ -37,2 +37,3 @@
+ from motion_budget import configure_motion_budget
++from command_epoch import CommandEpoch
+ 
+@@ -57,2 +58,3 @@
+         self.requests = queue.Queue()
++        self.command_epoch = CommandEpoch()
+         self.history = deque(maxlen=300)
+@@ -478,2 +480,24 @@
+ 
++    def rotate_command_epoch(self, reason):
++        self.command_epoch.rotate(reason)
++        self.trajectory_times.clear()
++        self.latest_trajectory = None
++
++    def observe_command_epoch(self):
++        if not self.command_epoch.enabled:
++            return
++        reason = self.command_epoch.observe(self.sim_now(), time.monotonic())
++        if not reason:
++            return
++        old_stamp = self.goal_stamp_ns
++        self.active_goal, self.setpoint = None, None
++        self.goal_acknowledged = False
++        self.goal_stamp_ns = self.planning_since = None
++        self.trajectory_times.clear()
++        self.latest_trajectory = None
++        while not self.requests.empty():
++            self.requests.get_nowait()
++        if old_stamp is not None:
++            self.stop_pub.publish(String(data=str(old_stamp)))
++
+     def on_bspline(self, msg):
+@@ -487,2 +511,6 @@
+         with self.lock:
++            self.observe_command_epoch()
++            if self.command_epoch.enabled and (not self.active_goal or not self.goal_acknowledged or
++                                               msg.traj_id < self.min_trajectory_id):
++                return
+             previous = self.latest_trajectory
+@@ -519,2 +547,3 @@
+         with self.lock:
++            self.observe_command_epoch()
+             self.last_trajectory_id = max(self.last_trajectory_id, msg.trajectory_id)
+@@ -537,2 +566,4 @@
+                                  goal_id=self.active_goal.get("goal_id"))
++            if self.command_epoch.enabled:
++                self.setpoint["command_epoch"] = self.command_epoch.token
+ 
+@@ -544,2 +575,3 @@
+         with self.lock:
++            self.observe_command_epoch()
+             if self.active_goal and stamp == self.goal_stamp_ns:
+@@ -620,2 +652,4 @@
+     def tick(self):
++        with self.lock:
++            self.observe_command_epoch()
+         self.flush_depth()
+@@ -639,2 +673,4 @@
+                 command = self.requests.get_nowait()
++                if self.command_epoch.enabled and command.get("command_epoch") != self.command_epoch.token:
++                    continue
+                 if command["type"] == "stop":
+@@ -668,2 +704,3 @@
+         with self.lock:
++            self.observe_command_epoch()
+             now, wall = self.sim_now(), time.monotonic()
+@@ -699,2 +736,4 @@
+             point = self.setpoint
++            if self.command_epoch.enabled and point and point.get("command_epoch") != self.command_epoch.token:
++                reason = reason or "command_epoch_mismatch"
+             if not reason and point and now - point["stamp_sim_s"] > 0.3:
+@@ -720,2 +759,3 @@
+             return {"ready": reason is None, "simulation_s": now,
++                    **({"command_epoch": self.command_epoch.token} if self.command_epoch.enabled else {}),
+                     "runtime_identity": {"pid": os.getpid(), "start_ticks": start_ticks(os.getpid()),
+@@ -942,2 +982,9 @@
+                 with node.lock:
++                    node.observe_command_epoch()
++                    if node.command_epoch.enabled and body["type"] == "goal":
++                        current = node.state()
++                        if not current["ready"] and current["reason"] not in (
++                                "no_path", "planning_timeout", "planner_emergency"):
++                            self.send(503, {"error": current["reason"]})
++                            return
+                     if body["type"] == "stop":
+@@ -947,2 +994,4 @@
+                             return
++                        if node.command_epoch.enabled:
++                            node.rotate_command_epoch("stop")
+                         # Cancellation must work even while Gazebo /clock is paused.
+@@ -957,2 +1006,4 @@
+                     else:
++                        if node.command_epoch.enabled:
++                            node.rotate_command_epoch("goal")
+                         node.active_goal = body
+@@ -962,2 +1013,5 @@
+                         node.goal_stamp_ns = node.get_clock().now().nanoseconds + node.goal_sequence
++                        if node.command_epoch.enabled:
++                            node.goal_stamp_ns = node.command_epoch.next_goal_stamp(node.goal_stamp_ns)
++                            body["command_epoch"] = node.command_epoch.token
+                         node.planning_since = node.goal_stamp
+@@ -967,4 +1021,6 @@
+                         node.requests.put(body)
++                    reply_epoch = node.command_epoch.token
+                 self.send(202, {"accepted": True, "task_id": body.get("task_id"),
+-                                "goal_id": body.get("goal_id")})
++                                "goal_id": body.get("goal_id"),
++                                **({"command_epoch": reply_epoch} if node.command_epoch.enabled else {})})
+             except (ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
+diff --git a/command_epoch.py b/command_epoch.py
+new file mode 100644
+--- /dev/null
++++ b/command_epoch.py
+@@ -0,0 +1,38 @@
++"""Opt-in local candidate epochs; not a native ROS or SDK cancellation token."""
++import os
++import uuid
++
++
++class CommandEpoch:
++    def __init__(self):
++        self.enabled = os.environ.get("DRONE_COMMAND_EPOCH") == "1"
++        self.token = str(uuid.uuid4())
++        self.last_sim = self.progress_wall = None
++        self.stalled = False
++        self.reason = "initial"
++        self.goal_stamp_floor = 0
++
++    def rotate(self, reason):
++        self.token, self.reason = str(uuid.uuid4()), reason
++
++    def next_goal_stamp(self, proposed):
++        # Native ACK echoes this correlation stamp, not the HTTP UUID.
++        self.goal_stamp_floor = max(proposed, self.goal_stamp_floor+1)
++        return self.goal_stamp_floor
++
++    def observe(self, now, wall):
++        if not self.enabled:
++            return None
++        changed = self.last_sim is None or now != self.last_sim
++        reason = None
++        if self.last_sim is not None and now < self.last_sim:
++            reason = "clock_rewind"
++        elif self.progress_wall is not None and wall-self.progress_wall > 2 and not self.stalled:
++            reason = "clock_stalled"
++        if reason:
++            self.rotate(reason)
++            self.stalled = True
++        if changed:
++            self.progress_wall, self.stalled = wall, False
++        self.last_sim = now
++        return reason
