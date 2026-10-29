@@ -996,3 +996,15 @@ Next/owner：当前根Codex在独立分区、无飞机的最小Gazebo世界核�
 - 真实录像：`apps/fishbot-control-station/workbench-tools/output/drone-live/2d0db740-28a3-4f8e-a646-6f94f45577aa/static-on-flight.mp4`，H264/1280×880/96.720s。原WebM、MCAP、Task报告及失败视频保留，ego-success.png已目视；不是生成动画。
 
 Next/owner：当前聊天根Codex只读本轮A原planner.log的首次refine_collision分支，最小变更后同场景复飞再同版B；不新增评估脚本/夹具。原drone/PX4/GCOPTER冻结树clean，实际改动在既有drone仓分支codex/live-baseline-20261028；自有仿真/SDK已回收，5186网页保留，SO101 Station既有119增/3删不混交。Knowledge=already_covered；项目事实留项目，整体计划未完成。
+
+
+## refine_collision实际复飞（2026-10-29）
+
+无人机既有codex/live-baseline-20261028隔离分支仅启用preserve_boundary_va并扩展原refine_optimize：失败后用原连续碰撞检查复查输入控制点，通过才恢复，仍经manager原PVA/3D动力学/高度门。没有新增离线工具或夹具，工作台控制逻辑未改。
+
+- 仅参数c5012fdd-a0ad-43a6-8f41-6c29ad608b60仍failed/planner_emergency，恢复落地/disarm。
+- 源码候选46ddc2fc-1532-43dc-9580-ea043fd4f9fc触发RefineSeedFallback safe=1一次，FinalSplineReject为0；后续rebound首段.258s碰撞→紧停，仍failed、只起飞到点。恢复落地/disarm；高1.880189m、净空1.158373m。不能称动态修复成功。
+- 新实际planner进程来自ego-refine-seed-20261029/install，原源码/overlay未覆盖。曲线7源起点/Sidecar24.588sim→Flight RPC87/24.640sim→PX4 ingress24640000µs→used24644000µs，原九PVA载荷对应、branch0/success_mask1、无地面覆盖；感知柱格时刻仍未提取。
+- 复用原replay-only QA，失败原任务MCAP的seek/play/pause/rewind、模型与页面3项过，控制写/WS/页面与HTTP错误0。原始录像output/drone-live/refine-seed-A-20261029-01/page@768184a56cbccbf78703b5086bbe67b0.webm，失败未改成功。
+
+完整两UUID、录像、时间表、隔离构建和空间清理见研究factory-air-ground-arm-20261024/progress.md末节。两轮自有PX4/Gazebo/EGO/SDK已回收、控制端口关闭，5186回放服务保留；本轮共清理601180334逻辑字节可重建.o/.a，二进制和原包保留。Next当前根Codex只核本轮rebound首段占据/FSM时刻后最小修改重飞，MINCO冻结，不新增离线衍生、不跨聊天；Knowledge=already_covered。

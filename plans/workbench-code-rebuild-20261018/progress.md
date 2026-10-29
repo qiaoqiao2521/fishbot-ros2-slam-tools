@@ -1,5 +1,10 @@
 # 实施进度
 
+## 2026-10-29 refine最小修改实际复飞
+
+- c5012fdd参数对照和46ddc2fc源码候选都planner_emergency/failed，恢复落地/disarm已确认。后者原连续检查保留输入候选一次、无FinalSplineReject，后续rebound首段占据仍拒绝；动态未通过。
+- 工作台执行代码未改；原replay-only QA对46ddc2fc的原生MCAP三项过、零控制写/WS/页面错误。两录像/原包与四步表见docs/DRONE_HANDOFF_EVIDENCE.md末节和研究进度；无新分析器/夹具，MINCO冻结，Station在途改动保留。Knowledge=already_covered。
+
 ## 2026-10-28 无人机实际网页飞行交付
 
 - 已跳过专门无飞机暂停；复用5186、原任务入口/预演/录像/MCAP。简化1m宽/4m高墙OFF21ae28f5、ON子集6ca4265e均完成并落地/disarm，原生回放通过；缓存期限误杀项关闭、NATIVE_RECEIPTS=0，不能称全保护通过。
