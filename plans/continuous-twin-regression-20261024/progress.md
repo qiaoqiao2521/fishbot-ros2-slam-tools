@@ -208,3 +208,20 @@ E/F不放宽时间、碰撞、载货、速度或评分；没有继续盲重试�
 knowledge_status=already_covered：已读回Wiki/ROS2 与 FishBot的原生终态新零目标、差速进场及第20节分层验收；本轮时序根因未定、卸货仅静态修正，有限场景结论留项目，不写成已验证通用修复。下一owner=root，最短接续见task_plan末节。
 
 收尾核验：D/F以原observer重新运行独立Oracle，整项仍false；passed、原K、目的地、业务评分和保护遥测五组字段与现场评分逐项一致，回执replay-comparison.json。93个文档本地链接无缺失，git diff --check通过。五份B–F原始流逐块核验gzip后删除展开件，分配900354048→148467712字节，释放751886336字节（717.05MiB）；保留原模型、失败快照、原始压缩流、评分、短诊断和未晋级配置。恢复gzip -dk <observer.jsonl.gz>，不会重启任务。全盘可用约5.38GiB；只统计本轮文件的实际回收，不将其冒充全盘净增量。
+
+
+## 2026-10-29 完成：修接纳/接收调度，宽场景连续B→A通过
+
+实现：保留标准TimeSource，将其订阅移到专用接收Node/executor；销毁/参数切换继续走原生命周期。工位两DDS输入depth5匹配原同步器queue5；新增有界callback入口最大间隔诊断，原源龄/接收龄、碰撞、载货和评分门槛不变。完成后补接收线程异常原生Task转发与done唤醒，使无其他输入时也能进入主流程清理。
+
+原生验收：full-ba-g/run b8dc8641-77e6-4bc3-b32c-822767b011f0，原170/9140、J100＋3D雷达宽场景、原SO101与Factory。B/A两单各自命名货物原K、实际抓放/装运/卸货/回位/停稳评分均通过；原生载货Nav终态4，路线48.781/19.263墙秒，位置误差28.044/21.291mm，偏航.028485/.020467rad。总889.584墙秒；39940独立物理样本证明同world/episode、reset0、源序推进，start2/cancel0/reset0。两单末freshness_failure均null。
+
+边界：这是一次宽场景完整B/A通过，不是全计划、旧窄场地或长期稳定通过。启动期clock/physics最大入口空档.325/.347秒保留；没有找出全部底层调度停顿的唯一来源。理想停车guard两次各约.8源秒；不宣称纯视觉/真机。A旧primary cargo_1的顶层K仍false，活动cargo_2按命名物理原K通过，旧字段未篡改。G执行源码起止一致；异常转发补丁在G结束后加入，以生产MultiThreadedExecutor无后续事件原生注入验证，未重跑完整两单。
+
+测试：BridgeRaceTests105项通过；既有check-feedback1869项（control1112/checkpoint22/mission209/autonomy61/frontend465）全部通过，无跳过；其中已包含桥接回归，不重复累加。另3项实际ROS测试通过：停用control executor仍更新时间及参数切换/回跳；DDS错位缓存depth1零配对/当前depth5四对；接收异常晚于主executor首次扫描且无其它ROS事件仍能传播。两份压缩原observer独立重放仍passed，passed/原K/delivery/business/guard五组结果与现场逐项一致。只读Qoder超时未改文件，内置审查发现异常传播缺口，已修并用实际MultiThreadedExecutor补测。
+
+证据：~/.cache/fishbot/j100-wide-20261028/full-ba-g/{result.json,verified-summary.json,replay-comparison.json,archive-receipt.json}及两order/observer；root保留原任务/UUID和B–F失败。原生运行owned_process_survivors=[]、API9140关闭，原生测试171也已退出。只核既有保护单元快照一致，未触碰107/114或宣称它们仍运行。
+
+空间收尾：G两原始observer逐块核验gzip可还原后移除展开件，释放958377984字节；另6份已结束旧连续/麦克纳姆observer归档释放412561408字节，合计1370939392字节（约1.277GiB）。保留场景、快照、源记录、markers、独立评分与失败证据；恢复gzip -dk <observer.jsonl.gz>，索引分别为full-ba-g/archive-receipt.json与cleanup-20261029.json。本轮早期全盘约1.1GiB可用，收尾约2.7GiB；全盘受其它工作影响，回收量以本轮文件分配块为准。没有清理未知/运行中模型或环境。
+
+knowledge_status=updated：已将独立executor的边界、标准TimeSource生命周期、双层队列配对及MultiThreadedExecutor异常唤醒经验补入Wiki/ROS2 与 FishBot“原生 ROS 时钟与回调组”，开发知识入口同行已补触发词，并读回验证。当前B/A结果只回写项目，源龄与真实物理证据分层沿用第19/20节。下一owner=root；M1/M3/M4及其它M2分支仍按task_plan独立推进。

@@ -60,12 +60,20 @@ class BridgeTiming(LoopTiming):
         super().__init__()
         self.diagnostic_lock = threading.RLock()
         self.last = {}
+        self.entry_gaps = {}
 
     def record(self, stage, start, end, context):
         with self.diagnostic_lock:
             super().observe(stage, start, end, context.get('source_stamp'))
             event = dict(context, stage=stage, start_monotonic=start,
                          end_monotonic=end, duration_s=end-start)
+            previous = self.last.get(stage)
+            if previous and stage in ('clock_callback', 'physics_callback', 'station_pair'):
+                gap = start-previous['start_monotonic']
+                event['entry_gap_s'] = gap
+                maximum = self.entry_gaps.get(stage, {}).get('entry_gap_s', 0.)
+                if gap > maximum:
+                    self.entry_gaps[stage] = event.copy()
             self.last[stage] = event
             if end-start >= .1:
                 self.slow_tail[-1].update(context)
@@ -74,6 +82,7 @@ class BridgeTiming(LoopTiming):
         with self.diagnostic_lock:
             value = super().snapshot()
             value.update(last={name: event.copy() for name, event in self.last.items()},
+                         maximum_entry_gaps={name: event.copy() for name, event in self.entry_gaps.items()},
                          native_consumption_ack=False,
                          boundary='bridge processing only; not controller consumption',
                          dds_timestamp_clock='RMW timestamp basis unverified; raw nanoseconds only')
@@ -82,6 +91,22 @@ class BridgeTiming(LoopTiming):
 
 class Canceled(RuntimeError):
     pass
+
+
+def spin_clock_receiver(receiver_executor, control_executor, shutdown_exception):
+    """Propagate receiver faults through the owner's existing cleanup path."""
+    try:
+        receiver_executor.spin()
+    except shutdown_exception:
+        pass
+    except Exception as error:
+        def propagate(error=error):
+            raise error
+        task = control_executor.create_task(propagate)
+        # A completed pool task alone need not wake MultiThreadedExecutor.
+        # Its native done callback queues a ready task and surfaces the fault
+        # even when all other ROS inputs have stopped.
+        task.add_done_callback(lambda completed: None)
 
 
 def make_server(bridge, args, *, runtime):
@@ -168,7 +193,7 @@ def run(args):
     import rclpy
     from rclpy.action import ActionClient
     from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
-    from rclpy.executors import MultiThreadedExecutor, ExternalShutdownException
+    from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor, ExternalShutdownException
     from rclpy.node import Node
     from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy, qos_profile_sensor_data
     from rclpy.time import Time
@@ -191,8 +216,11 @@ def run(args):
 
     class Bridge(Node):
         def __init__(self):
-            # TimeSource subscribes during Node construction. Keep its standard
-            # clock update independent of native action callbacks in the default group.
+            # Standard TimeSource remains the sole clock writer. Only its DDS
+            # subscription lives on a dedicated node/executor, outside action dispatch.
+            self.clock_receiver = Node(
+                "fishbot_cooperation_clock_receiver",
+                parameter_overrides=[rclpy.parameter.Parameter("use_sim_time", value=False)])
             self.clock_callbacks = MutuallyExclusiveCallbackGroup()
             super().__init__('fishbot_so101_cooperation', parameter_overrides=[rclpy.parameter.Parameter('use_sim_time', value=True)])
             self.lock = threading.RLock()
@@ -288,7 +316,7 @@ def run(args):
             self.dock_pose_pub = self.create_publisher(PoseStamped, '/detected_dock_pose', 1)
             # Exact source stamps, bounded queues, and standard ROS messages.
             perception_qos = copy.copy(qos_profile_sensor_data)
-            perception_qos.depth = 1
+            perception_qos.depth = 5
             self.station_pose_filter = Subscriber(self, PoseWithCovarianceStamped,
                                                   '/cooperation/station_pose', qos_profile=perception_qos,
                                                   callback_group=self.perception_callbacks)
@@ -352,10 +380,23 @@ def run(args):
                 def traced_clock(message, info):
                     return self.observe_clock(message, info, original_callback)
                 callback = traced_clock
+                receiver = getattr(self, 'clock_receiver', None)
+                if receiver is not None:
+                    return receiver.create_subscription(
+                        msg_type, topic, callback, qos_profile, callback_group=callback_group,
+                        event_callbacks=event_callbacks, qos_overriding_options=qos_overriding_options,
+                        raw=raw, content_filter_options=content_filter_options)
             return super().create_subscription(
                 msg_type, topic, callback, qos_profile, callback_group=callback_group,
                 event_callbacks=event_callbacks, qos_overriding_options=qos_overriding_options,
                 raw=raw, content_filter_options=content_filter_options)
+
+        def destroy_subscription(self, subscription):
+            # TimeSource owns lifecycle, including use_sim_time disable/re-enable.
+            receiver = getattr(self, 'clock_receiver', None)
+            if receiver is not None and subscription in receiver.subscriptions:
+                return receiver.destroy_subscription(subscription)
+            return super().destroy_subscription(subscription)
 
         def observe_clock(self, message, info, original_callback):
             started = time.monotonic()
@@ -2286,6 +2327,12 @@ def run(args):
 
     rclpy.init()
     bridge=Bridge(); executor=MultiThreadedExecutor(num_threads=4);executor.add_node(bridge)
+    clock_executor = SingleThreadedExecutor(context=bridge.context)
+    clock_executor.add_node(bridge.clock_receiver)
+    clock_thread = threading.Thread(target=spin_clock_receiver,
+        args=(clock_executor, executor, ExternalShutdownException),
+        name='cooperation-clock', daemon=True)
+    clock_thread.start()
     runtime = RuntimeIdentity('cooperation', 'simulation', args.domain, [
         capability('transport', 'native_action', cancel=True, event_history='bounded'),
     ], scene_id=scene_sha)
@@ -2298,7 +2345,8 @@ def run(args):
         bridge.cancel_event.set()
         if bridge.context.ok():
             bridge.hold(True)
-        server.shutdown();executor.shutdown();bridge.destroy_node();rclpy.try_shutdown()
+        server.shutdown();executor.shutdown();clock_executor.shutdown();clock_thread.join()
+        bridge.destroy_node();bridge.clock_receiver.destroy_node();rclpy.try_shutdown()
 
 
 def main():

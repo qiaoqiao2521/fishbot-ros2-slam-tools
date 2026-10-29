@@ -358,3 +358,20 @@ D轮到B原生Nav UUID 7269a222137d45bda02eec46bb4c75d4终态4，路线49.857384
 D轮完整任务仍失败：卸货目标局部(.261648,.157880,.017889)，原上方41mm准备点IK残差.066438，目标本身可解。残差含位置权重和姿态，不解释为6.6cm物理误差。导航容差内的误差仍可让短臂准备点不可达。复用原查询，只为卸货站增加pickup_xy_m配置，缺省原(.24,.14)。宽场景采用(.24,.04)，两卸货臂/货架向世界-X平移.10m；高度、车体、托盘、抬升与评分保持。曾试(.24,.08)可解D快照但4cm圆周八方向中两方向失败，未进行该候选完整运动。采用配置5项原生检查通过，含每站8方向IK、完整车道扫掠/静置和默认物理保持；既有多实体场景15项通过。D快照原抓取查询完整5段通过，仍需真实卸货。
 
 E轮新工位配置在Dock源龄.30秒超过原.25秒门槛失败，接收龄.353秒小于.5秒，A未运行。独立两路50Hz连续；bridge paired转发空档与HTTP组装.211/.482秒峰值共现，根因尚未唯一确定，不修改QoS/过期门槛，不把后续成功视为修复。F轮仅同源码/同输入复现，新任务1c184d60-bafe-41b5-ae9c-aa07862f84fb，未宣称策略改进。
+
+
+## 2026-10-29 接收隔离与连续宽场景 B→A
+
+旧F首次fresh失败：node clock215.76、physics215.90，源龄-.14秒，接收龄.01217秒；清理期-.34秒不是首次故障。随后相邻clock入口间隔.724537秒，physics也停顿，独立observer仍约20ms；clock实际更新最大2.966ms、DDS收到至该入口4.819ms。未证实具体GIL占用者、网卡或TimeSource赋值慢，不把候选机制写成已确诊根因。
+
+明确结构缺口：工位两DDS输入depth1，同步器queue5；同步器持锁调用业务接纳，业务再等控制锁。阻塞时两输入独立覆盖后可能失去相同stamp。修为depth5，原精确匹配/身份/序列/时龄不变。原生错开一帧并暂停takes的对照：depth1零配对，当前depth5恢复4对；没有宽容匹配或刷新旧帧。
+
+仅分callback group仍共用control executor。现将标准TimeSource创建的Clock订阅交给专用Node/executor，继续原callback与depth1/BEST_EFFORT；销毁转发保留参数切换语义。原生测试在control executor完全不spin时仍推进100→101→3秒，验证单写入与回跳；异常经原生Task及done callback唤醒生产MultiThreadedExecutor，再走原finally，避免daemon静默退出。最后异常路径补丁在G结束后加入，有原生故障注入覆盖，未追加完整双单重复试验。
+
+G（run b8dc8641-77e6-4bc3-b32c-822767b011f0）总889.584墙秒，B任务bbb987ce-000c-4d47-a685-cc9f5f66f5bd，A任务82664df5-5594-407b-b14c-a9871d1ef922。独立cargo_1/cargo_2各自原K、双指抬升、托盘交接、实体货架卸货、回位与清理通过；载货Nav UUID分别bca9831d28464edeb752e13172359f8a/4e6aa67000324fb09bf0634aa4b808dc，终态均4。路线48.781/19.263秒；位置误差.028044/.021291m，偏航.028485/.020467rad，原.04m/.05rad及360/120/180预算保持。
+
+独立连续39940帧，同world c9759217-3197-49ed-a00a-e2e165f5e0de、episode 9bf7b187-4002-41af-9340-f1dfc1870c3e，reset0，API start2/cancel0/reset0。B→A交界1412帧源序严格推进、hold且位姿漂移0。A顶层legacy_primary_cargo的旧K为false，因为该通道仍是已卸在B的cargo_1；A按命名cargo_2重新应用原K为true，未篡改旧字段或放宽评分。
+
+两任务末freshness_failure均null；启动source5.74秒时clock最大入口间隔.325114秒、physics.347315秒仍记录。station_pair跨离开工位/返回的长间隔不能直接当消息处理耗时。不能由单次成功断言全部空档消失、特定GIL根因已修或生产稳定。停车理想guard各介入约.8源秒，单列辅助，不宣称纯视觉精度。G选定执行源起止一致；全部owned进程已退出、9140关闭；历史保护仅证明配置的systemd快照一致（旧单元均not-found），不宣称旧ROS实例在运行。
+
+证据：~/.cache/fishbot/j100-wide-20261028/full-ba-g/{result.json,verified-summary.json,replay-comparison.json,archive-receipt.json}；两order的原observer.jsonl.gz、markers、score、terminal-state及源快照保留。独立重放passed、原K、delivery、business和guard五组字段逐项相同。控制桥转发/动作回执仍不冒充控制器逐条消费ACK。

@@ -397,6 +397,16 @@ class BridgeRaceTests(unittest.TestCase):
         value['sequence']=73
         return p,value
 
+    def test_callback_entry_gap_is_distinct_from_fast_processing_duration(self):
+        timing=BridgeTiming()
+        timing.record('clock_callback',1.,1.001,{'source_stamp':1.})
+        timing.record('clock_callback',1.7,1.701,{'source_stamp':1.7})
+        timing.record('clock_callback',1.72,1.721,{'source_stamp':1.72})
+        snapshot=timing.snapshot()
+        self.assertAlmostEqual(snapshot['maximum_entry_gaps']['clock_callback']['entry_gap_s'],.7)
+        self.assertAlmostEqual(snapshot['last']['clock_callback']['duration_s'],.001)
+        self.assertAlmostEqual(snapshot['last']['clock_callback']['entry_gap_s'],.02)
+
     def test_builtin_clock_subscription_routes_once_and_preserves_qos_and_options(self):
         p=self.bridge;p.clock_callbacks=object()
         source=self.namespace['TimeSource']();callback=source.clock_callback;qos=object()
@@ -414,6 +424,23 @@ class BridgeRaceTests(unittest.TestCase):
         with self.assertRaises(TypeError):inspect.signature(call.values[2]).bind(message)
         call.values[2](message,info)
         self.assertEqual(observed,[(message,info,callback)])
+
+    def test_clock_receiver_owns_subscription_and_timesource_destruction(self):
+        p=self.bridge;p.clock_callbacks=object();source=self.namespace['TimeSource']()
+        calls=[];destroyed=[]
+        subscription=object()
+        p.clock_receiver=NS(
+            create_subscription=lambda *a,**k:calls.append((a,k)) or subscription,
+            subscriptions=[subscription],
+            destroy_subscription=lambda sub:destroyed.append(sub) or True)
+        self.assertIs(p.create_subscription(self.namespace['Clock'],'/clock',source.clock_callback,1),subscription)
+        self.assertFalse(getattr(p,'subscription_calls',[]))
+        self.assertEqual(calls[0][0][1],'/clock')
+        observed=[];p.observe_clock=lambda *a:observed.append(a)
+        calls[0][0][2]('message','metadata')
+        self.assertEqual(observed,[('message','metadata',source.clock_callback)])
+        self.assertTrue(p.destroy_subscription(subscription))
+        self.assertEqual(destroyed,[subscription])
 
     def test_clock_routing_keeps_explicit_groups_other_subscriptions_and_callbacks(self):
         p=self.bridge;p.clock_callbacks=object();source=self.namespace['TimeSource']()

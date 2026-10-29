@@ -408,8 +408,12 @@ tools/fishbot_cooperation.sh prepare \
 
 订单继续使用 `continuous-ba-orders.json`，`cooperation_factory.py run --manifest ... --continuous-deliveries tools/config/factory_delivery/continuous-ba-orders.json --order order-b --order order-a`，沿用原 domain/port 隔离和清理流程。首次先加 `--dry-run` 检查请求；去掉后才会执行完整任务。
 
-本轮原生 `ComputePathToPose` 到B、到A、B返回staging均status4，完整几何扫掠通过；按路径估时约49.53/21.20/49.53秒。真实车辆执行、完整载货及无reset B/A仍待验收，不把规划回执当成运动通过。相关原生场景测试为 `tools/tests/test_cooperation_wide_scene.py`。
+本轮原生 `ComputePathToPose` 到B、到A、B返回staging均status4，完整几何扫掠通过；按路径估时约49.53/21.20/49.53秒。随后2026-10-29 G轮实际MuJoCo连续B→A通过，含两件货物装卸；原生规划成功与实际任务验收分别保留。相关原生场景测试为 `tools/tests/test_cooperation_wide_scene.py`。
 
 完整执行还须开启既有 `--terminal-stop-heartbeat`：原生载货动作成功后持续新零目标完成减速，再进入hold。此前只有规划的宽场景准备命令漏带该开关，完整C轮在出站终态发生支撑丢失；C轮失败保留，不追认通过。
 
 卸货工位可选 `pickup_xy_m`，表示理想到站时托盘中心在卸货臂局部坐标中的XY；缺省为原 `[.24,.14]`。宽场景改为 `[.24,.04]`，将两套卸货臂及货架沿世界X负向平移.10m，保持高度与模型尺寸。D轮实际到站偏差仍在导航门槛内，但原准备点IK不可达；新配置已检查原4cm平移误差八方向的上方41mm准备点，并以D轮快照通过原完整抓取查询。该有限IK检查不保证任意偏航/物体姿态，也不替代实际卸货。
+
+2026-10-29 G轮：标准TimeSource的/clock订阅由专用Node＋SingleThreadedExecutor接收；原TimeSource仍为唯一写入源，支持disable/re-enable与reset回跳。两路工位输入DDS depth=5，与原精确同步器缓存一致，不刷新旧stamp、不放宽源龄[-.1,.25]秒与接收龄.5秒。接收线程异常通过原生Task回到控制executor与既有清理路径。
+
+完整B→A一次实测通过：路线48.781/19.263秒，独立末位置误差28.044/21.291mm，偏航.028485/.020467rad；同world/episode、reset=0、start=2、cancel=0。实际双指抬升、托盘释放、连续交接、货架卸货与回位逐货物评分通过。两单理想停车保护各介入约.8源秒，不是无辅助视觉或真机成绩。启动期clock最大入口间隔.325秒仍保留，不宣称消灭调度空档或长期稳定。证据与失败边界见现有continuous-twin计划；G源码起止一致，结束后另补了接收线程异常转发的原生测试。
