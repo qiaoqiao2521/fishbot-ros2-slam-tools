@@ -28,6 +28,8 @@ P1 已完成。当前接 P2：借用 RoboDK 的场景树、平移坐标系、目
 
 ## Next Step
 
+2026-10-29当前无人机覆盖：四次A复飞仍失败但恢复落地/disarm，FSM相位无错；仅SensorData history1有单轮时龄改善，重锚/周期试验撤回。下一项只核新鲜地图下测量PV重锚后的第一条rebound拒绝，不新增离线工具/夹具，不扫周期，MINCO冻结。原始ID/录像/四步表和归档恢复入口以docs/DRONE_HANDOFF_EVIDENCE.md末节及研究进度为准。
+
 2026-10-28无人机覆盖：静态简化高墙OFF/ON子集与网页MCAP已过；动态A/B仍失败且最后两轮未确认落地。下一项只核本轮EGO refine_collision直接分支并最小修改复飞；跳过专门无飞机暂停、禁止新增离线验证器/夹具，MINCO在线冻结。配置、视频和原始ID以docs/DRONE_HANDOFF_EVIDENCE.md末节及研究计划交接为准；当前聊天串行，不跨聊天派发。
 
 2026-10-28接续：Scene父进程锁/pipe无界阻塞已由原真实方法＋SDK复现并在默认OFF候选补有限预算/自有worker回收；85局部检查与四组SDK对照通过。下一步当前根Codex用独立分区、无飞机的最小Gazebo世界核真实暂停回执和clock/physics停止，不部署三冻结源或启动飞行。关闭前仍会重发旧PVA，真实状态/地图/终端、可行备份、MINCO在线、M3与动态仍未完成。复验与交接见工作台docs/DRONE_HANDOFF_EVIDENCE.md末节。

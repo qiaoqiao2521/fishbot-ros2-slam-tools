@@ -1,5 +1,10 @@
 # 实施进度
 
+## 2026-10-29 首段/FSM四次实际复飞
+
+- FSM相位核对无错，生产SensorData历史5→1后单轮front源年龄.144s（旧例.628s）；四次实际A仍failed，只起飞到点，全部恢复落地/disarm；一次起飞前取消另列。重锚/.3s候选已撤回，仅留有限队列改善，原硬门不变。
+- 工作台控制代码未改；e7939d53原生MCAP原QA三项过、零控制写/WS/页面错误。完整ID/录像/逐轮native表与无损ULog恢复见docs/DRONE_HANDOFF_EVIDENCE.md及研究进度末节。无新离线工具/夹具，MINCO冻结、Station在途保留。Knowledge=already_covered。
+
 ## 2026-10-29 refine最小修改实际复飞
 
 - c5012fdd参数对照和46ddc2fc源码候选都planner_emergency/failed，恢复落地/disarm已确认。后者原连续检查保留输入候选一次、无FinalSplineReject，后续rebound首段占据仍拒绝；动态未通过。

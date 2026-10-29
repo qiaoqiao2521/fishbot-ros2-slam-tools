@@ -1008,3 +1008,14 @@ Next/owner：当前聊天根Codex只读本轮A原planner.log的首次refine_coll
 - 复用原replay-only QA，失败原任务MCAP的seek/play/pause/rewind、模型与页面3项过，控制写/WS/页面与HTTP错误0。原始录像output/drone-live/refine-seed-A-20261029-01/page@768184a56cbccbf78703b5086bbe67b0.webm，失败未改成功。
 
 完整两UUID、录像、时间表、隔离构建和空间清理见研究factory-air-ground-arm-20261024/progress.md末节。两轮自有PX4/Gazebo/EGO/SDK已回收、控制端口关闭，5186回放服务保留；本轮共清理601180334逻辑字节可重建.o/.a，二进制和原包保留。Next当前根Codex只核本轮rebound首段占据/FSM时刻后最小修改重飞，MINCO冻结，不新增离线衍生、不跨聊天；Knowledge=already_covered。
+
+
+## rebound首段、FSM时刻与SensorData历史（2026-10-29）
+
+原46ddc2fc FSM24.688−curve24.588=.100，未发现相位计算错误；参考/旧odom差.322m含.116s年龄，不冒充同刻误差。原最近front源24.060/融合结束24.628。仅保留生产SensorDataQoS keep_last(1)，history1 e7939d53紧停前FSM26.976、front源26.832/融合结束26.932，年龄.144s；单轮改善不证明动态完成。
+
+本轮d6ee01bc-d0d7-4ed4-8113-7316584c10a5（重锚）、9923f3f0-1e27-4ac5-b353-82e1c67d5e45（周期.3s）、e7939d53-3410-429f-9c73-729d1a8a30d8（history1）、6e5e22b5-42c0-4904-8e72-7b387bd89c65（history1＋重锚）均failed/planner_emergency、只起飞目标；四次恢复落地/disarm。83f0abfa起飞前取消单列。无效重锚/.3s试验已撤回，其他阈值不变，无新分析器/夹具，MINCO冻结。
+
+仅重建共享plan_env，实际maps指向隔离install库。e7939d53原生MCAP原QA三项过，控制写/WS/页面与HTTP错误0，未把回放通过改成飞行成功。录像output/drone-live/sensor-latest-A-20261029-01/page@4d80024a2e1c56a86fd54b568e156035.webm；所有完整ID、其他视频、逐轮四步native表在研究factory-air-ground-arm-20261024/progress.md末节。该回合curve6为26.600/实收26.608sim，RPC80/26.640sim→PX4 ingress26640000µs→used26644000µs；不跨钟相减、非柱格因果证明。
+
+五组自有进程/SDK回收、控制端口关闭，5186保留。清理118623904字节可重建.o；四份ULog44130457→13072750字节gzip并逐份gzip -t后移除展开件，仍在各Task sitl/log/2026-10-29，用gzip -dk对应.ulg.gz恢复。MCAP/录像/配置和二进制保留，原Station119增/3删及研究人类编辑不混交。Next仅核新鲜地图下测量PV重锚后第一条ReboundCollision的可动段，不继续扫时钟周期。Knowledge=already_covered。
