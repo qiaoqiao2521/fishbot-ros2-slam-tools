@@ -375,3 +375,10 @@ G（run b8dc8641-77e6-4bc3-b32c-822767b011f0）总889.584墙秒，B任务bbb987c
 两任务末freshness_failure均null；启动source5.74秒时clock最大入口间隔.325114秒、physics.347315秒仍记录。station_pair跨离开工位/返回的长间隔不能直接当消息处理耗时。不能由单次成功断言全部空档消失、特定GIL根因已修或生产稳定。停车理想guard各介入约.8源秒，单列辅助，不宣称纯视觉精度。G选定执行源起止一致；全部owned进程已退出、9140关闭；历史保护仅证明配置的systemd快照一致（旧单元均not-found），不宣称旧ROS实例在运行。
 
 证据：~/.cache/fishbot/j100-wide-20261028/full-ba-g/{result.json,verified-summary.json,replay-comparison.json,archive-receipt.json}；两order的原observer.jsonl.gz、markers、score、terminal-state及源快照保留。独立重放passed、原K、delivery、business和guard五组字段逐项相同。控制桥转发/动作回执仍不冒充控制器逐条消费ACK。
+# 2026-10-30 预训练接入取舍
+
+现有 SO101 已使用 mink/OMPL，GraspGen-X demo 记录过完整几何输入的固定方块抓放。复用范围是推理、夹爪描述与候选筛选；不能移用旧成功证明相机点云泛化。本机原 GraspGen-X venv/models 均不存在，当前规划环境也没有 Torch；4GB GPU、约2GB可用磁盘，不执行多套大型环境下载。FoundationPose 官方输入含RGB、深度、K、CAD和首帧mask；openpi官方>8GB推理要求与SO101动作合同仍是待解决条件。
+
+MuJoCo3.3.7 Renderer 已返回 float32 米制 optical Z。原生2m平面中心及角点均2m，不是射线距离。新增深度使用原生640×480，不把RGB的BOX降采样用于深度。只输出标准图像/CameraInfo、已有来源白名单和相对静态TF；不对模型暴露世界真值。
+
+原camera calibration把FishBot base_link的.092m偏移写死；车型不同必须从编译MJCF相对基座计算安装变换。当前相机依旧后向且带原标记夹具，尚不证明可见抓取货物。原默认RGB分支保持，新增RGB-D不切换ideal/vision任务模式。

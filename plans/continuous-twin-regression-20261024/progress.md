@@ -2,6 +2,8 @@
 
 ## Current
 
+2026-10-30：按用户优先复用预训练模型的方向，完成可选RGB-D输入及车型MJCF安装标定。6项原生RGB-D和76项相机/prepare/sim定向检查通过；模型推理、可见点云抓放与视觉配送仍未运行。旧2026-10-29宽场景ideal B→A成功保持。当前接续见[预训练感知](../../docs/PRETRAINED_PERCEPTION.md)，下方早期进场失败属于历史记录。
+
 2026-10-27 本轮：卡点快照10档原地小角速离线测试完成，±.001/.003几乎无响应、±.01已转动；原载货/几何不变。30秒固定路径原生FollowPath确认Shim约8.3秒后MPPI输出，继续前进但偏离增加、角命令接近小角速响应不足区间。PathAngle阈值.15单变量短测进度失败；temperature .03单变量前段更快、后段仍停且偏差增长；两者均不晋级，原owner完整进场/配送尚未运行通过。下一步针对运动时小角响应与路径偏移做分层修复，保留hold切换接触瞬态及采样缺口。
 
 2026-10-27 固定卡点：新原生快照4377a191已恢复R2，局部路径40点经TF与缓存全局路径对应；AMCL/控制器状态重新初始化。独立FollowPath在原载货限速下15秒真值转向-.331rad，temperature=.03对照-.330rad；已采50Hz支撑/禁碰0，smoothed观察有缺口，两轮原UUID取消5/hold/实例已退出。不支持必然存在.15rad/s以下转向死区；两轮未证明路线或配送通过。进场/完整运输仍需下一步原owner验收。
@@ -82,6 +84,16 @@ m2-cleanup-a.json已实际核验并执行：旧m2-model-a/b十个文件以原生
 恢复旧模型探针：`tar -xzf ~/.cache/fishbot/continuous-twin-20261024/archives/m2-model-prototypes-a-b.tar.gz -C ~/.cache/fishbot/continuous-twin-20261024`。CI临时venv已删除，不能再把该路径当现存环境；环境与构建可由工作流重建。后续m2-cleanup-b.json又归档并读回四个早期实体抓取/卸货a/b目录，共28成员，释放6758400字节；归档archives/m2-early-entity-fixtures-a-b.tar.gz。恢复同样用`tar -xzf ~/.cache/fishbot/continuous-twin-20261024/archives/m2-early-entity-fixtures-a-b.tar.gz -C ~/.cache/fishbot/continuous-twin-20261024`。两轮合计释放105644032字节（100.75MiB）。当前采用的grasp-c/unload-c、原生R1、最终图与全部模型依赖保留；旧根日志/脚本也保留。
 
 ## Verification
+
+### 2026-10-30 RGB-D 输入切片
+
+- 已实现 `--camera-rgbd`，默认关闭；开启后保持原ideal/vision语义，同一快照发布RGB、CameraInfo、32FC1米制光轴深度和原来源信息。NaN代表无效深度，远平面无效；相对安装外参来自车型编译MJCF，不发布世界位姿或目标真值。SO101固定工位与J100继续独立控制。
+- 6项真实MuJoCo/ROS消息检查通过：深度单位与背景、时间/字节、错误尺寸、RGB-only/RGB-D线程、变车型安装、实际J100 prepare及640×480渲染。未启动DDS/动作/Nav2，也未作模型推理。原相机/prepare/sim共76项通过，无跳过；native6另计。EGL依赖有已存在的/proc/cpuinfo ResourceWarning，不影响通过；未修改第三方库。
+- 独立内置审查指出float深度用0会被标准点云组件当作有效原点，已改NaN并复验。首次扩展测试还暴露旧模拟桩缺Physics.close和business_cargo_pubs：先出现12个错误/1跳过，改用原规划环境后剩1错误，补桩后76项全通过。只补测试接口和关闭检查，未改生产清理或任务评分。
+- 复用调查确认SO101现有GraspGen-X官方模型曾在完整几何输入下完成固定方块抓放；不把它等同视觉。原缓存venv/models路径已缺失；当前规划环境缺Torch，4GB GPU、约2GB余盘。没有下载权重、另建训练/推理平台或自动启动云作业。FoundationPose及openpi输入/运行约束见文档。
+- 下一owner=root：恢复原GraspGen-X可运行位置，配置可见货物的固定相机，用真实图像选区/分割与深度生成可见点云，复用原候选/IK/OMPL做单次抓放，再进入原配送owner。当前后向停靠相机并不证明货物可见；先不跑几十单面板，不以ideal回退冒充视觉。
+- 清理：所有本轮native/prepare临时场景由TemporaryDirectory退出回收，renderer线程在测试中确认退出；没有常驻仿真实例、逐帧图像日志或大模型下载。开始约2.0GiB可用，收尾2024951808字节；全盘变化含其他任务，不据此报告本轮回收收益。旧场景、模型来源和失败/成功原件保留。
+- knowledge_status=already_covered：采用Wiki/ROS2 与 FishBot第19/20节的真值隔离、同源时间和分层验收；本轮运行状态及模型缺失留项目，未另写知识状态。SpecMesh三文件和PROJECT入口已同步；源码语法、diff与本地链接检查通过。
 
 2026-10-25：ci-cpu-contracts-isolated-a.log在仅安装NumPy1.26.4的独立Python环境74/74通过，rclpy/mujoco均未安装；ci-frontend-a.log为57文件/687项通过，ci-frontend-build-a.log构建通过，保留500KB chunk警告。actionlint1.7.12检查新增工作流通过。不是新的1778全仓回归、浏览器验收或原生配送通过。
 

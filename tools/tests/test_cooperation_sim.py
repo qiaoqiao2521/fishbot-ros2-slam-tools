@@ -508,7 +508,8 @@ class ExitFinalizationTests(unittest.TestCase):
                  'receiver_thread': SimpleNamespace(join=lambda **kw: stage('receiver.join'), is_alive=lambda: False),
                  'receiver_errors': [],
                  'physics': SimpleNamespace(wheels=SimpleNamespace(set_hold=lambda value: events.append(('hold', value))),
-                                            data=SimpleNamespace(ctrl=Control()), wheel_a='wheels'),
+                                            data=SimpleNamespace(ctrl=Control()), wheel_a='wheels',
+                                            close=lambda: stage('physics.close')),
                  'frames': resource('frames'), 'record': record, 'node': node,
                  'timing_record': writer, 'timing': sim.LoopTiming(),
                  # A context which is already stopped supports this idempotent API.
@@ -544,7 +545,7 @@ class ExitFinalizationTests(unittest.TestCase):
 
     def assert_closed(self, writer, events):
         self.assertEqual(events[:2], [('hold', True), ('wheel_ctrl', 'wheels', 0.)])
-        for stage in ('frames.close', 'camera.close', 'lidar.close', 'record.close',
+        for stage in ('frames.close', 'camera.close', 'lidar.close', 'record.close', 'physics.close',
                       'node.destroy_node', 'rclpy.try_shutdown',
                       'timing_record.flush', 'timing_record.close'):
             self.assertEqual(events.count(stage), 1, stage)
@@ -1223,7 +1224,8 @@ class SharedWorldTest(unittest.TestCase):
         exec(compile(ast.Module(body=methods, type_ignores=[]), str(TOOLS/'cooperation_sim.py'), 'exec'), scope)
         sinks = {name: [] for name in ('clock','scan','imu','joint','odom','truth','cargo','state',
                                        'station_pose','station_detection')}
-        node = SimpleNamespace(last_rejected=None, runtime_observation={}, tf=SimpleNamespace(sendTransform=lambda message: None))
+        node = SimpleNamespace(last_rejected=None, runtime_observation={}, business_cargo_pubs={},
+                               tf=SimpleNamespace(sendTransform=lambda message: None))
         for name, messages in sinks.items():
             setattr(node, name+'_pub', SimpleNamespace(publish=messages.append))
         measurements = []

@@ -1100,7 +1100,8 @@ def run_ros(args):
     from std_msgs.msg import Bool, String
     from action_msgs.msg import GoalStatusArray
     from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
-    from cooperation_camera import CameraRenderer, frame_messages, IMAGE_TOPIC, INFO_TOPIC, METADATA_TOPIC, FAULT_TOPIC
+    from cooperation_camera import (CameraRenderer, frame_messages, depth_message,
+                                    IMAGE_TOPIC, DEPTH_TOPIC, INFO_TOPIC, METADATA_TOPIC, FAULT_TOPIC)
     from cooperation_lidar import CloudWorker, configuration as lidar_configuration
 
     manifest = getattr(args, 'manifest', None)
@@ -1168,7 +1169,9 @@ def run_ros(args):
                 self.station_pose_pub = self.create_publisher(PoseWithCovarianceStamped, STATION_POSE_TOPIC, self.latest_qos)
                 self.station_detection_pub = self.create_publisher(DiagnosticArray, STATION_DETECTION_TOPIC, self.latest_qos)
             self.camera = None
-            if physics.station_beacon.perception_config['mode'] == 'vision':
+            camera_config = physics.identity['manifest'].get('station_camera', {})
+            rgbd_enabled = camera_config.get('rgbd_enabled', False)
+            if physics.station_beacon.perception_config['mode'] == 'vision' or rgbd_enabled:
                 self.image_pub = self.create_publisher(Image, IMAGE_TOPIC, self.latest_qos)
                 self.camera_info_pub = self.create_publisher(CameraInfo, INFO_TOPIC, self.latest_qos)
                 self.camera_metadata_pub = self.create_publisher(DiagnosticArray, METADATA_TOPIC, self.latest_qos)
@@ -1177,7 +1180,12 @@ def run_ros(args):
                                                   frame_messages(pixels, snapshot, physics.identity['manifest']['station_camera'])):
                         publisher.publish(message)
                 directory = Path(args.frame_dir).parent/'vision' if args.frame_dir else args.scene.parent/'vision'
-                self.camera = CameraRenderer(physics, directory, camera_publish)
+                publish_depth = None
+                if rgbd_enabled:
+                    self.depth_pub = self.create_publisher(Image, DEPTH_TOPIC, self.latest_qos)
+                    def publish_depth(depth, snapshot):
+                        self.depth_pub.publish(depth_message(depth, snapshot, camera_config))
+                self.camera = CameraRenderer(physics, directory, camera_publish, publish_depth)
             self.state_pub = self.create_publisher(String, '/cooperation/physics_state', self.latest_qos)
             reset_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                                   durability=DurabilityPolicy.VOLATILE)
@@ -1379,9 +1387,10 @@ def run_ros(args):
                 transform = TransformStamped()
                 transform.header.frame_id, transform.child_frame_id = 'base_footprint', camera_config['frame_id']
                 transform.transform.translation.x, transform.transform.translation.y, transform.transform.translation.z = camera_config['base_camera_translation']
-                # Rear optical axes (+Y,-Z,-X), quaternion xyzw=(-.5,-.5,.5,.5).
-                transform.transform.rotation.x, transform.transform.rotation.y = -.5, -.5
-                transform.transform.rotation.z, transform.transform.rotation.w = .5, .5
+                # Older manifests use the canonical rear optical rotation.
+                quaternion = camera_config.get('base_camera_quaternion_xyzw', [-.5, -.5, .5, .5])
+                (transform.transform.rotation.x, transform.transform.rotation.y,
+                 transform.transform.rotation.z, transform.transform.rotation.w) = quaternion
                 self.static_tf.sendTransform([transform])
 
         def publish(self, include_scan):

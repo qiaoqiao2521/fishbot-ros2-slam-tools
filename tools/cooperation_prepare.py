@@ -302,13 +302,16 @@ def prepare(args):
     spawn=getattr(args,'spawn',(0.,-2.))
     spawn_yaw=getattr(args,'spawn_yaw',0.)
     manifest=build_scene(args.so101_project,args.fishbot_project,args.output,
-                         spawn=spawn,spawn_yaw=spawn_yaw,camera=station_perception['mode']=='vision',
+                         spawn=spawn,spawn_yaw=spawn_yaw,
+                         camera=station_perception['mode']=='vision' or getattr(args,'camera_rgbd',False),
                          camera_light_scale=getattr(args,'camera_light_scale',1.),
                          tag_lateral_offset=getattr(args,'tag_lateral_offset',.03),
                          scene_profile=scene_profile,
                          omit_unused_native_rangefinders=getattr(args,'omit_unused_native_rangefinders',False),
                          continuous_delivery=business,
                          arena_xml=getattr(args, 'arena_xml', None))
+    if getattr(args,'camera_rgbd',False):
+        manifest['station_camera']['rgbd_enabled']=True
     if getattr(args,'queued_ros_dispatch',False):
         manifest['queued_ros_dispatch']=True
     if getattr(args,'terminal_stop_heartbeat',False):
@@ -537,6 +540,8 @@ def main():
     parser.add_argument('--spawn-yaw',type=float,default=0.,help='initial robot yaw in radians')
     parser.add_argument('--observation-faults',type=Path,help='accepted-Dock fault declaration JSON')
     parser.add_argument('--camera-light-scale',type=float,default=1.,help='actual renderer light attenuation (.1..1)')
+    parser.add_argument('--camera-rgbd',action='store_true',
+                        help='Publish registered metric depth beside RGB; does not change station perception mode')
     parser.add_argument('--tag-lateral-offset',type=float,default=.03,help='calibrated marker offset along world +Y (m)')
     args=parser.parse_args()
     if args.output.exists():parser.error('输出目录必须是新的，以保留已有回合')

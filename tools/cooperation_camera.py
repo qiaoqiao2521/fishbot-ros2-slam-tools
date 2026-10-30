@@ -6,6 +6,7 @@ calibration and identity; camera metadata never contains robot or cargo poses.
 from __future__ import annotations
 
 import copy
+from contextlib import ExitStack
 import json
 import math
 import os
@@ -18,6 +19,7 @@ import xml.etree.ElementTree as ET
 CAMERA_NAME = 'cooperation_camera'
 CAMERA_FRAME = 'cooperation_camera_optical_frame'
 IMAGE_TOPIC = '/cooperation/camera/image_raw'
+DEPTH_TOPIC = '/cooperation/camera/depth/image_raw'
 INFO_TOPIC = '/cooperation/camera/camera_info'
 METADATA_TOPIC = '/cooperation/camera/frame_metadata'
 FAULT_TOPIC = '/cooperation/observation_fault_trigger'
@@ -177,10 +179,56 @@ def frame_messages(pixels, snapshot, config):
     return image, info, metadata
 
 
+def depth_message(depth, snapshot, config):
+    """Registered optical-Z depth in metres; no world poses or object labels."""
+    import numpy as np
+    from sensor_msgs.msg import Image
+    values = np.asarray(depth, dtype='<f4')
+    if values.shape != (config['height'], config['width']):
+        raise ValueError('depth dimensions do not match CameraInfo')
+    values = np.where(np.isfinite(values) & (values > 0), values, np.nan).astype('<f4')
+    image = Image()
+    image.header.frame_id = config['frame_id']
+    image.header.stamp.sec, image.header.stamp.nanosec = divmod(
+        int(round(snapshot['stamp']*1e9)), 1_000_000_000)
+    image.width, image.height = config['width'], config['height']
+    image.encoding, image.step, image.is_bigendian = '32FC1', image.width*4, 0
+    image.data = values.tobytes()
+    return image
+
+
+def camera_mount(model, config):
+    """Read the rigid mounting calibration, never expose a world-space pose."""
+    import mujoco
+    import numpy as np
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    base, camera = model.body('base_footprint').id, model.camera(config['name']).id
+    base_rotation = data.xmat[base].reshape(3, 3)
+    rotation = base_rotation.T @ data.cam_xmat[camera].reshape(3, 3) @ np.diag([1., -1., -1.])
+    translation = base_rotation.T @ (data.cam_xpos[camera]-data.xpos[base])
+    quaternion = np.empty(4)
+    mujoco.mju_mat2Quat(quaternion, rotation.ravel())
+    return {'base_camera_translation': translation.tolist(),
+            'base_camera_rotation': rotation.tolist(),
+            'base_camera_quaternion_xyzw': quaternion[[1, 2, 3, 0]].tolist()}
+
+
+def render_depth(renderer, model, data, config, options):
+    """MuJoCo already returns metric optical Z; clear its far-plane background."""
+    import numpy as np
+    renderer.update_scene(data, camera=config['name'], scene_option=options)
+    depth = renderer.render().copy()
+    far = float(model.vis.map.zfar * model.stat.extent)
+    depth[~np.isfinite(depth) | (depth <= 0) | (depth >= far*(1.-1e-5))] = np.nan
+    return depth
+
+
 class CameraRenderer:
     """Reuse the independent MuJoCo renderer; never block the physics owner."""
-    def __init__(self, physics, directory, publish):
+    def __init__(self, physics, directory, publish, publish_depth=None):
         self.physics, self.config, self.publish = physics, physics.identity['manifest']['station_camera'], publish
+        self.publish_depth = publish_depth
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.slot = LatestCameraSnapshot()
@@ -222,7 +270,14 @@ class CameraRenderer:
             options.sitegroup[:] = 0
             options.flags[mujoco.mjtVisFlag.mjVIS_RANGEFINDER] = False
             factor = self.config['supersample_factor']
-            with mujoco.Renderer(model, height=self.config['height']*factor, width=self.config['width']*factor) as renderer:
+            with ExitStack() as resources:
+                renderer = resources.enter_context(mujoco.Renderer(
+                    model, height=self.config['height']*factor, width=self.config['width']*factor))
+                depth_renderer = None
+                if self.publish_depth is not None:
+                    depth_renderer = resources.enter_context(mujoco.Renderer(
+                        model, height=self.config['height'], width=self.config['width']))
+                    depth_renderer.enable_depth_rendering()
                 while not self.stop_event.wait(1./self.config['render_hz_wall_cap']):
                     snapshot = self.slot.take()
                     if snapshot is None:
@@ -234,6 +289,8 @@ class CameraRenderer:
                     renderer.update_scene(data, camera=self.config['name'], scene_option=options)
                     renderer.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = self.config['shadows_enabled']
                     pixels = downsample_camera_rgb(renderer.render(), self.config)
+                    depth = (render_depth(depth_renderer, model, data, self.config, options)
+                             if depth_renderer is not None else None)
                     snapshot['render_duration_s'] = time.monotonic()-began
                     # Publishing and the episode fence share one lock. A reset
                     # cannot leave an old image under a new episode identity.
@@ -241,6 +298,8 @@ class CameraRenderer:
                         if snapshot['episode_id'] != self.slot.episode_id or snapshot['episode_id'] != self.physics.episode_id:
                             continue
                         self.publish(pixels, snapshot)
+                        if depth is not None:
+                            self.publish_depth(depth, snapshot)
                         self.rendered += 1
                     evidence = {key: value for key, value in snapshot.items() if key != 'qpos'}
                     evidence.update(render_duration_s=time.monotonic()-began,

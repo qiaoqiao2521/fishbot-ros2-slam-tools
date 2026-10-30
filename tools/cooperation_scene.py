@@ -285,6 +285,9 @@ def build_scene(so101_project: Path, fishbot_project: Path, output: Path,
     world_path = output / "world.xml"
     ET.ElementTree(common_root).write(world_path, encoding="utf-8", xml_declaration=True)
     model = mujoco.MjModel.from_xml_path(str(world_path))
+    if station_camera is not None:
+        from cooperation_camera import camera_mount
+        station_camera.update(camera_mount(model, station_camera))
     wheel_names = vehicle['left_wheel_joints']+vehicle['right_wheel_joints']
     wheel_count = len(wheel_names)
     passive_names = vehicle.get('passive_joints', [])

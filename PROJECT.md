@@ -1,5 +1,7 @@
 # FishBot
 
+2026-10-30 当前优先增加预训练感知能力：复用已有 SO101 GraspGen-X、mink/OMPL，先补相机输入，不另建训练框架。本轮新增可选 RGB-D 和车型 MJCF 相对外参；模型推理与视觉配送仍待验，旧 ideal B→A 成绩保留。接口、现有模型缓存缺失及最短接续见[预训练感知接入](docs/PRETRAINED_PERCEPTION.md)。
+
 2026-10-29 J100＋3D雷达宽场景 **连续 B→A 已通过**：两单在同一世界/episode完成装货、运输、实体卸货，零reset/取消，独立物理评分及压缩原件重放一致。路线48.78/19.26秒，末XY误差28.04/21.29mm；原限速、碰撞与时龄门槛保持。修复工位配对缓存并将标准TimeSource接收移至独立executor；启动期短空档仍记录，单次成功不外推长期稳定或真机。见[当前进度](plans/continuous-twin-regression-20261024/progress.md)。
 
 2026-10-28 J100 [宽场景](docs/FACTORY_DELIVERY.md#j100-宽场景2026-10-28)已实跑：D轮B载货路线49.86秒，独立真值末误差29.50mm，原生导航4；卸货准备点IK失败。现已补停车收尾开关、卸货工位10cm平移及有限可达检查；E/F复验分别因观测过期、节点时钟落后失败，A未执行，完整无reset B→A仍未通过。原门槛、失败与旧窄场地保留，详见[进度](plans/continuous-twin-regression-20261024/progress.md)。
