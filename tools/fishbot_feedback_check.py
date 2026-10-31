@@ -29,6 +29,7 @@ PYTHON_GROUPS = {
         'test_cooperation_factory_continuous.py',
         'test_cooperation_faults.py', 'test_cooperation_acceptance.py',
         'test_cooperation_camera.py', 'test_cooperation_station_vision.py',
+        'test_cooperation_grasp_inference.py',
         'test_cooperation_readiness.py', 'test_cooperation_prepare.py',
         'test_cooperation_scene.py', 'test_cooperation_geometry.py',
         'test_cooperation_launch.py',

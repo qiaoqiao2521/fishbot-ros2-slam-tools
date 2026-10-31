@@ -1859,6 +1859,39 @@ class BridgeRaceTests(unittest.TestCase):
         self.assertGreaterEqual(p.raw['stamp']-10.,25.6)
         self.assertLess(np.max(np.abs(np.asarray(p.raw['q6'])[:5]-.1)),.012)
 
+    def test_model_payload_reference_does_not_catch_up_after_source_dispatch_gap(self):
+        p=self.bridge
+        self.namespace['manifest']['pretrained_grasp']={'enabled':True}
+        samples=[];ticks=0
+        original_reference=p.reference
+        def reference(q):
+            samples.append((p.raw['stamp'], np.asarray(q[:5]).copy()))
+            original_reference(q)
+        p.reference=reference
+        def track_reference():
+            nonlocal ticks
+            ticks+=1
+            if ticks % 5 == 0:
+                # A live control scheduling gap; the current physics frame is
+                # fresh, but source trajectory time jumped by 100 ms.
+                p.raw['stamp']+=.1;p.raw['time_s']=p.raw['stamp']
+            p.raw['q6']=list(p.last_ref);p.raw['qpos22'][:6]=p.last_ref
+        self.on_sleep=track_reference
+        p.segment({'stage':'transport','path':[[0.]*5,[.2]*5], 'gripper':.015,
+                   'duration_s':3.,'dwell_s':.6},NS(evaluate=lambda q:{'valid':True}))
+        steps=np.linalg.norm(np.diff([q for stamp,q in samples],axis=0),axis=1)
+        self.assertLessEqual(float(steps.max()), .006+1e-10)
+        np.testing.assert_allclose(samples[-1][1],[.2]*5,atol=1e-10)
+        self.assertGreater(p.task['arm_reference_pacing'][0]['clamped_updates'],0)
+        self.assertGreater(p.task['arm_reference_pacing'][0]['max_source_gap_s'],.1)
+        self.assertLess(p.raw['stamp']-10.,23.6)  # Original source limit, unchanged.
+
+    def test_reference_progress_requires_new_source_and_never_rewinds(self):
+        self.assertAlmostEqual(core.advance_arm_reference(.1,.2,.12),.106)
+        self.assertAlmostEqual(core.advance_arm_reference(.1,.2,0.),.1)
+        self.assertAlmostEqual(core.advance_arm_reference(.1,.09,.02),.1)
+        self.assertAlmostEqual(core.advance_arm_reference(.1,.102,.02),.102)
+
     def test_segment_paused_source_still_hits_independent_total_wall_deadline(self):
         p=self.bridge;self.source_rate=0.;p.wall_deadline=100.5
         with self.assertRaisesRegex(RuntimeError,'超过总执行时间'):

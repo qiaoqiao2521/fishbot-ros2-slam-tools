@@ -7,6 +7,17 @@ import uuid
 ACTIVE = {'running', 'canceling', 'unknown'}
 
 
+def advance_arm_reference(previous, requested, source_delta):
+    """Keep the original .3rad/s, 20ms path step after a dispatch gap.
+
+    This changes only progress along an owned path, never its geometry, source
+    timestamps, task deadline or acceptance limits. Duplicate source frames do
+    not advance a delayed reference.
+    """
+    step = .3 * min(.02, max(0., source_delta))
+    return max(previous, min(requested, previous+step))
+
+
 def within_station_capture(pose, dock):
     """Select native relative docking only inside its east-side approach tube."""
     x, y, yaw = finite_vector([pose[key] for key in ('x', 'y', 'yaw')], 3, '工位车体观测')

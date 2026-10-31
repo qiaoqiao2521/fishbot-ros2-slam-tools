@@ -44,6 +44,8 @@ jobs:
           tools.tests.test_cooperation_loaded_limits
           tools.tests.test_cooperation_timing
           tools.tests.test_cooperation_comparison
+          tools.tests.test_cooperation_grasp_inference
+          tools.tests.test_cooperation_workcell_vision.WorkcellConfigurationTests
       - name: Record acceptance boundary
         if: always()
         run: |

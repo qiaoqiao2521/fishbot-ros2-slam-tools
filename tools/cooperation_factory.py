@@ -178,7 +178,11 @@ def loaded_code_reference(extra_paths=()):
                      ('cooperation_bridge.py', 'cooperation_sim.py', 'cooperation_checkpoint.py', 'cooperation_readiness.py', 'cooperation_mecanum.py', 'cooperation_lidar.py', 'cooperation_geometry_check.py', 'cooperation_oracle.py',
                       'cooperation_oracle_base.py', 'cooperation_core.py', 'cooperation_arm.py',
                       'cooperation_arm_entities.py', 'cooperation_business_scene.py', 'cooperation_business.py',
-                      'cooperation_factory_policy.py', 'cooperation_delivery_route.py')]
+                      'cooperation_factory_policy.py', 'cooperation_delivery_route.py',
+                      'cooperation_visual_grasp.py', 'cooperation_model_grasp.py',
+                      'cooperation_workcell_vision.py', 'cooperation_grasp_inference.py',
+                      'cooperation_camera.py', 'cooperation_station_vision.py',
+                      'cooperation.launch.py', 'config/perception/so101-graspgenx-tip-region.json')]
     runtime_files.extend(Path(path).resolve() for path in extra_paths)
     paths = [Path(path) for path in module_files.values()]+runtime_files
     result = {'module_files': module_files,
@@ -305,6 +309,7 @@ def summarize(result):
         and all(value.get('passed') is True for value in execution.get('continuous_transitions', []))))
     result['passed'] = (continuous_ok and result['task_verdict'] == 'passed'
                         and execution['status'] == 'completed'
+                        and execution.get('pretrained_grasp_server_closed', True) is True
                         and all(execution.get(key) is True for key in
                                 ('cleanup_complete', 'owned_launch_stopped', 'owned_port_closed',
                                  'protected_instances_unchanged', 'within_total_budget',
@@ -506,6 +511,9 @@ def run(args, manifest, declaration):
     if output.exists() or output.is_relative_to(ROOT):
         raise ValueError('Use a new private output directory outside the source repository')
     ensure_port_available(args.port)
+    grasp_port = args.port+1000 if manifest.get('pretrained_grasp', {}).get('enabled') else None
+    if grasp_port is not None:
+        ensure_port_available(grasp_port)
     env = dict(os.environ, FISHBOT_COOP_PYTHON=str(args.planning_python),
                FISHBOT_COOP_DOMAIN=str(args.domain), FISHBOT_MUJOCO_DOMAIN_ID=str(args.domain),
                ROS_DOMAIN_ID=str(args.domain), ROS_AUTOMATIC_DISCOVERY_RANGE='LOCALHOST',
@@ -557,6 +565,16 @@ def run(args, manifest, declaration):
         checkpoint()
         if launch.poll() is not None:
             raise RuntimeError('Owned launch exited')
+        if grasp_port is not None:
+            # The official server binds after loading its shared weights.
+            # Observe startup before motion; this is not an inference receipt.
+            with socket.socket() as probe:
+                probe.settimeout(.05)
+                if probe.connect_ex(('127.0.0.1', grasp_port)) != 0:
+                    return None
+            result['execution']['pretrained_grasp_server'] = {
+                'host': '127.0.0.1', 'port': grasp_port, 'bound_before_dispatch': True,
+                'is_inference_proof': False}
         try:
             state = bridge.state()
         except RuntimeError:
@@ -799,7 +817,16 @@ def run(args, manifest, declaration):
     except (OSError, ValueError, RuntimeError, TimeoutError, subprocess.SubprocessError,
             KeyboardInterrupt) as error:
         result['errors'].append(type(error).__name__+': '+str(error))
-        if launch is not None and launch.poll() is None and task_id is not None and tail is not None:
+        if launch is not None and not any(item['kind'] == 'start' for item in mutation_posts):
+            # No start was attempted, so no unknown motion outcome needs to be
+            # reconciled. Reclaim this launch through its existing safe teardown.
+            result['execution']['startup_cleanup'] = {'start_intent_recorded': False,
+                'reason': 'failed_before_first_start_intent'}
+            try:
+                result['execution']['owned_launch_stopped'] = stop_owned_launch(launch, result)
+            except (OSError, RuntimeError, TimeoutError) as cleanup_error:
+                result['errors'].append('startup cleanup: '+str(cleanup_error))
+        elif launch is not None and launch.poll() is None and task_id is not None and tail is not None:
             try:
                 current=bridge.state()
                 if (current.get('episode_id')==episode and current.get('task',{}).get('id')==task_id
@@ -837,6 +864,9 @@ def run(args, manifest, declaration):
                                                        and observer.poll() is None else None)
         with socket.socket() as probe:
             result['execution']['owned_port_closed'] = probe.connect_ex(('127.0.0.1', args.port)) != 0
+        if grasp_port is not None:
+            with socket.socket() as probe:
+                result['execution']['pretrained_grasp_server_closed'] = probe.connect_ex(('127.0.0.1', grasp_port)) != 0
         protected_after = protected_snapshot(units)
         save(output/'protected-after.json', protected_after)
         result['execution'].update(protection_observation(protected, protected_after))

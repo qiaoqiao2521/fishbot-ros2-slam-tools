@@ -36,6 +36,12 @@ def start(context):
         raise RuntimeError('publication_mode must be source or asynchronous')
     publication_env=({'RMW_FASTRTPS_PUBLICATION_MODE':'ASYNCHRONOUS'}
                      if publication_mode=='asynchronous' else {})
+    grasp_config = manifest.get('pretrained_grasp', {})
+    grasp_enabled = grasp_config.get('enabled', False)
+    grasp_port = str(int(port)+1000)
+    bridge_env = dict(publication_env)
+    if grasp_enabled:
+        bridge_env['FISHBOT_GRASP_SERVER_PORT'] = grasp_port
     simulation=[python,str(root/'cooperation_sim.py'),'--scene',manifest['world_xml'],
         '--manifest',str(manifest_path),'--domain',domain,
         '--stamped-cmd-vel','--frame-dir',str(frames),'--frame-fps','2',
@@ -58,7 +64,7 @@ def start(context):
         ExecuteProcess(cmd=simulation,additional_env=publication_env,output='screen',on_exit=Shutdown()),
         ExecuteProcess(cmd=[python,str(root/'cooperation_bridge.py'),'--manifest',str(manifest_path),'--domain',domain,
             '--port',port,'--frame-dir',str(frames),'--output',str(output/'tasks')],
-            additional_env=publication_env,output='screen',on_exit=Shutdown()),
+            additional_env=bridge_env,output='screen',on_exit=Shutdown()),
         Node(package='nav2_map_server',executable='map_server',name='cooperation_collision_map_server',
             parameters=[{'use_sim_time':True,'yaml_filename':manifest['collision_map_yaml'],
                          'topic_name':'cooperation_collision_map','frame_id':'map','autostart_node':True}],
@@ -78,6 +84,12 @@ def start(context):
             get_package_share_directory('nav2_bringup'),'launch','navigation_launch.py')),
             launch_arguments={'params_file':manifest['nav2_yaml'],'use_sim_time':'True',
                               'use_composition':'False','autostart':'True'}.items())])])]
+    if grasp_enabled:
+        actions.insert(4, ExecuteProcess(
+            cmd=[grasp_config['python'], '-B', str(root/'cooperation_grasp_inference.py'),
+                 '--serve-port', grasp_port, '--models', grasp_config['models']],
+            additional_env={'PYTHONPATH':'', 'OPENBLAS_NUM_THREADS':'1', 'OMP_NUM_THREADS':'1'},
+            output='screen', on_exit=Shutdown()))
     if manifest.get('localization', {}).get('enabled'):
         actions.insert(4, Node(package='robot_localization', executable='ekf_node', name='ekf_filter_node',
             parameters=[manifest['localization']['ekf_yaml']],

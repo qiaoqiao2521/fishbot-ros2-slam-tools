@@ -320,6 +320,23 @@ def prepare(args):
     if factory_path:
         from cooperation_factory_scene import apply_factory_scene
         apply_factory_scene(manifest, json.loads(Path(factory_path).read_text()))
+    grasp_path = getattr(args, 'pretrained_grasp_config', None)
+    if grasp_path:
+        settings = json.loads(Path(grasp_path).read_text())
+        settings.setdefault('enabled', True)
+        settings.setdefault('output_directory', str(args.output/'grasp-observations'))
+        for field in ('python', 'models', 'descriptor', 'output_directory'):
+            value = Path(settings[field]).expanduser()
+            # A venv's interpreter is a symlink. Resolving it bypasses pyvenv.cfg.
+            settings[field] = str(value.absolute() if field == 'python' else value.resolve())
+        manifest['pretrained_grasp'] = settings
+        if settings['enabled']:
+            if not manifest.get('business_entities'):
+                raise ValueError('Model RGB-D grasp requires named business entities; use --continuous-delivery')
+            from cooperation_workcell_vision import add_workcell_cameras
+            tree = ET.parse(manifest['world_xml'])
+            manifest['workcell_cameras'] = add_workcell_cameras(tree.getroot(), manifest)
+            tree.write(manifest['world_xml'], encoding='utf-8', xml_declaration=True)
     model=mujoco.MjModel.from_xml_path(manifest['world_xml'])
     data=mujoco.MjData(model);mujoco.mj_forward(model,data)
     rectangles=[];slices=[]
@@ -542,6 +559,8 @@ def main():
     parser.add_argument('--camera-light-scale',type=float,default=1.,help='actual renderer light attenuation (.1..1)')
     parser.add_argument('--camera-rgbd',action='store_true',
                         help='Publish registered metric depth beside RGB; does not change station perception mode')
+    parser.add_argument('--pretrained-grasp-config',type=Path,
+                        help='Use existing GraspGen-X on visible workcell RGB-D for load and unload')
     parser.add_argument('--tag-lateral-offset',type=float,default=.03,help='calibrated marker offset along world +Y (m)')
     args=parser.parse_args()
     if args.output.exists():parser.error('输出目录必须是新的，以保留已有回合')

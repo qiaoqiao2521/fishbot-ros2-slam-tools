@@ -23,6 +23,16 @@ DEPTH_TOPIC = '/cooperation/camera/depth/image_raw'
 INFO_TOPIC = '/cooperation/camera/camera_info'
 METADATA_TOPIC = '/cooperation/camera/frame_metadata'
 FAULT_TOPIC = '/cooperation/observation_fault_trigger'
+CAMERA_SYNC_DEPTH = 5
+
+
+def camera_sync_qos():
+    """Retain large camera fragments through one bounded timestamp window."""
+    from rclpy.qos import qos_profile_sensor_data, ReliabilityPolicy
+    profile = copy.copy(qos_profile_sensor_data)
+    profile.depth = CAMERA_SYNC_DEPTH
+    profile.reliability = ReliabilityPolicy.RELIABLE
+    return profile
 
 
 def system_vision_environment(environment=None):
@@ -116,10 +126,14 @@ class LatestCameraSnapshot:
         self.pending = None
         self.episode_id = None
         self.overwritten = 0
+        self.skipped_busy = 0
         self.last_stamp = -math.inf
 
-    def offer(self, snapshot):
-        with self.lock:
+    def offer(self, snapshot, *, blocking=True):
+        if not self.lock.acquire(blocking=blocking):
+            self.skipped_busy += 1
+            return False
+        try:
             if snapshot['stamp'] <= self.last_stamp:
                 return False
             if snapshot['episode_id'] != self.episode_id:
@@ -129,6 +143,8 @@ class LatestCameraSnapshot:
             self.overwritten += self.pending is not None
             self.pending = snapshot
             return True
+        finally:
+            self.lock.release()
 
     def take(self):
         with self.lock:
@@ -250,7 +266,7 @@ class CameraRenderer:
                          'capture_steady_ns': time.monotonic_ns(), 'occluded': occluded,
                          'fault_started': getattr(self.physics.observation_faults, 'start_wall', None) is not None,
                          'scene_sha256': self.physics.identity['scene_sha256'],
-                         'manifest_sha256': self.physics.identity['manifest_sha256']})
+                         'manifest_sha256': self.physics.identity['manifest_sha256']}, blocking=False)
 
     def run(self):
         try:
@@ -303,7 +319,8 @@ class CameraRenderer:
                         self.rendered += 1
                     evidence = {key: value for key, value in snapshot.items() if key != 'qpos'}
                     evidence.update(render_duration_s=time.monotonic()-began,
-                                    overwritten_snapshots=self.slot.overwritten)
+                                    overwritten_snapshots=self.slot.overwritten,
+                                    skipped_busy_snapshots=self.slot.skipped_busy)
                     with (self.directory/'camera.jsonl').open('a') as stream:
                         stream.write(json.dumps(evidence)+'\n')
         except Exception as error:

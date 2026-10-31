@@ -63,6 +63,50 @@ class ClockReceiverTests(unittest.TestCase):
         finally:
             executor.shutdown(); node.destroy_node(); rclpy.shutdown()
 
+    def test_physics_updates_while_control_executor_is_not_spun(self):
+        from std_msgs.msg import String
+        tree = ast.parse((Path(__file__).parents[1] / 'cooperation_bridge.py').read_text())
+        bridge = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == 'Bridge')
+        methods = [copy.deepcopy(n) for n in bridge.body if isinstance(n, ast.FunctionDef)
+                   and n.name in ('create_subscription', 'destroy_subscription')]
+        module = ast.Module(body=[ast.ClassDef(name='Probe', bases=[ast.Name(id='Node', ctx=ast.Load())],
+                           keywords=[], body=methods, decorator_list=[])], type_ignores=[])
+        namespace = dict(Node=Node, Clock=Clock, TimeSource=TimeSource)
+        exec(compile(ast.fix_missing_locations(module), '<actual-physics-routing>', 'exec'), namespace)
+        rclpy.init()
+        receiver = Node('test_dedicated_physics_receiver')
+        probe = namespace['Probe'].__new__(namespace['Probe'])
+        probe.clock_receiver = receiver
+        probe.clock_callbacks = MutuallyExclusiveCallbackGroup()
+        Node.__init__(probe, 'test_unspun_physics_control')
+        values = []
+        qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
+        subscription = probe.create_subscription(String, '/cooperation/physics_state',
+            lambda message: values.append(int(message.data)), qos,
+            callback_group=MutuallyExclusiveCallbackGroup())
+        publisher = receiver.create_publisher(String, '/cooperation/physics_state', qos)
+        executor = SingleThreadedExecutor(); executor.add_node(receiver)
+        thread = threading.Thread(target=executor.spin); thread.start()
+        try:
+            deadline = time.monotonic()+3.
+            while not publisher.get_subscription_count() and time.monotonic()<deadline:
+                time.sleep(.01)
+            self.assertTrue(publisher.get_subscription_count())
+            for sequence in range(40):
+                publisher.publish(String(data=str(sequence)))
+                time.sleep(.02)
+            deadline = time.monotonic()+1.
+            while (not values or values[-1] != 39) and time.monotonic()<deadline:
+                time.sleep(.01)
+            self.assertTrue(values, 'Physics feedback starved with control executor paused')
+            self.assertEqual(values[-1], 39)
+            self.assertIn(subscription, receiver.subscriptions)
+            self.assertTrue(probe.destroy_subscription(subscription))
+            self.assertNotIn(subscription, receiver.subscriptions)
+        finally:
+            executor.shutdown(); thread.join()
+            probe.destroy_node(); receiver.destroy_node(); rclpy.shutdown()
+
     def test_receiver_failure_propagates_to_native_owner_executor(self):
         tree = ast.parse((Path(__file__).parents[1] / 'cooperation_bridge.py').read_text())
         function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'spin_clock_receiver')

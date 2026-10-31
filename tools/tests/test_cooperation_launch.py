@@ -113,6 +113,24 @@ with tempfile.TemporaryDirectory() as directory:
  processes=[a for a in actions if isinstance(a,ExecuteProcess) and not isinstance(a,Node)]
  assert len(processes)==3
  assert '--no-overview-render' in simulation_cmd(actions)
+ # Enabled pretrained perception owns one official loopback model server.
+ manifest['pretrained_grasp']={'enabled':True,'python':'/model/python','models':'/model/weights'}
+ p.write_text(json.dumps(manifest))
+ warm_actions=module['start'](context)
+ warm_processes=[a for a in warm_actions if isinstance(a,ExecuteProcess)and not isinstance(a,Node)]
+ commands=[[perform_substitutions(context,part)for part in a.cmd]for a in warm_processes]
+ servers=[(a,c)for a,c in zip(warm_processes,commands)if '--serve-port'in c]
+ assert len(servers)==1
+ server,command=servers[0]
+ assert command[0]=='/model/python' and command[command.index('--serve-port')+1]=='10086'
+ assert additional_env(server)=={'PYTHONPATH':'','OPENBLAS_NUM_THREADS':'1','OMP_NUM_THREADS':'1'}
+ bridge=next(a for a,c in zip(warm_processes,commands)if any('cooperation_bridge.py'in part for part in c))
+ assert additional_env(bridge)=={'FISHBOT_GRASP_SERVER_PORT':'10086'}
+ # No global model environment is injected into the physics process.
+ simulation=next(a for a,c in zip(warm_processes,commands)if any('cooperation_sim.py'in part for part in c))
+ assert additional_env(simulation)=={}
+ manifest.pop('pretrained_grasp')
+ p.write_text(json.dumps(manifest))
  # Optional J100 fusion uses the existing upstream EKF, retaining the old nodes.
  ekf=Path(directory)/'ekf.yaml';ekf.write_text('ekf_filter_node:\n  ros__parameters:\n    use_sim_time: true\n')
  manifest['localization']={'enabled':True,'ekf_yaml':str(ekf)}

@@ -172,6 +172,109 @@ with tempfile.TemporaryDirectory() as directory:
         self.assertTrue(self.evidence['png_unchanged'])
         self.assertEqual(self.evidence['latest'], self.evidence['expected_latest'])
 
+class NativeCameraSyncWindowTests(unittest.TestCase):
+    """Native DDS queue retention, without a simulator, motion or GPU."""
+    @classmethod
+    def setUpClass(cls):
+        code = r'''
+import copy,json,sys,time
+sys.path.insert(0,sys.argv[1])
+try:
+ import rclpy
+ from rclpy.context import Context
+ from rclpy.executors import SingleThreadedExecutor
+ from message_filters import Subscriber,TimeSynchronizer
+ from sensor_msgs.msg import Image,CameraInfo
+ from diagnostic_msgs.msg import DiagnosticArray
+except ImportError as error:
+ print(json.dumps({'unavailable':str(error)}));sys.exit(0)
+from cooperation_camera import camera_sync_qos,CAMERA_SYNC_DEPTH,LatestCameraSnapshot
+from cooperation_sim import latest_sensor_qos
+context=Context();rclpy.init(args=[],context=context,domain_id=177)
+node=rclpy.create_node('camera_sync_queue_fixture',context=context)
+executor=SingleThreadedExecutor(context=context);executor.add_node(node)
+results={}
+try:
+ for depth in (1,CAMERA_SYNC_DEPTH):
+  qos=copy.copy(camera_sync_qos());qos.depth=depth
+  topics=['/camera_sync_fixture/d'+str(depth)+'/'+x for x in ('image','info','metadata')]
+  kinds=[Image,CameraInfo,DiagnosticArray]
+  publishers=[node.create_publisher(kind,topic,qos)for kind,topic in zip(kinds,topics)]
+  filters=[Subscriber(node,kind,topic,qos_profile=qos)for kind,topic in zip(kinds,topics)]
+  ingress=[0,0,0];pairs=[];slot=LatestCameraSnapshot()
+  def received(message,index):ingress[index]+=1
+  for index,source in enumerate(filters):source.registerCallback(received,index)
+  sync=TimeSynchronizer(filters,queue_size=CAMERA_SYNC_DEPTH)
+  def paired(image,info,metadata):
+   stamp=image.header.stamp.sec+image.header.stamp.nanosec*1e-9
+   age=time.time()-stamp
+   sequence=round((stamp-capture)*1000)
+   pairs.append({'sequence':sequence,'age_s':age,'fresh':-.1<=age<=.25})
+   slot.offer({'episode_id':'native-sync','stamp':stamp,'sequence':sequence})
+  sync.registerCallback(paired)
+  until=time.monotonic()+3
+  while any(p.get_subscription_count()!=1 for p in publishers)and time.monotonic()<until:
+   executor.spin_once(timeout_sec=.01)
+  if any(p.get_subscription_count()!=1 for p in publishers):raise RuntimeError('DDS discovery incomplete')
+  # Pause the executor while individually published channels advance to
+  # different stamps. Their common 2..4 frames are within the sync window.
+  # Depth 1 loses all common stamps; depth 5 retains the fresh common frames.
+  capture=time.time()
+  for channel,(publisher,kind,last)in enumerate(zip(publishers,kinds,(4,5,6))):
+   for sequence in range(1,last+1):
+    message=kind();ns=int((capture+sequence*.001)*1e9)
+    message.header.stamp.sec=ns//1000000000
+    message.header.stamp.nanosec=ns%1000000000
+    message.header.frame_id='fixture_camera_optical'
+    if channel==0:
+     message.width=640;message.height=480;message.encoding='rgb8';message.step=1920
+     message.data=bytes(921600)
+    publisher.publish(message)
+    time.sleep(.001)
+  time.sleep(.10)
+  until=time.monotonic()+.18
+  while time.monotonic()<until:
+   executor.spin_once(timeout_sec=.001)
+   if ingress==([1,1,1]if depth==1 else[4,5,5]):break
+  newest=slot.take()
+  results[str(depth)]={'ingress':ingress,'pairs':pairs,'latest_sequence':newest['sequence']if newest else None,
+                        'overwritten':slot.overwritten,'qos_depths':[p.qos_profile.depth for p in publishers]}
+  for source in filters:node.destroy_subscription(source.sub)
+  for publisher in publishers:node.destroy_publisher(publisher)
+ results['other_latest_depth']=latest_sensor_qos().depth
+ results['camera_reliability']=camera_sync_qos().reliability.name
+ results['other_reliability']=latest_sensor_qos().reliability.name
+ results['image_payload_bytes']=921600
+finally:
+ executor.shutdown(timeout_sec=2.);node.destroy_node();context.shutdown()
+print(json.dumps(results))
+'''
+        result = subprocess.run(['/usr/bin/python3', '-B', '-c', code, str(TOOLS)],
+                                env=system_vision_environment(), capture_output=True,
+                                text=True, timeout=15)
+        if result.returncode:
+            raise RuntimeError(result.stderr)
+        cls.evidence = json.loads(result.stdout.strip().splitlines()[-1])
+        if 'unavailable' in cls.evidence:
+            raise unittest.SkipTest('native camera test requires sourced ROS Jazzy: '+cls.evidence['unavailable'])
+
+    def test_paused_depth_one_loses_pair_but_sync_window_preserves_fresh_pairs(self):
+        previous, candidate = self.evidence['1'], self.evidence['5']
+        self.assertEqual(previous['ingress'], [1, 1, 1])
+        self.assertEqual(previous['pairs'], [])
+        self.assertEqual(candidate['ingress'], [4, 5, 5])
+        self.assertEqual([x['sequence'] for x in candidate['pairs']], [2, 3, 4])
+        self.assertTrue(all(x['fresh'] for x in candidate['pairs']))
+
+    def test_synchronized_frames_still_replace_one_pending_frame(self):
+        self.assertEqual(self.evidence['5']['latest_sequence'], 4)
+        self.assertEqual(self.evidence['5']['overwritten'], 2)
+        self.assertEqual(self.evidence['5']['qos_depths'], [5, 5, 5])
+        self.assertEqual(self.evidence['other_latest_depth'], 1)
+        self.assertEqual(self.evidence['camera_reliability'], 'RELIABLE')
+        self.assertEqual(self.evidence['other_reliability'], 'BEST_EFFORT')
+        self.assertEqual(self.evidence['image_payload_bytes'], 921600)
+
 
 if __name__ == '__main__':
     unittest.main()

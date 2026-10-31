@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "python": "~/.cache/so101-graspgenx/upstream/.venv/bin/python",
+  "models": "~/.cache/so101-graspgenx/models",
+  "descriptor": "tools/config/perception/so101-graspgenx-tip-region.json"
+}

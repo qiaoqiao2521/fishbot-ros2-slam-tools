@@ -1,12 +1,14 @@
-"""Factory adapter contracts only; no ROS, listener, process or robot motion."""
+"""Factory contracts and owned startup-process cleanup; no ROS or robot motion."""
 import contextlib
 import copy
 import io
 import json
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -224,6 +226,9 @@ class ScoreTests(unittest.TestCase):
                   'execution': {key: True for key in ('cleanup_complete', 'owned_launch_stopped',
                     'owned_port_closed', 'protected_instances_unchanged', 'within_total_budget')}}
         self.assertTrue(factory.summarize(result)['passed'])
+        result['execution']['pretrained_grasp_server_closed'] = False
+        self.assertFalse(factory.summarize(result)['passed'])
+        result['execution']['pretrained_grasp_server_closed'] = True
         result['execution']['cleanup_complete'] = False
         value = factory.summarize(result)
         self.assertEqual(value['task_verdict'], 'passed')
@@ -260,6 +265,102 @@ class ScoreTests(unittest.TestCase):
 
 
 class BoundaryTests(unittest.TestCase):
+    def test_native_startup_tree_is_reclaimed_but_unknown_start_is_retained(self):
+        # Only these inert fixture processes are real. Existing ROS, geometric
+        # acceptance and API operations are replaced; actual launch teardown runs.
+        native_popen = subprocess.Popen
+        for after_start in (False, True):
+            with self.subTest(after_start=after_start), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                fixture = root/'launch.py'
+                identities = root/'owned.json'
+                fixture.write_text('import json,os,signal,subprocess,sys,time\n'
+                    'child=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"])\n'
+                    'def stop(signum,frame):\n'
+                    ' child.send_signal(signal.SIGINT)\n'
+                    ' child.wait(timeout=3)\n'
+                    ' sys.exit(0)\n'
+                    'signal.signal(signal.SIGINT,stop)\n'
+                    f'open({str(identities)!r},"w").write(json.dumps([os.getpid(),child.pid]))\n'
+                    'time.sleep(60)\n')
+                source = manifest()
+                source_path = root/'manifest.json'
+                source_path.write_text(json.dumps(source))
+                args = SimpleNamespace(output=root/'run', manifest=source_path, domain=199,
+                    port=19199, planning_python=Path(sys.executable), isolated_runtime=True,
+                    policy_config=None, checkpoint_samples=0)
+                declaration = factory.reference(source, candidate='inert-startup-fixture')
+                state = {'episode_id':'11111111-1111-4111-8111-111111111111',
+                    'mode':'mujoco', 'ready':True, 'scene_profile':source['scene_profile'],
+                    'source':{'scene_sha':'0'*64}, 'task':{'id':None, 'status':'idle'},
+                    'history':[], 'reset':{'available':True, 'pending':False}}
+                started = []
+                def popen(command, **kwargs):
+                    if isinstance(command, list) and len(command)>1 and command[1]=='run':
+                        process = native_popen([sys.executable, str(fixture)], **kwargs)
+                        started.append(process)
+                        deadline = time.monotonic()+3
+                        while not identities.exists() and time.monotonic()<deadline:
+                            time.sleep(.01)
+                        self.assertTrue(identities.exists(), 'fixture launch did not start')
+                        return process
+                    if isinstance(command, list) and any('cooperation_geometry_check.py' in str(x) for x in command):
+                        (args.output/'geometry.json').write_text('{"passed":true}')
+                        return native_popen([sys.executable, '-c', 'pass'], **kwargs)
+                    if isinstance(command, list) and len(command)>1 and command[1]=='oracle':
+                        return SimpleNamespace(pid=-1, poll=lambda:0)
+                    return native_popen(command, **kwargs)
+                def waiting(function, timeout, *, description):
+                    if not after_start and description=='Original native readiness unavailable':
+                        raise RuntimeError('forced readiness exception before start')
+                    if description in ('Original native readiness unavailable', 'New episode not ready',
+                                       'Dispatch readiness unavailable'):
+                        return copy.deepcopy(state)
+                    if description=='Independent observer discovery unavailable':
+                        return True
+                    raise RuntimeError('unexpected fixture wait: '+description)
+                receipt_lost = Mock(side_effect=TransportUnknown('start receipt unavailable'))
+                def current_state():
+                    if receipt_lost.called:
+                        raise RuntimeError('unknown start outcome')
+                    return copy.deepcopy(state)
+                try:
+                    with (patch('fishbot_simulation_suite.domain_is_empty'),
+                          patch.object(factory, 'ReadOnlyMonitor'),
+                          patch.object(factory, 'loaded_code_reference', return_value={'selected_source_text':{}}),
+                          patch.object(factory, 'protected_snapshot', return_value={}),
+                          patch.object(factory, 'host_load_observation', return_value={}),
+                          patch.object(factory, 'wait_until', side_effect=waiting),
+                          patch.object(factory.subprocess, 'Popen', side_effect=popen),
+                          patch.object(LocalBridge, 'post', receipt_lost),
+                          patch.object(LocalBridge, 'state', side_effect=current_state)):
+                        result = factory.run(args, source, declaration)
+                    parent, child = json.loads(identities.read_text())
+                    from cooperation_acceptance import owned_processes, surviving_processes
+                    if after_start:
+                        self.assertEqual(receipt_lost.call_count, 1, result['errors'])
+                        receipt_lost.assert_called_once()
+                        self.assertEqual(result['execution']['mutation_posts']['start'], 1)
+                        self.assertNotIn('startup_cleanup', result['execution'])
+                        self.assertEqual(result['execution']['retained_launch_pid'], parent)
+                        self.assertIsNone(started[0].poll())
+                        self.assertIn(child, surviving_processes(owned_processes(parent)))
+                    else:
+                        receipt_lost.assert_not_called()
+                        self.assertEqual(result['execution']['mutation_posts']['start'], 0)
+                        self.assertFalse(result['execution']['startup_cleanup']['start_intent_recorded'])
+                        self.assertTrue(result['execution']['owned_launch_stopped'])
+                        self.assertEqual(result['owned_process_survivors'], [])
+                        self.assertIsNone(result['execution']['retained_launch_pid'])
+                        self.assertIsNotNone(started[0].poll())
+                    self.assertFalse(result['passed'])
+                finally:
+                    # The retained tree represents an unknown action only in this
+                    # test. Reclaim these known inert fixture processes afterward.
+                    for process in started:
+                        if process.poll() is None:
+                            factory.stop_owned_launch(process, {'errors':[]})
+
     def test_missing_units_are_unchanged_but_do_not_claim_running_original_instances(self):
         missing = {'old-107.service': 'MainPID=0\nLoadState=not-found\nActiveState=inactive',
                    'old-114.service': 'MainPID=0\nLoadState=not-found\nActiveState=inactive'}

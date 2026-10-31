@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 cv2.setNumThreads(1)
 
-from cooperation_camera import CAMERA_FRAME, IMAGE_TOPIC, INFO_TOPIC, METADATA_TOPIC, FAULT_TOPIC, LatestCameraSnapshot
+from cooperation_camera import CAMERA_FRAME, IMAGE_TOPIC, INFO_TOPIC, METADATA_TOPIC, FAULT_TOPIC, LatestCameraSnapshot, camera_sync_qos, CAMERA_SYNC_DEPTH
 from cooperation_perception import normalize_config
 from fishbot_inspection import decode_rgb
 
@@ -329,14 +329,24 @@ def run(args):
     pose_pub = node.create_publisher(PoseWithCovarianceStamped, '/cooperation/station_pose', qos)
     detection_pub = node.create_publisher(DiagnosticArray, '/cooperation/station_detection', qos)
     quality_pub = node.create_publisher(DiagnosticArray, QUALITY_TOPIC, qos)
-    filters = [Subscriber(node, kind, topic, qos_profile=qos)
+    ingress_counts = {IMAGE_TOPIC: 0, INFO_TOPIC: 0, METADATA_TOPIC: 0}
+    synchronized_frames = 0
+
+    def ingress(message, topic):
+        with fault_lock:
+            ingress_counts[topic] += 1
+
+    filters = [Subscriber(node, kind, topic, qos_profile=camera_sync_qos())
                for kind, topic in [(Image, IMAGE_TOPIC), (CameraInfo, INFO_TOPIC), (DiagnosticArray, METADATA_TOPIC)]]
-    sync = TimeSynchronizer(filters, queue_size=5)
+    for source, topic in zip(filters, (IMAGE_TOPIC, INFO_TOPIC, METADATA_TOPIC)):
+        source.registerCallback(ingress, topic)
+    sync = TimeSynchronizer(filters, queue_size=CAMERA_SYNC_DEPTH)
     last = None
     discarded = 0
 
     def capture(image, info, metadata):
-        nonlocal discarded
+        nonlocal discarded, synchronized_frames
+        synchronized_frames += 1
         try:
             for topic in (IMAGE_TOPIC, INFO_TOPIC, METADATA_TOPIC):
                 unique_arm_publisher(node.get_publishers_info_by_topic(topic), 'cooperation_physics')
@@ -406,6 +416,8 @@ def run(args):
                     detection_pub.publish(diagnostic)
                 fault_status = faults.status()
                 discarded_frames = discarded
+                received_counts = dict(ingress_counts)
+                paired_frames = synchronized_frames
             quality = DiagnosticArray()
             _, diagnostic = station_message_pair(observation)
             quality.header = copy.deepcopy(diagnostic.header)
@@ -415,7 +427,9 @@ def run(args):
             status.message = metrics['reason']
             quality_values = {**observation, **metrics, 'render_duration_s': sample['render_duration_s'],
                               'capture_age_s': capture_age, 'source_age_s': source_age,
-                              'overwritten_frames': slot.overwritten, 'discarded_frames': discarded_frames}
+                              'overwritten_frames': slot.overwritten, 'discarded_frames': discarded_frames,
+                              'camera_ingress_counts': received_counts,
+                              'camera_synchronized_frames': paired_frames}
             status.values = [KeyValue(key=key, value=json.dumps(value)) for key, value in quality_values.items()]
             quality.status = [status]
             quality_pub.publish(quality)

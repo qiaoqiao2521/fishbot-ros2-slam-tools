@@ -71,14 +71,21 @@ class NativeDepth(unittest.TestCase):
             root = Path(directory)
             profile = root/'j100.json'
             profile.write_text(json.dumps({'vehicle': 'jackal_j100'}))
+            interpreter = root/'model-python'
+            interpreter.symlink_to(sys.executable)
+            grasp_config = root/'grasp.json'
+            grasp_config.write_text(json.dumps({'enabled': False, 'python': str(interpreter),
+                'models': str(root/'models'), 'descriptor': str(root/'descriptor.json')}))
             output = root/'scene'
             manifest = prepare(types.SimpleNamespace(
                 so101_project=project.parent/'so101', fishbot_project=project,
-                output=output, scene_profile=profile, camera_rgbd=True))
+                output=output, scene_profile=profile, camera_rgbd=True,
+                pretrained_grasp_config=grasp_config))
             saved = json.loads((output/'scene-manifest.json').read_text())
             self.assertTrue(saved['station_camera']['rgbd_enabled'])
             self.assertEqual(saved['station_perception']['mode'], 'ideal')
             self.assertIn('ideal_station_perception', saved)
+            self.assertEqual(saved['pretrained_grasp']['python'], str(interpreter))
             camera = manifest['station_camera']
             self.assertAlmostEqual(camera['base_camera_translation'][2],
                                    manifest['vehicle_profile']['base_link_z_m']+.168)

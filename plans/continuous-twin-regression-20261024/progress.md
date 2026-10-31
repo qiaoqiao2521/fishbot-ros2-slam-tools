@@ -2,7 +2,7 @@
 
 ## Current
 
-2026-10-30：按用户优先复用预训练模型的方向，完成可选RGB-D输入及车型MJCF安装标定。6项原生RGB-D和76项相机/prepare/sim定向检查通过；模型推理、可见点云抓放与视觉配送仍未运行。旧2026-10-29宽场景ideal B→A成功保持。当前接续见[预训练感知](../../docs/PRETRAINED_PERCEPTION.md)，下方早期进场失败属于历史记录。
+2026-10-31：本次V1–V4模型推理与视觉配送完成。K同一world/episode无reset完成B→A，两单独立命名原物理、业务及原记录重算均通过；源码起止一致，原时限/碰撞/接触门槛保持，owned进程和端口已清理。整轮958.277墙秒，路线49.902/20.968秒，末XY31.065/21.215mm。停车保护辅助、源采样缺口和A–J全部失败保留；本文件末尾记录当前验收和恢复入口，下方2026-10-27及以前状态为历史。持续孪生M3/M4等其他计划项仍按未验边界接续，不能由本次视觉两单代替。配置见[预训练感知](../../docs/PRETRAINED_PERCEPTION.md)。
 
 2026-10-27 本轮：卡点快照10档原地小角速离线测试完成，±.001/.003几乎无响应、±.01已转动；原载货/几何不变。30秒固定路径原生FollowPath确认Shim约8.3秒后MPPI输出，继续前进但偏离增加、角命令接近小角速响应不足区间。PathAngle阈值.15单变量短测进度失败；temperature .03单变量前段更快、后段仍停且偏差增长；两者均不晋级，原owner完整进场/配送尚未运行通过。下一步针对运动时小角响应与路径偏移做分层修复，保留hold切换接触瞬态及采样缺口。
 
@@ -237,3 +237,141 @@ knowledge_status=already_covered：已读回Wiki/ROS2 与 FishBot的原生终态
 空间收尾：G两原始observer逐块核验gzip可还原后移除展开件，释放958377984字节；另6份已结束旧连续/麦克纳姆observer归档释放412561408字节，合计1370939392字节（约1.277GiB）。保留场景、快照、源记录、markers、独立评分与失败证据；恢复gzip -dk <observer.jsonl.gz>，索引分别为full-ba-g/archive-receipt.json与cleanup-20261029.json。本轮早期全盘约1.1GiB可用，收尾约2.7GiB；全盘受其它工作影响，回收量以本轮文件分配块为准。没有清理未知/运行中模型或环境。
 
 knowledge_status=updated：已将独立executor的边界、标准TimeSource生命周期、双层队列配对及MultiThreadedExecutor异常唤醒经验补入Wiki/ROS2 与 FishBot“原生 ROS 时钟与回调组”，开发知识入口同行已补触发词，并读回验证。当前B/A结果只回写项目，源龄与真实物理证据分层沿用第19/20节。下一owner=root；M1/M3/M4及其它M2分支仍按task_plan独立推进。
+
+
+## 2026-10-31 模型推理与视觉配送（进行中）
+
+V1/V2已通过agent-link交给Qoder/AGY，范围分别为推理环境与固定工位RGB-D。root新增模型姿态→mink→原OMPL/五阶段执行薄适配，以及渲染生产器与独立推理进程边界；暂未计模型或运输成功。历史候选103在J100宽场景的原查询几何中经新mink接口求得.156mm/.000131rad拟合，约4秒完成原扫掠/路径；这是机械适配测试，输入不是本轮视觉。
+
+后向相机预检第一次因辅助脚本属性名错误退出；第二次默认可见组遗漏业务group4而失检。按实际CameraRenderer的geomgroup全开设置复跑，进场/停靠均有效检测；停靠相对误差约.207mm/.000184rad。未修改生产摄像头或放宽评分，尚未证明运动RGB停靠。图像与原结果保留在~/.cache/fishbot/pretrained-vision-20261031/。
+
+执行接续：agent-link外部Qoder/AGY同步调用超时，确认无产物后分别取消；改用当前会话内置Agent完成同一V1/V2范围。没有联系其它对话。恢复官方代码b9429097与模型7c834043，现有GraspGen-X venv及权重放回原cache入口。Kaggle muqiaoqiao只读CLI核对成功，未派发云作业；30秒原在线查询采用本机RTX3050，避免引入云kernel冷启动。
+
+实际推理：312个RGB-D可见点，固定颜色先验选区、固定工位标定转到Z向上推理系，再将候选还原相机系。官方输出408候选（48扩散＋360 OBB），冷推理总12.717秒、神经推理.863秒，显存峰值584MiB。候选51（OBB，预训练判别分.71622）经mink和原OMPL/扫掠可执行；不是神经分支单独成功。完整离线视觉查询28.583秒通过原30秒期限，尚不等于物理抓起。
+
+single-b-a：原生RGB Dock终态4，随后抓取查询失败。模型report实际17.728秒完成408候选，但新增18秒子进程截止在Python退出时将其截断，任务失败、A未派发。相同输入退出取证实测report15.303秒、进程16.962秒，退出多1.387秒。已移除新增18秒子限制，仍由原整个query的30秒owner截止并回收进程组；未扩大原任务360/路线120/卸货180秒。失败run清理通过、owned survivors空、端口9146关闭、原UUID终态和hold/guard关闭确认。独立物理评分仍false；不将Dock原生成功当作整项通过。single-b-b为修复后新实例，结果待回读。
+
+single-b-b实际在模型查询前失败：RGB观测源龄.26>.25秒，detector各帧均正常、渲染最大39ms/检测最大22ms；相机已产出的755/759两序号未完成视觉同步。原三topic DDS depth1与TimeSynchronizer5不匹配；仅相机三pub/sub改depth5，latest单槽、其它topic depth1和原鲜度阈值不变。受控原生DDS夹具depth1收[1,1,1]/配对0，depth5收[4,5,5]/配对2/3/4，鲜度约.12秒；只能证明这一机制可致漏配对，实际回合修复仍需复验。新增分topic接收与同步计数用于后续区分缺口。失败owned实例清理完成。
+
+机械接触边界：第一次原生probe-a虽规划成功，却压低货物7.58mm、最大lift0；官方OBB以面中心为tip轴，SO101实际PINCH_POINT相对body横偏6mm，直接映射不一致。保留失败；以公开机械坐标建立虚拟模型原点，descriptor两offset_x减.006、extents/depth不变，所有扩散/OBB/判别器共享该坐标，执行边界只做逆变换。probe-b旧51修正后抓起，明确旧score不适用；随后重新官方推理408候选并重新评分，probe-c使用整池排序、新score .774583、report T_body_model且无事后手调，实际lift40.780mm、连续lift≥25mm且双指> .02N为3.14源秒，末双指1.266/1.236N，原五段收敛、非预期接触0。它是单次原生抓起，不是ROS或完整配送通过。
+
+推理时限接续：本机负载波动下冷启动inference-centered-a共26.90秒（模型加载5.16、推理1.91），不足以稳定容纳同30秒内的IK。复用官方GraspGenXZMQServer共享权重，随同一个ROS launch拥有和清理，客户端仍使用官方infer_object全候选协议；不新建通用推理平台，不放宽原查询期限。热推理和正式ROS结果待回读。
+
+knowledge_status=updated：已将“预训练抓取：先对齐夹爪坐标，再验接触”写入Wiki/ROS2 与 FishBot，覆盖可见点云／分支来源／非对称夹爪坐标与重评分／冷启动和退出分层；开发知识入口已增加对应触发词，并逐段读回。这里只回写已实测的机械和推理经验，完整业务结果仍留本计划。
+
+full-ba-c实际未到模型查询：首单e23cd1e3-6138-4939-8c70-740a2191af94在进场时观测源龄.26秒取消，A未派发。新计数显示图像入口195→196、标定／metadata355→359；相机正常产生1387/1392/1397，但大图未进入回调。全程图像250、其它431，说明原depth修正不足；不是已完成图像在检测器计算过慢。失败回合57.443墙秒，清理、API9146／模型10146关闭、owned survivors空、选定源码起止一致。
+
+新增实际负载传输对照：921600字节640×480 RGB、20Hz、每组80帧、原异步发送。BestEffort baseline入口65/80/80、受控暂停59/80/80；RELIABLE两组均80/80/80且同步80。可靠组最大源龄.0387/.1365秒、过期0，最大发布3.51/.80ms；受控暂停后latest单槽保留最新，未把队列当指令缓存。只将相机三topic改可靠depth5，其它传感器QoS及原.25秒接纳不变。实际业务效果仍待full-ba-d验收。
+
+full-ba-d：原单B task69e90c4a-c42b-4f53-ad08-25bcda9184fe完成RGB Dock、实际模型查询与双指抬升、托盘放货；在回位后的连续交接确认失败，A未派发。实际抓取输入312点、全部408候选，新51/OBB分.774583；模型owner1.823秒、完整query17.690秒，原30秒保持。相机三个入口与同步均3103帧，检测最大源龄.100／捕获龄.112秒，无station_freshness_failure，真实负载相机修复在该有限回合有效。
+
+D失败不是时间门槛：末8秒371个唯一物理样本全部不满足handoff，机械臂已回位，货物实际落地。151.36源秒仍有固定pad压货物的5个接触，法向Z约-.9976，固定指7.47N／托盘7.53N；随后的OMPL侧摆把货物拖离盘，约155秒落地。假设沿-X脱离经接触法向检查否定，未执行；先垂直反走原最后下降段再OMPL回位作为有证据的候选，不扩大接触/支撑门槛。D209.031墙秒，cleanup与两端口关闭、owned survivors空，选定源码起止一致；保持failed。
+
+释放修正原生证据：release-diagnosis-d取151.36源秒实录qpos/qvel/ctrl及参考量作R0重建；未保存warmstart，不称精确R1重放。原OMPL退让复现落地、最大货速1.84m/s、交接0秒；开爪后反走原竖直lower，再OMPL回位，维持托盘完整足迹/实际支撑、双指0N、回home，原transport_handoff_ready连续5.18源秒、最大货速.00650m/s、forbidden0。仅pretrained模式采用；前缀及组合路径重新按原open_checker1mm/.01rad检查，仍合并同一个retreat段、原segments计数不变。非竖直末段复用原IK与41mm standoff；没有调接触或交接谓词。7原生模型/退让与11查询进程检查通过。full-ba-e将验证完整B→A，尚未计成功。
+
+阶段清理：A/B/C三份已结束失败observer逐块核验gzip还原字节后移除展开件，释放66.391MiB，回执cleanup-ended-failures.json；原输入、模型候选、失败报告保留。D仍保留展开供释放问题取证，待本轮最终收尾归档。
+
+
+### 2026-10-31 E与回归复核（接续，未计完整配送通过）
+
+E/order-1任务ec77104e-e700-4ac1-82a6-3d442a53cfb7在原30秒接近查询预算内超时，A未执行；官方模型已返回408个候选，热推理owner耗时2.897秒。与D相比，可见312点、408候选姿态/分数/来源全部一致，初始关节差约1e-7rad，但实际停车位置相差约1.62mm/yaw约.00103rad，因此几何影响仍须短对照，不把负载当成唯一根因。真实producer墙钟映射显示D/E查询事件至RGB落盘分别7.839/15.487秒；E模型报告前已耗约19.085秒，旧日志不足以再拆分前半段。原输出与失败保留，owned清理通过，模型端口和API已关闭。
+
+root此前将全回归与E实时任务并行，排程不合适。后续串行运行；不停止其它项目，不放宽30秒查询或碰撞/接触/载货门槛。已给候选筛选补原子小型阶段journal（IK/预抓取/OMPL），可选记录写失败只警告，不改变候选数学或执行。
+
+反馈回归首次control1116中一项夹具错误：旧fake Popen不支持新无start清理分支的ps调用。已在该夹具mock原stop_owned_launch并断言调用一次；policy10项通过。修后control1121项全部通过、零跳过（包含新增5项推理合同）。首次其余checkpoint22/mission209/autonomy61/frontend465均通过，无跳过；这些与修后control共1878项，不重复累计。另推理+工位CPU合同6项通过，原生camera/station16项通过。当前完整B/A仍pending，owner=root。
+
+
+### F：实际模型交接通过，载货Nav入口接收饥饿（保留失败）
+
+F/task303e24e8-2238-4e86-87f2-9fab6314a425，episode95575302-d90d-4f7d-a73c-15584c39509f：RGB标记停靠后，以312个可见点重新进行官方408候选推理；选中OBB候选51、预训练判别分.77458322，原接近查询18.184秒。真实双指抬升、托盘放置、竖直清离与回位交接均执行通过；载货DriveOnHeading终态4。载货Nav UUID77d2d4aeffef42baa1b701809c22dac8已接受，随后因桥接物理反馈中断取消至5；任务unknown，A未执行。原Factory清理证明未通过，结果不重写为成功。
+
+独立取证：source209–220连续550个physics/551个clock，producer最大间隔22.87ms、observer接收最大41.79ms。桥接physics入口最大空档.8995秒，缓存锁等待最大32微秒、提交最大2.17ms；原源龄保护记录clock212.06对physics211.66的.4秒差。恢复包新鲜，缺口发生在进入主执行器回调前。支持主执行器接纳饥饿，不将HTTP慢事件相关性当作唯一根因。证据full-ba-f/readonly-feedback-window.json。
+
+root独立收尾：原Nav终态已知、60帧跨1.18源秒均hold/停稳/guard关闭后，复用stop_owned_launch发送SIGINT；survivors=[]、9146/10146关闭、observer完成。root-reconciliation.json只证明安全资源收回，不改变原任务unknown和评分失败。
+
+最小修复仅将/cooperation/physics_state订阅路由到现有clock_receiver执行器；原BEST_EFFORT depth1、标准TimeSource、源龄/接收龄、速度及物理门槛不变。新增原生测试故意不spin主执行器：旧路由40帧收0而失败，新路由持续收到末帧；四项实际ROS时钟/接收测试全部通过。相关BridgeRace105+原query11=116项通过，mink/退让原生7项通过。G在新独立输出、同场景/订单/预算启动，未计通过；运行时不再并行重测试。
+
+
+### G：载货导航已通过，视觉卸货转运滑脱（保留失败）
+
+G/task4acad401-61cb-49aa-916d-0bb65933443f：修后桥接鲜度失败为null；RGB停靠、模型装货抓取、实际放盘/清离/交接、DriveOnHeading与B载货Nav均通过原生阶段。B Nav UUIDfdf08a0a57024aaf8f536117805004f8终态4，末位置误差33.453mm/yaw.005895rad。B卸货用新的210点可见RGB-D推理408候选，选择99后实际双指抬升得到确认。
+
+随后货架释放前的原连续确认失败，任务和独立评分仍false，A未执行。source398–414的独立记录表明cargo_1已落回原车载托盘、双指力0、trayforce.0981N，不能解释为货架gate过严。此前实际抓持姿态wrist_roll约2.2768rad；原source solve_pinch_ik显式偏好q[4]=0，转运姿态突变为当前待验证假设。root已派当前内置Agent做原始掉落时刻取证与有界R0对照；不放宽评分或故意跳过货架验收。
+
+G原Factory清理通过，owned survivors=[]、API与模型端口关闭，原源码起止观察保留；输出full-ba-g。最短下一步是先验证搬运时保留实际抓持方向的薄适配（mink＋原载物checker），再由原Factory运行新独立回合B→A。
+
+
+### H前局部修复验收与完整接续
+
+G滑脱首次双指失去为source365.60，原IK将腕角2.2768rad拉向0；实际cargo-PINCH偏差仅(+2.973,-.653,-8.488)mm，不需改货架槽或门槛。新增候选声明放货端点的mink IK检查：候选99以48.62mm/1.164rad端点误差拒绝，仍按原池排序接纳候选57、原分.75156不变；使用候选姿态的标签为proposed，实际搬运保存measured方向。端点检查明确kinematic-only，完整原载物路径和物理仍另验。
+
+原G的210可见点／408候选冻结输入，在原pregrasp244.92帧的R0重建中完成候选57五段实际抓取、40.69mm抬升、持货转运、货架释放、竖直清离与归位：before-retreat原gate连续3.96源秒、最终shelf/home连续2.98秒，双指0、禁碰0。没有求解器warmstart，不称精确回放或真实ROS成功。原load51的79.68持货帧也完成同原完整转运／托盘释放／归位，handoff连续2.98秒。卸货初始化4.55秒、候选5.52秒、placement10.61秒；装货init4.60秒、placement9.46秒；端点筛选3候选累计约.06秒。证据unload-preserve-h/{unload-result.json,load-result.json}。卸货probe早于仅改措辞的metadata修正，旧receipt的measured标签不是实测承诺，数值／行为未变。
+
+相关native_model_grasp8＋原query11项全通过；未改官方rank/score、几何、plant、时间、碰撞或物理门槛。H由root独占176/API9146原Factory新输出full-ba-h启动，原B→A同world订单，不重用G任务。当前未计完整通过；模型／ROS测试与H不并行运行。
+
+knowledge_status=updated：原Wiki/ROS2 与 FishBot“预训练抓取”“放货退出”“原生ROS时钟与回调组”补模型夹爪坐标、后续操作原语姿态/机械限位、竖直清离和physics入口饥饿边界；开发知识入口相同行触发词已更新并读回。只沉淀经原生验证的可复用判断，H业务结果仍留项目。
+
+
+H第一单B已由原独立评分通过：task4e336deb-9b79-4131-a373-0aa9374eb3a9，episode3f1a19b1-e58a-44ef-a2e7-26f3783bf922，401.799墙秒，载货路线48.1957秒（原120秒），末XY33.225mm/yaw.013464rad。装货312点候选51、到站新229点候选85，均由原官方全408池/原分数筛选；实际完整装卸、原K及业务独立评分均true。随后同world无reset启动第二单A/task7fc70b3c-c4a8-4038-a1fd-00a495396217，当前进行中，不把第一单通过写成整轮通过。
+
+最终只读审查：当前标准路线坐标、实测R、官方分数及生命周期无阻断；非竖直/单点自定义撤离仍是原upright fallback，未纳入本轮证明。旧report.kind保兼容，orientation_policy明确measured；此限制已写docs，未在H中途改源码。
+
+### H第二单失败与参考发送节奏修复
+
+H整轮仍失败：A/task7fc70b3c-c4a8-4038-a1fd-00a495396217以新291点输入选择候选87、原分.77662897，双指抓取和抬升成立，source588.28在持货转运中滑脱，最终落回取货台，原释放gate正确拒绝。B的通过不替代A。原Factory清理通过、端口关闭；完整失败保留在full-ba-h。
+
+以H/source586.72的R0重建、原201帧/105条实际reference发送记录作有界对照：原记录重放在同source588.28再次滑脱；同路径、同发送时刻，仅将参考弧长推进限制为原.3rad/s乘min(源间隔,.02s)后，4秒运动＋2秒保持中双指未失持，最小双指力.92949N。82/105次推进被限制。它验证的是该局部转运窗口，不是全路径或完整任务。证据load2-diagnosis-h/{recorded-recorded-replay.json,capped-recorded-replay.json}。
+
+轨迹参考投影到原重建路径的残差约1e-14rad，实际发送会落后20/40/80ms后追赶；更严格IK精度没有改变任何路径点，已撤回，不能记为修复。规划起止快照抓持方向仅差2.63e-5rad、货物相对漂移.0769mm，现有证据不支持将快照陈旧列为该滑脱的唯一原因。
+
+薄修复仅作用于预训练视觉分支的lift/transport/lower：保持原几何路径、夹力、速度、源龄、段内时限和整单预算；不补发漏掉周期，末端实际到达后再计算原dwell。默认ideal与自由接近/撤离保持。新增实际Bridge.segment跳帧推进及重复源帧检查；相关BridgeRace＋原query共118项通过，无跳过。I轮在原场景/订单/176/9146的新输出full-ba-i独占运行；未计完整通过，所有重测试与仿真串行。
+
+I整轮未通过：885.432墙秒，B/task601ed79c-5508-44ea-9ec3-0a8d1cee118e完整原K/业务评分通过；B路线48.73865秒、末30.947mm/.024884rad。A/task8510851a-7d3c-49af-bb35-d0e2a6bb258a仍选候选87，原滑脱段已完成，货物实际放盘/清离/回位后运到A；路线与到站物理评分通过，末20.811mm/.009636rad。新226点卸货选择候选85，实际双指抬升与转运后在source844.32触发原实际臂位姿1mm碰撞余量检查，未计货架交付成功。原生禁止接触累计没有因此改写为通过业务；接续先核具体几何对、开爪中间角和实际/reference差异。
+
+I两单同world756e2553-9f69-4343-b617-c66cbd2654fd、episode49730297-debc-475d-bba8-2797dca84c8e，2start/0reset/0cancel；39862个独立物理样本保持源推进。源码起止一致，Factory清理、全部owned进程退出、两端口关闭和原实例保护均通过；失败及原记录保留。当前根Agent处理收尾与碰撞诊断，内置visual_grasp_review仅做同帧离线有界对照，不运行新完整ROS任务。
+
+I最早离线无效帧为source843.30，实际jaw=.1921956rad，pad_moving_jaw对frozen__unload_line_a__pick_wall_x_1距离.95018mm；前五轴误差约.00053rad。冻结原计划末端也在jaw=.19063786rad（第88/244点）失效，全开端点又有效，确认漏验开爪中间角。现在复用原configuration_sweep，在候选声明端点与实际持货placement终点检查完整.015→.5扫掠；原1mm及.005/.002rad采样、模型排序/score、几何和预算保持。错误信息补具体碰撞对、距离与原因，不再只报泛化文字。
+
+原I的226可见点／完整408候选冻结池：85按新预检拒绝，原排序继续选择97，原分.635462保持；planner初始化5.42秒＋候选10.33秒，未超过原30秒接近查询。以source709.02预抓取帧R0重建，实际完成双指抓取、40.773mm抬升、声明转运路线、开爪、货架落稳、竖直清离和OMPL回位；before-retreat连续3.94源秒、最终shelf/home连续3秒，实际q6原1mm均通过、禁碰0。私有实例关闭。证据unload-collision-i/diagnosis.json；仅局部原生物理，不计完整ROS成功。
+
+新增“端点均有效但开爪中段碰撞”“按原rank跳过不可释放候选”的行为回归。native模型10＋原query11=21通过，随后BridgeRace107通过，无跳过。J轮新输出full-ba-j、原场景/订单/176/9146独占运行中，未计通过。
+
+J仍未通过：986.029墙秒，B/taskb6641fbe-20d3-4592-89bf-19b815183bd0完整独立原K/业务通过，路线51.42229秒、末29.601mm/.016002rad。A/task2b09f4b6-f218-44a6-9830-157f90a36ff8的新230点选择97，实际抓取/放架/清离/home已执行，source935.80发出unloaded；最终清理后的新帧确认在937.56超过原180秒卸货deadline，终态failed，不能改判完整配送成功。A末21.054mm/.025731rad，物理完成与任务期限失败分别保留。原源码起止一致、2start/0reset/0cancel、Factory清理通过、survivors=[]、两端口关闭。
+
+接续只检查原接近规划是否有可省的无载绕行：当前官方RRTConnect适配保留原树路径、不作simplify，即使直达关节边可能有效仍调用随机树。先用J原冻结输入和现有validate_joint_path/.005rad/1mm验证直达，证据成立后才复用该已有路径；不移动deadline、不省略清理或连续停稳，不放宽速度/碰撞/评分。
+
+J同source756.80／230点池的候选97：原RRT路径4.808396rad、标称30.05248源秒，重建到实际reference投影残差2.24e-14rad；同起终点直达1.521132rad、标称9.50708秒，原1mm/.005rad检查306状态全部clear。直达验证.630墙秒，原OMPL查询4.019秒。真实壁钟拆分还记录query23.92秒、placement query/刷新26.54秒、放货与退出77.46秒，不把模型.52秒等同整个查询成本。证据latency-j/direct-check.json及timing-breakdown.json。
+
+最小修复仅视觉无载approach优先复用原直达边检查，无效仍回退RRTConnect；持货路径、速度、dwell、清理及180秒期限不改。21项native模型/原query相关测试通过，包含直达/回退及JSON回执；首次native预执行发现np.ndarray无法序列化，已改普通列表并保留该零动作失败，不冒充物理运行。
+
+同J/A冻结输入当前源码完整native通过：直达接近标称9.507秒／实际10.14源秒，期间货物XY变化约7e-12m、双指0；随后实际抬升40.782mm、保持双指1.626/1.637N，原货架before-retreat连续3.92秒、最终shelf/home连续3秒、tips0，实际原1mm及禁碰检查通过。整计划JSON落盘成功，实例关闭。证据latency-j/direct-native-result.json；K轮新输出full-ba-k、原176/9146、同场景/两单/预算已启动，未计完整通过。
+
+## 2026-10-31 K最终验收：模型推理与视觉B→A完成
+
+run a7264eae-5138-4ee7-9e14-1a727d550d57，world6ede1c78-a38e-4b1a-86fb-3ba5a146755b，episode38b64699-d53e-4248-9fe5-5cc88d9c481c。原Factory同一世界执行B→A，2start/0reset/0cancel，41973个独立物理样本保持源推进；958.277墙秒，errors=[]，整体passed=true。原声明每单装运360秒＋卸货180秒、路线120秒、整轮1360秒，均未改动；不把历史无卸货单360秒与本业务阶段预算混写。
+
+| 订单／原任务 | 任务墙秒 | 路线墙秒 | 最终XY／yaw | 独立命名原K／业务 |
+| --- | ---: | ---: | --- | --- |
+| B／b8e18c78-0a1d-442d-8fdb-8d5269f2b8ac | 448.649 | 49.902 | 31.065mm／.001365rad | true／true |
+| A／62e383a7-64c3-4672-bdce-8d3ec8e16662 | 415.055 | 20.968 | 21.215mm／.014968rad | true／true |
+
+四次实际RGB-D可见点为312/226/291/227，候选51/85/87/61；每次官方池完整408（48diff＋360OBB），原分数保留，最终四次均选OBB＋预训练判别分。GPU推理1.096/.625/.500/.503墙秒，RTX3050 Laptop峰值分配584.3MiB，training_steps=0；查询总耗时还含场景/机械初始化和规划。装货两次直达被拒并正常RRT回退，卸货两次直达通过；不是从冻结快照拷贝指定候选或修改模型分数。
+
+原独立评分覆盖同一货物双指抓起/抬升、托盘释放/完整足迹支撑、臂清离/home、载货实际位移、配送目标停车、卸货抓起/货架落稳/清离与清理后的新帧确认。A的兼容original_k_oracle_passed=false仍保留：未投影的旧诊断始终看cargo_1，它此时已在B货架；A实际搬运cargo_2，对应独立命名原K及业务均true，不改旧诊断字段或用网页状态替代物理验收。
+
+root用两个独立score-only进程读取原记录，B/A均passed；full_attempts、旧诊断、目标交付、命名业务、guard及observation_metrics与现场评分逐项精确一致。证据replay-k/comparison.json、verified-k-summary.json和full-ba-k/result.json。选定源码/输入起止一致，owned_process_survivors=[]，launch/API9146/模型10146均关闭，原配置systemd快照一致。
+
+边界：plant停车guard分别介入.80/.74源秒；物理序号缺227/28，最大源间隔.34/.06秒，未补帧。K在第一件持货时出现主机负载/发送空档，相关源间隔与执行节奏原样保留；不把单次通过称为零丢包、纯视觉精度或稳定生产。只证明已声明绿色货物/固定工位仿真，地图/激光Nav2与既有物理反馈继续参与，不外推任意物体、真机或sim-to-real。
+
+验证：完整反馈在早期代码切片已1878项通过（control1121/checkpoint22/mission209/autonomy61/frontend465），不改称最终全仓重跑。后续故障修复分别验证；最终相关BridgeRace107＋native模型10/原query11共128项通过，无跳过，包含直达回退、开爪扫掠和JSON回执。实际ROS时钟/physics独立接收4项与相机DDS对照、原生RGB-D6项等早期证据保持；K运行时未并行重测试。
+
+knowledge_status=updated：原Wiki/ROS2 与 FishBot“预训练抓取”“放货退出”“原生ROS时钟与回调组”及开发知识入口已补夹爪坐标、姿态接续、完整开爪扫掠、无载直达预检、发送节奏与回调饥饿边界，原文和触发词均读回。只写复用经验；本轮成功/失败及原日志仍留项目。知识库其他未审改动保留，未整库提交，后续owner=根Codex。
+
+
+### K空间与交付收尾
+
+结束并核实无人占用后，G/H/I/J/K共9份observer原始JSONL用gzip归档，逐字节解压对比一致后删除展开件；实际回收已分配空间4042481664字节（3.765GiB）。自由空间前后变化另记，不据此归因其他任务。结果cleanup-ended-ghijk.json；此前A–C与D–F归档记录保持。所有成功/失败评分、模型原候选、RGB/深度/掩码、标定、R0对照和源配置均保留，当前GraspGen-X环境/权重及原生overlay未删除，未停止其他项目。
+
+恢复任一原记录：`gzip -dk ~/.cache/fishbot/pretrained-vision-20261031/full-ba-k/order-1/observer/observer.jsonl.gz`；第二单替换order-2。恢复后可按原score-only或耗时导入命令重算。归档保留原路径，原JSON报告不改写；未声称当前不存在的展开文件仍可直接读取。私有总摘要verified-k-summary.json包含现场/离线比较和边界，原输入图像/深度在grasp-observations对应episode目录。
+
+最终25个改动Python文件AST、84个本地文档链接和git diff --check通过；无额外全仓构建。根Agent已核实qiaoqiao2521账号及既有origin，Git交付覆盖本轮已验源码、文档与测试，具体版本以仓库当前提交及远端读回为准；模型、原日志、私有快照和本地会话不入Git。

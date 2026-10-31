@@ -222,10 +222,12 @@ class PolicyTests(unittest.TestCase):
               patch.object(factory, 'loaded_code_reference', return_value={'selected_source_text': {}}),
               patch.object(factory.subprocess, 'Popen', side_effect=popen),
               patch.object(factory, 'ReadOnlyMonitor', side_effect=RuntimeError('stop before ROS boundary')),
+              patch.object(factory, 'stop_owned_launch', return_value=True) as stop_launch,
               patch.object(factory, 'stop_non_motion_child', return_value=[]),
               patch.object(factory.socket, 'socket') as socket):
             socket.return_value.__enter__.return_value.connect_ex.return_value = 111
             result = factory.run(arguments, scene(), factory.reference(scene(), candidate='label-only'))
+        stop_launch.assert_called_once()
         self.assertEqual(self.called.read_text(), '1')
         runtime = output/'derived-manifest.json'
         self.assertEqual(json.loads(runtime.read_text())['egress_pose'], {'x': 0., 'y': -2.7, 'yaw': 0.})

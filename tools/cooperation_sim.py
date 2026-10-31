@@ -1100,7 +1100,7 @@ def run_ros(args):
     from std_msgs.msg import Bool, String
     from action_msgs.msg import GoalStatusArray
     from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
-    from cooperation_camera import (CameraRenderer, frame_messages, depth_message,
+    from cooperation_camera import (CameraRenderer, frame_messages, depth_message, camera_sync_qos,
                                     IMAGE_TOPIC, DEPTH_TOPIC, INFO_TOPIC, METADATA_TOPIC, FAULT_TOPIC)
     from cooperation_lidar import CloudWorker, configuration as lidar_configuration
 
@@ -1172,9 +1172,9 @@ def run_ros(args):
             camera_config = physics.identity['manifest'].get('station_camera', {})
             rgbd_enabled = camera_config.get('rgbd_enabled', False)
             if physics.station_beacon.perception_config['mode'] == 'vision' or rgbd_enabled:
-                self.image_pub = self.create_publisher(Image, IMAGE_TOPIC, self.latest_qos)
-                self.camera_info_pub = self.create_publisher(CameraInfo, INFO_TOPIC, self.latest_qos)
-                self.camera_metadata_pub = self.create_publisher(DiagnosticArray, METADATA_TOPIC, self.latest_qos)
+                self.image_pub = self.create_publisher(Image, IMAGE_TOPIC, camera_sync_qos())
+                self.camera_info_pub = self.create_publisher(CameraInfo, INFO_TOPIC, camera_sync_qos())
+                self.camera_metadata_pub = self.create_publisher(DiagnosticArray, METADATA_TOPIC, camera_sync_qos())
                 def camera_publish(pixels, snapshot):
                     for publisher, message in zip((self.image_pub, self.camera_info_pub, self.camera_metadata_pub),
                                                   frame_messages(pixels, snapshot, physics.identity['manifest']['station_camera'])):

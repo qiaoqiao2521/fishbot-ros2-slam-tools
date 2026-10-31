@@ -34,7 +34,7 @@ class _PayloadQueryBackend:
 
 
 def query_approach(manifest, q6, car_pose, *, check, timeout_s=30.,
-                   arm_id=None, cargo_id=None, snapshot=None):
+                   arm_id=None, cargo_id=None, snapshot=None, model_grasps=None):
     """Original bounded approach query; input and its 30s limit stay intact."""
     if not math.isfinite(timeout_s) or not 0 < timeout_s <= 30.:
         raise ValueError('Approach query requires a wall budget up to 30 seconds')
@@ -42,6 +42,8 @@ def query_approach(manifest, q6, car_pose, *, check, timeout_s=30.,
                'car_pose': [float(v) for v in car_pose]}
     if arm_id is not None or cargo_id is not None:
         payload.update(arm_id=arm_id, cargo_id=cargo_id, snapshot=snapshot)
+    if model_grasps is not None:
+        payload['model_grasps'] = model_grasps
     return _query('approach', payload, check=check, timeout_s=timeout_s)
 
 
@@ -126,11 +128,30 @@ def _query(kind, values, *, check, timeout_s):
             plan[field]['execution'] = execution
             return plan
         finally:
-            if process is not None and process.poll() is None:
-                process.terminate()
-                try: process.wait(timeout=2.)
-                except subprocess.TimeoutExpired:
-                    process.kill(); process.wait(timeout=2.)
+            if process is not None:
+                # A visual query owns a model subprocess in this new session.
+                # Cancel the owned group so Torch cannot outlive its query.
+                nested = values.get('manifest', {}).get('pretrained_grasp', {}).get('enabled', False)
+                def stop_query(force=False):
+                    if nested:
+                        import signal
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL if force else signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
+                    elif force:
+                        process.kill()
+                    else:
+                        process.terminate()
+                if process.poll() is None:
+                    stop_query()
+                    try: process.wait(timeout=2.)
+                    except subprocess.TimeoutExpired:
+                        stop_query(force=True); process.wait(timeout=2.)
+                if nested:
+                    # The direct child may have exited before a stubborn model
+                    # worker. This owned group cannot be left behind in either case.
+                    stop_query(force=True)
 
 
 class ArmPlanner:
@@ -353,8 +374,9 @@ class ArmPlanner:
         """Explicit station route using the original carried checker and IK.
 
         The upstream transport function hardcodes the original tray route.
-        Only waypoint selection is generalized here; its margins, upright IK,
-        Cartesian/joint resolutions and measured dual-pad admission stay intact.
+        Its margins, Cartesian/joint resolutions and measured dual-pad admission
+        stay intact. Model grasps retain the measured gripper rotation using
+        the existing mink task; ideal grasps keep the original upright IK.
         """
         np, mj = self.np, self.mujoco
         local = self.refresh_placement_context(snapshot, car_pose=car_pose)
@@ -375,19 +397,37 @@ class ArmPlanner:
         valid, audit = self.payload_placement.carried_configuration_checker(
             self.contact, execution, self.closed_checker)
         gripper = self.contact.body('gripper').id
-        current = execution.xpos[gripper]+execution.xmat[gripper].reshape(3, 3) @ grasp.PINCH_POINT
+        rotation = execution.xmat[gripper].reshape(3, 3).copy()
+        current = execution.xpos[gripper]+rotation @ grasp.PINCH_POINT
+        preserve_rotation = self.manifest.get('pretrained_grasp', {}).get('enabled', False)
         q = execution.qpos[:5].copy(); paths = []
         for a, b in zip(np.vstack([current, centers])[:-1], centers):
             points = [q.copy()]
             for fraction in np.linspace(0, 1, max(2, int(np.ceil(np.linalg.norm(b-a)/.003))+1))[1:]:
-                goal = grasp.solve_pinch_ik(self.rig, a+(b-a)*fraction, q)
+                xyz = a+(b-a)*fraction
+                if preserve_rotation:
+                    from cooperation_model_grasp import fit_body_pose
+                    target = np.eye(4)
+                    target[:3, :3] = rotation
+                    target[:3, 3] = xyz-rotation @ grasp.PINCH_POINT
+                    goal, position_error, angle_error = fit_body_pose(self.rig, np.r_[q, .5], target)
+                    if goal is None:
+                        raise RuntimeError('Measured-orientation placement is unreachable: '
+                            f'position={position_error:.6f}m rotation={angle_error:.6f}rad')
+                else:
+                    goal = grasp.solve_pinch_ik(self.rig, xyz, q)
                 edge = self.modules['joint_planner'].validate_joint_path([q, goal], valid, .01)
                 if not edge['valid']:
                     raise RuntimeError(f'Station carried route rejected: {audit["last_rejection"]}')
                 points.append(goal.copy()); q = goal
             paths.append(np.asarray(points))
-        retreat = self.modules['joint_planner'].plan_joint_path(q, self.home[:5],
-            self.open_checker.bounds, self.open_checker.is_valid, seed=0, timeout_s=10, resolution_rad=.01)
+        release = None
+        if preserve_rotation:
+            from cooperation_model_grasp import release_sweep
+            release = release_sweep(self, q)
+            if not release['valid']:
+                raise RuntimeError(f'Measured-grasp release sweep rejected: {release}')
+        retreat = self._placement_retreat(q, paths[-1], centers)
         if retreat['status'] != 'solved':
             raise RuntimeError(f'Station retreat rejected: {retreat}')
         segments = [self._segment('lower' if i == len(paths)-1 else 'transport', path, .015)
@@ -398,9 +438,63 @@ class ArmPlanner:
                                        duration_s=0., dwell_s=1.5)])
         return {'segments': segments, 'snapshot_tip_forces_n': forces, 'retreat': retreat,
                 'report': {'kind': 'upright_cartesian_ik', 'centers_local_m': centers.tolist(),
+                           'orientation_policy': 'preserve_measured_gripper_rotation' if preserve_rotation else 'original_upright_zero_roll',
+                           **({'measured_gripper_rotation_station': rotation.tolist()} if preserve_rotation else {}),
+                           **({'release_configuration_sweep': release} if release is not None else {}),
                            'cartesian_resolution_m': .003, 'joint_edge_resolution_rad': .01,
+                           **({'release_detachment': retreat['release_detachment']}
+                              if 'release_detachment' in retreat else {}),
                            **audit, 'arm_query_clearance': self.query_clearance.copy()},
                 **self.entity_contract()}
+
+    def _placement_retreat(self, q, lowering_path, centers):
+        """Clear released cargo vertically before the original OMPL home query."""
+        np = self.np
+        source = self.modules['joint_planner']
+        prefix = None
+        if self.manifest.get('pretrained_grasp', {}).get('enabled'):
+            centers = np.asarray(centers, dtype=float)
+            if (len(centers) >= 2 and np.allclose(centers[-2, :2], centers[-1, :2], atol=1e-9)
+                    and centers[-2, 2] > centers[-1, 2]):
+                # Reuse the exact already-planned upright descent in reverse.
+                # The jaw is now open, so validate it again with the open checker.
+                prefix = np.asarray(lowering_path, dtype=float)[::-1].copy()
+                kind = 'reverse_last_vertical_lowering_path'
+            else:
+                grasp = self.modules['grasp_episode']
+                data = self.mujoco.MjData(self.rig)
+                data.qpos[:6] = np.r_[q, .5]
+                self.mujoco.mj_forward(self.rig, data)
+                body = self.rig.body('gripper').id
+                pinch = data.xpos[body] + data.xmat[body].reshape(3, 3) @ grasp.PINCH_POINT
+                points = [np.asarray(q, dtype=float).copy()]
+                for fraction in np.linspace(0., 1., int(np.ceil(.041/.003))+1)[1:]:
+                    points.append(grasp.solve_pinch_ik(self.rig,
+                        pinch + np.array([0., 0., .041*fraction]), points[-1]))
+                prefix = np.asarray(points)
+                kind = 'upright_original_41mm_standoff'
+            checked = source.validate_joint_path(prefix, self.open_checker.is_valid, .01)
+            if not checked['valid']:
+                raise RuntimeError(f'Open-jaw vertical detachment rejected: {checked}')
+        retreat = source.plan_joint_path(q if prefix is None else prefix[-1], self.home[:5],
+            self.open_checker.bounds, self.open_checker.is_valid, seed=0, timeout_s=10, resolution_rad=.01)
+        if prefix is not None and retreat['status'] == 'solved':
+            retreat['path'] = np.vstack([prefix, np.asarray(retreat['path'])[1:]]).tolist()
+            combined = source.validate_joint_path(retreat['path'], self.open_checker.is_valid, .01)
+            if not combined['valid']:
+                raise RuntimeError(f'Combined open-jaw retreat rejected: {combined}')
+            home_query = {key: copy.deepcopy(retreat[key]) for key in
+                ('validation', 'waypoint_count', 'path_length_rad') if key in retreat}
+            retreat['validation'] = combined
+            retreat['waypoint_count'] = len(retreat['path'])
+            retreat['path_length_rad'] = float(np.linalg.norm(
+                np.diff(np.asarray(retreat['path']), axis=0), axis=1).sum())
+            retreat['release_detachment'] = {'kind': kind, 'jaw_rad': .5,
+                'prefix_waypoints': len(prefix), 'joint_edge_resolution_rad': .01,
+                'margin_m': self.open_checker.margin_m, 'checked': checked,
+                'original_home_query': home_query,
+                'boundary': 'Geometric open-jaw path; live cargo support and release gates remain required'}
+        return retreat
 
     def evaluate(self, q6):
         return self.open_checker.evaluate(self._q6(q6), require_fixed_gripper=False)
@@ -414,11 +508,27 @@ def _query_main():
     payload = json.loads(request.read_text())
     result = {'query_id': payload['query_id']}
     try:
+        began = time.monotonic()
         planner = ArmPlanner(payload['manifest'], car_pose=payload['car_pose'],
             arm_id=payload.get('arm_id'), cargo_id=payload.get('cargo_id'), snapshot=payload.get('snapshot'))
-        result['plan'] = (planner.prepare_approach(payload['q6'], seed=0)
-                          if sys.argv[1] == '--query-approach' else
-                          planner.prepare_placement(payload['snapshot'], payload['centers_local']))
+        timing = {'planner_init_wall_s': time.monotonic()-began}
+        if sys.argv[1] == '--query-approach':
+            if payload.get('model_grasps') is None and payload['manifest'].get('pretrained_grasp', {}).get('enabled'):
+                from cooperation_visual_grasp import model_proposals
+                observed = time.monotonic()
+                payload['model_grasps'] = model_proposals(payload['manifest'], payload['snapshot'],
+                    payload['arm_id'], payload['cargo_id'], model=planner.common)
+                timing['rgbd_and_inference_wall_s'] = time.monotonic()-observed
+            if payload.get('model_grasps') is not None:
+                from cooperation_model_grasp import prepare_model_approach
+                planned = time.monotonic()
+                result['plan'] = prepare_model_approach(planner, payload['q6'], payload['model_grasps'])
+                timing['candidate_planning_wall_s'] = time.monotonic()-planned
+                result['plan']['planning']['visual_query_timing'] = timing
+            else:
+                result['plan'] = planner.prepare_approach(payload['q6'], seed=0)
+        else:
+            result['plan'] = planner.prepare_placement(payload['snapshot'], payload['centers_local'])
     except Exception as error:
         result['error'] = str(error)[:2000]
     response.write_text(json.dumps(result, allow_nan=False))

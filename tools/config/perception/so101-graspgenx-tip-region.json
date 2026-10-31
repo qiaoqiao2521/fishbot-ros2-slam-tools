@@ -1,0 +1,59 @@
+{
+  "kind": "SO101_declared_simulated_tip_region",
+  "params": {
+    "extents_open": [
+      0.044,
+      0.008,
+      0.009
+    ],
+    "offset_open": [
+      0.01,
+      0.0,
+      0.094
+    ],
+    "extents_mid": [
+      0.028,
+      0.008,
+      0.012
+    ],
+    "offset_mid": [
+      0.002,
+      0.0,
+      0.096
+    ],
+    "gripper_type": 1,
+    "fingertip_depth": 0.094
+  },
+  "validation_scope": "Declared simulated conservative tip region at jaw .5/.2575; no hardware calibration or maximum aperture claim",
+  "boundary": "Official wizard annotation verified for this task region; raw full mesh check is not motion/physics acceptance",
+  "collision_geometry_used_for_inference": false,
+  "source": "so101 experiments/graspgenx-demo; reviewed-20261014-183003-2405056 descriptor",
+  "T_body_model": [
+    [
+      1.0,
+      0.0,
+      0.0,
+      0.006
+    ],
+    [
+      0.0,
+      -1.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      -1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "model_frame": "virtual_pinch_xy_z_forward",
+  "frame_derivation": "Original mechanical PINCH_POINT=(.006,0,-.094) maps to model (0,0,+.094); subtract .006 from both descriptor offset X values. Extents and depth unchanged."
+}

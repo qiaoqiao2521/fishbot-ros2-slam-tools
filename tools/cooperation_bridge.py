@@ -21,7 +21,7 @@ from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, arm_home_qui
                               task_scope, task_delivery_pose, task_delivery_approaches, task_business_delivery,
                               reset_request_identity,
                               release_ready_for_retreat, stopped, tip_forces, transport_handoff_ready, validate_physics)
-from cooperation_core import station_robot_pose, within_station_capture
+from cooperation_core import advance_arm_reference, station_robot_pose, within_station_capture
 from cooperation_perception import (map_covariance, messages_to_observation,
                                     normalize_config, validate_observation)
 from cooperation_readiness import NativeReadiness, StaticLocalizationWarmup
@@ -216,8 +216,9 @@ def run(args):
 
     class Bridge(Node):
         def __init__(self):
-            # Standard TimeSource remains the sole clock writer. Only its DDS
-            # subscription lives on a dedicated node/executor, outside action dispatch.
+            # Standard TimeSource remains the sole clock writer. Clock and
+            # latest physics DDS reception share the existing dedicated executor,
+            # outside action dispatch and station/image processing.
             self.clock_receiver = Node(
                 "fishbot_cooperation_clock_receiver",
                 parameter_overrides=[rclpy.parameter.Parameter("use_sim_time", value=False)])
@@ -371,6 +372,12 @@ def run(args):
                                 callback_group=None, event_callbacks=None,
                                 qos_overriding_options=None, raw=False,
                                 content_filter_options=None):
+            receiver = getattr(self, 'clock_receiver', None)
+            if topic == '/cooperation/physics_state' and receiver is not None:
+                return receiver.create_subscription(
+                    msg_type, topic, callback, qos_profile, callback_group=callback_group,
+                    event_callbacks=event_callbacks, qos_overriding_options=qos_overriding_options,
+                    raw=raw, content_filter_options=content_filter_options)
             if (msg_type is Clock and topic == '/clock' and callback_group is None
                     and isinstance(getattr(callback, '__self__', None), TimeSource)
                     and getattr(callback, '__func__', None) is TimeSource.clock_callback):
@@ -1361,6 +1368,16 @@ def run(args):
             dwell = float(segment.get('dwell_s', .6))
             initial = self.check()['stamp']
             source_limit = duration+dwell+20
+            paced = (manifest.get('pretrained_grasp', {}).get('enabled', False)
+                     and stage in ('lift', 'transport', 'lower'))
+            progress, previous_stamp, reference_finished = 0., initial, None
+            if paced:
+                pacing = {'stage': stage, 'policy': 'owned_path_no_source_gap_catch_up',
+                    'max_speed_rad_s': .3, 'original_source_period_s': .02,
+                    'clamped_updates': 0, 'max_source_gap_s': 0., 'max_sent_arc_step_rad': 0.,
+                    'nominal_duration_s': duration, 'source_elapsed_s': 0.}
+                with self.lock:
+                    self.task.setdefault('arm_reference_pacing', []).append(pacing)
             while True:
                 raw = self.check()
                 age = raw['stamp']-initial
@@ -1370,6 +1387,15 @@ def run(args):
                     q = points[-1]
                 else:
                     value = fraction*cumulative[-1]
+                    if paced:
+                        requested = value
+                        delta = raw['stamp']-previous_stamp
+                        value = advance_arm_reference(progress, requested, delta)
+                        pacing['clamped_updates'] += int(value < requested-1e-10)
+                        pacing['max_source_gap_s'] = max(pacing['max_source_gap_s'], delta)
+                        pacing['max_sent_arc_step_rad'] = max(pacing['max_sent_arc_step_rad'], value-progress)
+                        pacing['source_elapsed_s'] = age
+                        progress, previous_stamp = value, raw['stamp']
                     i = max(0, min(int(np.searchsorted(cumulative,value,side='right'))-1,len(points)-2))
                     alpha = (value-cumulative[i])/max(cumulative[i+1]-cumulative[i],1e-12)
                     q = points[i]+alpha*(points[i+1]-points[i])
@@ -1377,9 +1403,16 @@ def run(args):
                 view = self.task_material(raw)
                 if self.task.get('business_delivery') and (not raw['car_hold'] or not stopped(raw)):
                     raise RuntimeError('实体抓放期间车辆未保持停车')
-                if not planner.evaluate(view['q6'])['valid']:
-                    raise RuntimeError('实际机械臂位姿失去原碰撞余量')
-                if age >= duration+dwell and np.max(np.abs(np.asarray(view['q6'])[:5]-points[-1]))<.012 and np.linalg.norm(view['qvel6'][:5])<.05:
+                clearance = planner.evaluate(view['q6'])
+                if not clearance['valid']:
+                    raise RuntimeError('实际机械臂位姿失去原碰撞余量：'
+                        f'{clearance.get("pair")}，距离{clearance.get("min_distance_m")}m，'
+                        f'{clearance.get("reason")}')
+                if paced and progress >= cumulative[-1]-1e-10 and reference_finished is None:
+                    reference_finished = max(raw['stamp'], initial+duration)
+                dwell_complete = (reference_finished is not None and raw['stamp']-reference_finished >= dwell
+                                  if paced else age >= duration+dwell)
+                if dwell_complete and np.max(np.abs(np.asarray(view['q6'])[:5]-points[-1]))<.012 and np.linalg.norm(view['qvel6'][:5])<.05:
                     return raw
                 if age > source_limit:
                     errors=np.abs(np.asarray(view['q6'])[:5]-points[-1])
@@ -1475,6 +1508,16 @@ def run(args):
                 self.persist()
             return plan
 
+        def record_visual_grasp(self, plan):
+            result = plan.get('planning', {}).get('model_grasp')
+            if result is not None:
+                receipt = copy.deepcopy({key: value for key, value in result.items() if key != 'attempts'})
+                receipt['attempt_count'] = len(result.get('attempts', []))
+                with self.lock:
+                    self.owner()
+                    self.task.setdefault('visual_grasp_receipts', []).append(receipt)
+                    self.persist()
+
         def execute_unload(self, token):
             """Continue the same owned task/world after its original loaded route."""
             from cooperation_business import shelf_settled, placement_slot
@@ -1496,9 +1539,11 @@ def run(args):
             options = {'arm_id': arm_id, 'cargo_id': binding['cargo_id'], 'snapshot': raw}
             planner = ArmPlanner(manifest, car_pose=pose, **options)
             baseline = self.task_material(raw)['cargo']['position'][2]
-            self.event('arm','unload_grasp','卸货臂按当前货物身份从托盘抓取。')
+            self.event('arm','unload_grasp','卸货臂使用 RGB-D 与预训练模型计算托盘抓取。'
+                if manifest.get('pretrained_grasp', {}).get('enabled') else '卸货臂按当前货物身份从托盘抓取。')
             plan = query_approach(manifest, self.task_material(raw)['q6'], pose,
                 check=self.check, timeout_s=min(30., max(.001,self.wall_deadline-time.monotonic())), **options)
+            self.record_visual_grasp(plan)
             for segment in plan['segments']:
                 self.segment(segment, planner)
             self.wait_condition(lambda value: self.task_material(value)['cargo']['position'][2]-baseline>=.025
@@ -1565,8 +1610,11 @@ def run(args):
                            if binding else {})
                 pose = raw['car']['position']+raw['car']['quaternion_wxyz']
                 planner = ArmPlanner(manifest, car_pose=pose, **options)
+                if manifest.get('pretrained_grasp', {}).get('enabled'):
+                    self.event('arm','approach','正在从 RGB-D 提取目标，并由 GraspGen-X 生成抓取候选。')
                 plan = query_approach(manifest, self.task_material(raw)['q6'], pose,
                     check=self.check, timeout_s=min(30., max(.001, self.wall_deadline-time.monotonic())), **options)
+                self.record_visual_grasp(plan)
                 self.check()
                 # Retain small planning evidence once per task. Full trajectories
                 # remain local planning data, not repeated telemetry payloads.

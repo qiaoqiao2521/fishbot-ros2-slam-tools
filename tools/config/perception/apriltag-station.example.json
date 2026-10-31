@@ -1,0 +1,10 @@
+{
+  "mode": "vision",
+  "publisher": "station_camera",
+  "min_confidence": 0.75,
+  "max_covariance": [
+    0.0013,
+    0.0014,
+    0.019
+  ]
+}

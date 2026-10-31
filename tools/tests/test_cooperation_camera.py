@@ -7,7 +7,7 @@ import unittest
 
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS))
-from cooperation_camera import LatestCameraSnapshot, system_vision_environment
+from cooperation_camera import CameraRenderer, LatestCameraSnapshot, system_vision_environment
 
 
 class CameraSourceTests(unittest.TestCase):
@@ -23,6 +23,41 @@ class CameraSourceTests(unittest.TestCase):
         self.assertTrue(slot.offer({'stamp': 2.1, 'episode_id': 'second', 'sequence': 4}))
         self.assertFalse(slot.offer({'stamp': 2.1, 'episode_id': 'second', 'sequence': 5}))
         self.assertEqual(slot.take()['sequence'], 4)
+
+    def test_camera_source_skips_busy_publication_lock_without_blocking_physics(self):
+        import threading
+        from types import SimpleNamespace
+        import numpy as np
+        slot = LatestCameraSnapshot()
+        worker = CameraRenderer.__new__(CameraRenderer)
+        worker.slot = slot
+        worker.physics = SimpleNamespace(
+            data=SimpleNamespace(qpos=np.zeros(2), time=1.),
+            episode_id='source-episode', state_sequence=50,
+            identity={'scene_sha256': 'scene', 'manifest_sha256': 'manifest'},
+            body_velocity=lambda body: np.zeros(6), car_body=0,
+            observation_faults=SimpleNamespace(start_wall=None, occlusion_active=lambda **kwargs: False))
+        completed = threading.Event()
+        def offer():
+            try:
+                worker.offer()
+            finally:
+                completed.set()
+        slot.lock.acquire()
+        thread = threading.Thread(target=offer)
+        thread.start()
+        try:
+            returned_while_publisher_locked = completed.wait(.5)
+        finally:
+            slot.lock.release()
+            thread.join(timeout=1.)
+        self.assertTrue(returned_while_publisher_locked)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(slot.skipped_busy, 1)
+        self.assertIsNone(slot.pending)
+        worker.offer()
+        self.assertEqual(slot.take()['sequence'], 50)
+        self.assertTrue(slot.current('source-episode'))
 
     def test_system_detector_keeps_ros_and_rejects_planning_numpy_path(self):
         env = {'PYTHONPATH': '/x/planning-venv/lib/python3.12/site-packages:/opt/ros/jazzy/lib/python3.12/site-packages:/usr/lib/python3/dist-packages',
