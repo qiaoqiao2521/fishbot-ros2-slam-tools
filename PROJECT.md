@@ -11,6 +11,8 @@
 ## Constraints
 Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。历史无线延迟与专项验收边界继续保留，不再作为已售实车的当前阻塞项。
 ## Current State
+2026-10-31 CERLAB最小网页接入已实际飞行：固定作者场景/1m航点、原ID刷新、取消返航落地、实时三维及原生MCAP seek/倒退/播放通过。默认工作台选择CERLAB，旧PX4可显式选择；可靠动态/真实深度/全程净空未过。[使用与验收](docs/DRONE_CERLAB.md)，原EGO/MINCO冻结保持。
+
 2026-10-24 已接入N3组件对照/N4历史候选旁路：原N2前缀＋现有MINCO分轴刹停，7条生成、4数学通过、3加速度拒绝；原生三维分色显示并按源曲线替换。常用5186桌面/390px最终19项检查通过，零控制写请求；动态占据和在线采用未核，drone c866441冻结。[方法与边界](docs/DRONE_STOP_CANDIDATES.md)。
 
 2026-10-24 N0/N1已实现：选择现有EGO＋PX4，MINCO S4NU保留离线候选；原深度包抽取四束前视＋一束下视，按源位姿和可用时刻进入原生MCAP。原像素/位姿独立审计通过；页面交付与未验边界见[稀疏观测](docs/DRONE_SPARSE_OBSERVATIONS.md)和[工作台进度](plans/workbench-code-rebuild-20261018/progress.md)。不训练、不写飞控，drone c866441冻结保持。

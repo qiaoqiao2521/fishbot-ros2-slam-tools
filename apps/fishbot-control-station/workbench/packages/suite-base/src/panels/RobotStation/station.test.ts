@@ -12,6 +12,7 @@ import { isLayoutEqual } from "@lichtblick/suite-base/services/LayoutManager/uti
 import {
   copyStation,
   defaultDroneStation,
+  defaultCerlabStation,
   defaultStation,
   exportStation,
   exportStationRecipe,
@@ -581,4 +582,26 @@ it.each([
     },
   };
   expect(isLayoutEqual(baseline, current)).toBe(false);
+});
+
+describe("CERLAB station documents", () => {
+  it("preserves the distinct backend through normal JSON round-trip", () => {
+    const station = defaultCerlabStation();
+    const imported = importStation(JSON.parse(exportStation(station)));
+    expect(imported.station.flight?.planner).toBe("cerlab");
+    expect(
+      imported.station.program.map(({ action, target, seconds }) => ({
+        action,
+        target,
+        seconds,
+      })),
+    ).toEqual(
+      station.program.map(({ action, target, seconds }) => ({
+        action,
+        target,
+        seconds,
+      })),
+    );
+    expect(defaultDroneStation().flight?.planner).toBe("ego");
+  });
 });

@@ -134,3 +134,15 @@ test('return-home and cancellation are requests, not immediate completed flight 
  assert.equal(runtime.task('flight-control-123').telemetry.armed,false);
  assert.equal(runtime.submit('flight-control-123',{...station,name:'new'}).value.station.name,station.name);
 });
+
+
+test('CERLAB scenes preserve native obstacle orientation and never display the X500 asset',()=>{
+ const {sceneFor}=require('../drone-scene.cjs');
+ const orientation={x:0,y:0,z:Math.SQRT1_2,w:Math.SQRT1_2};
+ const scene=sceneFor({nodes:[],program:[]},{backend:'cerlab',simulation_s:1,
+  pose:{position:[1,2,1],orientation},obstacles:[{id:'wall',position:[-.75,0,1.25],size:[5.15,.15,2.5],orientation,source:'author_world_sdf'}]},
+  {models:[{url:'x500.dae'}]});
+ assert.equal(scene.entities.some(e=>e.models?.length),false);
+ assert.deepEqual(scene.entities.find(e=>e.id==='observed-wall').cubes[0].pose.orientation,orientation);
+ assert.match(scene.entities.find(e=>e.id==='x500-pose-marker').texts[0].text,/IRIS/);
+});

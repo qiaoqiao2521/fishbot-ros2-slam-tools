@@ -61,7 +61,7 @@ export type Station = {
   skillControl?: unknown;
   flight?: {
     speed_m_s: number;
-    planner: "waypoint" | "ego";
+    planner: "waypoint" | "ego" | "cerlab";
     acceptance?: FlightAcceptance;
     sensors?: {
       depth_drop_probability?: number;
@@ -121,6 +121,30 @@ export function stationKindLabel(kind: Kind, platform: Platform): string {
     }
   }
   return KIND_LABELS[kind];
+}
+
+export function defaultCerlabStation(): Station {
+  const station = defaultDroneStation();
+  return {
+    ...station,
+    name: "CERLAB 作者栈往返",
+    flight: { speed_m_s: 1.5, planner: "cerlab" },
+    nodes: station.nodes
+      .filter((node) => ["base", "home", "takeoff", "wp1"].includes(node.id))
+      .map((node): StationNode => ({
+        ...node,
+        name: node.id === "base" ? "IRIS 四旋翼" : node.name,
+        position:
+          node.id === "wp1"
+            ? [8, 0, 1]
+            : node.kind === "target"
+              ? [0, 0, 1]
+              : node.position,
+      })),
+    program: station.program.filter((step) => !["s3", "s4"].includes(step.id)),
+    notes:
+      "CERLAB 固定作者场景，目标高度 1m，速度配置 1.5m/s。真值动态障碍输入；全程净空与真实感知未验收。结束/取消请求原生返航后降落，不包含历史轨迹安全回退。",
+  };
 }
 
 export function defaultDroneStation(): Station {
@@ -736,7 +760,9 @@ export function importStation(value: unknown): {
           flight: {
             speed_m_s: validSpeed ? speed : 1,
             planner:
-              flight?.planner === "ego"
+              flight?.planner === "cerlab"
+                ? ("cerlab" as const)
+                : flight?.planner === "ego"
                 ? ("ego" as const)
                 : ("waypoint" as const),
             ...(acceptanceSource ? { acceptance } : {}),

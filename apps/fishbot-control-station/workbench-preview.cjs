@@ -34,6 +34,7 @@ live = createSo101Live({runtime});
 let droneLive;
 const dronePlanning=createDronePlanning();
 const droneRuntime=createDroneRuntime({
+  backend:process.env.DRONE_BACKEND??'cerlab',
   onTaskCreated:id=>droneLive?.selectTask(id),
   sceneOptions:()=>droneLive?.sceneOptions()??{},
   validateSubmission:dronePlanning.validateFlight,

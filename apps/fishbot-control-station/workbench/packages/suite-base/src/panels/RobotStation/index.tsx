@@ -51,6 +51,7 @@ import {
   actionNeedsTarget,
   copyStation,
   defaultStation,
+  defaultCerlabStation,
   descendants,
   exportStation,
   exportStationRecipe,
@@ -1629,7 +1630,8 @@ function RobotStation({
               <TextField
                 size="small"
                 type="number"
-                label="速度上限（m/s）"
+                label={station.flight?.planner === "cerlab" ? "作者速度配置（m/s）" : "速度上限（m/s）"}
+                disabled={station.flight?.planner === "cerlab"}
                 value={station.flight?.speed_m_s ?? 1}
                 slotProps={{ htmlInput: { min: 1, max: 5, step: 0.1 } }}
                 onChange={(event) => {
@@ -1658,12 +1660,15 @@ function RobotStation({
                       ...station.flight,
                       speed_m_s: station.flight?.speed_m_s ?? 1,
                       planner:
-                        event.target.value === "ego" ? "ego" : "waypoint",
+                        event.target.value === "cerlab" ? "cerlab" : event.target.value === "ego" ? "ego" : "waypoint",
                     },
                   });
                 }}
               >
                 <MenuItem value="waypoint">按航点巡航</MenuItem>
+                <MenuItem value="cerlab" disabled={runtime?.executor?.planners?.includes("cerlab") !== true}>
+                  CERLAB 作者栈（固定场景 / 1m）
+                </MenuItem>
                 <MenuItem
                   value="ego"
                   disabled={
@@ -1678,7 +1683,7 @@ function RobotStation({
             </div>
             <Typography variant="subtitle2">飞行验收参数</Typography>
             <Typography variant="caption" color="text.secondary">
-              留空沿用执行器默认值。最低巡航速度只适用于有足够距离的巡航段；持续时长仅在填写最低巡航速度时参与验收。
+              {station.flight?.planner === "cerlab" ? "CERLAB 本阶段仅验证航点和落地。以下验收参数尚未接入，请保持空白。" : "留空沿用执行器默认值。最低巡航速度只适用于有足够距离的巡航段；持续时长仅在填写最低巡航速度时参与验收。"}
             </Typography>
             <div className={classes.fields}>
               {(
@@ -1695,6 +1700,7 @@ function RobotStation({
                   size="small"
                   type="number"
                   label={label}
+                  disabled={station.flight?.planner === "cerlab"}
                   value={station.flight?.acceptance?.[key] ?? ""}
                   slotProps={{ htmlInput: { min: 0, step: 0.05 } }}
                   onChange={(event) => {
@@ -1729,7 +1735,7 @@ function RobotStation({
             </div>
             <Typography variant="subtitle2">深度感知故障注入</Typography>
             <Typography variant="caption" color="text.secondary">
-              仅作用于仿真深度通道。丢帧 0.1 表示 10%；延迟保留原采集时间。
+              {station.flight?.planner === "cerlab" ? "CERLAB 当前使用真值动态障碍输入，尚未接入网页深度故障注入。" : "仅作用于仿真深度通道。丢帧 0.1 表示 10%；延迟保留原采集时间。"}
             </Typography>
             <div className={classes.fields}>
               {(
@@ -1744,6 +1750,7 @@ function RobotStation({
                   size="small"
                   type="number"
                   label={label}
+                  disabled={station.flight?.planner === "cerlab"}
                   value={station.flight?.sensors?.[key] ?? fallback}
                   slotProps={{
                     htmlInput: {
@@ -1776,7 +1783,9 @@ function RobotStation({
               ))}
             </div>
             <Typography variant="caption" color="text.secondary">
-              {station.flight?.planner === "ego"
+              {station.flight?.planner === "cerlab"
+                ? "CERLAB 固定场景和原点，航点 Z 必须为 1m；当前仅显示 IRIS 位姿标记，可靠动态避障和全程净空尚未验收。"
+                : station.flight?.planner === "ego"
                 ? "EGO-Swarm 使用 Gazebo 理想定位和深度图，结果以本次仿真报告为准。"
                 : "航点模式不自动绕障；请使用空旷仿真场景。"}
             </Typography>
@@ -1994,6 +2003,12 @@ function RobotStation({
             ? `执行器暂不可用：${runtimeError}`
             : (runtime?.message ?? "正在检查已有规划执行器…")}
         </Alert>
+        {drone && runtime?.executor?.planners?.includes("cerlab") === true && (
+          <Button size="small" variant="outlined" disabled={submitting || taskIsActive(task)}
+            onClick={() => { commit(defaultCerlabStation()); setNotice("已载入 CERLAB 固定场景往返草稿，尚未运行。"); }}>
+            载入 CERLAB 往返示例
+          </Button>
+        )}
         {runtime?.capabilities && runtime.capabilities.length > 0 && (
           <Typography variant="caption" color="text.secondary">
             执行器支持：{runtime.capabilities.join("；")}
@@ -2047,7 +2062,7 @@ function RobotStation({
             {cancelling
               ? "正在发送请求…"
               : drone
-                ? "停止并安全返回降落"
+                ? station.flight?.planner === "cerlab" ? "取消并请求返航降落" : "停止并安全返回降落"
                 : "取消任务"}
           </Button>
           {!drone && carryGateWaiting(task) && (
@@ -2203,7 +2218,9 @@ function RobotStation({
             )}
             {drone && task.report && (
               <Typography variant="body2">
-                飞行验收：{task.report.passed === true ? "通过" : "未通过"}
+                {task.report.backend === "cerlab"
+                  ? `任务功能：${task.status === "cancelled" ? "已取消" : task.report.passed === true ? "完成" : "未完成"}；落地解除电机：${task.report.landed_disarmed === true ? "已确认" : "未确认"}；动态安全与全程净空未验收。`
+                  : `飞行验收：${task.report.passed === true ? "通过" : "未通过"}`}
               </Typography>
             )}
             {!drone && task.report && (

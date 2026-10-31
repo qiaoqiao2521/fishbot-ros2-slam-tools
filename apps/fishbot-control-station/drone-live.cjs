@@ -15,10 +15,11 @@ function createDroneLive({runtime,planning}){
   channels[key]=foxglove.addChannel({topic:`/drone/live/${key}`,encoding:'json',schemaName:name,schema:JSON.stringify(definition)});
  let mode='draft',taskId,planId,plan,station={nodes:[],program:[]},origin='',sourceEpoch=0,previousIds=new Set(),lastScene;
  function modelInfo(){
+  if(runtime.backend==='cerlab')return {models:[],files:[]};
   try{return JSON.parse(fs.readFileSync(path.join(runtime.paths.sourceRoot,'assets/x500-scene.json'),'utf8'));}
   catch{return {models:[],files:[]};}
  }
- function sceneOptions(){return {models:modelInfo().models,assetBase:origin};}
+ function sceneOptions(){return {models:modelInfo().models,assetBase:origin,...(runtime.backend==='cerlab'?{vehicleName:'IRIS / CERLAB'}:{})};}
  function state(){
   const task=mode==='task'&&taskId?runtime.task(taskId):undefined;
   return {mode,taskId:mode==='task'?taskId:undefined,planId:mode==='draft'?planId:undefined,sourceEpoch,ready:mode==='draft'||!!task?.pose,

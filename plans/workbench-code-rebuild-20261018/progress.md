@@ -661,3 +661,14 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 - 失败保留：95d1旧protobuf优先导致导入失败，未启SDK；a817未传Scene开关导致原OFF阻塞、探针超时才回收；首版Boolean夹具字段及快速拒绝2ms窗口审计要求均按原始证据修正，不计生产通过。原记录/初失败log/最终log在忽略输出，完整UUID/命令见工作台docs/DRONE_HANDOFF_EVIDENCE.md末节。
 - Next/owner：当前根Codex用独立分区无飞机最小Gazebo世界核真实暂停回执与clock/physics停止，再续真实资格。当前只是修清理无限等待，不宣称关闭前缓存安全、原子撤销、可行备份、M3或动态闭环。整体目标继续。
 - 收尾/Knowledge：本轮自有SDK与worker均回收、端口关；独有证据保留，临时源与两个/tmp日志已清理，Station在途119增/3删保留。updated：Wiki/ROS2与FishBot和入口补原生超时不等父进程IPC界，已读回；知识库大dirty保留，不写memory、不跨聊天。
+
+
+## CERLAB R2网页任务与原生回放（2026-10-31）
+
+- 复用createTaskRuntime/原ID查询、drone-live、writeRecording及原播放器，增加backend=cerlab与编辑草稿样例；默认工作台选作者栈，旧PX4通过环境显式选择。固定作者场景/1m/配置1.5m/s；IRIS位姿标记、原世界静态几何和真值动态框，无新控制器/FSM。
+- 新7c32d745实飞往返落地但首次网页QA因提前终态缺report失败；根因已修为host清理/报告完成后唯一发布终态。保留原QA日志和原任务，不覆写飞行结果。
+- 新25a1b511实际网页到8m/返程误差.230141/.095245m，落地/disarm；空中刷新同ID零重发，MCAP seek/倒退/播放零控制写入。c7c88e8f网页空中取消后原生返航落地/disarm，cancelled；实时三维轨迹与其MCAP回放同过。
+- 3任务边界、6服务/双WS/记录、43Station文档检查通过，生产构建通过。真实QA与原始数据位置见docs/DRONE_CERLAB.md；常用5186最终只读验收见后续读回。safety_qualified=false，未将功能成功记可靠动态/全程净空/真实深度通过。
+- 既存station-execution.cjs为SO101持物接续resume/cancel QA扩展，已读diff、保留；本轮不以无人机测试替代其真实持物验收。保留未提交，owner=根Codex后续SO101范围，最短入口STATION_QA_CARRY_ACTION=resume/cancel与原station-carry-m2.json。
+- 知识收尾already_covered：沿用Wiki/ROS2与FishBot§20的动作、交接、物理结果分列；本轮接线发现留项目，不更新memory。
+- 最终读回：5186默认CERLAB、限高/速度配置标签和禁用项、历史选中25a1b511、功能/落地/动态安全分列文案、本次轨迹链接及SO101只读页面均通过，零任务写请求。常用端口原生回放复验通过；隔离5187释放，保留5186服务。最终构建2警告均为webpack资产/入口体积建议。

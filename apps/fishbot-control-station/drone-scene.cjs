@@ -42,6 +42,14 @@ function sceneFor(station={},sample={},options={}){
    }));
   }
  }
+ for(const obstacle of sample.obstacles??[]){
+  if(nodes.some(node=>node.id===obstacle.id))continue;
+  entities.push(entity(`observed-${obstacle.id}`,seconds,{
+   metadata:[{key:'source',value:obstacle.source??'observed'}],
+   cubes:[{pose:{position:xyz(obstacle.position),orientation:obstacle.orientation??identity},
+    size:xyz(obstacle.size),color:obstacle.source==='oracle_dynamic'?{r:.9,g:.35,b:.12,a:.65}:{r:.4,g:.45,b:.5,a:.45}}],
+  }));
+ }
  const goalPath=(station.program??[]).flatMap(step=>{
   const node=nodes.find(n=>n.id===step.target);
   return node&&['takeoff','waypoint'].includes(step.action)?[position(node,nodes)]:[];
@@ -69,11 +77,11 @@ function sceneFor(station={},sample={},options={}){
  if(options.preview)pose={position:position(nodes.find(n=>n.kind==='robot')??{position:[0,0,0]},nodes),orientation:identity};
  if(pose?.position){
   const vehiclePose={position:xyz(pose.position),orientation:pose.orientation??identity};
-  const models=options.models?.map(model=>({...model,url:options.assetBase+model.url,pose:composePose(vehiclePose,model.pose)}));
+  const models=sample.backend==='cerlab'?[]:options.models?.map(model=>({...model,url:options.assetBase+model.url,pose:composePose(vehiclePose,model.pose)}));
   if(models?.length) entities.push(entity('x500',seconds,{models}));
   else entities.push(entity('x500-pose-marker',seconds,{
    cubes:[{pose:vehiclePose,size:{x:.25,y:.16,z:.1},color:{r:.15,g:.25,b:.35,a:1}}],
-   texts:[{pose:{position:{...vehiclePose.position,z:vehiclePose.position.z+.35},orientation:identity},billboard:true,font_size:.18,scale_invariant:false,color:{r:.15,g:.25,b:.35,a:1},text:'X500 位姿（模型加载中）'}],
+   texts:[{pose:{position:{...vehiclePose.position,z:vehiclePose.position.z+.35},orientation:identity},billboard:true,font_size:.18,scale_invariant:false,color:{r:.15,g:.25,b:.35,a:1},text:sample.backend==='cerlab'?'IRIS / CERLAB 位姿':options.preview&&options.vehicleName?`${options.vehicleName} 位姿`:'X500 位姿（模型加载中）'}],
   }));
  }
  return {deletions:[],entities};
