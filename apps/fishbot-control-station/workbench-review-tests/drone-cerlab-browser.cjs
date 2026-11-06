@@ -41,7 +41,9 @@ const save=()=>fs.writeFileSync(path.join(output,'result.json'),JSON.stringify(r
    result.checks.push('airborne-refresh-keeps-original-task-without-resubmission');save();
    const liveScene=page.getByTestId('panel-mouseenter-container 3D!dronelive');
    await expect.poll(async()=>{
-    const png=PNG.sync.read(await liveScene.screenshot());let green=0;
+    const bytes=await liveScene.screenshot().catch(e=>{if(/not attached to the DOM/.test(e.message))return null;throw e;});
+    if(!bytes)return 0;
+    const png=PNG.sync.read(bytes);let green=0;
     for(let i=0;i<png.data.length;i+=4)if(png.data[i+1]>100&&png.data[i+1]>png.data[i]*1.3&&png.data[i+1]>png.data[i+2]*1.2)green++;
     return green;
    },{timeout:30000}).toBeGreaterThan(5);
@@ -75,9 +77,10 @@ const save=()=>fs.writeFileSync(path.join(output,'result.json'),JSON.stringify(r
   assert(count>20);assert(airborne.z>.7);assert(last.z<.15);
   const reverse=[];for await(const m of reader.readMessages({topics:['/drone/live/status'],reverse:true})) {reverse.push(m.logTime);if(reverse.length===2)break;}
   assert(reverse[0]>=reverse[1]);result.mcap={frames:count,first,last,airborne,bytes:bytes.length};
-  const replay=await browser.newContext({viewport:{width:1600,height:1100}});
+  const replay=await browser.newContext({viewport:{width:1600,height:1100}, ...(process.env.CERLAB_REPLAY_VIDEO?{recordVideo:{dir:output,size:{width:1600,height:1100}}}:{})});
   await replay.route('**/*',route=>{const r=route.request();if(!['GET','HEAD'].includes(r.method())){result.replayWrites.push(r.url());return route.abort();}return route.continue();});
   await replay.routeWebSocket('**/*',ws=>{result.replayWrites.push('websocket:'+ws.url());ws.close();});
+  const replayCreated=Date.now();
   const view=await replay.newPage();
   result.replayUrl=base+'/?'+new URLSearchParams({ds:'remote-file','ds.url':artifact,layoutUrl:base+'/layouts/drone-review.json'});
   await view.goto(result.replayUrl);
@@ -96,6 +99,23 @@ const save=()=>fs.writeFileSync(path.join(output,'result.json'),JSON.stringify(r
   await view.getByTestId('play-button').click();
   assert.deepEqual(result.replayWrites,[]);
   result.checks.push('native-mcap-seek-rewind-and-play-with-zero-control-writes');
+  if(process.env.CERLAB_REPLAY_VIDEO){
+   const start=Math.max(first.s,(task.report.dynamic_metrics?.goal_release_s??first.s)-3);
+   await timeInput.fill(start.toFixed(9));await timeInput.press('Enter');await timeInput.blur();
+   await expect.poll(async()=>Number(await timeInput.inputValue())).toBeCloseTo(start,5);
+   const crop=await scenePanel.boundingBox();
+   const offset=(Date.now()-replayCreated)/1000;
+   await view.getByTestId('play-button').click();
+   await expect.poll(async()=>Number(await timeInput.inputValue()),{timeout:(last.s-start+30)*1000,intervals:[500]}).toBeGreaterThanOrEqual(last.s-.05);
+   const duration=(Date.now()-replayCreated)/1000-offset;
+   const video=view.video();await replay.close();
+   const raw=await video.path();const destination=path.resolve(process.env.CERLAB_REPLAY_VIDEO);const encoded=destination+'.new.mp4';
+   fs.mkdirSync(path.dirname(destination),{recursive:true});
+   require('node:child_process').execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y','-ss',String(offset),'-i',raw,'-t',String(duration),'-vf',`crop=${Math.floor(crop.width/2)*2}:${Math.floor(crop.height/2)*2}:${Math.floor(crop.x)}:${Math.floor(crop.y)}`,'-c:v','libx264','-crf','20','-pix_fmt','yuv420p','-movflags','+faststart',encoded]);
+   fs.renameSync(encoded,destination);fs.unlinkSync(raw);
+   result.video={file:destination,start_s:start,end_s:last.s,crop};
+   result.checks.push('exported-native-3d-replay-video');
+  }
   result.passed=true;save();
  }catch(e){result.error=e.stack;save();throw e;}
  finally{await browser.close();}

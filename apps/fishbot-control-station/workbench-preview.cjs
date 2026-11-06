@@ -71,7 +71,13 @@ const server = http.createServer(async (request, response) => {
     return;
   }
   let publicPath = build;
-  if (pathname === "/") {
+  if (pathname === "/drone-showcase" || pathname === "/drone-showcase/") {
+    publicPath = path.join(__dirname, "drone-showcase");
+    request.url = "/index.html";
+  } else if (pathname.startsWith("/drone-showcase/")) {
+    publicPath = path.join(__dirname, "workbench-tools/output/drone-showcase");
+    request.url = pathname.slice("/drone-showcase".length);
+  } else if (pathname === "/") {
     request.url = "/index.html";
   } else if (pathname === "/records/so101.mcap" && recordings) {
     publicPath = path.resolve(recordings);

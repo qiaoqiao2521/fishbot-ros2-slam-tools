@@ -57,3 +57,31 @@ QA 入口：`workbench-review-tests/drone-cerlab-browser.cjs`。默认会显式�
 
 报告 `scope=functional_waypoints_and_observed_landing`、`safety_qualified=false`。
 全程机体净空、hazard→safe链、真实深度、退化、高速和通用恢复尚未验收。
+
+
+## R3 产品入口（2026-11-06）
+
+打开 http://127.0.0.1:5186/drone-showcase 。页面包含本轮42.56秒实际MCAP三维视频、
+接触/净空/高度/落地指标、可seek的完整原生回放和时间换算机理卡片。
+当前任务50b08c15-7f6d-4e7d-afe4-94713eac13c7：零接触、动柱保守净空.309m，
+完成起飞、8m航点、返航、落地并解除电机。实际缩放f=.608–.692；53.440sim
+曾保留安全旧曲线，.05秒后重试并在53.494sim接受新曲线。
+
+页面源码是apps/fishbot-control-station/drone-showcase/index.html，未另建播放器。
+数据索引在workbench-tools/output/drone-showcase/current.json，绑定原task_id与report；
+视频为同目录flight.mp4，不提交运行数据。修改文案可直接编辑HTML，替换素材只更新索引。
+
+导出采用既有QA，只读原生MCAP，不重飞：
+
+```bash
+cd /home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018/apps/fishbot-control-station
+CERLAB_REPLAY_TASK_ID=50b08c15-7f6d-4e7d-afe4-94713eac13c7 \
+CERLAB_REPLAY_VIDEO="$PWD/workbench-tools/output/drone-showcase/flight.mp4" \
+STATION_TEST_URL=http://127.0.0.1:5186 \
+node workbench-review-tests/drone-cerlab-browser.cjs
+```
+
+本机执行，因为录制对象是本机5186原生播放器；轻量ffmpeg转MP4，没有模型推理或云端渲染。
+视频只裁出三维视图和横穿前后的时间，完整起飞/返航/落地时间轴保留在MCAP中。
+页内回放和导出已核零控制写；手机390px、桌面1500px布局、实际video seek与嵌入回放均已验。
+R3按全要素最小闭环收口；R4继续真值与深度/点云直观对照，R5为可选前沿插件体验。
