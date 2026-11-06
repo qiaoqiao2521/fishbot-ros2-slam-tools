@@ -1,0 +1,69 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "evidence_kind": "documented_acceptance",
+  "observation_mode": "ideal",
+  "model": "SO101 · ideal 工位观测（无视觉推理）",
+  "description": "查看已有配送评分、实际阶段报告及可用素材。本页不启动任务。",
+  "evidence_note": "ideal工位观测用于该配置的装卸；不是纯视觉结果。不同场景或回合不作性能A/B，停车保护辅助单列；不外推真机。",
+  "warnings": [],
+  "archive_status": "原run＋场景＋引用网格已存Drive，实际下载读回76文件、67,365,047字节。",
+  "availability_note": "原始位置采样已找到并只读导入；未恢复录像、静态障碍及机械臂FK。",
+  "title": "J100旧场景 · ideal完整K",
+  "recorded_at": "2026-10-24",
+  "vehicle": "Jackal J100",
+  "sensor": "3D 雷达",
+  "run_id": "04e217b2-6d37-4991-b3f2-b5ce036b1a2e",
+  "reset_count": 1,
+  "elapsed_wall_s": 488.45511902999715,
+  "orders": [
+    {
+      "id": "04e217b2-6d37-4991-b3f2-b5ce036b1a2e:order-b",
+      "label": "订单 B",
+      "task_id": "a8ec16f2-6a4a-492f-a173-e21c920c2256",
+      "passed": true,
+      "route_seconds": 119.79384802099958,
+      "position_error_m": 0.018540844731151074,
+      "yaw_error_rad": 0.015728857041820515,
+      "visible_points": [],
+      "selected_candidates": []
+    },
+    {
+      "id": "04e217b2-6d37-4991-b3f2-b5ce036b1a2e:order-a",
+      "label": "订单 A",
+      "task_id": "82a017b2-4d15-4a03-aa99-8ddb67d4fdfe",
+      "passed": true,
+      "route_seconds": 34.88337723100267,
+      "position_error_m": 0.02361262240435101,
+      "yaw_error_rad": 0.021707049328403973,
+      "visible_points": [],
+      "selected_candidates": []
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/delivery-timing.json",
+    "video": null,
+    "replay": "/workbench/j100-ideal-k-replay.json"
+  },
+  "scene_label": "历史占用通道",
+  "provenance": {
+    "source_kind": "existing_exported_report",
+    "references": [
+      "apps/fishbot-control-station/frontend/public/workbench/delivery-timing.json",
+      "plans/continuous-twin-regression-20261024/findings.md"
+    ],
+    "new_execution": false,
+    "rescored": false
+  },
+  "recordings": [
+    {
+      "label": "10/29宽场景 · 成功摘要",
+      "url": "/workbench/j100-ideal-wide-result.json"
+    },
+    {
+      "label": "10/24旧场景 · 原报告与位置回放",
+      "url": "/workbench/j100-ideal-k-result.json"
+    }
+  ],
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "archive_url": "https://drive.google.com/file/d/1cu18pi8OWzZYgCRvBpzv6Ovcr0jFRrwK/view?usp=drivesdk"
+}

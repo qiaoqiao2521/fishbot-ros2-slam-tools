@@ -1,0 +1,61 @@
+{
+  "schema": "fishbot.delivery-results.v1",
+  "updated_at": "2026-11-06",
+  "scope": "现有资料整理，零新仿真、零推理、零重评分",
+  "groups": [
+    {
+      "id": "j100-vision",
+      "title": "J100 视觉配送",
+      "vehicle": "j100",
+      "sensor": "3d",
+      "configuration": "J100 / 3D 雷达 / GraspGen-X＋SO101",
+      "source": "/workbench/j100-vision-result.json",
+      "coverage": "历史成功摘要；v4/v5实际补录",
+      "materials": "真实回放、录像、阶段图；完整成功录像缺失"
+    },
+    {
+      "id": "j100-ideal",
+      "title": "J100 ideal 配送",
+      "vehicle": "j100",
+      "sensor": "3d",
+      "configuration": "J100 / 3D 雷达 / ideal工位观测",
+      "source": "/workbench/j100-ideal-wide-result.json",
+      "coverage": "宽场景成功摘要；旧场景原记录",
+      "materials": "宽场景摘要；旧场景真实位置回放与阶段图"
+    },
+    {
+      "id": "mecanum-2d",
+      "title": "麦轮 2D 配送",
+      "vehicle": "mecanum",
+      "sensor": "2d",
+      "configuration": "robot_base / 2D 雷达 / ideal工位观测",
+      "source": "/workbench/mecanum-2d-result.json",
+      "coverage": "两单原评分通过；显式reset 1次",
+      "materials": "原阶段报告；轨迹与录像原件缺失"
+    },
+    {
+      "id": "mecanum-3d",
+      "title": "麦轮 3D 配送",
+      "vehicle": "mecanum",
+      "sensor": "3d",
+      "configuration": "robot_base / 3D 雷达 / ideal工位观测",
+      "source": "/workbench/mecanum-3d-result.json",
+      "coverage": "两单原评分通过；显式reset 1次",
+      "materials": "原阶段报告；轨迹与录像原件缺失"
+    }
+  ],
+  "archives": [
+    {
+      "label": "v5源码与原始视觉停靠记录",
+      "url": "https://drive.google.com/file/d/1vM9H5rISIn81j9p-yr8uASGtVq2g8mQ5/view?usp=drivesdk"
+    },
+    {
+      "label": "v3/v4与原始失败记录",
+      "url": "https://drive.google.com/file/d/1atOL7Ewk7h2Z2gFpZQ7wtvbUWlMk7wPp/view?usp=drivesdk"
+    },
+    {
+      "label": "旧J100 ideal 原始记录、场景与网格",
+      "url": "https://drive.google.com/file/d/1cu18pi8OWzZYgCRvBpzv6Ovcr0jFRrwK/view?usp=drivesdk"
+    }
+  ]
+}

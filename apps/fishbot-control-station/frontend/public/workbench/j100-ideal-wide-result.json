@@ -1,0 +1,71 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "evidence_kind": "documented_acceptance",
+  "observation_mode": "ideal",
+  "model": "SO101 · ideal 工位观测（无视觉推理）",
+  "description": "查看已有配送评分、实际阶段报告及可用素材。本页不启动任务。",
+  "evidence_note": "ideal工位观测用于该配置的装卸；不是纯视觉结果。不同场景或回合不作性能A/B，停车保护辅助单列；不外推真机。",
+  "warnings": [
+    "当前存活文档未提供两task UUID、完整阶段边界；保持未知。",
+    "原宽场景缓存已不存在，旧场景报告只作为单独可选记录，不填入本回合。",
+    "同world/episode、2start/0reset/0cancel；两次停车保护各约0.8源秒。"
+  ],
+  "archive_status": "现存原报告与摘要正在统一归档Drive；已删除原件不记作可恢复。",
+  "availability_note": "当前未找到该回合的位置采样或录像原件，仅展示已保存报告；不以插值或其他回合代替。",
+  "title": "J100宽通道 · ideal配送",
+  "recorded_at": "2026-10-29",
+  "vehicle": "Jackal J100",
+  "sensor": "3D 雷达",
+  "run_id": "b8dc8641-77e6-4bc3-b32c-822767b011f0",
+  "reset_count": 0,
+  "elapsed_wall_s": 889.584,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B",
+      "task_id": null,
+      "passed": true,
+      "route_seconds": 48.781,
+      "position_error_m": 0.028044,
+      "yaw_error_rad": 0.028485,
+      "visible_points": [],
+      "selected_candidates": []
+    },
+    {
+      "id": "order-a",
+      "label": "订单 A",
+      "task_id": null,
+      "passed": true,
+      "route_seconds": 19.263,
+      "position_error_m": 0.021291,
+      "yaw_error_rad": 0.020467,
+      "visible_points": [],
+      "selected_candidates": []
+    }
+  ],
+  "assets": {
+    "timing": null,
+    "replay": null,
+    "video": null
+  },
+  "recordings": [
+    {
+      "label": "10/29宽场景 · 成功摘要",
+      "url": "/workbench/j100-ideal-wide-result.json"
+    },
+    {
+      "label": "10/24旧场景 · 原报告与位置回放",
+      "url": "/workbench/j100-ideal-k-result.json"
+    }
+  ],
+  "provenance": {
+    "source_kind": "committed_acceptance_summary",
+    "references": [
+      "plans/continuous-twin-regression-20261024/progress.md#2026-10-29-完成修接纳接收调度宽场景连续ba通过"
+    ],
+    "new_execution": false,
+    "rescored": false
+  },
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "scene_label": "J100宽通道 · full-ba-g"
+}

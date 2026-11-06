@@ -1,0 +1,21 @@
+#delivery-results-gallery { min-width: 0; width: 100%; overflow-wrap: anywhere; scroll-margin-top: 100px; margin-bottom: 28px; }
+.delivery-gallery-heading { display: flex; justify-content: space-between; align-items: start; gap: 20px; margin: 24px 0 14px; }
+.delivery-gallery-heading h2 { font-size: 24px; font-weight: 650; color: #17324d; }
+.delivery-gallery-heading p, .delivery-gallery-archives p { color: #61748b; font-size: 13px; line-height: 1.7; margin-top: 6px; }
+.delivery-gallery-heading a, .delivery-gallery-archives a { display: inline-flex; align-items: center; gap: 6px; color: #2563eb; font-size: 13px; }
+.delivery-gallery-filters { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 12px; color: #61748b; margin-bottom: 14px; }
+.delivery-gallery-filters label { display: flex; align-items: center; gap: 8px; }
+.delivery-gallery-filters select { border: 1px solid #cfdced; border-radius: 5px; background: #fff; padding: 6px; color: #17324d; }
+.delivery-gallery-groups { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid #cfdced; border-radius: 10px; overflow: hidden; margin-bottom: 18px; }
+.delivery-gallery-groups button { display: flex; flex-direction: column; gap: 10px; text-align: left; background: #fff; padding: 16px; border-right: 1px solid #dbe4ef; color: #17324d; min-width: 0; }
+.delivery-gallery-groups button:last-child { border-right: none; }
+.delivery-gallery-groups button[aria-pressed=true] { background: #edf4ff; box-shadow: inset 0 3px #2465da; }
+.delivery-gallery-groups strong { font-size: 16px; }
+.delivery-gallery-groups span { font-size: 12px; color: #526780; }
+.delivery-gallery-groups small { font-size: 11px; color: #61748b; line-height: 1.65; }
+.delivery-gallery-archives { font-size: 13px; border-top: 1px solid #dbe4ef; padding-top: 14px; color: #526780; }
+.delivery-gallery-archives summary { cursor: pointer; }
+.delivery-gallery-archives a { margin: 10px 16px 0 0; }
+.delivery-gallery-groups button:focus-visible, .delivery-gallery-filters select:focus-visible { outline: 2px solid #2465da; outline-offset: -3px; }
+@media(max-width: 1100px) { .delivery-gallery-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); } .delivery-gallery-groups button:nth-child(-n+2) { border-bottom: 1px solid #dbe4ef; } }
+@media(max-width: 560px) { .delivery-gallery-heading { flex-direction: column; gap: 10px; } .delivery-gallery-groups { grid-template-columns: 1fr; } .delivery-gallery-groups button { border-right: none; border-bottom: 1px solid #dbe4ef; padding: 14px; } .delivery-gallery-groups button:last-child { border-bottom: none; } }

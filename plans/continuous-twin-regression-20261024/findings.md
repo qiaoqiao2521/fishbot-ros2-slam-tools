@@ -420,3 +420,19 @@ Drive目标已由用户选定，沿现有ROS2文档账号。持久恢复资料�
 三类入口import、静态EGL RGB-D和原native-clock均通过后，实际B在car_to_dock失败；不是新一轮环境零Goal。5条vision_quality均camera_capture_stale，render_duration为1.906–3.129墙秒，检测0.038–0.072秒，capture_age1.981–3.234墙秒；主要开销在原渲染链路。独立Clock/physics与bridge事件headerClock基本一致，不能认定为桥Clock落后造成future；事件发布时相对原输入晚0.78–1.16源秒，是发布时上界而非控制器消费回执。GL后端=egl及退出0均不能证明硬件渲染，须取实际GL_VENDOR/RENDERER并按生产2×RGB＋原深度分段计时。
 
 本轮不以换分辨率、减少超采样或放宽时龄规避本问题；GL小探针只选择已安装NVIDIA库/设备。若证据充分再同job原配置复验，不另造仿真平台。
+
+## 2026-11-06 四组现有素材盘点（不运行仿真）
+
+| 配置 / 记录 | 存活资料 | 当前缺项 / 复用边界 |
+| --- | --- | --- |
+| J100 ideal 宽场景 b8dc8641（10/29） | 已提交具名评分摘要；路线48.781/19.263秒，零reset | 原cache已删除；两task UUID与阶段原件未在存活摘要中提供，保持未知 |
+| J100 ideal 旧K 04e217b2（10/24） | 原run与prepared scene仍在.local/share/cloud-jobs；现有delivery-timing，两单原物理JSONL | 本轮只读已有build_comparison(geometry=False)导出2685/1740帧，无MuJoCo/ROS导入、FK、步进或重评分；静态几何与臂世界FK缺失，无录像 |
+| J100视觉 历史K / v4 / v5 | 历史成功摘要；v4/v5实际回放/阶段/视频/海报，已有Drive原件 | 历史成功录像误删；v5整体失败保留，不能冒充成功补录 |
+| 麦轮2D f871d5d2 | 原导出时段JSON，两task UUID/原评分/物理误差/采样缺口 | 原cache/tmp及轨迹、录像未找到；1reset，非无reset连续两单 |
+| 麦轮3D b3d1ed7f | 独立时段JSON与两原task UUID/原评分 | 原cache及轨迹、录像未找到；1reset，不能复制2D路径当3D回放 |
+
+公开目录原有mecanum-delivery-timing是更早P2，仍保留但不混入当前queued2D组。三组ideal由原报告生成最小成果摘要，视觉继续使用原记录选择器；共用同一成果/回放/瀑布组件。联动模式固定时段来源，避免订单/场景切换后混配。未知task UUID不作为订单按钮唯一键，A/B仍可独立查看。ideal卡不显示GraspGen候选或纯视觉描述。
+
+原J100 74项材料525,199,609字节（run41、scene18、网格15）已打包并上传指定Drive，实际下载逐文件读取76项（含索引/恢复说明）通过，压缩67,365,047字节。原XML/manifest的旧绝对路径未篡改；恢复说明要求在独立副本重定向。保留共享cloud-jobs原件，不清理未知使用者。本轮只清理自己的派生/重复包。
+
+Drive文件搜索一次因本Agent误写q语法返回400，修正后本次受连接器MIME限制的检索返回空，不证明Drive没有其他历史压缩包。已知归档以具体file ID及下载读回为准，不把空搜索当原件全盘不存在。

@@ -7,12 +7,12 @@ import { DeliveryTimingPanel } from './delivery-timing-panel'
 import { ReplayViewport } from './regression-page'
 import './vision-delivery-result.css'
 
-const metric = (v: number | null, unit: string, scale = 1) => v === null ? '未提供' : `${(v * scale).toFixed(2)} ${unit}`
+const metric = (v: number | null, unit: string, scale = 1) => v === null ? '未提供' : `${(v * scale).toFixed(unit === 'rad' ? 4 : 2)} ${unit}`
 
-export function VisionDeliveryResult({ initialResult }: { initialResult?: unknown }) {
+export function VisionDeliveryResult({ initialResult, initialUrl = '/workbench/j100-vision-result.json' }: { initialResult?: unknown; initialUrl?: string }) {
   const [result, setResult] = useState<VisionResult | null>(() => initialResult === undefined ? null : parseVisionResult(initialResult))
   const [replay, setReplay] = useState<ReplayReport | null>(null), [timing, setTiming] = useState<TimingReport | null>(null)
-  const [sourceUrl, setSourceUrl] = useState('/workbench/j100-vision-result.json')
+  const [sourceUrl, setSourceUrl] = useState(initialUrl)
   const [videoError, setVideoError] = useState(false)
   const [messages, setMessages] = useState<string[]>([]), [loading, setLoading] = useState(initialResult === undefined)
   const [orderIndex, setOrderIndex] = useState(0), [elapsed, setElapsed] = useState(0), [playing, setPlaying] = useState(false), [speed, setSpeed] = useState(8)
@@ -76,11 +76,11 @@ export function VisionDeliveryResult({ initialResult }: { initialResult?: unknow
   }
   return <>
     <section className="vision-result" id="j100-vision-delivery" aria-labelledby="vision-result-title">
-      <header className="vision-result-heading"><div><h2 id="vision-result-title">{result?.title ?? 'J100 视觉配送'}</h2><p>从相机看到货物，到双指抓取、车载运输和货架交付。</p></div>
+      <header className="vision-result-heading"><div><h2 id="vision-result-title">{result?.title ?? 'J100 视觉配送'}</h2><p>{result?.description ?? '读取该配置已有的任务、报告与素材。'}</p></div>
         <button type="button" onClick={() => void load()} disabled={loading}><RefreshCw size={15} aria-hidden="true" />{loading ? '读取成果' : '刷新成果'}</button></header>
       {messages.length > 0 && <div className="vision-result-notice" role="status">{messages.map((message, i) => <p key={i}>{message}</p>)}</div>}
       {!result ? <p className="vision-result-notice">{loading ? '正在读取已保存的成果…' : '暂未载入视觉成果，下面仍可查看历史配送报告。'}</p> : <>
-        <div className="vision-result-context">{result.recordings.length > 1 && <label>配送记录 <select aria-label="选择视觉配送成果" disabled={loading} value={sourceUrl} onChange={event => void load(event.target.value)}>{result.recordings.map(item => <option key={item.url} value={item.url}>{item.label}</option>)}</select></label>}<span>{result.vehicle}</span><span>{result.sensor}</span><span>{result.model}</span><time>{result.recordedAt}</time><span>{result.evidenceKind === 'recorded_simulation' ? '记录回放' : result.evidenceKind === 'documented_acceptance' ? '已审历史摘要' : '来源待确认'}</span></div>
+        <div className="vision-result-context">{result.recordings.length > 1 && <label>配送记录 <select aria-label={result.observationMode === 'ideal' ? '选择配送成果' : '选择视觉配送成果'} disabled={loading} value={sourceUrl} onChange={event => void load(event.target.value)}>{result.recordings.map(item => <option key={item.url} value={item.url}>{item.label}</option>)}</select></label>}<span>{result.vehicle}</span><span>{result.sensor}</span><span>{result.model}</span>{result.sceneLabel && <span>场景：{result.sceneLabel}</span>}<time>{result.recordedAt}</time><span>{result.evidenceKind === 'recorded_simulation' ? '记录回放' : result.evidenceKind === 'documented_acceptance' ? '已审历史摘要' : '来源待确认'}</span></div>
         <div className="vision-result-layout">
           <div className="vision-result-player" id="j100-vision-replay">
             {run && replay && run.frames.length > 0 ? <>
@@ -93,21 +93,21 @@ export function VisionDeliveryResult({ initialResult }: { initialResult?: unknow
             {result.videoUrl && <><video controls preload="metadata" poster={result.posterUrl ?? undefined} src={result.videoUrl} aria-label="视觉配送场景采样录像" onError={() => setVideoError(true)} /><p className="vision-result-caption">{result.videoCaption || '场景采样录像独立播放；阶段跳转定位上方数据回放，不定位录像。'}</p></>}{videoError && <p className="vision-result-notice" role="status">录像加载失败；成果摘要与可用的数据回放继续保留。</p>}
           </div>
           <aside className="vision-result-ledger" aria-label="视觉配送订单成果">
-            <h3>{result.orders.length > 1 ? '两件货物，同一世界' : '实际派发的订单'}</h3><p>原任务与独立物理评分，分别对应每件货物。</p>
-            <div role="group" aria-label="选择视觉配送订单">{result.orders.map((item, i) => <button type="button" key={item.id} aria-pressed={orderIndex === i} onClick={() => chooseTask(item.taskId)}>{item.label}</button>)}</div>
+            <h3>{result.orders.length > 1 ? result.resets === 0 ? '两件货物，同一世界' : '两单配送，分轮验收' : '实际派发的订单'}</h3><p>原任务与独立物理评分，分别对应每件货物。</p>
+            <div role="group" aria-label="选择视觉配送订单">{result.orders.map((item, i) => <button type="button" key={item.id} aria-pressed={orderIndex === i} onClick={() => { setOrderIndex(i); setPlaying(false); setElapsed(0) }}>{item.label}</button>)}</div>
             {order && <><div className={`vision-result-verdict ${order.passed === true ? 'is-passed' : ''}`}><VerdictIcon size={18} aria-hidden="true" />{order.passed === true ? '独立业务评分通过' : order.passed === false ? '原评分未通过' : '评分待确认'}</div>{order.failureReason && <p className="vision-result-notice">{order.failureReason}</p>}{order.componentSummary && <p className="vision-result-component"><strong>已证实的分项</strong><br />{order.componentSummary}</p>}
               <dl><div><dt>配送路线</dt><dd>{metric(order.routeSeconds, 's')}</dd></div><div><dt>最终位置误差</dt><dd>{metric(order.positionError, 'cm', 100)}</dd></div><div><dt>最终偏航误差</dt><dd>{metric(order.yawError, 'rad')}</dd></div></dl>
-              <p className="vision-result-observation">装货 / 卸货可见点：<strong>{order.points.length ? order.points.join(' / ') : '未提供'}</strong><br />所选模型候选：{order.candidates.length ? order.candidates.join(' / ') : '未提供'}</p></>}
+              {result.observationMode !== 'ideal' && <p className="vision-result-observation">装货 / 卸货可见点：<strong>{order.points.length ? order.points.join(' / ') : '未提供'}</strong><br />所选模型候选：{order.candidates.length ? order.candidates.join(' / ') : '未提供'}</p>}</>}
             <p>{result.resets === null ? '重置次数未提供' : `${result.resets} 次世界重置`}；整轮 {metric(result.elapsed, 's')}。</p>
-            <a href="#workbench-delivery-timing"><ArrowDown size={14} aria-hidden="true" />查看阶段瀑布图</a>
-            <a href={sourceUrl} download="j100-vision-result.json"><FileDown size={14} aria-hidden="true" />下载成果摘要</a>
+            {result.timingUrl && <a href="#workbench-delivery-timing"><ArrowDown size={14} aria-hidden="true" />查看阶段瀑布图</a>}
+            <a href={sourceUrl} download={sourceUrl.split('/').at(-1)}><FileDown size={14} aria-hidden="true" />下载成果摘要</a>
           </aside>
         </div>
-        <details className="vision-result-evidence"><summary>来源、归档与适用范围</summary><p>运行 {result.runId}；{result.archiveStatus}。</p><p>固定绿色货物与工位仿真，OBB候选经预训练判别器评分，停车保护辅助单列。当前回放与原物理评分分开，不外推任意物体或真机。</p>
-          {result.archiveUrl && <p><a href={result.archiveUrl} target="_blank" rel="noopener noreferrer">打开 Drive 恢复包</a></p>}{result.warnings.map((message, i) => <p key={i}>{message}</p>)}<a href="https://github.com/qiaoqiao2521/fishbot-ros2-slam-tools/blob/main/docs/PRETRAINED_PERCEPTION.md" target="_blank" rel="noopener noreferrer">配置与验收说明</a></details>
+        <details className="vision-result-evidence"><summary>来源、归档与适用范围</summary><p>运行 {result.runId}；{result.archiveStatus}。</p><p>{result.evidenceNote}</p>
+          {result.archiveUrl && <p><a href={result.archiveUrl} target="_blank" rel="noopener noreferrer">打开 Drive 恢复包</a></p>}{result.warnings.map((message, i) => <p key={i}>{message}</p>)}<a href={result.evidenceUrl} target="_blank" rel="noopener noreferrer">配置与验收说明</a></details>
       </>}
     </section>
-    <DeliveryTimingPanel key={timing?.source_run_id ?? 'pending-vision'} initialSource="j100vision" sourceUrl={result?.timingUrl ?? undefined} initialReport={timing?.source}
-      caseTaskId={order?.taskId} onCaseChange={chooseTask} onReplayRequest={chooseTask} replayTaskIds={replay?.runs.map(item => item.taskId)} />
+    {result?.timingUrl ? <DeliveryTimingPanel boundSource key={timing?.source_run_id ?? 'pending-vision'} initialSource="j100vision" sourceUrl={result?.timingUrl ?? undefined} initialReport={timing?.source}
+      caseTaskId={order?.taskId} onCaseChange={chooseTask} onReplayRequest={chooseTask} replayTaskIds={replay?.runs.map(item => item.taskId)} /> : result && <p className="vision-result-notice" role="status">该回合阶段时间原件缺失，未拼接其他场景的时间轴。已有摘要可下载。</p>}
   </>
 }

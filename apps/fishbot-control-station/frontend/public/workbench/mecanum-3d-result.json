@@ -1,0 +1,58 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "evidence_kind": "documented_acceptance",
+  "observation_mode": "ideal",
+  "model": "SO101 · ideal 工位观测（无视觉推理）",
+  "description": "查看已有配送评分、实际阶段报告及可用素材。本页不启动任务。",
+  "evidence_note": "ideal工位观测用于该配置的装卸；不是纯视觉结果。不同场景或回合不作性能A/B，停车保护辅助单列；不外推真机。",
+  "warnings": [],
+  "archive_status": "现存原报告与摘要正在统一归档Drive；已删除原件不记作可恢复。",
+  "availability_note": "当前未找到该回合的位置采样或录像原件，仅展示已保存报告；不以插值或其他回合代替。",
+  "title": "麦轮＋3D雷达 · ideal配送",
+  "recorded_at": "2026-10-24",
+  "vehicle": "麦克纳姆 robot_base",
+  "sensor": "3D 雷达",
+  "run_id": "b3d1ed7f-27e3-4e28-bf98-7d7d5cf3200a",
+  "reset_count": 1,
+  "elapsed_wall_s": 460.235,
+  "orders": [
+    {
+      "id": "b3d1ed7f-27e3-4e28-bf98-7d7d5cf3200a:order-b",
+      "label": "订单 B",
+      "task_id": "223e32fb-262e-49fd-82be-ec105fbc488e",
+      "passed": true,
+      "route_seconds": 28.678604657005053,
+      "position_error_m": 0.02385575009414801,
+      "yaw_error_rad": 0.0022878027723978577,
+      "visible_points": [],
+      "selected_candidates": []
+    },
+    {
+      "id": "b3d1ed7f-27e3-4e28-bf98-7d7d5cf3200a:order-a",
+      "label": "订单 A",
+      "task_id": "6493b880-31ab-4e94-a2d4-78731ab646b8",
+      "passed": true,
+      "route_seconds": 22.289175444006105,
+      "position_error_m": 0.022805829646327314,
+      "yaw_error_rad": 0.0010998141501652047,
+      "visible_points": [],
+      "selected_candidates": []
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/mecanum-lidar3d-delivery-timing.json",
+    "video": null,
+    "replay": null
+  },
+  "scene_label": "f1-line-side-open",
+  "provenance": {
+    "source_kind": "existing_exported_report",
+    "references": [
+      "apps/fishbot-control-station/frontend/public/workbench/mecanum-lidar3d-delivery-timing.json",
+      "plans/mecanum-consolidation-20261024/progress.md"
+    ],
+    "new_execution": false,
+    "rescored": false
+  },
+  "evidence_path": "plans/mecanum-consolidation-20261024/progress.md"
+}

@@ -11,9 +11,9 @@ export interface VisionOrder {
 }
 export interface VisionResult {
   source: Record<string, unknown>; title: string; recordedAt: string; runId: string; evidenceKind: string
-  vehicle: string; sensor: string; model: string; resets: number | null; elapsed: number | null
+  vehicle: string; sensor: string; model: string; sceneLabel: string; evidenceUrl: string; resets: number | null; elapsed: number | null
   orders: VisionOrder[]; timingUrl: string | null; replayUrl: string | null; videoUrl: string | null; posterUrl: string | null
-  videoCaption: string; preferredUrl: string | null; recordings: { label: string; url: string }[]
+  description: string; evidenceNote: string; observationMode: string; videoCaption: string; preferredUrl: string | null; recordings: { label: string; url: string }[]
   availabilityNote: string; archiveStatus: string; archiveUrl: string | null; warnings: string[]
 }
 
@@ -46,10 +46,10 @@ export function parseVisionResult(input: unknown): VisionResult {
   })
   return { source, title: text(source.title, 'J100 视觉配送'), recordedAt: text(source.recorded_at, '日期未提供'),
     runId: text(source.run_id, '运行身份未提供'), evidenceKind: text(source.evidence_kind, '未确认来源'),
-    vehicle: text(source.vehicle, 'J100'), sensor: text(source.sensor, '3D 雷达'), model: text(source.model, 'GraspGen-X'),
+    vehicle: text(source.vehicle, 'J100'), sensor: text(source.sensor, '3D 雷达'), model: text(source.model, 'GraspGen-X'), sceneLabel: text(source.scene_label), evidenceUrl: 'https://github.com/qiaoqiao2521/fishbot-ros2-slam-tools/blob/main/' + (/^[A-Za-z0-9_/#.-]+$/.test(text(source.evidence_path)) && !text(source.evidence_path).includes('..') ? text(source.evidence_path) : 'docs/PRETRAINED_PERCEPTION.md'),
     resets: number(source.reset_count), elapsed: number(source.elapsed_wall_s), orders,
     timingUrl: asset(assets.timing, warnings), replayUrl: asset(assets.replay, warnings), videoUrl: asset(assets.video, warnings), posterUrl: asset(assets.poster, warnings),
-    videoCaption: text(source.video_caption), preferredUrl: asset(source.preferred_recording, warnings), recordings: array(source.recordings).flatMap(entry => { const row = object(entry), url = asset(row.url, warnings); return url ? [{ label: text(row.label, '配送记录'), url }] : [] }),
+    description: text(source.description, '从相机看到货物，到双指抓取、车载运输和货架交付。'), evidenceNote: text(source.evidence_note, '固定绿色货物与工位仿真，OBB候选经预训练判别器评分，停车保护辅助单列。当前回放与原物理评分分开，不外推任意物体或真机。'), observationMode: text(source.observation_mode, 'vision'), videoCaption: text(source.video_caption), preferredUrl: asset(source.preferred_recording, warnings), recordings: array(source.recordings).flatMap(entry => { const row = object(entry), url = asset(row.url, warnings); return url ? [{ label: text(row.label, '配送记录'), url }] : [] }),
     availabilityNote: text(source.availability_note), archiveStatus: text(source.archive_status, '归档状态未确认'), archiveUrl: driveArchive(source.archive_url), warnings }
 }
 

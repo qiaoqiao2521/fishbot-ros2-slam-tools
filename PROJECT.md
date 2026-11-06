@@ -1,6 +1,6 @@
 # FishBot
 
-2026-11-06 当前主线：J100＋3D雷达＋GraspGen-X视觉配送，以及麦轮2D/3D B→A分别作为已完成核心资产。下一步优先完善 `/results` 真实成果展示，再做两个适配车型的新场景，后续选择一项传感器/感知体验。旧混沌、全矩阵和预算极限不再作为主线前置。当前路线与逐片验收见[FishBot新计划](plans/continuous-twin-regression-20261024/task_plan.md)；F1首批已接入成果卡、实际记录回放、采样录像和阶段图；历史K原件误删，保留已审成功摘要。云端新记录完成原生视觉精停靠，随后抓取接近规划超时，完整成功运输回放仍未补齐。源码与摘要已存[Drive恢复包](https://drive.google.com/file/d/1SPHKQqheI0NQXC4T4c1lLN0h7aYIki2J/view?usp=drivesdk)。
+2026-11-06 当前主线：只整理四组已验成果到 `/results`，不再跑仿真、模型推理或完整配送补录。已验J100 ideal/视觉与麦轮2D/3D保留各自配置边界；四组报告与现存素材统一入口，原件继续存已确认Drive。旧J100 ideal原记录仍在并可只读回放；最新宽场景与历史视觉成功的缺失原件明确标注。本次云端补录完成辅助视觉停靠、随后30秒规划超时，整体失败保留；不影响历史已审成功，也不自动继续修复。F2/F3未派发，后续需用户选择。见[当前计划](plans/continuous-twin-regression-20261024/task_plan.md)。
 
 2026-10-31 预训练视觉配送已完成本轮仿真闭环：官方GraspGen-X实际推理＋工位RGB-D＋原mink/OMPL，J100/3D雷达在同一世界无reset完成B→A，两单命名原物理/业务评分及独立原记录重算均通过。路线49.90/20.97秒，末XY31.07/21.22mm；原时限、碰撞和接触门槛保持。保留停车保护辅助、采样缺口及全部早期失败，不称任意物体或sim-to-real。配置与边界见[预训练感知接入](docs/PRETRAINED_PERCEPTION.md)，详见[本轮进度](plans/continuous-twin-regression-20261024/progress.md)。
 

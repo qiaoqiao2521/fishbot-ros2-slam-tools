@@ -18,8 +18,8 @@ const label = (s: TimingSpan) => phases[s.label] ?? s.label
 const boundary = (values: (number | null)[], origin: number | null) => values.length && origin !== null
   ? values.map(v => v === null ? '未知' : `${(v - origin).toFixed(3)}s`).join(' ～ ') : '未提供精确边界'
 
-export function DeliveryTimingPanel({ initialReport, initialSource = 'j100', sourceUrl, caseTaskId, onCaseChange, onReplayRequest, replayTaskIds = [] }: {
-  initialReport?: unknown; initialSource?: DeliveryTimingSource; sourceUrl?: string; caseTaskId?: string
+export function DeliveryTimingPanel({ boundSource = false, initialReport, initialSource = 'j100', sourceUrl, caseTaskId, onCaseChange, onReplayRequest, replayTaskIds = [] }: {
+  boundSource?: boolean; initialReport?: unknown; initialSource?: DeliveryTimingSource; sourceUrl?: string; caseTaskId?: string
   onCaseChange?: (taskId: string) => void; onReplayRequest?: (taskId: string, sourceTime: number) => void; replayTaskIds?: string[]
 }) {
   const [report, setReport] = useState(() => initialReport === undefined ? null : parseDeliveryTiming(initialReport))
@@ -85,9 +85,9 @@ export function DeliveryTimingPanel({ initialReport, initialSource = 'j100', sou
   return <Card className="delivery-timing-panel" id="workbench-delivery-timing" aria-labelledby="delivery-timing-heading">
     <div className="delivery-timing-heading"><div><span className="delivery-timing-eyebrow"><Timer size={14} aria-hidden="true" />F1 配送 · 时间分析</span>
       <CardTitle id="delivery-timing-heading">配送阶段与耗时</CardTitle><p>原生动作、阶段采样与独立物理结果放在同一时间轴，保留各自含义。</p></div>
-      <div className="delivery-timing-actions"><label>配送记录<select aria-label="选择配送记录" value={source} disabled={loading} onChange={event => { const value = event.target.value as DeliveryTimingSource; setSource(value); void load(undefined, value) }}><option value="j100vision">J100 · 视觉配送</option><option value="j100">J100 · 原完整 K（历史）</option><option value="mecanum">麦克纳姆 · P2 历史</option><option value="mecanum2d">麦克纳姆 · 2D 回归</option><option value="mecanum3d">麦克纳姆 · 3D 雷达</option></select></label>
+      <div className="delivery-timing-actions">{!boundSource && <label>配送记录<select aria-label="选择配送记录" value={source} disabled={loading} onChange={event => { const value = event.target.value as DeliveryTimingSource; setSource(value); void load(undefined, value) }}><option value="j100vision">J100 · 视觉配送</option><option value="j100">J100 · 原完整 K（历史）</option><option value="mecanum">麦克纳姆 · P2 历史</option><option value="mecanum2d">麦克纳姆 · 2D 回归</option><option value="mecanum3d">麦克纳姆 · 3D 雷达</option></select></label>}
         <Button size="sm" variant="outline" disabled={loading} onClick={() => void load()}><RefreshCw size={14} aria-hidden="true" />{loading ? '读取中' : '刷新报告'}</Button>
-        <label className="delivery-timing-upload"><FileUp size={14} aria-hidden="true" />导入 JSON<input type="file" accept=".json,application/json" aria-label="导入配送耗时 JSON" onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void load(file) }} /></label></div>
+        {!boundSource && <label className="delivery-timing-upload"><FileUp size={14} aria-hidden="true" />导入 JSON<input type="file" accept=".json,application/json" aria-label="导入配送耗时 JSON" onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void load(file) }} /></label>}</div>
     </div>
     {error && <p role="alert" className="delivery-timing-warning">{error}</p>}
     {!report ? <p role="status">{loading ? '正在读取历史耗时报告…' : '暂无报告。可刷新或导入本地摘要。'}</p> : <>
