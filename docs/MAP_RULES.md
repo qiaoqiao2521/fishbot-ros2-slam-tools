@@ -1,5 +1,7 @@
 # 地图规则与巡航模板
 
+CY 逆向成果的独立几何编解码备选见 [CY 地图规则几何备选](../plans/cy-map-rule-candidate/README.md)；未接入当前执行链。
+
 本功能借鉴地图编辑与预约的产品语义，复用现有 `/simulation`、mission bridge、Nav2 KeepoutFilter 和 FollowWaypoints。同一地图标注用于执行规则和独立验收，后续可作为训练场景输入。本阶段没有训练策略权重，没有操作已售实车。
 
 ## 操作

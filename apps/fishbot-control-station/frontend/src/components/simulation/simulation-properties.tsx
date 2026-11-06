@@ -67,7 +67,6 @@ export function SimulationProperties({ selection, map, zones, points, routes, po
       <p>{mapRuleErrorMessage('rejected', zones, currentIssue)}</p>
       {!issueCurrent && <small>此记录来自上一版路线或规则，不代表当前对象仍被拒绝。</small>}
     </div>}
-    <p className="simulation-panel-note">在对象栏选择规则、航点或路线查看详情。属性查看不会发送运动命令。</p>
   </section>
 }
 
@@ -101,8 +100,7 @@ function ObjectPoseForm({ selection, zone, point, initial, editable, editScope, 
       <label>{zone ? '中心 Y（米）' : 'Y（米）'}<input aria-label={zone ? '中心 Y（米）' : 'Y（米）'} type="number" step="any" required value={y} disabled={!editable} onChange={(event) => { setY(event.target.value); setMessage('') }} /></label>
       {!translateOnly && <label>朝向（度）<input aria-label="朝向（度）" type="number" step="any" required value={yaw} disabled={!editable} onChange={(event) => { setYaw(event.target.value); setMessage('') }} /></label>}
     </div>
-    {translateOnly && <p className="simulation-panel-note">禁区保持世界轴对齐，只修改中心位置；当前导航合同不支持禁区旋转。</p>}
-    {!editable && <p className="simulation-panel-note">当前任务、保存或连接状态不允许修改；原草稿仍保留。</p>}
+    {translateOnly && <p className="simulation-panel-note">禁区保持世界轴对齐（仅平移中心）。</p>}
     <div className="simulation-object-edit-actions"><button className="simulation-button simulation-primary" type="submit" disabled={!editable}>应用到草稿</button>
       {onLocate && <button className="simulation-button simulation-quiet" type="button" onClick={onLocate}>在地图查看</button>}</div>
     {message && <p className={failed ? 'simulation-object-edit-error' : 'simulation-panel-note'} role={failed ? 'alert' : 'status'}>{message}</p>}

@@ -276,10 +276,10 @@ export function SimulationPage({ onBack, onCooperation, active: workspaceActive 
         : active ? '导航运行中' : '已就绪，可以派发' : '等待仿真就绪'
   const progressText = missionProgressText(mission)
   const sceneTitle = active ? unknownAcceptance ? '原任务接收状态未知' : awaitingAcceptance ? '等待 Nav2 确认任务'
-    : mission?.status === 'canceling' ? '正在收束巡逻任务' : '巡逻正在进行' : '点地图，安排一圈巡逻'
+    : mission?.status === 'canceling' ? '正在收束巡逻任务' : '巡逻正在进行' : '2D 巡逻与平面障碍画布'
 
   return <div className="simulation-page simulation-workspace">
-    <WorkspaceSurface id="simulation" title="小鱼巡逻" subtitle="编辑通行规则、保存路线，开始后由原生导航执行。" active={workspaceActive}
+    <WorkspaceSurface id="simulation" title="小鱼巡逻" subtitle="2D 平面障碍规则（虚拟墙/禁区）· 巡逻航点规划 · Nav2 原生执行" active={workspaceActive}
       toolbar={<div className="simulation-workspace-toolbar">
             <div className="simulation-mission-actions">
               <button type="button" className="simulation-button simulation-primary" disabled={!ready || !editable || !draftEditable || draftCache.conflict || draftCache.validation === 'stale' || waypoints.length === 0 || !!startBlock}
@@ -307,7 +307,7 @@ export function SimulationPage({ onBack, onCooperation, active: workspaceActive 
           <div className="simulation-scene-header">
             <div>
               <h2 id="simulation-map-title">{sceneTitle}</h2>
-              <p>{active ? '蓝色是小鱼，绿色线是当前导航路径。' : '点击空旷处添加巡逻点，编号就是前往的顺序。'}</p>
+              <p>{active ? '蓝点：小鱼位姿 · 绿线：当前导航路径' : `已设航点 ${displayedPoints.length} 个 · 平面障碍规则 ${editor.zones.length} 项`}</p>
             </div>
           </div>
 
@@ -326,23 +326,23 @@ export function SimulationPage({ onBack, onCooperation, active: workspaceActive 
                 onClick={() => void saveRules()}><Save size={14} />保存规则</button>
             </div>
           </div>
-          <p className="simulation-map-guidance" aria-live="polite">{selectionMessage || (editMode === 'wall' ? '选择墙的两个端点。' : editMode === 'no_go' ? '选择矩形的两个对角。' : editMode === 'observe' ? '只观察，不发送指令。' : '点击空旷处添加巡逻点。')}</p>
+          <p className="simulation-map-guidance" aria-live="polite">{selectionMessage || (editMode === 'wall' ? '选择墙的两个端点。' : editMode === 'no_go' ? '选择矩形的两个对角。' : editMode === 'observe' ? '点选地图对象查看坐标属性。' : '点击空旷处添加巡逻点。')}</p>
           <div className="simulation-map-stage" ref={mapStage} tabIndex={-1} aria-label="巡逻地图视图">
             {map ? <SimulationMapView map={map} state={state} points={displayedPoints} editable={(editMode === 'waypoint' ? draftEditable : editable) && editMode !== 'observe'} onSelect={selectPoint} mode={editMode}
               selectedObject={selectedMapObject}
               draftConflicts={draftConflicts} selectionPreview={active ? null : selectionPreview}
               zones={editor.zones} savedZones={editor.saved?.zones} anchor={editor.anchor} goalIssue={goalIssue} issueCurrent={issueCurrent} homeEmphasized={homeEmphasized} onCancelSelection={() => dispatch({ type: 'anchor', point: null })} />
-              : <div className="simulation-map-empty"><MapPin size={34} /><strong>等待仿真地图</strong><p>地图发布后，就能在这里选点。</p></div>}
+              : <div className="simulation-map-empty"><MapPin size={34} /><strong>等待仿真地图</strong><p>地图发布后即可选点与划定禁区。</p></div>}
           </div>
 
           <div className="simulation-map-footer">
             <div className="simulation-legend" aria-label="地图图例">
-              <span><i className="simulation-legend-robot" />小鱼实际位置</span>
+              <span><i className="simulation-legend-robot" />小鱼位置</span>
               <span><i className="simulation-legend-path" />导航路径</span>
-              <span><i className="simulation-legend-obstacle" />移动障碍</span>
-              <span><i className="simulation-legend-wall" />软件虚拟墙</span>
-              <span><i className="simulation-legend-zone" />禁区 · 虚线为草稿</span>
-              <span><i className="simulation-legend-conflict" />红线：草稿直线冲突</span>
+              <span><i className="simulation-legend-obstacle" />动态障碍</span>
+              <span><i className="simulation-legend-wall" />虚拟墙</span>
+              <span><i className="simulation-legend-zone" />禁区（虚线草稿）</span>
+              <span><i className="simulation-legend-conflict" />直线冲突</span>
             </div>
             {map && <span>{(map.width * map.resolution).toFixed(1)} × {(map.height * map.resolution).toFixed(1)} 米</span>}
           </div>
@@ -351,12 +351,10 @@ export function SimulationPage({ onBack, onCooperation, active: workspaceActive 
             <span>速度 {physical ? `${Math.abs(physical.linear_speed).toFixed(2)} 米/秒` : '—'}</span>
             <span>车头 {physical ? `${(physical.yaw * 180 / Math.PI).toFixed(0)}°` : '—'}</span>
           </div>
-          <p className="simulation-keyboard-note">键盘选点：聚焦地图后，用方向键移动十字，回车选点，Esc取消当前选择。</p>
         </section>}
       objects={<div className="simulation-object-sections">
           <section className="simulation-task simulation-rules" aria-labelledby="simulation-rules-title">
-            <div className="simulation-task-heading"><h2 id="simulation-rules-title">地图规则</h2><span>{editor.zones.length} 项</span></div>
-            <p className="simulation-panel-note">软件规则限制导航通行，不改变实体墙，也不会生成雷达回波。</p>
+            <div className="simulation-task-heading"><h2 id="simulation-rules-title">平面障碍规则</h2><span>{editor.zones.length} 项</span></div>
             {ruleDraftMessage && <p className="simulation-panel-note" role="status">{ruleDraftMessage}</p>}
             {(rulesError || editor.error) && <p className="simulation-inline-error" role="alert">{editor.error || rulesError}</p>}
             {editor.saved?.message && <p className="simulation-panel-note">{editor.saved.message}</p>}
@@ -406,7 +404,6 @@ export function SimulationPage({ onBack, onCooperation, active: workspaceActive 
           </section>
           <section className="simulation-task" aria-labelledby="simulation-routes-title">
             <div className="simulation-task-heading"><h2 id="simulation-routes-title">路线模板</h2><span>{routes.length} 条</span></div>
-            <p className="simulation-panel-note">保存与载入只改变草稿；点击“开始巡逻”才执行。</p>
             {routesError && <p className="simulation-inline-error" role="alert">{routesError}</p>}
             <label className="simulation-route-name">路线名称<input type="text" value={routeName} maxLength={64} placeholder="例如：窄口巡查" disabled={!draftEditable || routeWrite === 'unknown'} onChange={(event) => draftCache.setDraft((draft) => ({ ...draft, routeName: event.target.value }))} /></label>
             <button type="button" className="simulation-button simulation-quiet simulation-save-route" disabled={!editable || !rulesReady || !!routesError || !waypoints.length || !routeName.trim() || routeWrite === 'unknown'}
@@ -424,8 +421,7 @@ export function SimulationPage({ onBack, onCooperation, active: workspaceActive 
       task={<div className="simulation-task-sections">
           <section className="simulation-task">
             <div className="simulation-task-heading"><h2>巡逻路线</h2><span>{active ? displayedPoints.length : waypoints.length} 个点</span></div>
-            <p className="simulation-panel-note">航点间直线 {routeDistance.toFixed(2)} 米，不含绕障。任务终态以 ROS 回执为准。</p>
-            {elapsedSeconds !== null && <p className="simulation-panel-note">任务耗时 {elapsedSeconds.toFixed(1)} 秒</p>}
+            <p className="simulation-panel-note">航点间直线 {routeDistance.toFixed(2)} 米{elapsedSeconds !== null ? ` · 任务耗时 ${elapsedSeconds.toFixed(1)} 秒` : ''}</p>
             {geometryMessage && <p className="simulation-panel-note" role="status">{geometryMessage}</p>}
             <div className={`simulation-mission-state simulation-mission-${mission?.status ?? 'idle'}`} aria-live="polite">
               <strong>{missionLabel(mission?.status, mission?.dispatch_state)}</strong>
@@ -469,24 +465,21 @@ export function SimulationPage({ onBack, onCooperation, active: workspaceActive 
               <small>{run.id}</small></li>)}</ol>
           </details>
           <section className="simulation-collision-report" aria-labelledby="simulation-collision-title">
-            <h2 id="simulation-collision-title">最近 CM 报告</h2>
+            <h2 id="simulation-collision-title">碰撞监测 (CM)</h2>
             <strong aria-live="polite">{connected ? collisionMonitorText(collisionMonitor) : '连接中断，当前报告未知。'}</strong>
-            <p>{collisionMonitor?.available && collisionMonitor.observation_age_s != null
-              ? `最近变化在 ${collisionMonitor.observation_age_s.toFixed(1)} 秒前；持续状态不定时重发。`
-              : '等待状态来源与监测节点就绪。'}</p>
-            <small>该报告说明监测层最近的决定；零速本身不能确定停因。</small>
+            {collisionMonitor?.available && collisionMonitor.observation_age_s != null && (
+              <p>最近变化：{collisionMonitor.observation_age_s.toFixed(1)} 秒前</p>
+            )}
           </section>
 
           <section className="simulation-obstacle" aria-labelledby="simulation-obstacle-title">
-            <div><Box size={19} /><h2 id="simulation-obstacle-title">试试突然挡路</h2></div>
-            <p>巡逻途中，让箱子驶入小车前方，观察减速与避障；箱子随后自动退回。</p>
+            <div><Box size={19} /><h2 id="simulation-obstacle-title">动态障碍箱控制</h2></div>
             <strong aria-live="polite">{obstacleLabel}</strong>
             <div className="simulation-obstacle-actions">
               <button type="button" className="simulation-button simulation-quiet" disabled={!ready || mission?.status !== 'running' || awaitingAcceptance || !!pending || state?.obstacle.state !== 'parked'} onClick={() => void act('obstacle', { action: 'block' })}>移入障碍</button>
               <button type="button" className="simulation-button simulation-quiet" disabled={!connected || !!pending || !state?.obstacle || state.obstacle.state === 'parked' || state.obstacle.state === 'returning'} onClick={() => void act('obstacle', { action: 'clear' })}>移走障碍</button>
             </div>
           </section>
-          <p className="simulation-boundary">当前操作只作用于 MuJoCo 仿真。</p>
 
         <p className="simulation-rviz-status">{rviz.message} 窗口显示在控制站电脑，手机可发起打开。</p>
       </div>} />

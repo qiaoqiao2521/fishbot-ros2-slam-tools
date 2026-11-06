@@ -137,7 +137,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
       <span className="cooperation-object-marker" aria-hidden="true">{object.id === 'car' ? <Truck size={18} /> : object.id === 'cargo' ? <Box size={18} /> : object.id === 'station' ? <MapPin size={18} /> : <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 21h13M7 21v-6l6-5-3-6 3-2 5 8-6 7v4M18 10l3 3-3 3" /><circle cx="13" cy="10" r="2" /></svg>}</span>
       <span><strong>{object.id === 'car' ? liveProfile.vehicleName : object.name}</strong><small>{object.detail}</small></span>
     </button>)}
-    <p className="cooperation-object-help">选择对象查看属性。对象与工位只读，不发送移动指令。</p>
+    <span className="cooperation-object-help" hidden />
   </div>
   const properties = <div className="workspace-properties cooperation-workspace-properties">
     <div className="cooperation-properties-heading"><strong>{selected === 'car' ? liveProfile.vehicleName : sceneObjects.find((object) => object.id === selected)?.name}</strong>
@@ -168,7 +168,6 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
           <div><dt>高度</dt><dd>{physics ? `${metric(physics.cargo.z)} m` : '未收到'}</dd></div>
           <div><dt>速度</dt><dd>{physics ? `${metric(physics.cargo.speed)} m/s` : '未收到'}</dd></div>
           <div><dt>夹指接触力</dt><dd>{physics ? `${physics.cargo.tip_forces.map((value) => value.toFixed(2)).join(' / ') || '未收到'} N` : '未收到'}</dd></div></dl>
-        <p>货物位置与接触来自物理反馈。</p>
       </div>
     </section>
     <section hidden={selected !== 'station'} data-object-properties="station" className="cooperation-station-properties">
@@ -176,7 +175,7 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
           <div className="cooperation-stations">
             <div><MapPin size={15} aria-hidden="true" /><span>固定工位</span><strong>{state?.stations ? `${metric(state.stations.dock.x, 2)}, ${metric(state.stations.dock.y, 2)} m` : '等待坐标'}</strong></div>
             <div><CircleCheck size={15} aria-hidden="true" /><span>交付点</span><strong>{state?.stations ? `${metric(state.stations.delivery.x, 2)}, ${metric(state.stations.delivery.y, 2)} m` : '等待坐标'}</strong></div>
-          </div>      <p>坐标由当前场景提供。选择对象不会修改位置或重新派发任务。</p>
+          </div>
     </section>
     <footer className="cooperation-source"><span>仅用于仿真 · 物理真值与导航定位分别显示</span><span>场景来源 SHA：{state?.source?.scene_sha || '等待服务发布'}</span></footer>
   </div>
@@ -213,12 +212,12 @@ export function CooperationView({ snapshot, now, frame, onBack, onStart, onCance
 
         </section>
         <section className="cooperation-dialogue" aria-labelledby="cooperation-dialogue-heading">
-          <div className="cooperation-section-heading"><div><h2 id="cooperation-dialogue-heading">合作对话</h2><p>每条消息来自实际动作反馈。</p></div><span>{events.length} 条</span></div>
+          <div className="cooperation-section-heading"><div><h2 id="cooperation-dialogue-heading">合作对话</h2></div><span>{events.length} 条</span></div>
           {state && <EventContinuity events={state.events} episodeId={state.episode_id ?? null} taskId={state.task.id} />}
           {events.length ? <ol>{events.map((event) => <li key={event.sequence} className={`cooperation-event-${event.role}`}>
             <div><strong>{{ car: liveProfile.vehicleName, arm: 'SO101', system: '协同服务' }[event.role]}</strong><time>{event.time_s.toFixed(2)} s</time></div>
             <p>{event.message}</p>
-          </li>)}</ol> : <div className="cooperation-dialogue-empty"><p>尚未收到合作消息。</p><span>开始任务后，这里记录小车和机械臂的实际回应。</span></div>}
+          </li>)}</ol> : <div className="cooperation-dialogue-empty"><p>尚未收到合作消息。</p></div>}
         </section>
         {!!state?.history?.length && <section className="cooperation-dialogue" aria-labelledby="cooperation-history-heading">
           <div className="cooperation-section-heading"><div><h2 id="cooperation-history-heading">历史回合</h2><p>以下记录由协同服务保存，场景重置不会删除已完成记录。</p></div><span>{state.history.length} 条</span></div>
