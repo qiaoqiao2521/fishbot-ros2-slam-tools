@@ -1327,6 +1327,60 @@ class BridgeRaceTests(unittest.TestCase):
         p.raw['qvel6'][1]=p.raw['qvel20'][1]=.05
         with self.assertRaisesRegex(RuntimeError,'机械臂未保持回位停稳'):p.check(carrying=True)
 
+    def test_retention_failure_reports_missing_floor_contact_without_claiming_slip_and_keeps_first_frame(self):
+        p=self.bridge
+        p.raw['cargo_tray_floor_contact']=False;p.raw['cargo_tray_floor_contacts']=0
+        p.raw['cargo_tray_floor_normal_force_n']=0.
+        with self.assertRaisesRegex(RuntimeError,'底板接触.*外廓和高度仍在范围内'):p.check(carrying=True)
+        failure=copy.deepcopy(p.task['cargo_retention_failure'])
+        self.assertEqual(failure['reason'],'floor_contact_missing')
+        self.assertTrue(failure['footprint_inside']);self.assertTrue(failure['height_inside'])
+        self.assertFalse(failure['floor_contact']);self.assertEqual(failure['floor_contact_count'],0)
+        self.assertEqual(failure['source_stamp'],10.);self.assertEqual(failure['source_sequence'],1)
+        self.assertEqual(failure['source'],p.raw['source'])
+        self.assertFalse(failure['diagnostic_changes_acceptance'])
+        p.raw['cargo_tray_floor_contact']=True;p.raw['cargo_tray_floor_contacts']=1
+        p.check(carrying=True)
+        self.assertEqual(p.task['cargo_retention_failure'],failure)
+        p.raw['sequence']=2;p.raw['cargo_tray_floor_contact']=False;p.raw['cargo_tray_floor_contacts']=0
+        with self.assertRaisesRegex(RuntimeError,'底板接触'):p.check(carrying=True)
+        self.assertEqual(p.task['cargo_retention_failure'],failure)
+
+    def test_retention_failure_binds_original_named_material_and_source_identity(self):
+        p=self.bridge
+        p.task['business_delivery']={'cargo_id':'cargo_2','pickup_arm_id':'load','unload_station_id':'line_a'}
+        p.task['active_arm_id']='load'
+        p.raw['world_session_id']='world-original'
+        p.task_material=lambda raw:raw
+        p.raw['cargo_tray_floor_contact']=False;p.raw['cargo_tray_floor_contacts']=0
+        with self.assertRaisesRegex(RuntimeError,'底板接触'):p.check(carrying=True)
+        failure=p.task['cargo_retention_failure']
+        self.assertEqual(failure['cargo_id'],'cargo_2');self.assertEqual(failure['arm_id'],'load')
+        self.assertEqual(failure['world_session_id'],'world-original')
+        self.assertEqual(failure['task_id'],p.task['id'])
+        self.assertEqual(failure['source_stamp'],p.raw['stamp'])
+        self.assertEqual(failure['source_sequence'],p.raw['sequence'])
+
+    def test_retention_failure_distinguishes_height_and_other_original_conditions(self):
+        p=self.bridge
+        p.raw['cargo']['position_relative_tray'][2]=.041
+        with self.assertRaisesRegex(RuntimeError,'高度超出'):p.check(carrying=True)
+        self.assertEqual(p.task['cargo_retention_failure']['reason'],'height_outside')
+        p.task.pop('cargo_retention_failure')
+        p.raw['cargo']['position_relative_tray']=[.0471,0.,.01]
+        self.assertTrue(core.cargo_footprint_inside(p.raw))
+        with self.assertRaisesRegex(RuntimeError,'原托盘保持条件'):p.check(carrying=True)
+        self.assertEqual(p.task['cargo_retention_failure']['reason'],'other_retention_condition')
+        self.assertFalse(p.task['cargo_retention_failure']['center_within_original_retention_limit'])
+
+    def test_retention_failure_missing_optional_detail_retains_original_generic_error(self):
+        p=self.bridge
+        p.task_material=lambda raw:{'cargo':{'position_relative_tray':[.06,0.,.01]}}
+        with self.assertRaisesRegex(RuntimeError,'运输途中货物离开托盘支撑范围'):p.check(carrying=True)
+        self.assertEqual(p.task['cargo_retention_failure']['reason'],'retention_condition_failed')
+        self.assertIn('KeyError',p.task['cargo_retention_failure']['diagnostic_warning'])
+        self.assertEqual(p.task['cargo_retention_failure']['source_stamp'],10.)
+
     def execution_handoff_probe(self, *, before_transfer=None, after_delivery=None, delivery_distance=1., delivery_pose=None,
                                 egress_pose=None, on_navigate=None, egress_motion=None, on_drive=None,
                                 delivery_approach_poses=None, residual_fixed_contact=False):

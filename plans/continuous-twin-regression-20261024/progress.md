@@ -655,3 +655,15 @@ knowledge_status=updated：原《Wiki/ROS2 与 FishBot.md》“原生 ROS 时钟
 原件已按100MiB连接器上限分卷，超限首包324,713,158B被接口413在动作前拒绝，未产生Drive新文件。4相机卷与2证据卷均实际流式完整tar成员/最终gzipCRC读回：5270输入/325,776,071解码字节，以及557项/117,566,142解码字节。所选Drive新文件夹1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L已实际列出7项（含原v6），移动仅本轮新归档，保留权限/ID。已删除备份后5270本机原相机副本325,776,071B及重复上传tar324,713,966+79,172,928B，恢复README与全部part ID保持；其他新原件继续保留，D不借旧包冒称备份。
 
 未交付遗留已读回：docs/MAP_RULES.md两行与plans/cy-map-rule-candidate是独立CY备选，README明确来源无独立许可证、厂商坐标尚未核实、未接执行链。保留当前改动不推公开远端，owner根Codex，最短接续为该README的来源/许可证与独立局部测试；不覆盖、不当成已整合。knowledge_status=already_covered：交接坐标/工作空间和原生时序经验原页已覆盖，项目状态留本计划。
+
+
+车间E已按source4ccd8cd单独原Factory启动，目录f2-workshop-line-run-20261106-190615-8b2e4c，192/9162，原同世界B→A与原预算保持。仅已有pickup_xy_m的两条配置＋回归断言改动，未增控制框架；原失败D及仓库已验08b0结果保留。UI21检查/生产构建与QA后当前已提交推送4ccd8cd；当前仅保留待许可CY备选未提交。E未终态前不标通过，owner=root。
+
+
+### 车间E实际接触缺失与仅规划候选
+
+E runb9c010bd-e956-4c05-83cf-d9d86623a3fa / task5f9f5dd4-881e-4c99-8f15-7ff65895cbb3在原运输阶段失败，A未执行。source191.06外廓/高度仍合格，余量34.693/44.004mm，但单帧floor_contact=false/force0，下一帧191.08恢复；不是已证货物滑出。原RPP拒碰撞后Spin恢复有angular1.0请求，平滑器原限幅不变；瞬时实际yawrate约.59，车体约1mm弹跳。原判据保持，新增仅诊断首失败帧和具体原因，不忽略失触。
+
+独立原生只规划比较：原NavFn路径174poses/1.75045m、最大横偏234.724mm；HeadingAware 57poses/1.60m、横偏1.335e-7m，原完整车体保守净距50.247mm。两个原生status4，hold/清理成立，无运动，不能算配送成功。新f1_candidate.py --planner-only --staging-planner HeadingAware复用既有navigation_planner，只增加原生Lattice并改BT引用；Mec原controller_server、velocity_smoother、两costmap字节相等，vehicle_profile保持，不套J100速度。18相关测试在具备原Mujoco环境下通过；系统Python重跑17通过/1缺Mujoco跳过另记。原生manifest导航字段无桥/launch动态调参消费者。原默认J100入口保持。下一轮仅车间原Factory B→A，同世界零reset、原120/360与接触评分。
+
+仓库D10个独立Drive tar卷已全部上传并完整流式读取全部成员与gzip CRC：9631项原件加manifest共738,985,119解码字节。删除已验证上传包683,968,283B与9292后向原相机副本560,763,176B，保留Drive恢复README、原physics/model输入和当前Git工作台资产。新失败E、其余C/D失败和后续车间结果仍由root归档，不借已存仓库包冒称完成。knowledge_status=already_covered。

@@ -179,6 +179,86 @@ class NativeTransportSelectionTests(unittest.TestCase):
         manifest, _ = self.read()
         self.assertNotIn('loaded_controller', manifest['vehicle_profile'])
 
+    def test_planner_only_cli_preserves_control_and_binds_all_main_and_staging_references(self):
+        self.nav['planner_server']['ros__parameters']={
+            'planner_plugins':['GridBased'], 'GridBased':{'plugin':'nav2_navfn_planner::NavfnPlanner'}}
+        self.nav['global_costmap']['global_costmap']['ros__parameters']['resolution']=.02
+        for prefix in ('FollowPath','StagingPath'):
+            self.nav['controller_server']['ros__parameters'][prefix].update(
+                desired_linear_vel=.12,rotate_to_heading_angular_vel=.4)
+        self.nav_path.write_text(yaml.safe_dump(self.nav,sort_keys=False))
+        original={key:copy.deepcopy(self.nav[key])for key in (
+            'controller_server','velocity_smoother','local_costmap','global_costmap')}
+        xml='<!-- Nav2 1.3.13 Apache-2.0 -->\n<root><PlannerSelector default_planner="GridBased"/>' \
+            '<ComputePathToPose planner_id="GridBased"/><ComputePathThroughPoses planner_id="{selected_planner}"/>' \
+            '<FollowPath controller_id="FollowPath"/><Spin spin_dist="1.57"/></root>'
+        for field,name in [('navigation_behavior_tree','main.xml'),('staging_navigation_behavior_tree','stage.xml')]:
+            path=self.folder/name;path.write_text(xml);self.manifest[field]=str(path)
+        self.path.write_text(json.dumps(self.manifest));vehicle=copy.deepcopy(self.manifest['vehicle_profile'])
+        subprocess.run([sys.executable,str(ROOT/'experiments/kaggle/f1_candidate.py'),str(self.path),
+                        '--planner-only','--staging-planner','HeadingAware'],check=True,capture_output=True,text=True)
+        manifest,nav=self.read()
+        for key,value in original.items():self.assertEqual(nav[key],value)
+        self.assertEqual(manifest['vehicle_profile'],vehicle)
+        for field in ('navigation_behavior_tree','staging_navigation_behavior_tree'):
+            tree=ET.fromstring(Path(manifest[field]).read_text())
+            self.assertEqual(next(tree.iter('PlannerSelector')).get('default_planner'),'HeadingAware')
+            for tag in ('ComputePathToPose','ComputePathThroughPoses'):
+                self.assertTrue(all(v.get('planner_id')=='HeadingAware' for v in tree.iter(tag)))
+            self.assertEqual(next(tree.iter('FollowPath')).get('controller_id'),'FollowPath')
+            self.assertEqual(next(tree.iter('Spin')).get('spin_dist'),'1.57')
+        planner=nav['planner_server']['ros__parameters']['HeadingAware']
+        self.assertEqual(planner['plugin'],'nav2_smac_planner::SmacPlannerLattice')
+        self.assertEqual([planner[k]for k in ('cost_penalty','reverse_penalty','rotation_penalty')],[0.,1.,12.])
+        self.assertFalse(manifest['planner_only_candidate']['qualified'])
+        self.assertNotIn('global_extra_padding_m',manifest)
+
+    def test_planner_only_rejects_mixed_transport_tuning_before_writing(self):
+        before=self.path.read_bytes(),self.nav_path.read_bytes()
+        for extra in (['--global-extra-padding-m','0.005'],['--lattice-smooth-path'],
+                      ['--transport-controller-yaml',str(PRESET)]):
+            with self.subTest(extra=extra):
+                result=subprocess.run([sys.executable,str(ROOT/'experiments/kaggle/f1_candidate.py'),
+                    str(self.path),'--planner-only',*extra],capture_output=True,text=True)
+                self.assertNotEqual(result.returncode,0)
+                self.assertIn('cannot mix',result.stderr)
+                self.assertEqual((self.path.read_bytes(),self.nav_path.read_bytes()),before)
+
+
+@unittest.skipUnless(os.environ.get('FISHBOT_SO101_PYTHON'), 'native prepare runtime not selected')
+class GeneratedMecanumPlannerOnlyTests(unittest.TestCase):
+    def test_real_generated_navfn_scene_keeps_four_original_yaml_sections_byte_equal(self):
+        script=r'''
+from pathlib import Path
+from types import SimpleNamespace
+import json,subprocess,sys
+root=Path(sys.argv[1]);out=Path(sys.argv[2]);sys.path.insert(0,str(root/'tools'))
+from cooperation_prepare import prepare
+manifest=prepare(SimpleNamespace(so101_project=root.parent/'so101',fishbot_project=root,
+ output=out,scene_profile=root/'tools/config/cooperation_profiles/robot_base_mecanum-lidar3d-transport.json',
+ arena_xml=root/'tools/config/factory_delivery/f2-workshop-line-arena.xml',
+ factory_config=root/'tools/config/factory_delivery/f2-workshop-line-coaxial.json',
+ continuous_delivery=root/'tools/config/factory_delivery/f2-workshop-line-coaxial-entities.json',
+ spawn=[-.9,-1.64],spawn_yaw=0.,staging_reversing=True,amcl_motion_model='omni',
+ omit_unused_native_rangefinders=True))
+def section(text,name):
+ lines=text.splitlines(keepends=True);first=next(i for i,line in enumerate(lines)if line.startswith(name+':'))
+ end=next((i for i in range(first+1,len(lines))if lines[i]and not lines[i][0].isspace()and not lines[i].startswith('#')),len(lines))
+ return ''.join(lines[first:end]).encode()
+path=out/'scene-manifest.json';nav=Path(manifest['nav2_yaml']);before=nav.read_text()
+subprocess.run([sys.executable,str(root/'experiments/kaggle/f1_candidate.py'),str(path),
+ '--planner-only','--staging-planner','HeadingAware'],check=True,capture_output=True,text=True)
+after=nav.read_text();print(json.dumps({'equal':{k:section(before,k)==section(after,k)for k in
+ ('controller_server','velocity_smoother','local_costmap','global_costmap')},'physics_steps':0}))
+'''
+        with tempfile.TemporaryDirectory() as temp:
+            result=subprocess.run([os.environ['FISHBOT_SO101_PYTHON'],'-B','-c',script,str(ROOT),str(Path(temp)/'scene')],
+                                  check=True,capture_output=True,text=True,timeout=90)
+        proof=json.loads(result.stdout.splitlines()[-1])
+        self.assertTrue(all(proof['equal'].values()))
+        self.assertEqual(len(proof['equal']),4)
+        self.assertEqual(proof['physics_steps'],0)
+
 
 class FactoryInputSelectionTests(unittest.TestCase):
     def prepare(self, explicit=None, smoothing=None, padding=None):

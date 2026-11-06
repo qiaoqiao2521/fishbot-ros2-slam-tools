@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 from urllib.parse import parse_qs
 
 from cooperation_core import (ACTIVE, ContinuousEvidence, Rejected, arm_home_quiet, car_pose,
-                              cargo_retained, dispatch_terminal, finite_vector,
+                              cargo_retained, cargo_footprint_inside, dispatch_terminal, finite_vector,
                               physical_quiet, quaternion, request_identity,
                               task_scope, task_delivery_pose, task_delivery_approaches, task_business_delivery,
                               reset_request_identity,
@@ -860,7 +860,44 @@ def run(args):
                     raise RuntimeError('车体或机械臂发生非预期物理接触')
                 material = self.task_material(raw)
                 if carrying and not cargo_retained(material):
-                    raise RuntimeError('运输途中货物离开托盘支撑范围')
+                    # Diagnostic only, after the unchanged retention gate has
+                    # failed. Preserve the first failing source frame; a later
+                    # contact recovery does not erase or reinterpret it.
+                    binding = self.task.get('business_delivery') or {}
+                    failure = {'reason':'retention_condition_failed',
+                        'message':'运输途中货物离开托盘支撑范围',
+                        'task_id':self.task.get('id'), 'episode_id':raw.get('episode_id'),
+                        'world_session_id':raw.get('world_session_id'),
+                        'source_stamp':raw.get('stamp'), 'source_sequence':raw.get('sequence'),
+                        'source':copy.deepcopy(raw.get('source')),
+                        'cargo_id':binding.get('cargo_id'),
+                        'arm_id':self.task.get('active_arm_id',binding.get('pickup_arm_id')),
+                        'retained':False, 'acceptance_gate':'original cargo_retained(material)',
+                        'diagnostic_changes_acceptance':False}
+                    try:
+                        position = material['cargo']['position_relative_tray']
+                        footprint = cargo_footprint_inside(material)
+                        height = -.002 <= position[2] <= .04
+                        contact = material['cargo_tray_floor_contact']
+                        failure.update(position_relative_tray_m=copy.deepcopy(position),
+                            footprint_inside=footprint, height_inside=height, floor_contact=contact,
+                            center_within_original_retention_limit=all(abs(value)<=.047 for value in position[:2]),
+                            floor_contact_count=material.get('cargo_tray_floor_contacts'),
+                            floor_normal_force_n=material.get('cargo_tray_floor_normal_force_n'))
+                        if not footprint:
+                            failure.update(reason='footprint_outside',message='运输途中货物完整外廓超出托盘支撑范围')
+                        elif not height:
+                            failure.update(reason='height_outside',message='运输途中货物高度超出托盘保持范围')
+                        elif not contact:
+                            failure.update(reason='floor_contact_missing',
+                                message='运输途中未检测到货物与托盘底板接触（此帧外廓和高度仍在范围内）')
+                        else:
+                            failure.update(reason='other_retention_condition',message='运输途中货物未满足原托盘保持条件')
+                    except (KeyError, TypeError, ValueError, IndexError) as error:
+                        failure['diagnostic_warning'] = f'{type(error).__name__}: {error}'
+                        # Optional detail cannot replace the original failure.
+                    first_failure = self.task.setdefault('cargo_retention_failure',failure)
+                    raise RuntimeError(first_failure['message'])
                 binding = self.task.get('business_delivery')
                 home = (manifest['business_entities']['arms'][binding['pickup_arm_id']]['home_qpos6']
                         if binding else manifest['arm_home_qpos6'])
