@@ -13,6 +13,7 @@ export interface VisionResult {
   source: Record<string, unknown>; title: string; recordedAt: string; runId: string; evidenceKind: string
   vehicle: string; sensor: string; model: string; resets: number | null; elapsed: number | null
   orders: VisionOrder[]; timingUrl: string | null; replayUrl: string | null; videoUrl: string | null
+  recordings: { label: string; url: string }[]
   availabilityNote: string; archiveStatus: string; archiveUrl: string | null; warnings: string[]
 }
 
@@ -48,11 +49,12 @@ export function parseVisionResult(input: unknown): VisionResult {
     vehicle: text(source.vehicle, 'J100'), sensor: text(source.sensor, '3D 雷达'), model: text(source.model, 'GraspGen-X'),
     resets: number(source.reset_count), elapsed: number(source.elapsed_wall_s), orders,
     timingUrl: asset(assets.timing, warnings), replayUrl: asset(assets.replay, warnings), videoUrl: asset(assets.video, warnings),
+    recordings: array(source.recordings).flatMap(entry => { const row = object(entry), url = asset(row.url, warnings); return url ? [{ label: text(row.label, '配送记录'), url }] : [] }),
     availabilityNote: text(source.availability_note), archiveStatus: text(source.archive_status, '归档状态未确认'), archiveUrl: driveArchive(source.archive_url), warnings }
 }
 
-export async function readVisionResult(signal?: AbortSignal) {
-  const response = await fetch('/workbench/j100-vision-result.json', { method: 'GET', cache: 'no-store', signal })
+export async function readVisionResult(signal?: AbortSignal, url = '/workbench/j100-vision-result.json') {
+  const response = await fetch(url, { method: 'GET', cache: 'no-store', signal })
   if (!response.ok) throw new Error(`视觉配送成果暂不可读取（HTTP ${response.status}），其他历史成果仍可查看。`)
   return parseVisionResult(await response.json())
 }

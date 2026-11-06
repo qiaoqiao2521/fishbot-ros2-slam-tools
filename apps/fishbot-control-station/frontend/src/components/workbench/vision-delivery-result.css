@@ -43,3 +43,5 @@
 @media(max-width: 480px) { .vision-result-heading { gap: 10px; } .vision-result-heading button { padding: 7px; font-size: 12px; } .vision-result-playback { flex-wrap: wrap; } .vision-result-playback input { flex-basis: 60%; } .vision-result-unavailable { padding: 22px; } }
 
 #j100-vision-replay { scroll-margin-top: 120px; }
+
+.vision-result-context select { border: 1px solid #cfdced; padding: 5px; border-radius: 5px; color: #17324d; max-width: 100%; }

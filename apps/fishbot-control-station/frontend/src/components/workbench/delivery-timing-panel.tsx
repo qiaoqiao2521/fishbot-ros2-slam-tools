@@ -18,8 +18,8 @@ const label = (s: TimingSpan) => phases[s.label] ?? s.label
 const boundary = (values: (number | null)[], origin: number | null) => values.length && origin !== null
   ? values.map(v => v === null ? '未知' : `${(v - origin).toFixed(3)}s`).join(' ～ ') : '未提供精确边界'
 
-export function DeliveryTimingPanel({ initialReport, initialSource = 'j100', caseTaskId, onCaseChange, onReplayRequest, replayTaskIds = [] }: {
-  initialReport?: unknown; initialSource?: DeliveryTimingSource; caseTaskId?: string
+export function DeliveryTimingPanel({ initialReport, initialSource = 'j100', sourceUrl, caseTaskId, onCaseChange, onReplayRequest, replayTaskIds = [] }: {
+  initialReport?: unknown; initialSource?: DeliveryTimingSource; sourceUrl?: string; caseTaskId?: string
   onCaseChange?: (taskId: string) => void; onReplayRequest?: (taskId: string, sourceTime: number) => void; replayTaskIds?: string[]
 }) {
   const [report, setReport] = useState(() => initialReport === undefined ? null : parseDeliveryTiming(initialReport))
@@ -39,7 +39,7 @@ export function DeliveryTimingPanel({ initialReport, initialSource = 'j100', cas
     request.current = controller
     setLoading(true); setError('')
     try {
-      const next = local ? await readLocalDeliveryTiming(local) : await readDeliveryTiming(controller.signal, fetch, selectedSource)
+      const next = local ? await readLocalDeliveryTiming(local) : await readDeliveryTiming(controller.signal, fetch, selectedSource, selectedSource === initialSource ? sourceUrl : undefined)
       if (current !== generation.current) return
       setReport(next); setCaseIndex(0); setSelected(null)
     } catch (cause) {

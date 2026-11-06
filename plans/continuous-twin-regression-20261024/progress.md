@@ -403,3 +403,15 @@ Kaggle新私有kernel `muqiaoqiao/fishbot-f1-visual-recovery-20261106` v1于10:2
 已有13项历史耗时浏览器行为检查、新4项视觉成果行为检查通过，均零write请求/零未捕获异常；合成回放fixture只用于UI交互检查，不计物理成功。390px无水平溢出，桌面/手机截图已观察。相关25项前端单测首次因旧标题断言失败，已按新标题修正并复跑该11项全过；生产构建通过，最终统一复查待收尾。
 
 Drive进一步验收已完成：实际下载远端ZIP至本轮临时副本，逐成员解压检查通过，1378项且恢复说明存在，长度10,776,708字节与本地相同；随后已删除该重复下载副本。不是仅收到上传回执。新模型环境仍只在云端，本机仅准备小型MuJoCo查询环境供离线投影，不恢复完整规划/权重环境。
+
+F1网页/导入器提交2097982已推送qiaoqiao2521既有origin并读回同SHA。新增来源不明标签、回放来源告警和单项录像失败提示已核验；最新视觉UI检查5项通过，含来源异常及媒体404，仍零write/零未捕获错误。
+
+补录v1终态ERROR，未发业务Goal：系统依赖、官方模型setup及原生Nav2构建完成，scene-prepare的AprilTag纹理子进程失败。原helper已有NumPy隔离，因此目前不能把ABI当根因；原回执丢失系统Python版本，待有界诊断确认。v1失败完整保留；v2仅允许云系统OpenCV解释器适配、复用已构建native安装与显式开启overview，原控制/评分/预算不变。原K历史成功与本轮零Goal失败分开。
+
+v1失败证据完整归档至Drive `1h5Lrd-BnY1A3M_8mS4yyOGChvoZCNwZw`，9,266,184字节；远端实际下载并逐成员读取通过（29文件），临时读回副本已删除。24项云端输出均已回收，下载缺项重取完成。v2提交连接超时后先核实仍v1才重提，已确认v2唯一运行；默认系统Python OpenCV失败、显式3.12同环境预检通过，仅云选3.12。v2已通过scene-prepare/candidate-configuration，进入原native-clock；业务Goal尚未派发，不宣称B→A通过。
+
+网页追加独立记录切换，同步摘要、task身份、耗时源与下载；6项相关UI行为检查通过，零write/零异常。当前6文件26项前端单测及最终生产构建通过；新记录尚待云端实际产出。
+
+v2原生clock和完整几何预检通过，但owned launch 8.13秒退出，run dfa92391-86fe-4a54-ba06-500ad465170c，0start/0cancel/0reset、physics sample_count=0；B/A均未派发。首错为系统视觉cooperation_station_vision经fishbot_inspection导入PIL失败，后续KeyboardInterrupt/ekf异常是退出连带，不能记成多个根因。64/64输出已回收。默认系统Python实测3.13载入cp312系统NumPy失败；显式3.12/OpenCV4.6/NumPy1.26.4预检通过。GPU实际2×T4，不能把请求单档写成单卡实际资源。
+
+root按明确首错继续最小云依赖修复（python3-pil/scipy）与完整视觉模块导入预检，再执行v3；不修改导航/物理门槛。不是无依据重提，不把两轮零Goal当业务样本。

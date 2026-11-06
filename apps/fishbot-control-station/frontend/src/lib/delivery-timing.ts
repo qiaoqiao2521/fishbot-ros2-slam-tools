@@ -87,8 +87,8 @@ const TIMING_SOURCES: Record<DeliveryTimingSource, string> = {
   mecanum3d: '/workbench/mecanum-lidar3d-delivery-timing.json',
 }
 
-export async function readDeliveryTiming(signal?: AbortSignal, fetcher: typeof fetch = fetch, source: DeliveryTimingSource = 'j100') {
-  const response = await fetcher(TIMING_SOURCES[source], { method: 'GET', cache: 'no-store', signal })
+export async function readDeliveryTiming(signal?: AbortSignal, fetcher: typeof fetch = fetch, source: DeliveryTimingSource = 'j100', sourceUrl?: string) {
+  const response = await fetcher(sourceUrl ?? TIMING_SOURCES[source], { method: 'GET', cache: 'no-store', signal })
   if (!response.ok) throw new Error(`耗时报告读取失败（HTTP ${response.status}）。可重试或导入本地 JSON。`)
   return parseDeliveryTiming(await response.json())
 }
