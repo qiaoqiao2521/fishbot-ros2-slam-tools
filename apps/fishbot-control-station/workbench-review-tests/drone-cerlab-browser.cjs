@@ -60,6 +60,12 @@ const save=()=>fs.writeFileSync(path.join(output,'result.json'),JSON.stringify(r
   assert.equal(task.report.landed_disarmed,true);
   assert.equal(task.report.backend,'cerlab');
   assert.equal(task.report.safety_qualified,false);
+  if(task.report.perception==='sensor_dynamic'){
+   assert.equal(task.report.sensor_dynamic_validation?.passed,true);
+   assert.equal(task.report.native_input?.use_fake_detector,false);
+   assert(!task.report.native_input.navigation_subscriptions.includes('/gazebo/model_states'));
+   result.checks.push('native-depth-classification-consumed-by-planner-without-oracle');
+  }
   assert(task.artifacts.mcap);
   result.checks.push(cancelRun?'web-cancel-returns-and-confirms-landed-disarmed':'web-submitted-native-flight-reaches-goals-and-observed-landing');
   const artifact=new URL(task.artifacts.mcap,base).href;
