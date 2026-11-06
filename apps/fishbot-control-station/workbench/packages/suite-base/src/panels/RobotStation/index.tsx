@@ -59,15 +59,17 @@ import {
   programWarnings,
   removeNode,
   reparent,
+  SO101_WORKSPACE_SCENES,
   stationActions,
   stationKindLabel,
   stationPlatform,
   stationRequestsCarryGate,
   transformObstacle,
   worldPosition,
+  workspaceSceneId,
   workspaceStationSample,
 } from "./station";
-import type { Instruction, Kind, Station, StationNode, Vec3 } from "./station";
+import type { Instruction, Kind, Station, StationNode, Vec3, WorkspaceSceneId } from "./station";
 
 type Config = {
   station?: Station;
@@ -274,6 +276,7 @@ function RobotStation({
   );
   const platform = stationPlatform(station);
   const drone = platform === "px4";
+  const sceneId = useMemo(() => workspaceSceneId(station), [station]);
   const layoutManager = useLayoutManager();
   const { getCurrentLayoutState } = useCurrentLayoutActions();
   const layoutId = useCurrentLayoutSelector(selectedLayoutIdSelector);
@@ -689,6 +692,16 @@ function RobotStation({
     },
     [],
   );
+  // Keep this native layout across refresh and other replay tabs.
+  const preserveWorkspaceLayout = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("layoutUrl");
+    const name = getCurrentLayoutState().selectedLayout?.name;
+    if (name) {
+      url.searchParams.set("layout", name);
+    }
+    window.history.replaceState(window.history.state, "", url);
+  };
   const startSimulation = async () => {
     if (egoNeedsPreview && !planValid) {
       setPlanError("请先对当前草稿完成有效的 EGO 预演。");
@@ -718,13 +731,7 @@ function RobotStation({
     // Save the ID before POST. A lost response must query this ID, never submit again.
     saveConfig({ executionTaskId: id });
     // The template must not replace this task selection when the page reloads.
-    const url = new URL(window.location.href);
-    url.searchParams.delete("layoutUrl");
-    const name = getCurrentLayoutState().selectedLayout?.name;
-    if (name) {
-      url.searchParams.set("layout", name);
-    }
-    window.history.replaceState(window.history.state, "", url);
+    preserveWorkspaceLayout();
     try {
       const result = await requestSimulation<SimulationTask>(
         "/tasks",
@@ -969,7 +976,7 @@ function RobotStation({
       setNotice(error instanceof Error ? error.message : "配方导出失败，当前草稿保留。");
     }
   };
-  const loadWorkspaceSample = (sample: "x-plus20" | "x-minus20") => {
+  const loadWorkspaceSample = (sample: WorkspaceSceneId) => {
     if (drone || checkingTask || submitting || cancelling || taskIsActive(task)) {
       return;
     }
@@ -981,6 +988,7 @@ function RobotStation({
     setExecutionError("");
     rejectedTaskId.current = "";
     saveConfig({ station: next, executionTaskId: "" });
+    preserveWorkspaceLayout();
     setSelected("cube");
     setNotice("已载入独立草稿，尚未运行。修改后需重新验证，原任务记录保留。");
     void changeScene("draft", next);
@@ -1187,32 +1195,50 @@ function RobotStation({
           }}
         />
         {!drone && (
-          <div role="region" aria-label="SO101 开发工位样例">
-            <Typography variant="subtitle2">开发工位样例</Typography>
+          <div role="region" aria-label="SO101 场景选择">
+            <Typography variant="subtitle2">选择场景</Typography>
+            <Typography
+              variant="body2"
+              aria-live="polite"
+              data-testid="so101-current-scene"
+              data-scene-id={sceneId ?? "custom"}
+            >
+              当前草稿场景：
+              {SO101_WORKSPACE_SCENES.find((scene) => scene.id === sceneId)
+                ?.name ?? "自定义草稿"}
+            </Typography>
             <div className={classes.row}>
-              <Button
-                size="small"
-                variant="outlined"
-                disabled={checkingTask || submitting || cancelling || taskIsActive(task)}
-                onClick={() => {
-                  loadWorkspaceSample("x-plus20");
-                }}
-              >
-                载入 X+20mm 布局
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                disabled={checkingTask || submitting || cancelling || taskIsActive(task)}
-                onClick={() => {
-                  loadWorkspaceSample("x-minus20");
-                }}
-              >
-                载入 X−20mm 布局
-              </Button>
+              {SO101_WORKSPACE_SCENES.map((scene) => (
+                <div key={scene.id}>
+                  <Button
+                    size="small"
+                    variant={sceneId === scene.id ? "contained" : "outlined"}
+                    aria-pressed={sceneId === scene.id}
+                    data-testid={`so101-scene-${scene.id}`}
+                    disabled={
+                      checkingTask ||
+                      submitting ||
+                      cancelling ||
+                      taskIsActive(task)
+                    }
+                    onClick={() => {
+                      loadWorkspaceSample(scene.id);
+                    }}
+                  >
+                    {scene.name}
+                  </Button>
+                  <Typography
+                    variant="caption"
+                    component="p"
+                    color="text.secondary"
+                  >
+                    {scene.description}
+                  </Typography>
+                </div>
+              ))}
             </div>
             <Typography variant="caption" color="text.secondary">
-              每个样例仅验证过指定点位。加载只改草稿；修改后重新规划并运行。
+              选择只载入可编辑草稿，不自动运行。改动后显示自定义草稿；每次运行都生成自己的结果与回放。
             </Typography>
             {station.execution !== undefined && (
               <Alert severity="info" style={{ marginTop: 8 }}>
@@ -2133,13 +2159,7 @@ function RobotStation({
             rejectedTaskId.current = "";
             saveConfig({ executionTaskId: selectedTask.id });
             // Restore the saved task selection, rather than reimporting the template.
-            const url = new URL(window.location.href);
-            url.searchParams.delete("layoutUrl");
-            const name = getCurrentLayoutState().selectedLayout?.name;
-            if (name) {
-              url.searchParams.set("layout", name);
-            }
-            window.history.replaceState(window.history.state, "", url);
+            preserveWorkspaceLayout();
             void changeScene("task", station, selectedTask.id);
           }}
         >

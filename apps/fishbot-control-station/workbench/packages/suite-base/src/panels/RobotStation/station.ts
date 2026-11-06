@@ -4,6 +4,8 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v2.0. https://mozilla.org/MPL/2.0/
 
+import { isEqual } from "lodash-es";
+
 import { parseRecipeEnvelope, wrapRecipeEnvelope } from "./stationRecipe";
 
 export type Vec3 = [number, number, number];
@@ -302,8 +304,23 @@ export function defaultStation(): Station {
   };
 }
 
+export const SO101_WORKSPACE_SCENES = [
+  {
+    id: "x-minus20",
+    name: "工位 A · 近侧取料／斜向放盘",
+    description: "目标 X 220mm → 蓝盘 X 200 / Y 200mm；接近高度 60mm。",
+  },
+  {
+    id: "x-plus20",
+    name: "工位 B · 远侧取料／正向放盘",
+    description: "目标 X 260mm → 蓝盘 X 240 / Y 140mm；接近高度 54mm。",
+  },
+] as const;
+
+export type WorkspaceSceneId = (typeof SO101_WORKSPACE_SCENES)[number]["id"];
+
 /** Development layouts remain editable task inputs, never inherited pass certificates. */
-export function workspaceStationSample(id: "x-plus20" | "x-minus20"): Station {
+export function workspaceStationSample(id: WorkspaceSceneId): Station {
   const station = defaultStation();
   const plus = id === "x-plus20";
   const pick: Vec3 = plus ? [0.26, -0.13, 0] : [0.235, -0.13, 0];
@@ -332,6 +349,28 @@ export function workspaceStationSample(id: "x-plus20" | "x-minus20"): Station {
   };
   station.notes = `来源：workspace-x-m1a / ${plus ? "outside_x_plus20_layout" : "outside_x_minus20_layout_secondary"}。仅为布局开发样例，不代表连续工作区已验证；编辑后须重新运行原物理裁判。`;
   return station;
+}
+
+/** Match editable scene contents, excluding only import bookkeeping. */
+export function workspaceSceneId(
+  station: Station,
+): WorkspaceSceneId | undefined {
+  if (stationPlatform(station) !== "so101") {
+    return undefined;
+  }
+  const contents = (value: Station) => ({
+    ...value,
+    platform: stationPlatform(value),
+    recipeDocument: undefined,
+    program: value.program.map((step) => ({
+      action: step.action,
+      target: step.target,
+      seconds: step.seconds,
+    })),
+  });
+  return SO101_WORKSPACE_SCENES.find((scene) =>
+    isEqual(contents(station), contents(workspaceStationSample(scene.id))),
+  )?.id;
 }
 
 function copyExecution(value: unknown): unknown {

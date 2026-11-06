@@ -91,8 +91,8 @@ function envelope(document) {
   try {
     const draft=await context({width:1600,height:1100});
     await draft.page.goto(base+'/so101-station');const draftPanel=panelFor(draft.page);
-    await expect(draftPanel.getByRole('button',{name:'载入 X+20mm 布局',exact:true})).toBeEnabled({timeout:90000});
-    await draftPanel.getByRole('button',{name:'载入 X+20mm 布局',exact:true}).click();
+    await expect(draftPanel.getByTestId('so101-scene-x-plus20')).toBeEnabled({timeout:90000});
+    await draftPanel.getByTestId('so101-scene-x-plus20').click();
     const layout=await exported(draft.page,draftPanel,'layout-before-recipe');
     const wrapped=await exported(draft.page,draftPanel,'new-recipe',true);envelope(wrapped);
     assert.deepEqual(wrapped.station.execution,layout.station.execution);
@@ -172,14 +172,14 @@ function envelope(document) {
       assert.deepEqual(await exported(edit.page,panel,'rejected-'+name),edited);
       result.checks.push('reject-'+name+'-without-changing-draft');
     }
-    await panel.getByRole('region',{name:'SO101 开发工位样例'}).scrollIntoViewIfNeeded();
+    await panel.getByRole('region',{name:'SO101 场景选择'}).scrollIntoViewIfNeeded();
     await edit.page.screenshot({path:path.join(output,'desktop.png'),fullPage:true});
     await edit.ctx.close();
 
     const mobile=await context({width:390,height:844});
     await mobile.page.goto(base+'/so101-station-mobile');const narrow=panelFor(mobile.page);
     await expect(narrow.getByRole('button',{name:'导出工位配方',exact:true})).toBeVisible({timeout:90000});
-    await narrow.getByRole('button',{name:'载入 X+20mm 布局',exact:true}).click();
+    await narrow.getByTestId('so101-scene-x-plus20').click();
     envelope(await exported(mobile.page,narrow,'mobile-recipe',true));
     await imported(narrow,fixture,'qa-mobile-recipe.json');
     await expect(narrow.getByLabel('工作站名称',{exact:true})).toHaveValue(fixture.station.name);
@@ -189,7 +189,7 @@ function envelope(document) {
       assert(bounds && bounds.x>=0 && bounds.x+bounds.width<=391);
     }
     assert(await mobile.page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-    await narrow.getByRole('region',{name:'SO101 开发工位样例'}).scrollIntoViewIfNeeded();
+    await narrow.getByRole('region',{name:'SO101 场景选择'}).scrollIntoViewIfNeeded();
     await mobile.page.screenshot({path:path.join(output,'mobile.png'),fullPage:true});
     result.checks.push('390px-recipe-import-export-controls');await mobile.ctx.close();
 

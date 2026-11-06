@@ -11,16 +11,23 @@ const zstd = requireWorkbench('@lichtblick/wasm-zstd');
 const base = (process.env.STATION_TEST_URL ?? 'http://127.0.0.1:5187').replace(/\/$/, '');
 const output = process.env.SO101_REPLAY_QA_OUTPUT ?? path.join(__dirname, 'output', `so101-task-replay-${Date.now()}`);
 const requestedCase = process.env.TASK_REPLAY_CASE;
-if (requestedCase) assert(['success', 'cancelled'].includes(requestedCase), 'TASK_REPLAY_CASE must be success or cancelled');
-const allCases = [
+const customCases = process.env.SO101_REPLAY_TASKS ? JSON.parse(process.env.SO101_REPLAY_TASKS) : undefined;
+const allCases = customCases ?? [
   { id: process.env.TASK_SUCCESS_ID, status: 'succeeded', label: 'success' },
   { id: process.env.TASK_CANCEL_ID, status: 'cancelled', label: 'cancelled' },
 ];
+assert(Array.isArray(allCases) && allCases.length > 0, 'Supply saved task cases');
+for (const item of allCases) {
+  assert.match(item.id ?? '', /^[0-9a-f-]{36}$/i, 'Supply a real task UUID');
+  assert(['succeeded', 'cancelled', 'failed'].includes(item.status), 'Supply the original terminal status');
+  assert.match(item.label ?? '', /^[a-z0-9][a-z0-9-]*$/, 'Use a simple unique screenshot label');
+}
+assert.equal(new Set(allCases.map(item => item.id)).size, allCases.length);
+assert.equal(new Set(allCases.map(item => item.label)).size, allCases.length);
+if (requestedCase) assert(allCases.some(item => item.label === requestedCase), 'Unknown task label');
 const cases = requestedCase ? allCases.filter(item => item.label === requestedCase) : allCases;
-for (const item of allCases) assert.match(item.id ?? '', /^[0-9a-f-]{36}$/i, `Set TASK_${item.label === 'success' ? 'SUCCESS' : 'CANCEL'}_ID`);
-assert.notEqual(allCases[0].id, allCases[1].id);
 fs.mkdirSync(output, { recursive: true });
-const result = { passed: false, scope: requestedCase ?? 'success-and-cancelled-same-browser', base, output, controlPosts: [], viewWrites: [], replayWrites: [], pageErrors: [], cases: [] };
+const result = { passed: false, scope: requestedCase ?? (customCases ? 'selected-terminal-tasks-same-browser' : 'success-and-cancelled-same-browser'), base, output, controlPosts: [], viewWrites: [], replayWrites: [], pageErrors: [], cases: [] };
 const save = () => fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify(result, null, 2));
 const controlRoute = /\/api\/(?:so101|drone)\/(?:tasks|plans)(?:\/|$)/;
 const observe = page => page.on('pageerror', error => { result.pageErrors.push({ url: page.url(), message: error.message }); save(); });
@@ -143,7 +150,7 @@ const observe = page => page.on('pageerror', error => { result.pageErrors.push({
       panel = page.getByTestId('panel-mouseenter-container RobotStation!so101station');
       await expect(panel).toContainText(item.id, { timeout: 90000 });
       try {
-        await expect(panel.getByRole('region', { name: '当前仿真任务' })).toContainText(item.status === 'cancelled' ? '已取消' : '执行完成', { timeout: 10000 });
+        await expect(panel.getByRole('region', { name: '当前仿真任务' })).toContainText(item.status === 'cancelled' ? '已取消' : item.status === 'failed' ? '执行失败' : '执行完成', { timeout: 10000 });
         entry.refreshPassed = true;
         entry.checks.push('history-selection-and-refresh-preserve-task-id-and-terminal-outcome');
       } catch (error) {
@@ -208,7 +215,7 @@ const observe = page => page.on('pageerror', error => { result.pageErrors.push({
       assert(new URL(page.url()).searchParams.get('layout'), 'Workcell URL pins its saved layout name');
       await page.reload();
       panel = page.getByTestId('panel-mouseenter-container RobotStation!so101station');
-      await expect(panel.getByRole('region', { name: '当前仿真任务' })).toContainText(item.status === 'cancelled' ? '已取消' : '执行完成', { timeout: 90000 });
+      await expect(panel.getByRole('region', { name: '当前仿真任务' })).toContainText(item.status === 'cancelled' ? '已取消' : item.status === 'failed' ? '执行失败' : '执行完成', { timeout: 90000 });
       await expect(panel).toContainText(item.id);
       const restoredHref = await panel.getByRole('link', { name: '回看本次三维轨迹 ↗', exact: true }).getAttribute('href');
       assert.equal(new URL(restoredHref, base).searchParams.get('ds.url'), new URL(task.artifacts.mcap, base).href);

@@ -20,11 +20,13 @@ import {
   programWarnings,
   removeNode,
   reparent,
+  SO101_WORKSPACE_SCENES,
   stationActions,
   stationKindLabel,
   stationPlatform,
   stationRequestsCarryGate,
   transformObstacle,
+  workspaceSceneId,
   workspaceStationSample,
   worldPosition,
 } from "./station";
@@ -89,6 +91,85 @@ describe("SO101 recipe documents through the original Station editor", () => {
 });
 
 describe("SO101 workspace development samples", () => {
+  it.each(SO101_WORKSPACE_SCENES)(
+    "identifies the unchanged $id scene after recipe import",
+    ({ id }) => {
+      const original = workspaceStationSample(id);
+      expect(workspaceSceneId(original)).toBe(id);
+      const restored = importStation(
+        JSON.parse(exportStationRecipe(original)),
+      ).station;
+      expect(workspaceSceneId(restored)).toBe(id);
+      restored.program[0]!.id = "restored-editor-step";
+      expect(workspaceSceneId(restored)).toBe(id);
+      expect(workspaceSceneId({ ...restored, platform: "so101" })).toBe(id);
+    },
+  );
+
+  it.each([
+    [
+      "target position",
+      (station: ReturnType<typeof workspaceStationSample>) => {
+        station.nodes.find((node) => node.id === "cube")!.position[0] += 0.001;
+      },
+    ],
+    [
+      "tray position",
+      (station: ReturnType<typeof workspaceStationSample>) => {
+        station.nodes.find((node) => node.id === "place")!.position[1] += 0.001;
+      },
+    ],
+    [
+      "execution",
+      (station: ReturnType<typeof workspaceStationSample>) => {
+        station.execution = {
+          ...(station.execution as Record<string, unknown>),
+          pickup_hover_z_m: 0.055,
+        };
+      },
+    ],
+    [
+      "program",
+      (station: ReturnType<typeof workspaceStationSample>) => {
+        station.program[0]!.action = "close";
+      },
+    ],
+    [
+      "skill declaration",
+      (station: ReturnType<typeof workspaceStationSample>) => {
+        station.skillControl = { mode: "hold-before-carry" };
+      },
+    ],
+    [
+      "name",
+      (station: ReturnType<typeof workspaceStationSample>) => {
+        station.name = "Edited scene";
+      },
+    ],
+  ] as const)(
+    "does not label an edited %s as the unchanged scene",
+    (_label, edit) => {
+      const station = workspaceStationSample("x-plus20");
+      edit(station);
+      expect(workspaceSceneId(station)).toBeUndefined();
+      expect(workspaceSceneId(workspaceStationSample("x-plus20"))).toBe(
+        "x-plus20",
+      );
+    },
+  );
+
+  it("keeps default, copied, and drone drafts separate from the scene catalog", () => {
+    expect(workspaceSceneId(defaultStation())).toBeUndefined();
+    expect(
+      workspaceSceneId(copyStation(workspaceStationSample("x-minus20"))),
+    ).toBeUndefined();
+    expect(workspaceSceneId(defaultDroneStation())).toBeUndefined();
+    expect(SO101_WORKSPACE_SCENES.map((scene) => scene.id)).toEqual([
+      "x-minus20",
+      "x-plus20",
+    ]);
+  });
+
   it.each([
     "x-plus20",
     "x-minus20",

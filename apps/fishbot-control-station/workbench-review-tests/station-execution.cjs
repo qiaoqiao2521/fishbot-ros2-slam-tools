@@ -40,11 +40,34 @@ const carryAction=process.env.STATION_QA_CARRY_ACTION;
   const panel=page.getByTestId('panel-mouseenter-container RobotStation!so101station');
   const run=panel.getByRole('button',{name:'规划并运行仿真',exact:true});
   await expect(run).toBeEnabled({timeout:90000});
+  let selectedScene;
   if(process.env.STATION_SAMPLE){
-   const samples={'x-plus20':'载入 X+20mm 布局','x-minus20':'载入 X−20mm 布局'};
-   const name=samples[process.env.STATION_SAMPLE];
-   assert(name,'Unknown STATION_SAMPLE; no task submitted');
-   await panel.getByRole('button',{name,exact:true}).click();
+   const sample=process.env.STATION_SAMPLE;
+   assert(['x-plus20','x-minus20'].includes(sample),'Unknown STATION_SAMPLE; no task submitted');
+   assert(!process.env.STATION_DOCUMENT,'Choose a scene or import a document, not both');
+   const control=panel.getByTestId('so101-scene-'+sample);
+   const beforePosts=result.posts.length;
+   await control.click();await expect(control).toHaveAttribute('aria-pressed','true');
+   assert.equal(result.posts.length,beforePosts,'Selecting a scene must not start a task');
+   const downloaded=page.waitForEvent('download');
+   await panel.getByRole('button',{name:'导出 JSON',exact:true}).click();
+   const exported=path.join(out,'scene-export.json');await(await downloaded).saveAs(exported);
+   const station=JSON.parse(fs.readFileSync(exported,'utf8')).station;
+   const sourceRoot=process.env.SO101_ROOT??path.join(require('node:os').homedir(),'dev/ros2/_delivery/so101-colab-20261001');
+   const fixture=path.join(sourceRoot,'experiments/colab-twin/scenarios/workspace-station',sample+'.json');
+   const expected=JSON.parse(fs.readFileSync(fixture,'utf8')).station;
+   assert.deepEqual(station,expected,'Web scene must preserve the existing workcell input');
+   selectedScene={id:sample,exported,fixture,station};result.scene=selectedScene;save();
+   await expect.poll(async()=>page.evaluate(scene=>{
+    const saved=value=>value&&typeof value==='object'&&
+     ((value.station?.name===scene.name&&JSON.stringify(value.station.execution)===JSON.stringify(scene.execution)&&value.executionTaskId==='')||Object.values(value).some(saved));
+    return Object.values(localStorage).some(raw=>{try{return saved(JSON.parse(raw));}catch{return false;}});
+   },station),{timeout:15000}).toBe(true);
+   await page.reload();await expect(control).toHaveAttribute('aria-pressed','true',{timeout:60000});
+   await expect(panel.getByTestId('so101-current-scene')).toHaveAttribute('data-scene-id',sample);
+   assert.equal(result.posts.length,beforePosts,'Scene refresh must not dispatch a task');
+   result.scene.selectionRefresh=true;
+   await page.screenshot({path:path.join(out,'selected-scene.png'),fullPage:true});save();
   }
   if(process.env.STATION_DOCUMENT){
    const fixture=path.resolve(process.env.STATION_DOCUMENT);
@@ -85,6 +108,15 @@ const carryAction=process.env.STATION_QA_CARRY_ACTION;
    assert.equal(first.id,originalId);
    assert.deepEqual(originalPost[0].body.station,JSON.parse(fs.readFileSync(result.browserExport,'utf8')).station);
   }else first=await(await submitted).json();
+  if(selectedScene){
+   assert.deepEqual(first.station,selectedScene.station,'Submitted scene must match its browser export');
+   const sceneRequest=result.posts.find(p=>p.url===base+'/api/so101/tasks');
+   assert.deepEqual(sceneRequest.body.station,selectedScene.station);
+   result.scene.taskId=first.id;
+   await expect(panel.getByTestId('so101-scene-x-minus20')).toBeDisabled();
+   await expect(panel.getByTestId('so101-scene-x-plus20')).toBeDisabled();
+   result.scene.switchDisabledWhileRunning=true;
+  }
   result.tasks.push({id:first.id});save();
   await expect(panel).toContainText(first.id);
   await expect.poll(async()=>{const state=await(await page.request.get(base+'/api/so101/tasks/'+first.id)).json();return state.simulation_s??0;},{timeout:60000}).toBeGreaterThan(1);

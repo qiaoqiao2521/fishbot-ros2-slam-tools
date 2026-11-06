@@ -24,7 +24,7 @@ function position(station, id) {
   return position(station, node.parent).map((value,i) => value+node.position[i]);
 }
 async function sample(page, panel, plus, name) {
-  await panel.getByRole('button', {name:plus ? '载入 X+20mm 布局' : '载入 X−20mm 布局', exact:true}).click();
+  await panel.getByTestId('so101-scene-'+(plus?'x-plus20':'x-minus20')).click();
   await expect(panel.getByLabel('工作站名称', {exact:true})).toHaveValue(
     plus ? 'SO101 X+20mm 布局开发样例' : 'SO101 X−20mm 布局开发样例');
   await expect(panel.getByRole('region', {name:'当前仿真任务', exact:true})).toHaveCount(0);
@@ -58,7 +58,7 @@ async function sample(page, panel, plus, name) {
     const {ctx,page} = await context({width:1600,height:1100});
     await page.goto(base+'/so101-station');
     const panel = page.getByTestId('panel-mouseenter-container RobotStation!so101station');
-    await expect(panel.getByRole('button',{name:'载入 X+20mm 布局',exact:true})).toBeEnabled({timeout:90000});
+    await expect(panel.getByTestId('so101-scene-x-plus20')).toBeEnabled({timeout:90000});
     const plus = await sample(page,panel,true,'desktop-plus');
     await panel.getByRole('button',{name:'保存草稿',exact:true}).click();
     await panel.getByText('草稿与当前布局已保存，刷新页面可继续编辑。也可导出 JSON 备份。',{exact:true}).waitFor();
@@ -72,15 +72,15 @@ async function sample(page, panel, plus, name) {
     assert.equal(copy.station.name,plus.station.name+' 副本');
     await sample(page,panel,false,'desktop-minus');
     result.checks.push('copy-preserves-execution','minus-layout-export','sample-load-clears-old-result');
-    await panel.getByRole('region',{name:'SO101 开发工位样例'}).scrollIntoViewIfNeeded();
+    await panel.getByRole('region',{name:'SO101 场景选择'}).scrollIntoViewIfNeeded();
     await page.screenshot({path:path.join(output,'desktop.png'),fullPage:true});
     await ctx.close();
     const mobile = await context({width:390,height:844});
     await mobile.page.goto(base+'/so101-station-mobile');
     const narrow = mobile.page.getByTestId('panel-mouseenter-container RobotStation!so101station');
-    await expect(narrow.getByRole('button',{name:'载入 X−20mm 布局',exact:true})).toBeEnabled({timeout:90000});
+    await expect(narrow.getByTestId('so101-scene-x-minus20')).toBeEnabled({timeout:90000});
     await sample(mobile.page,narrow,false,'mobile-minus');
-    await narrow.getByRole('region',{name:'SO101 开发工位样例'}).scrollIntoViewIfNeeded();
+    await narrow.getByRole('region',{name:'SO101 场景选择'}).scrollIntoViewIfNeeded();
     await mobile.page.screenshot({path:path.join(output,'mobile.png'),fullPage:true});
     result.checks.push('390px-sample-controls','390px-execution-export');
     assert.deepEqual(result.motionRequests,[]);
