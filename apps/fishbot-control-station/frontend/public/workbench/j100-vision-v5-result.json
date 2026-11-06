@@ -31,7 +31,7 @@
     "poster": "/workbench/j100-vision-v5-overview.jpg"
   },
   "video_caption": "本任务的实际采样录像经裁剪后按原片4×播放；原片与逐帧时间索引保留在Drive。与上方源时间数据回放独立。",
-  "archive_status": "本轮原始证据正在归档Drive；此前所有失败均独立保留",
+  "archive_status": "已存入指定Drive并实际下载读回：28,837,929字节、116文件；含源码、原始遥测、录像与恢复说明。可选日志缺口单列。",
   "warnings": [
     "这不是完整B→A运输：只派发B一次，未reset/取消，未进入载货导航或卸货。",
     "692帧AprilTag检测与原生视觉停靠已经发生；这不是GraspGen-X神经推理收据。仅模型服务加载有证据，尚未恢复输入／候选／推理耗时收据。",
@@ -66,5 +66,6 @@
     "actual_output_frames": 161,
     "duration_s": 20.125,
     "output_frame_count_matches_source_selection": true
-  }
+  },
+  "archive_url": "https://drive.google.com/file/d/1vM9H5rISIn81j9p-yr8uASGtVq2g8mQ5/view?usp=drivesdk"
 }
