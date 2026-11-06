@@ -1,0 +1,50 @@
+{
+  "schema": "fishbot.score-contract-summary.v1",
+  "run_id": "f5791fca-7354-4db3-bf35-7c80ff9e9497",
+  "source_audit_reference": "workshop-F-independent-audit.json",
+  "new_physics_steps": 0,
+  "new_inference_calls": 0,
+  "new_scoring_implementation": false,
+  "original_full_result_passed": true,
+  "thresholds_changed": false,
+  "legacy_primary_vs_named": "The historical primary K path is grasp_target/cargo_1 and remains visible as original_k_oracle_passed and legacy_primary_full_attempts. In order A cargo1 is already on shelf B, so it has no new lift or transport. Named business scoring independently projects cargo_2 measured poses/forces/support and calls unchanged oracle.full_score. Named K load-and-transport plus actual unload/shelf/home/fresh-cleanup all pass; inventory receipts alone do not establish this.",
+  "acceptance_boundary": "This is genuine native ROS2/MuJoCo two-order ideal station-observation delivery with physical loading/unloading. It does not demonstrate visual model inference on Mec, real hardware or sim-to-real. Original warehouse D is a separate visual hybrid RGB-D+OBB candidate run; do not conflate.",
+  "orders": [
+    {
+      "task_id": "cd0e5234-856a-4a3e-88d6-7026f6d66d76",
+      "binding": {
+        "cargo_id": "cargo_1",
+        "pickup_arm_id": "load",
+        "unload_station_id": "line_b"
+      },
+      "original_full_score_passed": true,
+      "legacy_primary_k_passed": true,
+      "named_original_k_passed": true,
+      "business_passed": true,
+      "physical_unload_lift_passed": true,
+      "shelf_home_rest_through_cleanup_passed": true,
+      "source_nonadvance_count": 0,
+      "maximum_source_gap_s": 0.020000000000095497,
+      "guard_trip_samples": 0
+    },
+    {
+      "task_id": "fc1b6aff-c4c2-46db-8cde-1b6467382396",
+      "binding": {
+        "cargo_id": "cargo_2",
+        "pickup_arm_id": "load",
+        "unload_station_id": "line_a"
+      },
+      "original_full_score_passed": true,
+      "legacy_primary_k_passed": false,
+      "named_original_k_passed": true,
+      "business_passed": true,
+      "physical_unload_lift_passed": true,
+      "shelf_home_rest_through_cleanup_passed": true,
+      "source_nonadvance_count": 0,
+      "maximum_source_gap_s": 0.36000000000171894,
+      "guard_trip_samples": 0
+    }
+  ],
+  "source_gap_boundary": "A has exactly one .36s source gap at car_to_dock return onset (273.66->274.02src, .357654wall); both tasks have zero nonadvancing physics timestamps. Original gate max gap remains .1s and no gap is interpolated into a qualified dwell.",
+  "raw_records_expanded": false
+}

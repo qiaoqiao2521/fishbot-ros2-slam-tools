@@ -1,0 +1,317 @@
+{
+  "schema": "fishbot.original-component-evidence.v1",
+  "run_id": "f5791fca-7354-4db3-bf35-7c80ff9e9497",
+  "new_execution": false,
+  "rescored": false,
+  "original_whole_task_passed": true,
+  "orders": [
+    {
+      "task_id": "cd0e5234-856a-4a3e-88d6-7026f6d66d76",
+      "episode_id": "85204680-9924-4956-bd87-e9a119933982",
+      "business_delivery": {
+        "cargo_id": "cargo_1",
+        "pickup_arm_id": "load",
+        "unload_station_id": "line_b"
+      },
+      "original_score_passed": true,
+      "phase_evidence": {
+        "independent_selected_samples": 12105,
+        "load_and_transport_prefix_samples": 6904,
+        "arrival_source_stamp": 149.83999999998736,
+        "pickup_and_transport_observed": {
+          "dock_true_pose_and_stop": {
+            "passed": true,
+            "first_pass_stamp": 19.200000000000237,
+            "longest_source_duration_s": 0.719999999999601,
+            "required_duration_s": 0.7,
+            "max_source_gap_s": 0.1
+          },
+          "actual_lift_and_two_tip_forces": {
+            "passed": true,
+            "first_pass_stamp": 44.62000000000857,
+            "longest_source_duration_s": 38.77999999998202,
+            "required_duration_s": 1.0,
+            "max_source_gap_s": 0.1
+          },
+          "released_full_footprint_supported_and_relative_rest": {
+            "passed": true,
+            "first_pass_stamp": 85.47999999998218,
+            "longest_source_duration_s": 1.0199999999976228,
+            "required_duration_s": 1.0,
+            "max_source_gap_s": 0.1
+          },
+          "arm_home_before_motion": {
+            "passed": true,
+            "first_pass_stamp": 94.33999999996153,
+            "longest_source_duration_s": 105.02000000050145,
+            "required_duration_s": 1.0,
+            "max_source_gap_s": 0.1
+          },
+          "final_car_and_cargo_rest": {
+            "passed": true,
+            "first_pass_stamp": 149.83999999998736,
+            "longest_source_duration_s": 16.680000000079644,
+            "required_duration_s": 1.0,
+            "max_source_gap_s": 0.1
+          },
+          "transport": {
+            "passed": true,
+            "max_true_cargo_displacement_m": 2.5814086112459504,
+            "max_true_car_displacement_m": 2.2842357265908806,
+            "first_car_motion_after_release_stamp": 96.73999999995594,
+            "car_moved_before_home_dwell": false,
+            "full_footprint_violation_samples_after_release": 3411
+          },
+          "forbidden_contacts": {
+            "passed": true,
+            "first_violation": []
+          },
+          "independent_pose_crosschecks": {
+            "passed": true,
+            "bad_samples": 0
+          },
+          "cargo_baseline_z_m": 0.23092145032031103,
+          "scored_samples": 12105,
+          "passed": true
+        },
+        "unload_samples_after_arrival": 5201,
+        "rejection_reasons": []
+      },
+      "wall_budget": {
+        "required": true,
+        "passed": true,
+        "load_and_delivery_limit_wall_s": 360.0,
+        "declared": {
+          "load_and_delivery": 360,
+          "unload": 180
+        },
+        "load_and_delivery_wall_s": 138.0705542564392,
+        "load_and_delivery_complete": true,
+        "load_and_delivery_time_basis": "physical_arrival_prefix",
+        "full_task_wall_s": 242.10426926612854
+      },
+      "delivery_route_budget": {
+        "required": true,
+        "passed": true,
+        "receipt": {
+          "budget_wall_s": 120.0,
+          "clock": "monotonic_wall",
+          "boundary": "after_required_egress_through_final_nav_stop_and_hold",
+          "started_wall_time": 1793965068.4279308,
+          "finished_wall_time": 1793965092.3261373,
+          "elapsed_wall_s": 23.902024271999835,
+          "remaining_wall_s": 96.09797572800016,
+          "status": "succeeded",
+          "goals": [
+            {
+              "x": 0.7,
+              "y": -1.64,
+              "yaw": 0.0
+            }
+          ],
+          "completed_legs": 1,
+          "active_leg_index": null,
+          "active_leg_kind": null,
+          "within_budget": true
+        },
+        "independent_native_span_wall_s": 23.138035774230957,
+        "bridge_forwarding_is_not_consumption_ack": true
+      },
+      "guard_telemetry": {
+        "windows": [
+          {
+            "task_id": "cd0e5234-856a-4a3e-88d6-7026f6d66d76",
+            "scope": "transport",
+            "wall_start": 1793964954.56667,
+            "wall_end": 1793965196.6709392,
+            "closed": true,
+            "physics_sample_count": 12105,
+            "enabled_sample_count": 337,
+            "tripped_sample_count": 0,
+            "observed_enable_transitions": 1,
+            "observed_disable_transitions": 1,
+            "observed_trip_transitions": 0,
+            "initial_sample_tripped": false,
+            "enabled_observed_contiguous_source_duration_s": 6.719999999999418,
+            "tripped_observed_contiguous_source_duration_s": 0.0,
+            "invalid_guard_sample_count": 0,
+            "source_gap_or_nonadvance_count": 0,
+            "maximum_accumulated_source_gap_s": 0.1,
+            "methods": [
+              "ideal plant velocity guard"
+            ],
+            "hardware_validated_values": [
+              false
+            ],
+            "margin_m_values": [
+              0.01
+            ],
+            "plant_assistance_observed": false,
+            "pure_vision_precision_claimed": false
+          }
+        ],
+        "changes_acceptance_verdict": false,
+        "source": "independently received physics raw.docking_guard within task marker windows",
+        "boundary": "Ideal plant velocity guard remains available; observed intervention is separate from sensor/native/physical success.",
+        "sampling_limit": "Durations sum adjacent same-state source intervals <=0.1s; gaps are omitted, not interpolated. An initially tripped sample is not a within-window rising edge."
+      },
+      "original_k_passed": true,
+      "named_independent_score_passed": true,
+      "named_k_passed": true
+    },
+    {
+      "task_id": "fc1b6aff-c4c2-46db-8cde-1b6467382396",
+      "episode_id": "85204680-9924-4956-bd87-e9a119933982",
+      "business_delivery": {
+        "cargo_id": "cargo_2",
+        "pickup_arm_id": "load",
+        "unload_station_id": "line_a"
+      },
+      "original_score_passed": true,
+      "phase_evidence": {
+        "independent_selected_samples": 13538,
+        "load_and_transport_prefix_samples": 7771,
+        "arrival_source_stamp": 429.26000000132154,
+        "pickup_and_transport_observed": {
+          "dock_true_pose_and_stop": {
+            "passed": true,
+            "first_pass_stamp": 304.94000000072793,
+            "longest_source_duration_s": 0.7000000000033424,
+            "required_duration_s": 0.7,
+            "max_source_gap_s": 0.1
+          },
+          "actual_lift_and_two_tip_forces": {
+            "passed": true,
+            "first_pass_stamp": 328.78000000084177,
+            "longest_source_duration_s": 37.70000000018001,
+            "required_duration_s": 1.0,
+            "max_source_gap_s": 0.1
+          },
+          "released_full_footprint_supported_and_relative_rest": {
+            "passed": true,
+            "first_pass_stamp": 368.44000000103114,
+            "longest_source_duration_s": 1.0000000000047748,
+            "required_duration_s": 1.0,
+            "max_source_gap_s": 0.1
+          },
+          "arm_home_before_motion": {
+            "passed": true,
+            "first_pass_stamp": 377.28000000107335,
+            "longest_source_duration_s": 116.3399999996289,
+            "required_duration_s": 1.0,
+            "max_source_gap_s": 0.1
+          },
+          "final_car_and_cargo_rest": {
+            "passed": true,
+            "first_pass_stamp": 429.26000000132154,
+            "longest_source_duration_s": 16.48000000007869,
+            "required_duration_s": 1.0,
+            "max_source_gap_s": 0.1
+          },
+          "transport": {
+            "passed": true,
+            "max_true_cargo_displacement_m": 1.8964689816653801,
+            "max_true_car_displacement_m": 1.5855497768947717,
+            "first_car_motion_after_release_stamp": 379.6800000010848,
+            "car_moved_before_home_dwell": false,
+            "full_footprint_violation_samples_after_release": 3902
+          },
+          "forbidden_contacts": {
+            "passed": true,
+            "first_violation": []
+          },
+          "independent_pose_crosschecks": {
+            "passed": true,
+            "bad_samples": 0
+          },
+          "cargo_baseline_z_m": 0.23092145032031103,
+          "scored_samples": 13538,
+          "passed": true
+        },
+        "unload_samples_after_arrival": 5767,
+        "rejection_reasons": []
+      },
+      "wall_budget": {
+        "required": true,
+        "passed": true,
+        "load_and_delivery_limit_wall_s": 360.0,
+        "declared": {
+          "load_and_delivery": 360,
+          "unload": 180
+        },
+        "load_and_delivery_wall_s": 155.75097060203552,
+        "load_and_delivery_complete": true,
+        "load_and_delivery_time_basis": "physical_arrival_prefix",
+        "full_task_wall_s": 271.09943652153015
+      },
+      "delivery_route_budget": {
+        "required": true,
+        "passed": true,
+        "receipt": {
+          "budget_wall_s": 120.0,
+          "clock": "monotonic_wall",
+          "boundary": "after_required_egress_through_final_nav_stop_and_hold",
+          "started_wall_time": 1793965351.4608345,
+          "finished_wall_time": 1793965371.7603738,
+          "elapsed_wall_s": 20.313312582002254,
+          "remaining_wall_s": 99.68668741799775,
+          "status": "succeeded",
+          "goals": [
+            {
+              "x": 0.0,
+              "y": -1.64,
+              "yaw": 0.0
+            }
+          ],
+          "completed_legs": 1,
+          "active_leg_index": null,
+          "active_leg_kind": null,
+          "within_budget": true
+        },
+        "independent_native_span_wall_s": 19.077579259872437,
+        "bridge_forwarding_is_not_consumption_ack": true
+      },
+      "guard_telemetry": {
+        "windows": [
+          {
+            "task_id": "fc1b6aff-c4c2-46db-8cde-1b6467382396",
+            "scope": "transport",
+            "wall_start": 1793965216.3062332,
+            "wall_end": 1793965487.4056697,
+            "closed": true,
+            "physics_sample_count": 13538,
+            "enabled_sample_count": 344,
+            "tripped_sample_count": 0,
+            "observed_enable_transitions": 1,
+            "observed_disable_transitions": 1,
+            "observed_trip_transitions": 0,
+            "initial_sample_tripped": false,
+            "enabled_observed_contiguous_source_duration_s": 6.8600000000327555,
+            "tripped_observed_contiguous_source_duration_s": 0.0,
+            "invalid_guard_sample_count": 0,
+            "source_gap_or_nonadvance_count": 1,
+            "maximum_accumulated_source_gap_s": 0.1,
+            "methods": [
+              "ideal plant velocity guard"
+            ],
+            "hardware_validated_values": [
+              false
+            ],
+            "margin_m_values": [
+              0.01
+            ],
+            "plant_assistance_observed": false,
+            "pure_vision_precision_claimed": false
+          }
+        ],
+        "changes_acceptance_verdict": false,
+        "source": "independently received physics raw.docking_guard within task marker windows",
+        "boundary": "Ideal plant velocity guard remains available; observed intervention is separate from sensor/native/physical success.",
+        "sampling_limit": "Durations sum adjacent same-state source intervals <=0.1s; gaps are omitted, not interpolated. An initially tripped sample is not a within-window rising edge."
+      },
+      "original_k_passed": false,
+      "named_independent_score_passed": true,
+      "named_k_passed": true
+    }
+  ]
+}

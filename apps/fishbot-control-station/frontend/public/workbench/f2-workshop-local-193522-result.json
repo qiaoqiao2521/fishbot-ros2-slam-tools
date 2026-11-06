@@ -1,0 +1,135 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "本机车间 F · 两单配送完整通过（ideal观测）",
+  "recorded_at": "2026-11-06",
+  "run_id": "f5791fca-7354-4db3-bf35-7c80ff9e9497",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "麦克纳姆 robot_base",
+  "sensor": "原通用16线3D雷达 · 360×16槽位",
+  "scene_label": "本机车间线边 · f2-workshop-line",
+  "observation_mode": "ideal",
+  "model": "原SO101 IK/OMPL · ideal工位货物观测",
+  "description": "同一原Factory回合完成B→A两单装货、载货导航和实体卸货，原命名独立物理／业务评分2/2通过，零reset／cancel。本轮为ideal工位观测，不是新增RGB模型或视觉配送成功。",
+  "evidence_note": "本轮麦轮＋原16线3D＋ideal工位观测独立记账。仓库D的实际视觉/MID材料属于另一场景和任务，不混入本回合。A旧original_k_passed=false与其命名独立评分true分别保留；不以显示文案改写任何原评分。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 577.7172740099995,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（原命名独立评分通过）",
+      "task_id": "cd0e5234-856a-4a3e-88d6-7026f6d66d76",
+      "passed": true,
+      "route_seconds": 23.902024271999835,
+      "position_error_m": 0.02111821422845751,
+      "yaw_error_rad": 0.001277155758225397,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": null,
+      "component_summary": "同任务原命名装货、运输、卸货上架和回位验收通过；载货路线23.902s，整单242.160墙秒，最终XY误差21.118mm。原各评分标志保持独立。",
+      "original_k_passed": true,
+      "named_independent_score_passed": true,
+      "named_k_passed": true,
+      "task_elapsed_wall_s": 242.15953178900236
+    },
+    {
+      "id": "order-a",
+      "label": "订单 A（原命名独立评分通过）",
+      "task_id": "fc1b6aff-c4c2-46db-8cde-1b6467382396",
+      "passed": true,
+      "route_seconds": 20.313312582002254,
+      "position_error_m": 0.021707920726003884,
+      "yaw_error_rad": 0.005781018933330253,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": null,
+      "component_summary": "同一原任务cargo2命名装货、载货导航、实体卸货与回位验收通过；路线20.313s、整单271.117墙秒、最终XY21.708mm。旧original_k_passed=false对应已在B货架的主别名cargo1；本单按独立cargo2位姿／力／支撑复用同一full_score通过，不是库存或HTTP代替物理评分。",
+      "original_k_passed": false,
+      "named_independent_score_passed": true,
+      "named_k_passed": true,
+      "task_elapsed_wall_s": 271.11735754400434
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/f2-workshop-local-193522/timing.json",
+    "replay": "/workbench/f2-workshop-local-193522/replay.json",
+    "video": "/workbench/f2-workshop-local-193522/overview.mp4",
+    "video_index": "/workbench/f2-workshop-local-193522/video-frame-index.json",
+    "sensor_experience": "/workbench/f2-workshop-local-193522/sensor/sensor-experience.json",
+    "poster": "/workbench/f2-workshop-local-193522/overview.jpg",
+    "score_receipt": "/workbench/f2-workshop-local-193522/score-contract-summary.json"
+  },
+  "video_caption": "原录像954帧，按原2fps播放；下载索引仅派生媒体时间信息，不含运行日志。",
+  "archive_status": "F原件两卷已完整读回170项/120,778,495解码字节；最后工作台／评分重算／QA／清理补充卷也已完整读回114项/41,035,374解码字节。入口可恢复原件，补充卷见同一文件夹。",
+  "warnings": [
+    "本轮ideal工位观测没有RGB-D模型调用，不创建视觉模型输入、候选或视觉里程碑。",
+    "仅证明本次有限仿真两单；不把仓库D的视觉/MID证据借作本轮模型或传感器能力。",
+    "本报告仅覆盖本episode启动阶段源3.200–13.400秒，共6帧；不是装运全程观测或逐消息消费ACK。",
+    "A旧original_k_passed=false属于主对象cargo1；本单cargo2按独立pose/rawforce/support调用同一原full_score通过。命名K、实体卸货、业务评分与旧标志均原样保留。",
+    "A返站起步源273.660→274.020秒存在0.360秒空档；两单非递增时间戳均0、guard触发0。原门槛不变，空档不插值，不称无孔洞。",
+    "F原件与工作台派生补充卷均已完整读回；归档中的上传前状态快照与当前Git的已确认索引分别保留。"
+  ],
+  "provenance": {
+    "source_kind": "actual_local_terminal_factory_readonly_export",
+    "source_run_id": "f5791fca-7354-4db3-bf35-7c80ff9e9497",
+    "source_run_directory": "/tmp/fishbot-closure-20261106/runs/f2-workshop-line-run-20261106-193522-e1e90e",
+    "scene_id": "f2-workshop-line-coaxial-ba-entities",
+    "candidate_label": "f2-workshop-line",
+    "new_execution": false,
+    "rescored": false,
+    "raw_backup": {
+      "confirmed": true,
+      "drive_folder_url": "https://drive.google.com/drive/folders/1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L",
+      "verified_parts": 2,
+      "read_members": 170,
+      "decoded_bytes": 120778495,
+      "verification": "complete Drive gzip/tar full-member readback, matches declared files and bytes for both parts",
+      "verification_report_reference": "workshop-F-Drive-readback.json",
+      "includes_new_derived_UI": false,
+      "parts": [
+        {
+          "part_id": "essential-01",
+          "drive_id": "1QzusL5_U1KXzO0QNPDN6yZGy26v_9qfa",
+          "url": "https://drive.google.com/file/d/1QzusL5_U1KXzO0QNPDN6yZGy26v_9qfa/view?usp=drivesdk",
+          "read_members": 35,
+          "decoded_bytes": 49409377,
+          "verified": true,
+          "matches_declared_files_and_bytes": true
+        },
+        {
+          "part_id": "essential-02",
+          "drive_id": "1pFf4djw5I6_Av82zFWl8IIPNFoTJ390d",
+          "url": "https://drive.google.com/file/d/1pFf4djw5I6_Av82zFWl8IIPNFoTJ390d/view?usp=drivesdk",
+          "read_members": 135,
+          "decoded_bytes": 71369118,
+          "verified": true,
+          "matches_declared_files_and_bytes": true
+        }
+      ]
+    },
+    "original_components_report": "/workbench/f2-workshop-local-193522/original-components.json",
+    "episode_ids": [
+      "85204680-9924-4956-bd87-e9a119933982"
+    ],
+    "original_whole_passed": true,
+    "source_revision_provided_by_root": "c786c47",
+    "derived_ui_archive_status": "verified_final_appendix",
+    "scoring_flags_preserved_without_rescore": true,
+    "video_poster_source": {
+      "video_frame": 0,
+      "source_s": 1.280000000000001,
+      "episode_id": "85204680-9924-4956-bd87-e9a119933982"
+    },
+    "independent_audit_reference": "workshop-F-independent-audit.json",
+    "derived_ui_archive": {
+      "url": "https://drive.google.com/file/d/17HMMSAJtevi2zcjrXNjQ0ASqsDKY-Ubi/view",
+      "verified": true,
+      "members": 114,
+      "decoded_bytes": 41035374,
+      "snapshot_boundary": "Archived pre-upload state is retained; final post-readback status is recorded in current Git."
+    }
+  },
+  "archive_url": "https://drive.google.com/drive/folders/1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L",
+  "archive_verified": true,
+  "availability_note": "原ROS记录已只读提取阶段与展示采样，无新物理或评分重放；静态场景和机械臂世界FK未投影。"
+}

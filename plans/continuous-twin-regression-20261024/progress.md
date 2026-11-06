@@ -646,7 +646,7 @@ knowledge_status=updated：原《Wiki/ROS2 与 FishBot.md》“原生 ROS 时钟
 
 ### 仓库D完整B→A已完成，车间仅交接配置复验
 
-仓库runecfa94dd-0570-4691-b5f2-542e923f1a7f，source08b0cb2，B b928563d-9729-4003-917d-5116b27ffe98与A733083a1-a01e-464b-81af-53f7a2760963原named/full/K/实体卸货/armhome/cleanup全true。真实同world bf3f90…/episodebc8e2149…、跨单1133样本held gap无漂移、reset0/取消0，选定运行源码起止一致，owned survivors=[]。B/A路线48.377735/25.339426墙秒均原120内，load/arrival184.947/188.539原360内，原整单约293.26/297.98；末XY8.659/5.642mm、yaw.031948/.009281rad。原unloaded返站UUIDe64e0148…独立status[2,4]，568条负指令/1423负bodyvx样本，实际2.624m/29.214墙秒、568计划接收与2912原生反馈、禁止接触0。status4时仍有微运动，之后原hold辅助取得.7源秒静止，保留辅助边界不称纯控制器停车精度。载货限速与原参考保持；不能把原卸载返程-.12m/s说成全程载货.06m/s。
+仓库runecfa94dd-0570-4691-b5f2-542e923f1a7f，source08b0cb2，B b928563d-9729-4003-917d-5116b27ffe98与A733083a1-a01e-464b-81af-53f7a2760963原named/full/实体卸货/armhome/cleanup全true（第二单legacy primary K为false，见后续独立重算澄清）。真实同world bf3f90…/episodebc8e2149…、跨单1133样本held gap无漂移、reset0/取消0，选定运行源码起止一致，owned survivors=[]。B/A路线48.377735/25.339426墙秒均原120内，load/arrival184.947/188.539原360内，原整单约293.26/297.98；末XY8.659/5.642mm、yaw.031948/.009281rad。原unloaded返站UUIDe64e0148…独立status[2,4]，568条负指令/1423负bodyvx样本，实际2.624m/29.214墙秒、568计划接收与2912原生反馈、禁止接触0。status4时仍有微运动，之后原hold辅助取得.7源秒静止，保留辅助边界不称纯控制器停车精度。载货限速与原参考保持；不能把原卸载返程-.12m/s说成全程载货.06m/s。
 
 仓库D已导出/接页4段视觉链和8张原lift/placement图。B点云312/227、所选OBB51/49；A290/232、OBB51/97。两单四次官方模型请求真实完成，生成与几何候选执行分别说明，来源/task/episode不串。21定向前端测试/typecheck/lint、生产build与生产preview5195桌面/390px通过，0POST/0pageerror，20类原材料下载200；preview与QA浏览器已关，5194开发预览保持。582.5秒原录像可读，新原件/派生D仍待归档。
 
@@ -667,3 +667,35 @@ E runb9c010bd-e956-4c05-83cf-d9d86623a3fa / task5f9f5dd4-881e-4c99-8f15-7ff65895
 独立原生只规划比较：原NavFn路径174poses/1.75045m、最大横偏234.724mm；HeadingAware 57poses/1.60m、横偏1.335e-7m，原完整车体保守净距50.247mm。两个原生status4，hold/清理成立，无运动，不能算配送成功。新f1_candidate.py --planner-only --staging-planner HeadingAware复用既有navigation_planner，只增加原生Lattice并改BT引用；Mec原controller_server、velocity_smoother、两costmap字节相等，vehicle_profile保持，不套J100速度。18相关测试在具备原Mujoco环境下通过；系统Python重跑17通过/1缺Mujoco跳过另记。原生manifest导航字段无桥/launch动态调参消费者。原默认J100入口保持。下一轮仅车间原Factory B→A，同世界零reset、原120/360与接触评分。
 
 仓库D10个独立Drive tar卷已全部上传并完整流式读取全部成员与gzip CRC：9631项原件加manifest共738,985,119解码字节。删除已验证上传包683,968,283B与9292后向原相机副本560,763,176B，保留Drive恢复README、原physics/model输入和当前Git工作台资产。新失败E、其余C/D失败和后续车间结果仍由root归档，不借已存仓库包冒称完成。knowledge_status=already_covered。
+
+
+### 车间F原完整B→A通过（sourcec786c47）
+
+runf5791fca-7354-4db3-bf35-7c80ff9e9497，B taskcd0e5234-856a-4a3e-88d6-7026f6d66d76、A taskfc1b6aff-c4c2-46db-8cde-1b6467382396。原同world6cacd6f6-d45b-400f-9554-9600e410c49f/episode85204680-9924-4956-bd87-e9a119933982，两单命名货物装运/卸货/落稳/回位与完整评分均true，零reset/取消。跨单970独立held样本位移4.516µm、yaw2.150e-6rad；整轮577.717墙秒、选定源码起止一致，原保护快照未变、owned端口/launch清理完成且survivors=[]。B/A载货路线23.902/20.313墙秒、完整242.160/271.117墙秒，末XY21.118/21.708mm、yaw.001277/.005781rad，各连续停稳1源秒。原速度/碰撞/接触/预算保持，guard可用但trip0，ideal工位观测不冒称新增视觉成功。完整原overview/index、cmd袋和启动传感器材料已生成，无新模型调用。
+
+评分口径澄清：D与F第二单legacy primary original_k_oracle_passed均false；真正按cargo_2身份重建的original_k_load_and_transport、named full/business和整个原score均true。这不是忽略失败或新增降级，而是原多货物Oracle已有的命名替换口径。此前“两个K都true”简写已纠正，不再把全局cargo_1旧视图当第二单权威。仓库D两单原score-only直接gzip独立重算12节/sourceintegrity完全一致；F同样重算中。
+
+剩余失败四卷全部上传并完整读回3173项/285,260,116解码字节，与已备份local/D清单零重复。pack-time清单3287398B与最终清单3287449B元数据相差51B，files逐项完全相等；保留原打包时版本，最终元数据随最后恢复卷追加，不冒称二者字节相等。已删四个重复上传tar共252,625,939B，失败原件保持至最终空间收尾。原生运行均结束；下一步只做UI/原评分重算、最终Drive卷、实际临时环境清理与Git交付。knowledge_status=already_covered。
+
+
+F两单已使用原Oracle直接gzip独立重算，12个评分/源完整性节与原值完全一致，未运行新物理或新推理。D/F第二单原命名K均true，legacy primary K false来自已送达B货架的cargo_1没有新的抓取/位移；原business_samples以独立cargo_2位姿/力/支撑调用同一full_score，原augment_score保留旧视图并按命名实体替换业务任务判定。该口径已有，不新增评分或放宽门槛。
+
+临时下载模型环境清理已执行：保留GraspGenX b9429097与权重7c834043来源、两配置/许可、原恢复脚本和实际模型输入候选。删除仅本轮/tmp的graspgenx、uv-cache、huggingface、xdg，无打开文件；逻辑文件大小含硬链接不相加宣称释放。系统盘实际可用6099910656→15206948864B，观测增加9,107,038,208B；共享文件系统增量边界明确。原query环境、独有RGBD/physics和当前工作台素材保留。knowledge_status=already_covered。
+
+
+车间F两卷原件完整Drive读回170members/120,778,495解码字节，清单全部路径和大小匹配，移除重复上传tar105,049,062B。原native活动独立读回：A返站e7b0ddbf… status4、433负命令/1125负bodyvx、1.565695m真实位移；载货B40aa1949…/A0d94f343…均status4，命令/控制器计划/反馈和实际位移分别对应，不再靠同点静止Goal证明跟踪。保持桥转发不是逐条消费ACK边界。F A在return开始273.66→274.02出现一次.36源秒/.357654墙秒空档，两个任务0非递增帧，原.1连续评分规则保持，不插值。
+
+确认所有对应Drive原件完整可读且无打开文件后，按现有四组清单逐项移出2647个大相机/observer本机副本521,833,724B，0跳过；每目录留恢复README。独立重算已完成，原score/场景/模型实际输入候选及当前网页资产保留。非本轮工作区和运行任务未处理；无新清理服务。最终派生UI/QA/重算及本节随closeout卷另存，不借rawF卷冒称包含未来文件。knowledge_status=already_covered。
+
+
+最终工作台28项定向测试、typecheck/lint和生产build通过；实际生产桌面/390px QA通过，0POST/0页面错误、27类下载200，覆盖D/F成功、D/E失败、Drive folder、四段视觉链、legacy K口径及采样空档。根实际查看桌面回放与手机评分截图。QA浏览器和5195预览已关，5194工作台保留；UI资源/源码已冻结等待最后收尾卷。未新跑全前端733或原反馈1148；它们只作为此前基线，本次新增相关项单列。
+
+
+### 本轮完成 / complete
+
+最后closeout卷Drive17HMMSAJtevi2zcjrXNjQ0ASqsDKY-Ubi实际读回114members/41,035,374解码字节，全部路径和大小与声明相符，最终gzip CRC完整。覆盖最新UI overlay、四单原评分复算、生产QA、恢复清单及清理回执；上传前pending快照作为历史保留，当前JSON/Git索引按本次实际读回改verified，未改组件/评分。重复上传包8,823,845B已删。F1视觉与模型取证、F2两场景各B→A、F3有限同源样本及可切换配置的本轮范围均complete；不称真实硬件、通用物体、全时段点云或sim-to-real。原件均在已选Drive，恢复入口统一docs/VISUAL_DELIVERY_ARCHIVE.md。knowledge_status=already_covered。
+
+未交付的独立CY候选仍因来源许可/坐标未核而保留未提交，owner根Codex；不影响本轮已验证改动提交，不覆盖该文件。其他旧M/R专项不自动派发。
+
+
+最终归档状态文字已按实际读回更新；16项相关索引/结果组件测试再次通过（与28项定向集重叠，不相加）。生产bundle行为未改，仅将两个新确认JSON同步到dist；桌面/390px生产QA仍为此前同组件实测，最终状态另由JSON/HTTP读回确认，不冒称重新完整浏览器验收。Drive文件夹实际列出24个本轮归档，最终两卷与closeout均在其中。所有改动按路径核对后提交，原件/日志/环境/凭据不入Git。

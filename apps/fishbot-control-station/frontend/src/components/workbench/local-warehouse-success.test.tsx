@@ -9,6 +9,8 @@ import sensor from '../../../public/workbench/f2-warehouse-local-183948/sensor/s
 import native from '../../../public/workbench/f2-warehouse-local-183948/native-lidar-consumer.json'
 import workshop from '../../../public/workbench/f2-workshop-local-185131-result.json'
 import workshopScore from '../../../public/workbench/f2-workshop-local-185131/original-components.json'
+import workshopE from '../../../public/workbench/f2-workshop-local-190615-result.json'
+import workshopEDiagnostic from '../../../public/workbench/f2-workshop-local-190615/diagnostic-summary.json'
 import { parseVisualEvidence } from '@/lib/visual-evidence'
 import { VisualEvidencePanel } from './visual-evidence-panel'
 
@@ -21,7 +23,8 @@ describe('actual warehouse D whole visual transport success and separate worksho
     expect(result.orders.map(o => o.position_error_m)).toEqual([0.008658546665959235, 0.005642282842137417])
     expect(catalog.groups).toHaveLength(4)
     for (const id of ['f2-warehouse-v4', 'f2-warehouse-v5', 'f2-warehouse-v6', 'f2-warehouse-local-175145', 'f2-warehouse-local-183948', 'f2-workshop-local-185131']) expect(catalog.experiments.some(c => c.id === id)).toBe(true)
-    expect('archive_url' in result).toBe(false); expect(result.provenance.raw_backup.confirmed).toBe(false)
+    expect(result.archive_url).toBe('https://drive.google.com/drive/folders/1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L')
+    expect(result.provenance.raw_backup.confirmed).toBe(true); expect(result.provenance.raw_backup.verified_parts).toBe(10)
   })
   it('binds all four actual visual chains and eight original physical milestone images to the right task/episode', () => {
     expect(chain.entries).toHaveLength(4); expect(chain.run_id).toBe(result.run_id)
@@ -61,4 +64,14 @@ describe('actual warehouse D whole visual transport success and separate worksho
     expect('visual_chain' in workshop.assets).toBe(false)
     expect(workshop.warnings.join(' ')).toContain('没有RGB-D模型调用')
   })
+  it('records E as one floor-contact loss sample without relabeling it as cargo sliding or falling', () => {
+    expect(workshopE.observation_mode).toBe('ideal'); expect(workshopE.orders[0].passed).toBe(false)
+    expect(workshopEDiagnostic.sample_count).toBe(4779); expect(workshopEDiagnostic.floor_contact_loss_samples).toBe(1)
+    expect(workshopEDiagnostic.first_frame_inside_footprint).toBe(true)
+    expect(workshopEDiagnostic.first_frame_height_inside).toBe(true)
+    expect(workshopEDiagnostic.slide_or_drop_claimed).toBe(false)
+    expect(workshopE.orders[0].failure_reason).toContain('没有滑出或跌落证据')
+    expect('visual_chain' in workshopE.assets).toBe(false)
+  })
+
 })

@@ -1,0 +1,2467 @@
+{
+  "schema": "fishbot.video-frame-index.v1",
+  "source_kind": "derived_media_index_from_recorded_overview_metadata",
+  "new_execution": false,
+  "rescored": false,
+  "playback_fps": 2,
+  "frame_count": 351,
+  "frames": [
+    {
+      "video_frame": 0,
+      "source_s": 1.300000000000001,
+      "sim_s": 1.300000000000001,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 1,
+      "source_s": 1.8400000000000014,
+      "sim_s": 1.8400000000000014,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 2,
+      "source_s": 2.1799999999999815,
+      "sim_s": 2.1799999999999815,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 3,
+      "source_s": 2.6999999999999242,
+      "sim_s": 2.6999999999999242,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 4,
+      "source_s": 3.219999999999867,
+      "sim_s": 3.219999999999867,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 5,
+      "source_s": 3.719999999999812,
+      "sim_s": 3.719999999999812,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 6,
+      "source_s": 4.319999999999746,
+      "sim_s": 4.319999999999746,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 7,
+      "source_s": 4.91999999999968,
+      "sim_s": 4.91999999999968,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 8,
+      "source_s": 5.519999999999614,
+      "sim_s": 5.519999999999614,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 9,
+      "source_s": 6.09999999999955,
+      "sim_s": 6.09999999999955,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 10,
+      "source_s": 6.699999999999484,
+      "sim_s": 6.699999999999484,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 11,
+      "source_s": 7.299999999999418,
+      "sim_s": 7.299999999999418,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 12,
+      "source_s": 7.899999999999352,
+      "sim_s": 7.899999999999352,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 13,
+      "source_s": 8.499999999999508,
+      "sim_s": 8.499999999999508,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 14,
+      "source_s": 9.079999999999702,
+      "sim_s": 9.079999999999702,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 15,
+      "source_s": 9.679999999999902,
+      "sim_s": 9.679999999999902,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 16,
+      "source_s": 10.280000000000102,
+      "sim_s": 10.280000000000102,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 17,
+      "source_s": 10.880000000000303,
+      "sim_s": 10.880000000000303,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 18,
+      "source_s": 11.480000000000503,
+      "sim_s": 11.480000000000503,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 19,
+      "source_s": 12.080000000000704,
+      "sim_s": 12.080000000000704,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 20,
+      "source_s": 12.680000000000904,
+      "sim_s": 12.680000000000904,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 21,
+      "source_s": 13.280000000001104,
+      "sim_s": 13.280000000001104,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 22,
+      "source_s": 13.860000000001298,
+      "sim_s": 13.860000000001298,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 23,
+      "source_s": 14.460000000001498,
+      "sim_s": 14.460000000001498,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 24,
+      "source_s": 15.040000000001692,
+      "sim_s": 15.040000000001692,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 25,
+      "source_s": 15.640000000001892,
+      "sim_s": 15.640000000001892,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 26,
+      "source_s": 16.240000000001878,
+      "sim_s": 16.240000000001878,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 27,
+      "source_s": 16.820000000001556,
+      "sim_s": 16.820000000001556,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 28,
+      "source_s": 17.420000000001224,
+      "sim_s": 17.420000000001224,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 29,
+      "source_s": 18.000000000000902,
+      "sim_s": 18.000000000000902,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 30,
+      "source_s": 18.60000000000057,
+      "sim_s": 18.60000000000057,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 31,
+      "source_s": 19.18000000000025,
+      "sim_s": 19.18000000000025,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 32,
+      "source_s": 19.779999999999916,
+      "sim_s": 19.779999999999916,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 33,
+      "source_s": 20.319999999999617,
+      "sim_s": 20.319999999999617,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 34,
+      "source_s": 20.859999999999317,
+      "sim_s": 20.859999999999317,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 35,
+      "source_s": 21.419999999999007,
+      "sim_s": 21.419999999999007,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 36,
+      "source_s": 22.019999999998674,
+      "sim_s": 22.019999999998674,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 37,
+      "source_s": 22.599999999998353,
+      "sim_s": 22.599999999998353,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 38,
+      "source_s": 23.19999999999802,
+      "sim_s": 23.19999999999802,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 39,
+      "source_s": 23.799999999997688,
+      "sim_s": 23.799999999997688,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 40,
+      "source_s": 24.379999999997366,
+      "sim_s": 24.379999999997366,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 41,
+      "source_s": 24.979999999997034,
+      "sim_s": 24.979999999997034,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 42,
+      "source_s": 25.5799999999967,
+      "sim_s": 25.5799999999967,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 43,
+      "source_s": 26.15999999999638,
+      "sim_s": 26.15999999999638,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 44,
+      "source_s": 26.759999999996047,
+      "sim_s": 26.759999999996047,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 45,
+      "source_s": 27.339999999995726,
+      "sim_s": 27.339999999995726,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 46,
+      "source_s": 27.939999999995393,
+      "sim_s": 27.939999999995393,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 47,
+      "source_s": 28.519999999995072,
+      "sim_s": 28.519999999995072,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 48,
+      "source_s": 29.11999999999474,
+      "sim_s": 29.11999999999474,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 49,
+      "source_s": 29.719999999994407,
+      "sim_s": 29.719999999994407,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 50,
+      "source_s": 30.319999999994074,
+      "sim_s": 30.319999999994074,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 51,
+      "source_s": 30.919999999993742,
+      "sim_s": 30.919999999993742,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 52,
+      "source_s": 31.49999999999342,
+      "sim_s": 31.49999999999342,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 53,
+      "source_s": 32.099999999993265,
+      "sim_s": 32.099999999993265,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 54,
+      "source_s": 32.699999999994,
+      "sim_s": 32.699999999994,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 55,
+      "source_s": 33.29999999999473,
+      "sim_s": 33.29999999999473,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 56,
+      "source_s": 33.899999999995465,
+      "sim_s": 33.899999999995465,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 57,
+      "source_s": 34.4999999999962,
+      "sim_s": 34.4999999999962,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 58,
+      "source_s": 35.09999999999693,
+      "sim_s": 35.09999999999693,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 59,
+      "source_s": 35.699999999997665,
+      "sim_s": 35.699999999997665,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 60,
+      "source_s": 36.2999999999984,
+      "sim_s": 36.2999999999984,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 61,
+      "source_s": 36.87999999999911,
+      "sim_s": 36.87999999999911,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 62,
+      "source_s": 37.499999999999865,
+      "sim_s": 37.499999999999865,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 63,
+      "source_s": 38.080000000000574,
+      "sim_s": 38.080000000000574,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 64,
+      "source_s": 38.68000000000131,
+      "sim_s": 38.68000000000131,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 65,
+      "source_s": 39.300000000002065,
+      "sim_s": 39.300000000002065,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 66,
+      "source_s": 39.880000000002774,
+      "sim_s": 39.880000000002774,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 67,
+      "source_s": 40.48000000000351,
+      "sim_s": 40.48000000000351,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 68,
+      "source_s": 41.08000000000424,
+      "sim_s": 41.08000000000424,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 69,
+      "source_s": 41.700000000005,
+      "sim_s": 41.700000000005,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 70,
+      "source_s": 42.28000000000571,
+      "sim_s": 42.28000000000571,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 71,
+      "source_s": 42.88000000000644,
+      "sim_s": 42.88000000000644,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 72,
+      "source_s": 43.48000000000717,
+      "sim_s": 43.48000000000717,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 73,
+      "source_s": 44.08000000000791,
+      "sim_s": 44.08000000000791,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 74,
+      "source_s": 44.68000000000864,
+      "sim_s": 44.68000000000864,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 75,
+      "source_s": 45.28000000000937,
+      "sim_s": 45.28000000000937,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 76,
+      "source_s": 45.88000000001011,
+      "sim_s": 45.88000000001011,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 77,
+      "source_s": 46.48000000001084,
+      "sim_s": 46.48000000001084,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 78,
+      "source_s": 47.08000000001157,
+      "sim_s": 47.08000000001157,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 79,
+      "source_s": 47.680000000012306,
+      "sim_s": 47.680000000012306,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 80,
+      "source_s": 48.28000000001304,
+      "sim_s": 48.28000000001304,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 81,
+      "source_s": 48.88000000001377,
+      "sim_s": 48.88000000001377,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 82,
+      "source_s": 49.480000000014506,
+      "sim_s": 49.480000000014506,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 83,
+      "source_s": 50.08000000001524,
+      "sim_s": 50.08000000001524,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 84,
+      "source_s": 50.68000000001597,
+      "sim_s": 50.68000000001597,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 85,
+      "source_s": 51.26000000001668,
+      "sim_s": 51.26000000001668,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 86,
+      "source_s": 51.860000000017415,
+      "sim_s": 51.860000000017415,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 87,
+      "source_s": 52.46000000001815,
+      "sim_s": 52.46000000001815,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 88,
+      "source_s": 53.06000000001888,
+      "sim_s": 53.06000000001888,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 89,
+      "source_s": 53.660000000019615,
+      "sim_s": 53.660000000019615,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 90,
+      "source_s": 54.26000000002035,
+      "sim_s": 54.26000000002035,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 91,
+      "source_s": 54.84000000002106,
+      "sim_s": 54.84000000002106,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 92,
+      "source_s": 55.44000000002179,
+      "sim_s": 55.44000000002179,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 93,
+      "source_s": 56.04000000002252,
+      "sim_s": 56.04000000002252,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 94,
+      "source_s": 56.62000000002323,
+      "sim_s": 56.62000000002323,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 95,
+      "source_s": 57.220000000023965,
+      "sim_s": 57.220000000023965,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 96,
+      "source_s": 57.800000000024674,
+      "sim_s": 57.800000000024674,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 97,
+      "source_s": 58.40000000002541,
+      "sim_s": 58.40000000002541,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 98,
+      "source_s": 58.980000000026116,
+      "sim_s": 58.980000000026116,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 99,
+      "source_s": 59.58000000002685,
+      "sim_s": 59.58000000002685,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 100,
+      "source_s": 60.12000000002751,
+      "sim_s": 60.12000000002751,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 101,
+      "source_s": 60.680000000028194,
+      "sim_s": 60.680000000028194,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 102,
+      "source_s": 61.220000000028854,
+      "sim_s": 61.220000000028854,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 103,
+      "source_s": 61.82000000002959,
+      "sim_s": 61.82000000002959,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 104,
+      "source_s": 62.42000000003032,
+      "sim_s": 62.42000000003032,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 105,
+      "source_s": 63.00000000003103,
+      "sim_s": 63.00000000003103,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 106,
+      "source_s": 63.60000000003176,
+      "sim_s": 63.60000000003176,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 107,
+      "source_s": 64.20000000003178,
+      "sim_s": 64.20000000003178,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 108,
+      "source_s": 64.78000000003043,
+      "sim_s": 64.78000000003043,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 109,
+      "source_s": 65.38000000002903,
+      "sim_s": 65.38000000002903,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 110,
+      "source_s": 65.96000000002768,
+      "sim_s": 65.96000000002768,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 111,
+      "source_s": 66.56000000002628,
+      "sim_s": 66.56000000002628,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 112,
+      "source_s": 67.14000000002493,
+      "sim_s": 67.14000000002493,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 113,
+      "source_s": 67.74000000002353,
+      "sim_s": 67.74000000002353,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 114,
+      "source_s": 68.32000000002218,
+      "sim_s": 68.32000000002218,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 115,
+      "source_s": 68.92000000002078,
+      "sim_s": 68.92000000002078,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 116,
+      "source_s": 69.50000000001943,
+      "sim_s": 69.50000000001943,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 117,
+      "source_s": 70.10000000001803,
+      "sim_s": 70.10000000001803,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 118,
+      "source_s": 70.70000000001663,
+      "sim_s": 70.70000000001663,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 119,
+      "source_s": 71.30000000001523,
+      "sim_s": 71.30000000001523,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 120,
+      "source_s": 71.88000000001388,
+      "sim_s": 71.88000000001388,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 121,
+      "source_s": 72.48000000001248,
+      "sim_s": 72.48000000001248,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 122,
+      "source_s": 73.08000000001108,
+      "sim_s": 73.08000000001108,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 123,
+      "source_s": 73.68000000000968,
+      "sim_s": 73.68000000000968,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 124,
+      "source_s": 74.28000000000829,
+      "sim_s": 74.28000000000829,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 125,
+      "source_s": 74.88000000000689,
+      "sim_s": 74.88000000000689,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 126,
+      "source_s": 75.48000000000549,
+      "sim_s": 75.48000000000549,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 127,
+      "source_s": 76.08000000000409,
+      "sim_s": 76.08000000000409,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 128,
+      "source_s": 76.68000000000269,
+      "sim_s": 76.68000000000269,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 129,
+      "source_s": 77.2800000000013,
+      "sim_s": 77.2800000000013,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 130,
+      "source_s": 77.8799999999999,
+      "sim_s": 77.8799999999999,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 131,
+      "source_s": 78.4799999999985,
+      "sim_s": 78.4799999999985,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 132,
+      "source_s": 79.0799999999971,
+      "sim_s": 79.0799999999971,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 133,
+      "source_s": 79.6799999999957,
+      "sim_s": 79.6799999999957,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 134,
+      "source_s": 80.2799999999943,
+      "sim_s": 80.2799999999943,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 135,
+      "source_s": 80.8799999999929,
+      "sim_s": 80.8799999999929,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 136,
+      "source_s": 81.4799999999915,
+      "sim_s": 81.4799999999915,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 137,
+      "source_s": 82.07999999999011,
+      "sim_s": 82.07999999999011,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 138,
+      "source_s": 82.67999999998871,
+      "sim_s": 82.67999999998871,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 139,
+      "source_s": 83.27999999998731,
+      "sim_s": 83.27999999998731,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 140,
+      "source_s": 83.87999999998591,
+      "sim_s": 83.87999999998591,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 141,
+      "source_s": 84.47999999998451,
+      "sim_s": 84.47999999998451,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 142,
+      "source_s": 85.07999999998312,
+      "sim_s": 85.07999999998312,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 143,
+      "source_s": 85.67999999998172,
+      "sim_s": 85.67999999998172,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 144,
+      "source_s": 86.27999999998032,
+      "sim_s": 86.27999999998032,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 145,
+      "source_s": 86.87999999997892,
+      "sim_s": 86.87999999997892,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 146,
+      "source_s": 87.47999999997752,
+      "sim_s": 87.47999999997752,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 147,
+      "source_s": 88.07999999997612,
+      "sim_s": 88.07999999997612,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 148,
+      "source_s": 88.67999999997473,
+      "sim_s": 88.67999999997473,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 149,
+      "source_s": 89.25999999997337,
+      "sim_s": 89.25999999997337,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 150,
+      "source_s": 89.85999999997198,
+      "sim_s": 89.85999999997198,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 151,
+      "source_s": 90.45999999997058,
+      "sim_s": 90.45999999997058,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 152,
+      "source_s": 91.05999999996918,
+      "sim_s": 91.05999999996918,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 153,
+      "source_s": 91.65999999996778,
+      "sim_s": 91.65999999996778,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 154,
+      "source_s": 92.25999999996638,
+      "sim_s": 92.25999999996638,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 155,
+      "source_s": 92.85999999996498,
+      "sim_s": 92.85999999996498,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 156,
+      "source_s": 93.45999999996359,
+      "sim_s": 93.45999999996359,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 157,
+      "source_s": 94.05999999996219,
+      "sim_s": 94.05999999996219,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 158,
+      "source_s": 94.65999999996079,
+      "sim_s": 94.65999999996079,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 159,
+      "source_s": 95.25999999995939,
+      "sim_s": 95.25999999995939,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 160,
+      "source_s": 95.85999999995799,
+      "sim_s": 95.85999999995799,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 161,
+      "source_s": 96.4599999999566,
+      "sim_s": 96.4599999999566,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 162,
+      "source_s": 97.0599999999552,
+      "sim_s": 97.0599999999552,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 163,
+      "source_s": 97.6599999999538,
+      "sim_s": 97.6599999999538,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 164,
+      "source_s": 98.2599999999524,
+      "sim_s": 98.2599999999524,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 165,
+      "source_s": 98.859999999951,
+      "sim_s": 98.859999999951,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 166,
+      "source_s": 99.43999999994965,
+      "sim_s": 99.43999999994965,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 167,
+      "source_s": 100.03999999994825,
+      "sim_s": 100.03999999994825,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 168,
+      "source_s": 100.63999999994685,
+      "sim_s": 100.63999999994685,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 169,
+      "source_s": 101.23999999994545,
+      "sim_s": 101.23999999994545,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 170,
+      "source_s": 101.8199999999441,
+      "sim_s": 101.8199999999441,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 171,
+      "source_s": 102.4199999999427,
+      "sim_s": 102.4199999999427,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 172,
+      "source_s": 102.99999999994135,
+      "sim_s": 102.99999999994135,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 173,
+      "source_s": 103.59999999993995,
+      "sim_s": 103.59999999993995,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 174,
+      "source_s": 104.1799999999386,
+      "sim_s": 104.1799999999386,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 175,
+      "source_s": 104.7799999999372,
+      "sim_s": 104.7799999999372,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 176,
+      "source_s": 105.3799999999358,
+      "sim_s": 105.3799999999358,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 177,
+      "source_s": 105.95999999993445,
+      "sim_s": 105.95999999993445,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 178,
+      "source_s": 106.55999999993305,
+      "sim_s": 106.55999999993305,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 179,
+      "source_s": 107.0999999999318,
+      "sim_s": 107.0999999999318,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 180,
+      "source_s": 107.63999999993054,
+      "sim_s": 107.63999999993054,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 181,
+      "source_s": 108.17999999992928,
+      "sim_s": 108.17999999992928,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 182,
+      "source_s": 108.77999999992788,
+      "sim_s": 108.77999999992788,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 183,
+      "source_s": 109.37999999992648,
+      "sim_s": 109.37999999992648,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 184,
+      "source_s": 109.97999999992508,
+      "sim_s": 109.97999999992508,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 185,
+      "source_s": 110.55999999992373,
+      "sim_s": 110.55999999992373,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 186,
+      "source_s": 111.15999999992233,
+      "sim_s": 111.15999999992233,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 187,
+      "source_s": 111.73999999992098,
+      "sim_s": 111.73999999992098,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 188,
+      "source_s": 112.33999999991958,
+      "sim_s": 112.33999999991958,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 189,
+      "source_s": 112.93999999991819,
+      "sim_s": 112.93999999991819,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 190,
+      "source_s": 113.51999999991683,
+      "sim_s": 113.51999999991683,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 191,
+      "source_s": 114.11999999991544,
+      "sim_s": 114.11999999991544,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 192,
+      "source_s": 114.69999999991408,
+      "sim_s": 114.69999999991408,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 193,
+      "source_s": 115.29999999991269,
+      "sim_s": 115.29999999991269,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 194,
+      "source_s": 115.87999999991133,
+      "sim_s": 115.87999999991133,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 195,
+      "source_s": 116.47999999990994,
+      "sim_s": 116.47999999990994,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 196,
+      "source_s": 117.07999999990854,
+      "sim_s": 117.07999999990854,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 197,
+      "source_s": 117.67999999990714,
+      "sim_s": 117.67999999990714,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 198,
+      "source_s": 118.27999999990574,
+      "sim_s": 118.27999999990574,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 199,
+      "source_s": 118.85999999990439,
+      "sim_s": 118.85999999990439,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 200,
+      "source_s": 119.45999999990299,
+      "sim_s": 119.45999999990299,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 201,
+      "source_s": 120.05999999990159,
+      "sim_s": 120.05999999990159,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 202,
+      "source_s": 120.6599999999002,
+      "sim_s": 120.6599999999002,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 203,
+      "source_s": 121.2599999998988,
+      "sim_s": 121.2599999998988,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 204,
+      "source_s": 121.8599999998974,
+      "sim_s": 121.8599999998974,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 205,
+      "source_s": 122.459999999896,
+      "sim_s": 122.459999999896,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 206,
+      "source_s": 123.0599999998946,
+      "sim_s": 123.0599999998946,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 207,
+      "source_s": 123.6599999998932,
+      "sim_s": 123.6599999998932,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 208,
+      "source_s": 124.2599999998918,
+      "sim_s": 124.2599999998918,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 209,
+      "source_s": 124.83999999989045,
+      "sim_s": 124.83999999989045,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 210,
+      "source_s": 125.43999999988905,
+      "sim_s": 125.43999999988905,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 211,
+      "source_s": 126.03999999988766,
+      "sim_s": 126.03999999988766,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 212,
+      "source_s": 126.63999999988626,
+      "sim_s": 126.63999999988626,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 213,
+      "source_s": 127.23999999988486,
+      "sim_s": 127.23999999988486,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 214,
+      "source_s": 127.83999999988346,
+      "sim_s": 127.83999999988346,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 215,
+      "source_s": 128.43999999988517,
+      "sim_s": 128.43999999988517,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 216,
+      "source_s": 129.01999999988794,
+      "sim_s": 129.01999999988794,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 217,
+      "source_s": 129.6199999998908,
+      "sim_s": 129.6199999998908,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 218,
+      "source_s": 130.19999999989358,
+      "sim_s": 130.19999999989358,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 219,
+      "source_s": 130.79999999989644,
+      "sim_s": 130.79999999989644,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 220,
+      "source_s": 131.3799999998992,
+      "sim_s": 131.3799999998992,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 221,
+      "source_s": 131.97999999990208,
+      "sim_s": 131.97999999990208,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 222,
+      "source_s": 132.55999999990485,
+      "sim_s": 132.55999999990485,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 223,
+      "source_s": 133.1599999999077,
+      "sim_s": 133.1599999999077,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 224,
+      "source_s": 133.73999999991048,
+      "sim_s": 133.73999999991048,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 225,
+      "source_s": 134.33999999991335,
+      "sim_s": 134.33999999991335,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 226,
+      "source_s": 134.91999999991612,
+      "sim_s": 134.91999999991612,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 227,
+      "source_s": 135.4599999999187,
+      "sim_s": 135.4599999999187,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 228,
+      "source_s": 136.01999999992137,
+      "sim_s": 136.01999999992137,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 229,
+      "source_s": 136.55999999992395,
+      "sim_s": 136.55999999992395,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 230,
+      "source_s": 137.1599999999268,
+      "sim_s": 137.1599999999268,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 231,
+      "source_s": 137.73999999992958,
+      "sim_s": 137.73999999992958,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 232,
+      "source_s": 138.33999999993245,
+      "sim_s": 138.33999999993245,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 233,
+      "source_s": 138.9399999999353,
+      "sim_s": 138.9399999999353,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 234,
+      "source_s": 139.51999999993808,
+      "sim_s": 139.51999999993808,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 235,
+      "source_s": 140.11999999994094,
+      "sim_s": 140.11999999994094,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 236,
+      "source_s": 140.6999999999437,
+      "sim_s": 140.6999999999437,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 237,
+      "source_s": 141.29999999994658,
+      "sim_s": 141.29999999994658,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 238,
+      "source_s": 141.87999999994935,
+      "sim_s": 141.87999999994935,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 239,
+      "source_s": 142.4799999999522,
+      "sim_s": 142.4799999999522,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 240,
+      "source_s": 143.07999999995508,
+      "sim_s": 143.07999999995508,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 241,
+      "source_s": 143.67999999995794,
+      "sim_s": 143.67999999995794,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 242,
+      "source_s": 144.2799999999608,
+      "sim_s": 144.2799999999608,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 243,
+      "source_s": 144.87999999996367,
+      "sim_s": 144.87999999996367,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 244,
+      "source_s": 145.45999999996644,
+      "sim_s": 145.45999999996644,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 245,
+      "source_s": 146.0599999999693,
+      "sim_s": 146.0599999999693,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 246,
+      "source_s": 146.65999999997217,
+      "sim_s": 146.65999999997217,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 247,
+      "source_s": 147.25999999997504,
+      "sim_s": 147.25999999997504,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 248,
+      "source_s": 147.8599999999779,
+      "sim_s": 147.8599999999779,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 249,
+      "source_s": 148.43999999998067,
+      "sim_s": 148.43999999998067,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 250,
+      "source_s": 149.03999999998354,
+      "sim_s": 149.03999999998354,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 251,
+      "source_s": 149.6399999999864,
+      "sim_s": 149.6399999999864,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 252,
+      "source_s": 150.23999999998927,
+      "sim_s": 150.23999999998927,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 253,
+      "source_s": 150.83999999999213,
+      "sim_s": 150.83999999999213,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 254,
+      "source_s": 151.439999999995,
+      "sim_s": 151.439999999995,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 255,
+      "source_s": 152.03999999999786,
+      "sim_s": 152.03999999999786,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 256,
+      "source_s": 152.64000000000073,
+      "sim_s": 152.64000000000073,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 257,
+      "source_s": 153.2400000000036,
+      "sim_s": 153.2400000000036,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 258,
+      "source_s": 153.84000000000646,
+      "sim_s": 153.84000000000646,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 259,
+      "source_s": 154.42000000000922,
+      "sim_s": 154.42000000000922,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 260,
+      "source_s": 155.0200000000121,
+      "sim_s": 155.0200000000121,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 261,
+      "source_s": 155.62000000001495,
+      "sim_s": 155.62000000001495,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 262,
+      "source_s": 156.20000000001772,
+      "sim_s": 156.20000000001772,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 263,
+      "source_s": 156.8000000000206,
+      "sim_s": 156.8000000000206,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 264,
+      "source_s": 157.38000000002336,
+      "sim_s": 157.38000000002336,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 265,
+      "source_s": 157.98000000002622,
+      "sim_s": 157.98000000002622,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 266,
+      "source_s": 158.560000000029,
+      "sim_s": 158.560000000029,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 267,
+      "source_s": 159.14000000003176,
+      "sim_s": 159.14000000003176,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 268,
+      "source_s": 159.70000000003444,
+      "sim_s": 159.70000000003444,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 269,
+      "source_s": 160.240000000037,
+      "sim_s": 160.240000000037,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 270,
+      "source_s": 160.7800000000396,
+      "sim_s": 160.7800000000396,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 271,
+      "source_s": 161.38000000004246,
+      "sim_s": 161.38000000004246,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 272,
+      "source_s": 161.98000000004532,
+      "sim_s": 161.98000000004532,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 273,
+      "source_s": 162.5800000000482,
+      "sim_s": 162.5800000000482,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 274,
+      "source_s": 163.16000000005096,
+      "sim_s": 163.16000000005096,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 275,
+      "source_s": 163.76000000005382,
+      "sim_s": 163.76000000005382,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 276,
+      "source_s": 164.3400000000566,
+      "sim_s": 164.3400000000566,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 277,
+      "source_s": 164.94000000005946,
+      "sim_s": 164.94000000005946,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 278,
+      "source_s": 165.52000000006223,
+      "sim_s": 165.52000000006223,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 279,
+      "source_s": 166.1200000000651,
+      "sim_s": 166.1200000000651,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 280,
+      "source_s": 166.70000000006786,
+      "sim_s": 166.70000000006786,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 281,
+      "source_s": 167.30000000007072,
+      "sim_s": 167.30000000007072,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 282,
+      "source_s": 167.8800000000735,
+      "sim_s": 167.8800000000735,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 283,
+      "source_s": 168.48000000007636,
+      "sim_s": 168.48000000007636,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 284,
+      "source_s": 169.06000000007913,
+      "sim_s": 169.06000000007913,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 285,
+      "source_s": 169.660000000082,
+      "sim_s": 169.660000000082,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 286,
+      "source_s": 170.26000000008486,
+      "sim_s": 170.26000000008486,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 287,
+      "source_s": 170.86000000008772,
+      "sim_s": 170.86000000008772,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 288,
+      "source_s": 171.4600000000906,
+      "sim_s": 171.4600000000906,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 289,
+      "source_s": 172.04000000009336,
+      "sim_s": 172.04000000009336,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 290,
+      "source_s": 172.64000000009622,
+      "sim_s": 172.64000000009622,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 291,
+      "source_s": 173.2400000000991,
+      "sim_s": 173.2400000000991,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 292,
+      "source_s": 173.84000000010195,
+      "sim_s": 173.84000000010195,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 293,
+      "source_s": 174.44000000010482,
+      "sim_s": 174.44000000010482,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 294,
+      "source_s": 175.04000000010768,
+      "sim_s": 175.04000000010768,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 295,
+      "source_s": 175.64000000011055,
+      "sim_s": 175.64000000011055,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 296,
+      "source_s": 176.2400000001134,
+      "sim_s": 176.2400000001134,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 297,
+      "source_s": 176.82000000011618,
+      "sim_s": 176.82000000011618,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 298,
+      "source_s": 177.42000000011905,
+      "sim_s": 177.42000000011905,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 299,
+      "source_s": 178.0200000001219,
+      "sim_s": 178.0200000001219,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 300,
+      "source_s": 178.62000000012478,
+      "sim_s": 178.62000000012478,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 301,
+      "source_s": 179.20000000012755,
+      "sim_s": 179.20000000012755,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 302,
+      "source_s": 179.8000000001304,
+      "sim_s": 179.8000000001304,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 303,
+      "source_s": 180.40000000013328,
+      "sim_s": 180.40000000013328,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 304,
+      "source_s": 180.98000000013604,
+      "sim_s": 180.98000000013604,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 305,
+      "source_s": 181.5800000001389,
+      "sim_s": 181.5800000001389,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 306,
+      "source_s": 182.16000000014168,
+      "sim_s": 182.16000000014168,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 307,
+      "source_s": 182.76000000014454,
+      "sim_s": 182.76000000014454,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 308,
+      "source_s": 183.3400000001473,
+      "sim_s": 183.3400000001473,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 309,
+      "source_s": 183.94000000015018,
+      "sim_s": 183.94000000015018,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 310,
+      "source_s": 184.52000000015295,
+      "sim_s": 184.52000000015295,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 311,
+      "source_s": 185.1200000001558,
+      "sim_s": 185.1200000001558,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 312,
+      "source_s": 185.70000000015858,
+      "sim_s": 185.70000000015858,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 313,
+      "source_s": 186.30000000016145,
+      "sim_s": 186.30000000016145,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 314,
+      "source_s": 186.88000000016422,
+      "sim_s": 186.88000000016422,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 315,
+      "source_s": 187.48000000016708,
+      "sim_s": 187.48000000016708,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 316,
+      "source_s": 188.06000000016985,
+      "sim_s": 188.06000000016985,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 317,
+      "source_s": 188.66000000017272,
+      "sim_s": 188.66000000017272,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 318,
+      "source_s": 189.26000000017558,
+      "sim_s": 189.26000000017558,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 319,
+      "source_s": 189.86000000017845,
+      "sim_s": 189.86000000017845,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 320,
+      "source_s": 190.44000000018121,
+      "sim_s": 190.44000000018121,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 321,
+      "source_s": 191.04000000018408,
+      "sim_s": 191.04000000018408,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 322,
+      "source_s": 191.64000000018694,
+      "sim_s": 191.64000000018694,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 323,
+      "source_s": 192.2400000001898,
+      "sim_s": 192.2400000001898,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 324,
+      "source_s": 192.84000000019267,
+      "sim_s": 192.84000000019267,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 325,
+      "source_s": 193.44000000019554,
+      "sim_s": 193.44000000019554,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 326,
+      "source_s": 194.0400000001984,
+      "sim_s": 194.0400000001984,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 327,
+      "source_s": 194.62000000020117,
+      "sim_s": 194.62000000020117,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 328,
+      "source_s": 195.22000000020404,
+      "sim_s": 195.22000000020404,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 329,
+      "source_s": 195.8200000002069,
+      "sim_s": 195.8200000002069,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 330,
+      "source_s": 196.42000000020977,
+      "sim_s": 196.42000000020977,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 331,
+      "source_s": 197.02000000021263,
+      "sim_s": 197.02000000021263,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 332,
+      "source_s": 197.6200000002155,
+      "sim_s": 197.6200000002155,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 333,
+      "source_s": 198.20000000021827,
+      "sim_s": 198.20000000021827,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 334,
+      "source_s": 198.80000000022113,
+      "sim_s": 198.80000000022113,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 335,
+      "source_s": 199.3800000002239,
+      "sim_s": 199.3800000002239,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 336,
+      "source_s": 199.98000000022677,
+      "sim_s": 199.98000000022677,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 337,
+      "source_s": 200.58000000022963,
+      "sim_s": 200.58000000022963,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 338,
+      "source_s": 201.1600000002324,
+      "sim_s": 201.1600000002324,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 339,
+      "source_s": 201.76000000023527,
+      "sim_s": 201.76000000023527,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 340,
+      "source_s": 202.34000000023804,
+      "sim_s": 202.34000000023804,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 341,
+      "source_s": 202.9400000002409,
+      "sim_s": 202.9400000002409,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 342,
+      "source_s": 203.52000000024367,
+      "sim_s": 203.52000000024367,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 343,
+      "source_s": 204.12000000024653,
+      "sim_s": 204.12000000024653,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 344,
+      "source_s": 204.7000000002493,
+      "sim_s": 204.7000000002493,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 345,
+      "source_s": 205.24000000025188,
+      "sim_s": 205.24000000025188,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 346,
+      "source_s": 205.80000000025456,
+      "sim_s": 205.80000000025456,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 347,
+      "source_s": 206.34000000025713,
+      "sim_s": 206.34000000025713,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 348,
+      "source_s": 206.94000000026,
+      "sim_s": 206.94000000026,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 349,
+      "source_s": 207.52000000026277,
+      "sim_s": 207.52000000026277,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    },
+    {
+      "video_frame": 350,
+      "source_s": 208.12000000026563,
+      "sim_s": 208.12000000026563,
+      "episode_id": "09e51536-161f-4ef2-92e2-fc3bf90cfabb",
+      "scene_id": "c53edd61a47f11fa6cb3493734b6d12ffb3334e4d1820b3ef897c179d7889619"
+    }
+  ]
+}

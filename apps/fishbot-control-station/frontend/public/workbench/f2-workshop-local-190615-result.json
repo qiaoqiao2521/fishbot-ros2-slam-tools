@@ -1,0 +1,65 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "本机车间 E · 一帧托盘底接触失联",
+  "recorded_at": "2026-11-06",
+  "run_id": "b9c010bd-e956-4c05-83cf-d9d86623a3fa",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "麦克纳姆 robot_base",
+  "sensor": "原通用16线3D雷达 · 360×16槽位",
+  "scene_label": "本机车间线边 · f2-workshop-line",
+  "observation_mode": "ideal",
+  "model": "原SO101 IK/OMPL · ideal货物观测",
+  "description": "本轮原K抓放与载货运输分项通过；导航恢复附近出现一帧托盘底接触失联，任务随后停止。逐样本记录未显示货物滑出或跌落，原整单失败，A未执行。",
+  "evidence_note": "本轮是ideal货物观测，没有RGB-D模型调用。原消息“货物离开托盘支撑范围”是停止摘要；原记录逐样本诊断限定为底接触一帧false，不能据此说货物滑出或跌落。恢复旋转与车体起伏仅相关，尚无孤立根因证明。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 220.25353204499697,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（一帧底接触失联）",
+      "task_id": "5f9f5dd4-881e-4c99-8f15-7ff65895cbb3",
+      "passed": false,
+      "route_seconds": null,
+      "position_error_m": null,
+      "yaw_error_rad": null,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": "源191.060s有且仅有一帧cargo_tray_floor_contact=false；当帧外廓、中心、高度仍合规，没有滑出或跌落证据。原整单失败、目的地/卸货未完成，A未派发。",
+      "component_summary": "原K抓放/运输分项通过，货物真实位移2.326418m。诊断4779个物理样本中底接触失联1帧、禁碰0；最小XY余量34.519mm。载货导航已运行64.956墙秒、预算仍余55.044秒，不是路线时间耗尽。"
+    }
+  ],
+  "assets": {
+    "video": "/workbench/f2-workshop-local-190615/overview.mp4",
+    "video_index": "/workbench/f2-workshop-local-190615/video-frame-index.json",
+    "sensor_experience": "/workbench/f2-workshop-local-190615/sensor/sensor-experience.json"
+  },
+  "video_caption": "原录像351帧，按原2fps播放；下载索引仅派生媒体时间信息，不含运行日志。",
+  "archive_status": "本机原件和本次网页派生材料待根owner归档；旧Drive归档不冒充包含该回合。",
+  "warnings": [
+    "本轮采用ideal货物观测，无RGB-D模型输入、候选或视觉里程碑，不借用仓库材料。",
+    "一帧底接触失联不等于滑出/跌落；同期恢复Spin及约1mm车体起伏只证明相关，不能替代孤立根因实验。",
+    "没有已有阶段时序/轨迹缓存，保留实际录像和原评分摘要，不补轨迹。",
+    "后续候选须独立验收；本次E失败不回写，不声明F2完成。"
+  ],
+  "provenance": {
+    "source_kind": "actual_local_terminal_factory_readonly_export",
+    "source_run_id": "b9c010bd-e956-4c05-83cf-d9d86623a3fa",
+    "source_run_directory": "/tmp/fishbot-closure-20261106/runs/f2-workshop-line-run-20261106-190615-8b2e4c",
+    "scene_id": "f2-workshop-line-coaxial-ba-entities",
+    "candidate_label": "f2-workshop-line",
+    "new_execution": false,
+    "rescored": false,
+    "raw_backup": {
+      "confirmed": false,
+      "status": "pending_root_archive"
+    },
+    "original_components_report": "/workbench/f2-workshop-local-190615/original-components.json",
+    "episode_ids": [
+      "09e51536-161f-4ef2-92e2-fc3bf90cfabb"
+    ],
+    "original_whole_passed": false,
+    "diagnostic_summary": "/workbench/f2-workshop-local-190615/diagnostic-summary.json",
+    "original_diagnostic_reference": "MecE-diagnostic.json"
+  }
+}

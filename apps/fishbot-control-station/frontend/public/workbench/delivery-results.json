@@ -46,6 +46,14 @@
   ],
   "archives": [
     {
+      "label": "本轮最终工作台、原评分重算、QA与恢复索引（完整读回）",
+      "url": "https://drive.google.com/file/d/17HMMSAJtevi2zcjrXNjQ0ASqsDKY-Ubi/view"
+    },
+    {
+      "label": "仓库D10卷／车间F2卷原件（均完整下载读回）",
+      "url": "https://drive.google.com/drive/folders/1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L"
+    },
+    {
       "label": "F2/F3 v1/v2原始失败与冻结输入（已下载读回）",
       "url": "https://drive.google.com/file/d/1YqKqoBOeLqX-3WpOhHsawCpbw2ELsn4i/view?usp=drivesdk"
     },
@@ -67,6 +75,16 @@
     }
   ],
   "experiments": [
+    {
+      "id": "f2-workshop-local-193522",
+      "title": "本机车间 F · 两单配送完整通过（ideal观测）",
+      "vehicle": "mecanum",
+      "sensor": "3d",
+      "configuration": "本机麦轮 / 原16线3D / ideal工位货物观测",
+      "source": "/workbench/f2-workshop-local-193522-result.json",
+      "coverage": "同一回合B→A原命名独立物理/业务评分2/2；A旧K标志false保留",
+      "materials": "原ROS阶段图/回放、两单实际装卸录像、启动传感器样本；无RGB模型材料"
+    },
     {
       "id": "f2-warehouse-local-183948",
       "title": "本机仓库 D · 两单视觉配送完整通过",
@@ -166,6 +184,16 @@
       "source": "/workbench/f2-workshop-local-185131-result.json",
       "coverage": "装运与到站通过；卸货准备IK残差0.100121m，整单失败/A未派发",
       "materials": "实际装运录像、原任务/物理分项、启动传感器样本；无RGB模型材料"
+    },
+    {
+      "id": "f2-workshop-local-190615",
+      "title": "本机车间 E · 一帧托盘底接触失联",
+      "vehicle": "mecanum",
+      "sensor": "3d",
+      "configuration": "本机麦轮 / 原16线3D / ideal货物观测",
+      "source": "/workbench/f2-workshop-local-190615-result.json",
+      "coverage": "原K装运通过；4779样本中1帧底接触失联，非滑出/跌落证据；整单失败",
+      "materials": "实际录像、原任务/评分摘要及精确诊断；无RGB模型材料"
     }
   ]
 }

@@ -67,7 +67,7 @@
     "poster": "/workbench/f2-warehouse-local-183948/visual/bc8e2149-1b0a-4cea-b0dd-d08a84f2933c-load-cargo_1-990/lift.jpg"
   },
   "video_caption": "原录像1165帧，按原2fps播放；下载索引仅派生媒体时间信息，不含运行日志。 封面来自本回合B抬升的原采样帧，不代表录像起点。",
-  "archive_status": "本机原件和本次网页派生材料待根owner归档；旧Drive归档不冒充包含该回合。",
+  "archive_status": "仓库D原件与当时成果快照共10个独立卷已存Drive，全部实际下载逐成员读回：9,632项，解码738,985,119字节。此归档入口更新晚于该已保存快照。",
   "warnings": [
     "停车保护辅助与观测/动作/物理评分分别保留；本页播放不能触发运动。",
     "四段原模型调用确实完成；四次所选51/49/51/97均来自OBB几何候选池，不称神经网络proposal直接执行。原候选分数不代表成功概率。",
@@ -84,8 +84,107 @@
     "new_execution": false,
     "rescored": false,
     "raw_backup": {
-      "confirmed": false,
-      "status": "pending_root_archive"
+      "confirmed": true,
+      "drive_folder_url": "https://drive.google.com/drive/folders/1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L",
+      "drive_folder_id": "1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L",
+      "verified_parts": 10,
+      "archive_bytes": 683968283,
+      "read_members": 9632,
+      "decoded_bytes": 738985119,
+      "verification": "actual fullstream gzip/tar readback of every expected member in all ten warehouse-D parts",
+      "verification_report_reference": "warehouse-D-Drive-readback.json",
+      "parts": [
+        {
+          "id": "essential-01",
+          "drive_id": "1pfEovlgPufJ4w3NKacK4E0Vl5w9q9j_v",
+          "url": "https://drive.google.com/file/d/1pfEovlgPufJ4w3NKacK4E0Vl5w9q9j_v/view?usp=drivesdk",
+          "archive_bytes": 55042857,
+          "read_members": 37,
+          "decoded_bytes": 65967130,
+          "verified": true
+        },
+        {
+          "id": "essential-02",
+          "drive_id": "1MtF_IjfvteQFqQWpYmj5aUJzC00gNZha",
+          "url": "https://drive.google.com/file/d/1MtF_IjfvteQFqQWpYmj5aUJzC00gNZha/view?usp=drivesdk",
+          "archive_bytes": 56335056,
+          "read_members": 81,
+          "decoded_bytes": 57604908,
+          "verified": true
+        },
+        {
+          "id": "essential-03",
+          "drive_id": "1hFgYIJmrdYR1eOxkfvSH9ln-k_qetGZX",
+          "url": "https://drive.google.com/file/d/1hFgYIJmrdYR1eOxkfvSH9ln-k_qetGZX/view?usp=drivesdk",
+          "archive_bytes": 13844191,
+          "read_members": 222,
+          "decoded_bytes": 54649905,
+          "verified": true
+        },
+        {
+          "id": "rear-camera-01",
+          "drive_id": "1taXl4X9la4SfLgTRInzSLK9xhdNC17iQ",
+          "url": "https://drive.google.com/file/d/1taXl4X9la4SfLgTRInzSLK9xhdNC17iQ/view?usp=drivesdk",
+          "archive_bytes": 80129243,
+          "read_members": 1201,
+          "decoded_bytes": 83818282,
+          "verified": true
+        },
+        {
+          "id": "rear-camera-02",
+          "drive_id": "13LcjBkRIVUJHt_6g3wSJPV_hdmkqi_CK",
+          "url": "https://drive.google.com/file/d/13LcjBkRIVUJHt_6g3wSJPV_hdmkqi_CK/view?usp=drivesdk",
+          "archive_bytes": 84066539,
+          "read_members": 1266,
+          "decoded_bytes": 83845469,
+          "verified": true
+        },
+        {
+          "id": "rear-camera-03",
+          "drive_id": "11ASJ8nqlmklL_kha-CBS-qFZrLTFqMLH",
+          "url": "https://drive.google.com/file/d/11ASJ8nqlmklL_kha-CBS-qFZrLTFqMLH/view?usp=drivesdk",
+          "archive_bytes": 84209092,
+          "read_members": 1728,
+          "decoded_bytes": 83846597,
+          "verified": true
+        },
+        {
+          "id": "rear-camera-04",
+          "drive_id": "1hyHfTTm_d3whn8PAiLYaF0RU_eoYvWp1",
+          "url": "https://drive.google.com/file/d/1hyHfTTm_d3whn8PAiLYaF0RU_eoYvWp1/view?usp=drivesdk",
+          "archive_bytes": 84160588,
+          "read_members": 1363,
+          "decoded_bytes": 83857967,
+          "verified": true
+        },
+        {
+          "id": "rear-camera-05",
+          "drive_id": "1eJmZSD39KCiP4NMw6ksizozbK0ZI9-Hd",
+          "url": "https://drive.google.com/file/d/1eJmZSD39KCiP4NMw6ksizozbK0ZI9-Hd/view?usp=drivesdk",
+          "archive_bytes": 84102623,
+          "read_members": 1309,
+          "decoded_bytes": 83823371,
+          "verified": true
+        },
+        {
+          "id": "rear-camera-06",
+          "drive_id": "1J9uSg4Ed51aCi-GV26s__1FG-AhuIhSF",
+          "url": "https://drive.google.com/file/d/1J9uSg4Ed51aCi-GV26s__1FG-AhuIhSF/view?usp=drivesdk",
+          "archive_bytes": 84190075,
+          "read_members": 1553,
+          "decoded_bytes": 83857290,
+          "verified": true
+        },
+        {
+          "id": "rear-camera-07",
+          "drive_id": "1_3qf024KuaeErRmdyG6xFUaRaYyu3nI9",
+          "url": "https://drive.google.com/file/d/1_3qf024KuaeErRmdyG6xFUaRaYyu3nI9/view?usp=drivesdk",
+          "archive_bytes": 57888019,
+          "read_members": 872,
+          "decoded_bytes": 57714200,
+          "verified": true
+        }
+      ]
     },
     "original_components_report": "/workbench/f2-warehouse-local-183948/original-components.json",
     "episode_ids": [
@@ -104,6 +203,8 @@
       "phase": "load",
       "video_frame": 116,
       "source_s": 63.28000000003137
-    }
-  }
+    },
+    "derived_ui_archive_status": "verified_D_snapshot_before_this_archive_pointer_update"
+  },
+  "archive_url": "https://drive.google.com/drive/folders/1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L"
 }

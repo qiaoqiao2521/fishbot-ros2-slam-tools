@@ -30,6 +30,15 @@ describe('visual delivery result index', () => {
     expect(recording?.nativeActions.map(action => action.status)).toEqual([4, 4])
     expect(recording?.frames.length).toBeGreaterThan(0); expect(order.candidates).toEqual([])
   })
+  it('accepts official Drive folder archives without opening other hosts, paths or protocols', () => {
+    const folder = 'https://drive.google.com/drive/folders/1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L'
+    expect(parseVisionResult({ ...summary, archive_url: folder }).archiveUrl).toBe(folder)
+    expect(parseVisionResult({ ...summary, archive_url: folder, archive_verified: false }).archiveVerified).toBe(false)
+    for (const url of ['http://drive.google.com/drive/folders/ui-only', 'https://drive.google.com.example/drive/folders/ui-only', 'https://drive.google.com/open?id=ui-only', 'https://ui-only:ui-only@drive.google.com/drive/folders/ui-only']) {
+      expect(parseVisionResult({ ...summary, archive_url: url }).archiveUrl).toBeNull()
+    }
+    expect(parseVisionResult(summary).archiveUrl).toBe(summary.archive_url)
+  })
   it('degrades one bad optional asset and row without hiding an explicitly failed order', () => {
     const result = parseVisionResult({ schema: 'editable', assets: { replay: '/coop-api/start', video: '/workbench/../private.mp4' },
       orders: [null, { id: 'failure', passed: false, route_seconds: 'unknown', failure_reason: '进场Goal未通过' }] })

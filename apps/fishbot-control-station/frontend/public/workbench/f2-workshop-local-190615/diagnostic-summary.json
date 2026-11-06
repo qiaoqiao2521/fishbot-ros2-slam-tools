@@ -1,0 +1,32 @@
+{
+  "schema": "fishbot.mec-floor-contact-diagnostic-summary.v1",
+  "run_id": "b9c010bd-e956-4c05-83cf-d9d86623a3fa",
+  "task_id": "5f9f5dd4-881e-4c99-8f15-7ff65895cbb3",
+  "episode_ids": [
+    "09e51536-161f-4ef2-92e2-fc3bf90cfabb"
+  ],
+  "source_report_reference": "MecE-diagnostic.json",
+  "new_execution": false,
+  "rescored": false,
+  "physics_steps": 0,
+  "sample_count": 4779,
+  "floor_contact_loss_samples": 1,
+  "forbidden_contact_samples": 0,
+  "minimum_xy_margin_m": 0.03451930135203775,
+  "first_failed_source_s": 191.06000000018417,
+  "first_predicate": "cargo_tray_floor_contact=false",
+  "first_frame_inside_footprint": true,
+  "first_frame_height_inside": true,
+  "first_frame_footprint_margins_xy_m": [
+    0.03469280246139238,
+    0.04400375824495626
+  ],
+  "first_frame_center_margins_xy_m": [
+    0.03527518830512539,
+    0.04457820112617802
+  ],
+  "first_frame_support_count": 0,
+  "first_frame_support_force_n": 0.0,
+  "slide_or_drop_claimed": false,
+  "conclusion": "One recorded floor-contact loss frame while footprint/center/height remain valid; do not call this cargo sliding or falling. Recovery spin/chassis vertical excursion are correlated, not an isolated causal proof."
+}
