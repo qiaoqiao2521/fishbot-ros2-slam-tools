@@ -13,6 +13,7 @@ describe('sensor experience panel', () => {
       expect(html).toContain('该采集报告未绑定 run_id'); expect(html).toContain('12400000000')
       expect(html).toContain('同一源帧的点云与真值全景投影'); expect(html).toContain('/global_costmap/global_costmap')
       expect(html).toContain('订阅发现不等于逐消息消费ACK'); expect(html).toContain('不通过车体真值补TF')
+      expect(html).toContain('本图真值叠加回流控制'); expect(html).toContain('工位信标等原控制输入');
       expect(html).not.toContain('/coop-api/start'); expect(fetcher).not.toHaveBeenCalled()
     } finally { vi.unstubAllGlobals() }
   })

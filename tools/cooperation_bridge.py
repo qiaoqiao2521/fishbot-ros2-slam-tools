@@ -1058,8 +1058,11 @@ def run(args):
                     return stopped(value)
                 self.wait_condition(captured,duration=.4,timeout=5.)
                 return
-            pose=self.update_station_localization(force=True)
+            self.update_station_localization(force=True)
             def aligned(value):
+                # Compare against the current admitted observation while the
+                # original publisher retains its source-time refresh throttle.
+                pose=self.update_station_localization()
                 estimate=self.localized()
                 return (stopped(value) and math.hypot(estimate['x']-pose['x'],estimate['y']-pose['y'])<.025
                     and abs(math.atan2(math.sin(estimate['yaw']-pose['yaw']),math.cos(estimate['yaw']-pose['yaw'])))<.025)

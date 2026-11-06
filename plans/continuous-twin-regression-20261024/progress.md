@@ -577,3 +577,21 @@ source-v12候选准备：私有距离checker与源SO101原evaluate复用，只�
 v5原件/实际312点与408候选、原生诊断、source-v12冻结输入、v4/v5网页素材已存指定Drive：1XUIq0DCgp3GkAxdpILgFlb_CoBypZOYf。88,257,450B实际下载逐成员读回220项/109,340,949解码字节；删除已验证上传tar副本88,257,450B。网页原件/派生归档字段已据实更新，v4原件仍指向其独立v3/v4归档，不用新包替换未包含的旧原件。当前source-v12及必要运行材料继续保留。
 
 最终source-v12反馈control组在原180秒期限内1141项通过，0skip/0依赖缺失/0fail；覆盖新增pair adapter与既有控制/任务所有权回归。前端733为全量，不与旧465反馈子集重复相加；其余既有checkpoint22/mission209/autonomy61保持此前通过证据，无受影响实现再改。构建仍有原3D分块>500k提示，没有为此扩展重构。
+
+补核v5导出原日志：根目录f2-wide-warehouse-visual-export.log实际记录visual-chain.json、entries1/queries1/warnings[]；f1-deployment.json对应rc0、1.368075秒。此前本地缺部分visual-evidence文件只是选取/恢复缺口，不能归因云exporter partial。未修改exporter；本机同源再导出是读取原素材的展示索引，非新推理/评分。两小日志在首次v5归档之后补回，当前保留待最终归档。
+
+空间收尾已按逐文件归档成员覆盖与lsof检查执行：cloud-v3 99文件/22,945,792分配字节、source-v11 6文件/11,235,328分配字节已删除可恢复副本，Drive入口仍1AOuKbKN0Lwr22YB3JlDm0J-vCCcyMUGw。free约4,753,543,168→4,787,818,496B（其他任务可并发变化）；cloud-v4因新派生ui-v4侧车不在该原件包而整目录保留，未删未备份项。current cloud-v5/source-v12及native环境待本轮验收后收尾。
+
+knowledge_status=updated：再次回写原《Wiki/ROS2 与 FishBot.md》“预训练抓取：先对齐夹爪坐标，再验接触”小节的^query-model-preparation附近，补同机profile、pure-FK消费边界、官方rbound保守batch筛选及first-cap tie/未知形状/原阈值与实际验收边界；《Wiki/开发知识入口.md》对应原条目增加“推理后几何扫掠慢/数百万距离调用”触发，两原页已实际读回。更正前文位置描述：该新增内容在原预训练抓取小节，不冒称位于第20标题内部；第19/20经验仍是引用的共享验收依据。未写Codex memory或capmesh。
+
+### v6结果与本机执行余量备选
+
+仓库run49dc866b-7b04-4fed-bd31-b9a33fdccb5f、task76340fca-41e7-4628-b802-1e92f131669f：真实视觉query23.385秒过原30秒，原双指抬升/托盘释放/回位/留盘运输K分项true；整单仍false。DriveOnHeading.65m/.03m/s成功4，之后Nav2 UUID0363562cb8724194938831b58f1dfce4只运行34.635851秒，原120预算尚余85.364149秒便被原360装运总期限取消5；A和卸货未执行，不能将装货完整链计为完整配送。观察窗口189.66源秒/377.29墙秒、RTF.503；四逻辑CPU load约.98→10.74。Physics.step wrapper209.31墙秒、publish158.46墙秒均含调度/嵌套，不能冒称native纯CPU耗时；受持防赶帧810次，原名义47.697源秒实际60.82，不削保护。
+
+车间runb6360339-d420-4d94-8633-2988c88c0a08、task5bbdbe16-e282-46fe-8f3e-1cc2650174ca：首次ideal定位对齐失败，未派发native Goal。入口旧观测与后期AMCL距离25.744–26.159mm，当前观测约18.201mm；静止尾段已在原.01/.01阈内。aligned循环现复用当前接纳观测及原.3源秒发布节流，原.4源秒连续/5墙秒/.025m/.025rad不变；真实35样本时序fixture与过期观测回归、原模块127项通过。不是倒车控制失败，也不放宽停靠判定。
+
+v6同任务装货链已在/results完整接起实际RGBD/312点/selected51/抬升/托盘放稳。两原帧288和509与原gate差.040/.120源秒，同task/cargo/episode，限定同阶段且≤1源秒。只读exporter修复原业务未到站时读取同一次pickup_observed分项，scope明确且不改评分；卸货/整单false继续保留。8 exporter、15前端定向及真实desktop/390px零写/零pageerror通过，录像413秒。传感器文字进一步限定“本图真值叠加不回流”，避免与明确ideal信标模式混淆；4局部测试通过。Drive v6原件及派生素材尚待最终归档。
+
+本机余量已做必要前检，未无据重跑完整任务：Ryzen7435H16逻辑/32GB，RTX3050 4GB；同一完整模型5000次原Physics.step推进10源秒1.585墙秒（不含传感器/发布，非任务）。复用系统/opt/ros Jazzy1.3.13和原云overlay，不改全局ROS；7 overlay库及contact-audit ldd-r无缺失符号。模型环境临时放/tmp，公开权重和官方代码沿原revision，Torch2.6+cu124；官方UV prerelease配置用于解决依赖解析。导入检查一度未设模型目录触发重复checkpoint clone，已仅终止该owned进程组并清理477,002,688字节重复件，完整models/release保留；正式serve/infer原入口本就设置该目录。CUDA真实保存点云前检返回408候选、完整CLI12.945秒（纯推理.879秒），非新物理任务。
+
+本机原完整ROS/500Hz/传感器栈preflight实际10.04源秒/10.730298墙秒，RTF.935668；0任务/start/reset，owned descendants0、清理true。主Native库、模型与原任务预算保持，准备本机完整两场景复验；不把GPU导入/短吞吐或K分项计完整业务通过。原107/114单位使用原Factory保护快照，本机不使用cloud的isolated-runtime跳过项。临时依赖/权重在最终原件Drive读回后清理。knowledge_status=already_covered：双时钟、同源物理评分和观测刷新经验原页已有；项目状态不回写知识页。owner=root。

@@ -23,6 +23,7 @@
   --spawn -.9 -1.68 \
   --perception-config tools/config/perception/apriltag-station.example.json \
   --pretrained-grasp-config tools/config/perception/pretrained-grasp.example.json \
+  --lidar3d-config tools/config/cooperation_profiles/mid360-sensor.json \
   --camera-rgbd --queued-ros-dispatch --terminal-stop-heartbeat \
   --output "$HOME/.local/share/fishbot/f2-warehouse/scene"
 ```
@@ -36,12 +37,14 @@
   --so101-project /home/muqiao/dev/ros2/projects/so101 \
   --scene-profile tools/config/cooperation_profiles/robot_base_mecanum-lidar3d-transport.json \
   --arena-xml tools/config/factory_delivery/f2-workshop-line-arena.xml \
-  --factory-config tools/config/factory_delivery/f2-workshop-line.json \
-  --continuous-delivery tools/config/factory_delivery/continuous-ba-entities.json \
-  --spawn -.9 -1.64 \
+  --factory-config tools/config/factory_delivery/f2-workshop-line-coaxial.json \
+  --continuous-delivery tools/config/factory_delivery/f2-workshop-line-coaxial-entities.json \
+  --spawn -.9 -1.64 --staging-reversing \
   --queued-ros-dispatch --terminal-stop-heartbeat \
   --output "$HOME/.local/share/fishbot/f2-workshop/scene"
 ```
+
+此版本把两个卸货位及其实际工位/地图同步对齐原`y=-1.64`车道，并使用已有RPP倒车进站；原`y=-2`文件保留为失败对照。它不是只改网页目标，也不放宽车体、碰撞或时间预算。
 
 这里没有启用视觉工位观测或预训练抓取。RGB或深度可作为只读取证额外开启，但不能据相机存在把ideal结果解释为视觉控制。原麦轮控制/直线出站及评分继续复用；不要给麦轮套J100候选控制器文件。
 
@@ -62,8 +65,8 @@ python3 tools/cooperation_factory.py run \
 
 ## 当前验证范围
 
-`python3 -m unittest tools/tests/test_f2_scene_profiles.py -v` 的五项检查覆盖：配方路径与原订单/预算、visual与ideal显式边界、两布局真实几何差异，以及完整车体/托盘包围圆在新增arena中扫掠的保守净距。它不导入MuJoCo或ROS。
+`python3 -m unittest tools/tests/test_f2_scene_profiles.py -v` 的六项检查覆盖：配方路径与原订单/预算、visual与ideal显式边界、两布局真实几何差异，同轴相对工位/预算保持，以及完整车体/托盘包围圆在新增arena中扫掠的保守净距。它不导入MuJoCo或ROS。
 
-本机使用临时65MiB原生query环境做只读模型交接验证，不恢复GPU模型或整套规划环境。v3两个场景的原完整几何和原生停靠已通过，但Approach查询30秒超时，完整配送尚未通过。原机械臂抓放、载货运输、卸货和最终物理评分仍由独占云端回合确认，不能把几何/停靠组件计成F2配送完成。
+本机使用临时65MiB原生query环境做只读模型交接验证，不恢复GPU模型或整套规划环境。本轮前五次原生失败均保留。v5仓库已有实际312点/408候选及4.577秒模型请求取证，后续OMPL仍30秒超时；车间K抓放/运输分项通过，但末偏航约-.410rad未达标，B未完成。当前同轴布局与保守查询优化进入第六轮，完整配送尚待原记录确认。原机械臂抓放、载货运输、卸货和最终物理评分仍由独占云端回合确认，不能把几何/停靠组件计成F2配送完成。
 
 两场景从明确的空载取货候车位开始；仓库为`[-.9,-1.68,0]`，车间为`[-.9,-1.64,0]`。这避免在卸货机械臂旁原地转向，不验证从A站远端空载进场。B→A载货路线、双指交接、卸货与原时限/碰撞评分仍须实际通过。v2原出生点重叠和车间进场失败继续保留。

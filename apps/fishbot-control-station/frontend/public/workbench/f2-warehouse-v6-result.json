@@ -1,0 +1,72 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "新仓库 v6 · 视觉装货闭环，配送未完成",
+  "recorded_at": "2026-11-06",
+  "run_id": "49dc866b-7b04-4fed-bd31-b9a33fdccb5f",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "Jackal J100",
+  "sensor": "MID-360式扫描 · 4000×1槽位",
+  "scene_label": "新宽通道仓库 · f2-wide-warehouse",
+  "observation_mode": "vision",
+  "model": "GraspGen-X实际推理＋SO101实际装货",
+  "description": "同一实际任务串起RGB-D输入、312可见点、已选候选51、双指抬升与托盘放稳，原K装货/运输分项通过；原360秒总预算仍耗尽，完整配送未完成。",
+  "evidence_note": "本链仅取同一仓库run/task/episode/cargo，不与麦轮拼接。查询23.385秒内完成，原selected回执绑定候选51；抬升和托盘放稳画面从同episode原阶段、距原分项源时刻不超过1秒的实际录像帧抽取。本次放货是装货到小车托盘，不是目的地卸货上架。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 478.1259591930001,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（失败）",
+      "task_id": "76340fca-41e7-4628-b802-1e92f131669f",
+      "passed": false,
+      "route_seconds": null,
+      "position_error_m": null,
+      "yaw_error_rad": null,
+      "visible_points": [
+        312
+      ],
+      "selected_candidates": [
+        51
+      ],
+      "failure_reason": "原装货与配送窗口362.623墙秒超过360秒；载货路线才运行34.636秒，原120秒路线预算仍余85.364秒。B未完成、目的地卸货未做、A未派发，不把总预算耗尽写成路线预算到期。",
+      "component_summary": "同一任务原分项通过：视觉所选候选51；双指抬升源83.440s，实际画面83.480s；托盘释放与支撑落稳源144.100s，画面144.220s；机械臂回位157.660s。货物实际运输1.587350m；装货和运输K通过，目的地及卸货/整单仍失败。"
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/f2-warehouse-v6/timing.json",
+    "replay": "/workbench/f2-warehouse-v6/replay.json",
+    "video": "/workbench/f2-warehouse-v6/overview.mp4",
+    "video_index": "/workbench/f2-warehouse-v6/video-frame-index.json",
+    "poster": "/workbench/f2-warehouse-v6/overview.jpg",
+    "sensor_experience": "/workbench/f2-warehouse-v6/sensor-experience.json",
+    "visual_chain": "/workbench/f2-warehouse-v6/visual/visual-chain.json",
+    "lidar_receipt": "/workbench/f2-warehouse-v6/native-lidar-consumer.json"
+  },
+  "video_caption": "本回合826个真实全景采样帧，按原2fps独立播放。下载索引为实际记录派生的媒体索引，未插值；完整录像帧原件保留于Drive归档。",
+  "availability_note": "真实失败位置与阶段记录已只读导入；不补造静态场景或机械臂世界FK。",
+  "archive_status": "v6原始记录已回收，Drive归档待根owner收尾；网页派生资产另待归档",
+  "warnings": [
+    "原整单false保持；同任务装货分项通过不等于完整视觉配送成功。",
+    "抬升/托盘图原video_frame288/509，源偏差0.040/0.120秒，均在同episode及实际阶段内；未跨任务、未插值。",
+    "载货路线只运行34.636秒、仍余85.364秒，终止由360秒总预算引起，不能归因为120秒路线超时。",
+    "原观测与模型分数不等于成功概率；停车保护介入仍单独记账。"
+  ],
+  "provenance": {
+    "source_kind": "recovered_original_failed_run_and_same_episode_capture",
+    "source_run_id": "49dc866b-7b04-4fed-bd31-b9a33fdccb5f",
+    "task_id": "76340fca-41e7-4628-b802-1e92f131669f",
+    "episode_id": "2a6b19f2-014a-43f9-87b7-cfa79d435326",
+    "new_execution": false,
+    "rescored": false,
+    "scene_id": "f1-j100-wide-continuous-ba",
+    "candidate_label": "f2-wide-warehouse",
+    "raw_backup": {
+      "confirmed": false,
+      "status": "pending_root_archive"
+    },
+    "derived_ui_archive_status": "pending_root_archive",
+    "original_components_report": "/workbench/f2-warehouse-v6/original-components.json",
+    "related_run_boundaries_report": "/workbench/f2-warehouse-v6/related-run-boundaries.json"
+  }
+}

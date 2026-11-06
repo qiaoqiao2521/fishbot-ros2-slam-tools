@@ -1,0 +1,19 @@
+{
+  "schema": "fishbot.related-run-boundaries.v1",
+  "new_execution": false,
+  "rescored": false,
+  "independent_from_visual_chain": true,
+  "records": [
+    {
+      "configuration": "mecanum workshop v6",
+      "run_id": "b6360339-d420-4d94-8633-2988c88c0a08",
+      "task_id": "5bbdbe16-e282-46fe-8f3e-1cc2650174ca",
+      "episode_id": "46a7b558-1919-4df7-bfc0-f8bd17cdee87",
+      "original_passed": false,
+      "task_status": "failed",
+      "original_stop_reason": "未取得连续物理确认",
+      "scope": "initial alignment failed; no material from this task is used in the warehouse visual chain",
+      "root_candidate_fix_status": "subsequent target fix not natively evaluated in this recorded run"
+    }
+  ]
+}

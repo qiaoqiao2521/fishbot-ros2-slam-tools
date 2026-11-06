@@ -149,7 +149,17 @@ def original_gate(run, case, phase, milestone, warnings):
             if phase == 'load':
                 load = obj(attempt.get('original_k_load_and_transport'))
                 key = 'actual_lift_and_two_tip_forces' if milestone == 'lift' else 'released_full_footprint_supported_and_relative_rest'
-                return obj(load.get(key)), number(load.get('cargo_baseline_z_m'))
+                gate = obj(load.get(key))
+                if number(gate.get('first_pass_stamp')) is None:
+                    # Delivery-prefix gates can be empty before arrival. Display the
+                    # same named attempt's original pickup observations separately.
+                    deliveries = obj(attempt.get('task_delivery_acceptance')).get('attempts', [])
+                    same_episode = [row for row in deliveries if row.get('task_id') == case['task_id']
+                        and row.get('episode_id') == case.get('episode_id') and case.get('episode_id')]
+                    observed = obj(obj(attempt.get('phase_evidence')).get('pickup_and_transport_observed'))
+                    if len(same_episode) == 1 and number(obj(observed.get(key)).get('first_pass_stamp')) is not None:
+                        return {**obj(observed.get(key)), 'evidence_scope': 'original_named_attempt_pickup_observed_not_delivery_success'}, number(observed.get('cargo_baseline_z_m'))
+                return gate, number(load.get('cargo_baseline_z_m'))
             key = 'physical_unload_lift' if milestone == 'lift' else 'shelf_home_rest_through_cleanup'
             return obj(attempt.get(key)), None
         if not case.get('named_entities'):
@@ -173,6 +183,7 @@ def milestone(run, case, projection, observation, phase, kind, index, overview, 
         and number(obj(row.get('metadata')).get('stamp')) is not None
         and number(observation.get('stamp')) is not None
         and obj(row.get('metadata'))['stamp'] >= max(number(observation.get('stamp')), target)
+        and obj(row.get('metadata'))['stamp'] - target <= 1.0
         and any(s['start_source_s'] <= obj(row['metadata'])['stamp'] <= s['end_source_s'] for s in spans)]
     selected = min(frames, key=lambda r: abs(obj(r['metadata'])['stamp']-target)) if frames else None
     image = None
@@ -197,7 +208,11 @@ def milestone(run, case, projection, observation, phase, kind, index, overview, 
     measured = (number(after['cargo'][2])-baseline if after and after.get('cargo') and baseline is not None else None)
     value = {'source_s': actual_stamp, 'gate_source_s': target, 'image': image,
              'original_passed': gate.get('passed') if isinstance(gate.get('passed'), bool) else None,
-             'source': 'existing task-bound physical oracle; image selected from actual sampled overview'}
+             'source': 'existing task-bound physical oracle; image selected from actual sampled overview',
+             'original_gate_scope': gate.get('evidence_scope', 'original_task_bound_gate'),
+             'image_max_gate_source_delta_s': 1.0,
+             'image_gate_source_delta_s': actual_stamp-target if selected else None,
+             'video_frame': selected.get('video_frame') if selected else None}
     if kind == 'lift':
         value['measured_lift_m'] = measured
         value['measurement_basis'] = 'recorded cargo Z minus original/observation baseline; not a new physical score'

@@ -1668,6 +1668,45 @@ class BridgeRaceTests(unittest.TestCase):
                     p.update_station_localization(force=True)
         self.assertEqual(p.poses,[])
 
+    def test_station_alignment_refreshes_target_on_actual_v6_stopped_tail(self):
+        trace=json.loads((Path(__file__).parent/'fixtures/workshop-v6-alignment-tail.json').read_text())
+        rows=trace['rows'];frozen=trace['frozen_observation_pose']
+        for row in rows:
+            estimate=row['localized'];current=row['observation_pose']
+            # The recorded tail is stopped, but the entry-time target misses
+            # the original 25mm check. Current admitted station input does not.
+            self.assertLess(row['speed'],.01);self.assertLess(abs(row['yaw_rate']),.01)
+            self.assertGreater(math.hypot(estimate['x']-frozen['x'],estimate['y']-frozen['y']),.025)
+            self.assertLess(math.hypot(estimate['x']-current['x'],estimate['y']-current['y']),.025)
+        p=self.bridge;index=[0];calls=[]
+        def apply():
+            row=rows[index[0]]
+            p.raw.update(stamp=row['stamp'],time_s=row['stamp'])
+            p.raw['car'].update(speed=row['speed'],yaw_rate=row['yaw_rate'])
+        def refresh(*,force=False):
+            calls.append(force)
+            return frozen if force else rows[index[0]]['observation_pose']
+        def advance():
+            index[0]=min(index[0]+1,len(rows)-1);apply()
+        apply();p.check=lambda **kw:p.raw;p.localized=lambda:rows[index[0]]['localized']
+        p.update_station_localization=refresh;self.on_sleep=advance
+        p.align_station_map()
+        self.assertEqual(calls[0],True);self.assertTrue(all(not v for v in calls[1:]))
+        evidence=p.task['physical_wait']
+        self.assertEqual(evidence['outcome'],'passed')
+        self.assertEqual(evidence['required_source_duration_s'],.4)
+        self.assertEqual(evidence['timeout_wall_s'],5.)
+
+    def test_station_alignment_does_not_refresh_expired_input_or_forge_dwell(self):
+        p=self.bridge;self.station_measurement()
+        p.localized=lambda:{'x':.7,'y':0.,'yaw':0.}
+        # No new source observation arrives. The original 250ms freshness
+        # limit interrupts the 400ms dwell instead of restamping the old frame.
+        with self.assertRaisesRegex(RuntimeError,'过期'):p.align_station_map()
+        self.assertEqual(p.task['physical_wait']['outcome'],'interrupted')
+        self.assertLess(p.task['physical_wait']['longest_source_duration_s'],.4)
+        self.assertEqual(len(p.poses),1)
+
     def test_rgb_target_keeps_amcl_localization_and_original_expiry(self):
         p=self.bridge;measured=self.station_measurement()
         p.perception_config=self.namespace['normalize_config']({'mode':'vision','publisher':'station_camera',

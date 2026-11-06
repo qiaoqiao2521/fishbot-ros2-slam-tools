@@ -76,6 +76,42 @@ class VisualEvidenceExportTests(unittest.TestCase):
             self.assertFalse(result['new_execution']);self.assertFalse(result['rescored'])
             self.assertTrue((output/'visual-chain.json').is_file())
 
+    def test_failed_business_can_show_same_task_episode_cargo_pickup_observations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);case={'_order_index':1,'task_id':'t','episode_id':'e','entity_binding':{'cargo_id':'c'}}
+            gate={'passed':True,'first_pass_stamp':83.44}
+            attempt={'task_id':'t','passed':False,'business_delivery':{'cargo_id':'c'},
+                'original_k_load_and_transport':{'actual_lift_and_two_tip_forces':{'passed':False,'first_pass_stamp':None}},
+                'task_delivery_acceptance':{'attempts':[{'task_id':'t','episode_id':'e','passed':False}]},
+                'phase_evidence':{'pickup_and_transport_observed':{'actual_lift_and_two_tip_forces':gate,'cargo_baseline_z_m':.2764}}}
+            write(root/'order-1/observer/score-1.json',{'passed':False,'business_delivery_acceptance':{'attempts':[attempt]}})
+            found,baseline=exporter.original_gate(root,case,'load','lift',[])
+            self.assertTrue(found['passed']);self.assertEqual(found['first_pass_stamp'],83.44)
+            self.assertEqual(found['evidence_scope'],'original_named_attempt_pickup_observed_not_delivery_success')
+            self.assertEqual(baseline,.2764)
+            for change in [{'episode_id':'wrong'},{'task_id':'wrong'},{'entity_binding':{'cargo_id':'wrong'}}]:
+                found,_=exporter.original_gate(root,{**case,**change},'load','lift',[])
+                self.assertIsNone(found.get('first_pass_stamp'))
+            attempt['original_k_load_and_transport']['actual_lift_and_two_tip_forces']={'passed':False,'first_pass_stamp':80}
+            write(root/'order-1/observer/score-1.json',{'passed':False,'business_delivery_acceptance':{'attempts':[attempt]}})
+            self.assertEqual(exporter.original_gate(root,case,'load','lift',[])[0]['first_pass_stamp'],80)
+
+    def test_milestone_video_match_is_bounded_by_episode_stage_and_one_source_second(self):
+        from unittest.mock import patch
+        case={'task_id':'t','episode_id':'e','spans':[{'label':'arm_lift','start_source_s':2,'end_source_s':8}]}
+        observation={'episode_id':'e','stamp':1}
+        with tempfile.TemporaryDirectory() as tmp, patch.object(exporter,'original_gate',return_value=({'first_pass_stamp':3,'passed':True},.2)):
+            root=Path(tmp)
+            for stamp,episode,expected in [(3.7,'e',7),(4.1,'e',None),(3.7,'wrong',None)]:
+                rows=[{'video_frame':7,'metadata':{'episode_id':episode,'stamp':stamp}}]
+                result=exporter.milestone(root,case,{'frames':[]},observation,'load','lift',rows,root/'missing.mp4',root,'/workbench/',[])
+                self.assertEqual(result['video_frame'],expected)
+                self.assertIsNone(result['image'])
+                self.assertTrue(result['original_passed'])
+            case['spans'][0]['label']='unrelated_stage'
+            result=exporter.milestone(root,case,{'frames':[]},observation,'load','lift',[{'video_frame':7,'metadata':{'episode_id':'e','stamp':3.7}}],None,root,'/workbench/',[])
+            self.assertIsNone(result['video_frame'])
+
     def test_wrong_episode_video_is_never_used_for_lift(self):
         from unittest.mock import patch
         case={'task_id':'t','episode_id':'e','spans':[{'label':'arm_lift','start_source_s':2,'end_source_s':4}]}
