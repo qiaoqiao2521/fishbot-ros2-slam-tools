@@ -1,0 +1,87 @@
+{
+  "selected": {
+    "index": 51,
+    "score": 0.7745869755744934,
+    "origin": "obb",
+    "accepted": true,
+    "phase": "ompl_approach",
+    "phase_wall_s": {
+      "grasp_ik": 0.0030644830003438983,
+      "pregrasp_ik": 0.0018237659969599918,
+      "transfer_endpoint_ik": 0.00264262500058976,
+      "transfer_release_sweep": 0.11845372800235054,
+      "descent_validation": 0.03588384499744279,
+      "ascent_validation": 0.035142130000167526,
+      "closure_sweep": 0.12050544999874546,
+      "direct_approach": 0.038612520998867694,
+      "ompl_approach": 0.6671719279984245
+    },
+    "position_error_m": 0.00017105370319220924,
+    "rotation_error_rad": 0.00012537388159595522,
+    "transfer_endpoint": {
+      "pinch_station_m": [
+        0.24,
+        0.14,
+        0.023
+      ],
+      "position_error_m": 0.00043190470131310995,
+      "rotation_error_rad": 0.00017883215432578566,
+      "orientation_policy": "proposed_gripper_rotation",
+      "boundary": "Kinematic endpoint only; full carried path, collisions and physics still checked"
+    },
+    "transfer_release_sweep": {
+      "valid": true,
+      "checked_states": 244,
+      "reason": "clear",
+      "arm_resolution_rad": 0.005,
+      "jaw_resolution_rad": 0.002,
+      "max_samples": 4096,
+      "required_states": 244,
+      "max_arm_step_rad": 0.0,
+      "max_jaw_step_rad": 0.0019958847736626373,
+      "invalid_state": null,
+      "invalid_sample_index": null
+    },
+    "reason": "planned"
+  },
+  "pose_station": [
+    [
+      0.9826729458855373,
+      -0.18534818507283832,
+      -1.6027926763584333e-09,
+      0.24031559807795455
+    ],
+    [
+      -0.1853481802205769,
+      -0.9826729408668765,
+      3.510879253987298e-09,
+      -0.13030703915722536
+    ],
+    [
+      3.7096169469563733e-09,
+      -1.6313271122836426e-08,
+      -0.999999986379695,
+      0.11238646122793244
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "observation": {
+    "stamp": 19.819999999999894,
+    "episode_id": "bc8e2149-1b0a-4cea-b0dd-d08a84f2933c",
+    "sequence": 990,
+    "arm_id": "load",
+    "cargo_id": "cargo_1",
+    "point_count": 312,
+    "mask_kind": "declared_colour_prior",
+    "capture_status": "visible_cloud_extracted",
+    "frame": "workcell_load_camera_optical_frame",
+    "source": "rendered_rgbd_visible_surface_only"
+  },
+  "query_id": "6fdda744-9c61-4198-992e-eec967f56aed",
+  "physical_grasp_verified": false
+}

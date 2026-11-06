@@ -1,0 +1,100 @@
+{
+  "status": "inference_completed",
+  "input_kind": "camera_visible_points",
+  "training_steps": 0,
+  "physics_steps": 0,
+  "hardware_access": false,
+  "candidate_cap": null,
+  "seed": 11,
+  "model": "adithyamurali/GraspGenXModel",
+  "score_kind": "pretrained_discriminator",
+  "source_revision": "b9429097728cb1c430dd78b92edf17ba318aad03",
+  "model_revision": "7c834043c11a11417e31d6d5ea9355801e40a2c1",
+  "physical_grasp_verified": false,
+  "point_count": 232,
+  "descriptor_scope": "Declared simulated conservative tip region at jaw .5/.2575; no hardware calibration or maximum aperture claim",
+  "T_body_model": [
+    [
+      1.0,
+      0.0,
+      0.0,
+      0.006
+    ],
+    [
+      0.0,
+      -1.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      -1.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "model_frame": "virtual_pinch_xy_z_forward",
+  "inference_frame": "station_z_up",
+  "frame_conversion": {
+    "input": "camera_optical",
+    "output": "camera_optical",
+    "T_station_camera": [
+      [
+        0.9096880038630341,
+        0.31185489786733667,
+        -0.27425218012595953,
+        0.45
+      ],
+      [
+        0.415292349589646,
+        -0.683110728661785,
+        0.6007428707521018,
+        -0.5
+      ],
+      [
+        -0.0,
+        -0.6603834151940207,
+        -0.7509285884401271,
+        0.6
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "source": "fixed_camera_calibration"
+  },
+  "request_seed": 11,
+  "gpu": "NVIDIA GeForce RTX 3050 Laptop GPU",
+  "torch_version": "2.6.0+cu124",
+  "server_model_load_s": 2.7944517670002824,
+  "peak_allocated_mib": 584.2607421875,
+  "peak_reserved_mib": 622.0,
+  "last_inference_receipt": {
+    "request_number": 4,
+    "elapsed_wall_s": 0.4703859539986297,
+    "completed": true
+  },
+  "model_load_s": 0.0,
+  "inference_s": 0.4742111269988527,
+  "inference_runtime": "official_owned_zmq",
+  "server_host": "127.0.0.1",
+  "client_metadata_wall_s": 0.001281433000258403,
+  "inference_request_wall_s": 0.4712862650012539,
+  "post_inference_metadata_wall_s": 0.0010818200025823899,
+  "server_port": 10161,
+  "client_torch_imported": false,
+  "candidate_count": 408,
+  "diffusion_count": 48,
+  "obb_count": 360,
+  "output_frame": "input_camera",
+  "elapsed_s": 0.5083622419988387
+}

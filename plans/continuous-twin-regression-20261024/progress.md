@@ -642,3 +642,16 @@ fresh仅对negative future-pair等待标准TimeSource回调，固定首received+
 新workshop固定挡块明确移到local(.05,.15,.065)，原半尺寸(.025,.028,.065)保持；增加接地真实固定支架，xy半尺寸.04，底0顶.221。仅mounted_load_fixture可选字段/本coaxial配方启用，默认none保旧世界；业务先compose、factory后apply，66个卸货工位geom属性逐一等值。实际生成world箱心(-1.95,-1.85,.286)，支架心(-1.95,-1.85,.1105)，两地图占据。两cargo direct/descent/ascent及home/grasp/lift/transfer原fullchecker全过；uncapped实际距离最小47.341mm，非2mm cap伪余量；整车465样本5487pair，原几何认证余量25.652mm。14局部合同通过，newRRT0/physics0，不能据静态算新完整配送成功。
 
 knowledge_status=updated：原《Wiki/ROS2 与 FishBot.md》“原生 ROS 时钟与回调组”增加恢复后跨话题交错读取/固定首接收预算等待/原门槛复检，原《Wiki/开发知识入口.md》同条增加触发；两原页实际读回619/168。未写Codex memory或capmesh。当前模型/两单任务继续由根Codex原Factory接续。
+
+
+### 仓库D完整B→A已完成，车间仅交接配置复验
+
+仓库runecfa94dd-0570-4691-b5f2-542e923f1a7f，source08b0cb2，B b928563d-9729-4003-917d-5116b27ffe98与A733083a1-a01e-464b-81af-53f7a2760963原named/full/K/实体卸货/armhome/cleanup全true。真实同world bf3f90…/episodebc8e2149…、跨单1133样本held gap无漂移、reset0/取消0，选定运行源码起止一致，owned survivors=[]。B/A路线48.377735/25.339426墙秒均原120内，load/arrival184.947/188.539原360内，原整单约293.26/297.98；末XY8.659/5.642mm、yaw.031948/.009281rad。原unloaded返站UUIDe64e0148…独立status[2,4]，568条负指令/1423负bodyvx样本，实际2.624m/29.214墙秒、568计划接收与2912原生反馈、禁止接触0。status4时仍有微运动，之后原hold辅助取得.7源秒静止，保留辅助边界不称纯控制器停车精度。载货限速与原参考保持；不能把原卸载返程-.12m/s说成全程载货.06m/s。
+
+仓库D已导出/接页4段视觉链和8张原lift/placement图。B点云312/227、所选OBB51/49；A290/232、OBB51/97。两单四次官方模型请求真实完成，生成与几何候选执行分别说明，来源/task/episode不串。21定向前端测试/typecheck/lint、生产build与生产preview5195桌面/390px通过，0POST/0pageerror，20类原材料下载200；preview与QA浏览器已关，5194开发预览保持。582.5秒原录像可读，新原件/派生D仍待归档。
+
+车间D runf1d39d4b-6565-40d0-9f8b-60a6f0a17dd2，B task451a33b6-0694-464c-be56-276e4820653f完成装货和运抵B后，原卸货pinch IK失败，A未执行，整轮false/清理true/survivors[]/源一致。残差.100121是混合加权值，不解释为100mm纯位置。实测卸货臂yaw=pi/2、基座(.68,-2.10,.221)，货物(.515074,-1.831121,.228311)，局部target(.268879,.164926,.016311)超出该pinch姿态可解范围。原世界+X建议因坐标方向相反会更远，未采用。仅用原pickup_xy_m将两卸货站[.24,.14]改[.24,.04]：B基座(.58,-2.10)、A(-.12,-2.10)，bench/shelf一起-x.10，dock/Y/Z/yaw/尺寸/门槛/速度不变。原失败快照IK与全部接近/上下行/交接端点/home通过；A为明确静态平移预测，非执行成功。54个原完整body容差离散姿态全部pass/min32.407mm，不称连续体积证明；463点往返认证净距25.652mm。14相关契约与编译读回通过，无新控制或生成框架。下一步只跑车间原同世界B→A，不重跑已验仓库。
+
+原件已按100MiB连接器上限分卷，超限首包324,713,158B被接口413在动作前拒绝，未产生Drive新文件。4相机卷与2证据卷均实际流式完整tar成员/最终gzipCRC读回：5270输入/325,776,071解码字节，以及557项/117,566,142解码字节。所选Drive新文件夹1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L已实际列出7项（含原v6），移动仅本轮新归档，保留权限/ID。已删除备份后5270本机原相机副本325,776,071B及重复上传tar324,713,966+79,172,928B，恢复README与全部part ID保持；其他新原件继续保留，D不借旧包冒称备份。
+
+未交付遗留已读回：docs/MAP_RULES.md两行与plans/cy-map-rule-candidate是独立CY备选，README明确来源无独立许可证、厂商坐标尚未核实、未接执行链。保留当前改动不推公开远端，owner根Codex，最短接续为该README的来源/许可证与独立局部测试；不覆盖、不当成已整合。knowledge_status=already_covered：交接坐标/工作空间和原生时序经验原页已覆盖，项目状态留本计划。

@@ -68,6 +68,16 @@
   ],
   "experiments": [
     {
+      "id": "f2-warehouse-local-183948",
+      "title": "本机仓库 D · 两单视觉配送完整通过",
+      "vehicle": "j100",
+      "sensor": "3d",
+      "configuration": "本机J100 / MID-360式 / GraspGen-X视觉配送",
+      "source": "/workbench/f2-warehouse-local-183948-result.json",
+      "coverage": "同一回合B→A完整原评分2/2通过；原失败/部分成功记录保留",
+      "materials": "两单共四段RGBD/实际候选/抬升/装卸放稳链，真实录像与阶段回放；雷达仅启动样本"
+    },
+    {
       "id": "f2-workshop-v2",
       "title": "新车间 v2 · 进场失败",
       "vehicle": "mecanum",
@@ -146,6 +156,16 @@
       "source": "/workbench/f2-warehouse-local-175145-result.json",
       "coverage": "B完整原评分通过；A返站接触失败；整轮1/2",
       "materials": "B装货/卸货两条视觉链、实际MID与消费者回执、录像/阶段回放"
+    },
+    {
+      "id": "f2-workshop-local-185131",
+      "title": "本机车间 D · 装运通过，卸货规划失败",
+      "vehicle": "mecanum",
+      "sensor": "3d",
+      "configuration": "本机麦轮 / 原16线3D / ideal货物观测",
+      "source": "/workbench/f2-workshop-local-185131-result.json",
+      "coverage": "装运与到站通过；卸货准备IK残差0.100121m，整单失败/A未派发",
+      "materials": "实际装运录像、原任务/物理分项、启动传感器样本；无RGB模型材料"
     }
   ]
 }

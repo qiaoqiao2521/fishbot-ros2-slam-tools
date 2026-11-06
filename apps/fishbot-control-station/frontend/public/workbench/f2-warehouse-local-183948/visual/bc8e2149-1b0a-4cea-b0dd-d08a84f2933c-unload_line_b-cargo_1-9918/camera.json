@@ -1,0 +1,72 @@
+{
+  "name": "workcell_unload_line_b_camera",
+  "frame_id": "workcell_unload_line_b_camera_optical_frame",
+  "width": 640,
+  "height": 480,
+  "fovy": 45.0,
+  "k": [
+    579.4112549695428,
+    0.0,
+    319.5,
+    0.0,
+    579.4112549695428,
+    239.5,
+    0.0,
+    0.0,
+    1.0
+  ],
+  "T_station_camera": [
+    [
+      0.9096880038630341,
+      0.31185489786733667,
+      -0.27425218012595953,
+      0.45
+    ],
+    [
+      0.415292349589646,
+      -0.683110728661785,
+      0.6007428707521018,
+      -0.5
+    ],
+    [
+      -0.0,
+      -0.6603834151940207,
+      -0.7509285884401271,
+      0.6
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "slots_station_xy": {
+    "cargo_1": [
+      0.24,
+      0.04
+    ],
+    "cargo_2": [
+      0.24,
+      0.04
+    ]
+  },
+  "slot_half_extent_m": [
+    0.07,
+    0.07
+  ],
+  "target_id": "cargo_1",
+  "minimum_points": 25,
+  "depth_range_m": [
+    0.05,
+    1.5
+  ],
+  "colour_prior": {
+    "name": "declared_green_cargo",
+    "green_to_red_min": 1.22,
+    "green_to_blue_min": 1.12,
+    "green_min_u8": 35
+  },
+  "mask_method": "rgb_connected_component_in_fixed_inventory_slot",
+  "point_source": "visible_rgbd_surface_only"
+}

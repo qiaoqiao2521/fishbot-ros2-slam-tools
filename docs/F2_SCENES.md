@@ -82,3 +82,6 @@ python3 tools/cooperation_factory.py run \
 
 
 新车间 `mounted_load_fixture` 只在 coaxial 配方启用：保留原挡块尺寸，将其固定在 local(.05,.15,.065)，增加从地面到原挡块底部的真实支架。原默认、两个卸货工位与货物均保持，生成后的几何和地图必须一致。两货物关键抓放段、47.341mm障碍余量和25.652mm车体扫掠是静态候选证据；完整B→A仍看原Factory结果。Clock/physics恢复交错读取已改为在原接收预算内等待真实Clock，再按原门槛验收，绝不替换时间源或给旧帧改stamp。
+
+
+车间卸货候选复用entities的 `pickup_xy_m=[.24,.04]`：卸货臂yaw为pi/2，这使整套工位向世界-X移动.10m，保留dock、局部抓放/货架与碰撞尺寸。不是增大机械臂工作空间或改IK容差。原失败快照和两站静态预测均过原检查，完整任务另验。仓库D同世界B→A已实跑通过（source08b0cb2），传感器/视觉/原生返程与独立评分详见当前progress。

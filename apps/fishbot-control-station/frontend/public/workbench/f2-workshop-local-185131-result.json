@@ -1,0 +1,63 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "本机车间 D · 装运通过，卸货规划失败",
+  "recorded_at": "2026-11-06",
+  "run_id": "f1d39d4b-6565-40d0-9f8b-60a6f0a17dd2",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "麦克纳姆 robot_base",
+  "sensor": "原通用16线3D雷达 · 360×16槽位",
+  "scene_label": "本机车间线边 · f2-workshop-line",
+  "observation_mode": "ideal",
+  "model": "原SO101 IK/OMPL · ideal货物观测",
+  "description": "本次实际完成双指装货、托盘释放、载货运输与目的地停车；卸货准备阶段未找到垂直抓取IK，整单原评分失败，A未执行。",
+  "evidence_note": "本轮是ideal货物观测，没有RGB-D模型输入或神经网络抓取。原装运分项和载货路线通过，不代表卸货上架或完整业务通过。原现场姿态/接触和时限保持。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 192.9693151749998,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（卸货规划失败）",
+      "task_id": "451a33b6-0694-464c-be56-276e4820653f",
+      "passed": false,
+      "route_seconds": 32.29453478799769,
+      "position_error_m": 0.02533530703054679,
+      "yaw_error_rad": 0.033749279475426816,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": "卸货准备规划失败：No vertical pinch IK candidate，原残差0.100121m。未完成实体卸货上架；原整单失败，A未派发。",
+      "component_summary": "原双指抬升、托盘释放落稳、机械臂回位及载货运输通过；同货物真实位移2.280676m，载货路线32.295s并到站停稳。卸货实际抬升和货架回位未验证，不能计完整配送。"
+    }
+  ],
+  "assets": {
+    "video": "/workbench/f2-workshop-local-185131/overview.mp4",
+    "video_index": "/workbench/f2-workshop-local-185131/video-frame-index.json",
+    "sensor_experience": "/workbench/f2-workshop-local-185131/sensor/sensor-experience.json"
+  },
+  "video_caption": "原录像304帧，按原2fps播放；下载索引仅派生媒体时间信息，不含运行日志。",
+  "archive_status": "本机原件和本次网页派生材料待根owner归档；旧Drive归档不冒充包含该回合。",
+  "warnings": [
+    "本轮ideal观测没有RGB-D模型调用，不创建模型候选、查询或视觉里程碑。",
+    "已有缓存未提供阶段时序/位置回放；保留实际录像与原评分摘要，不补造轨迹。",
+    "后续卸货站位修正是另一个未在本记录验收的候选；不回写本次失败为通过。"
+  ],
+  "provenance": {
+    "source_kind": "actual_local_terminal_factory_readonly_export",
+    "source_run_id": "f1d39d4b-6565-40d0-9f8b-60a6f0a17dd2",
+    "source_run_directory": "/tmp/fishbot-closure-20261106/runs/f2-workshop-line-run-20261106-185131-99cfcb",
+    "scene_id": "f2-workshop-line-coaxial-ba-entities",
+    "candidate_label": "f2-workshop-line",
+    "new_execution": false,
+    "rescored": false,
+    "raw_backup": {
+      "confirmed": false,
+      "status": "pending_root_archive"
+    },
+    "original_components_report": "/workbench/f2-workshop-local-185131/original-components.json",
+    "episode_ids": [
+      "2db31961-cbf1-4bb0-ad4a-2b10c0805004"
+    ],
+    "original_whole_passed": false,
+    "original_stop_reason": "Approach query failed: No vertical pinch IK candidate, residual=0.10012118595087666"
+  }
+}

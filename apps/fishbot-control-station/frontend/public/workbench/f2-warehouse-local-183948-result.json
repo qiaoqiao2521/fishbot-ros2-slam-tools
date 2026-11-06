@@ -1,0 +1,109 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "本机仓库 D · 两单视觉配送完整通过",
+  "recorded_at": "2026-11-06",
+  "run_id": "ecfa94dd-0570-4691-b5f2-542e923f1a7f",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "Jackal J100",
+  "sensor": "MID-360式扫描 · 4000×1槽位",
+  "scene_label": "本机宽通道仓库 · f2-wide-warehouse",
+  "observation_mode": "vision",
+  "model": "GraspGen-X实际推理＋原SO101 IK/OMPL",
+  "description": "同一原Factory回合中，B与A两单均完成真实视觉输入、抓放、载货导航和实体卸货，原独立物理/业务评分2/2通过。原失败与此前B成功/A返站失败的记录继续保留。",
+  "evidence_note": "同一原Factory回合与原独立评分，只读导入，不跨麦轮或旧回合拼链；图像/查询/抓放与整体业务分别记账。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 659.7820396349998,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（完整原评分通过）",
+      "task_id": "b928563d-9729-4003-917d-5116b27ffe98",
+      "passed": true,
+      "route_seconds": 48.37773537099929,
+      "position_error_m": 0.008658546665959235,
+      "yaw_error_rad": 0.031948165346125,
+      "visible_points": [
+        312,
+        227
+      ],
+      "selected_candidates": [
+        51,
+        49
+      ],
+      "failure_reason": null,
+      "component_summary": "装货312点／候选#51（obb）；卸货227点／候选#49（obb）。同任务实际抬升、放稳、卸货上架和回位均通过原独立评分；任务293.266墙秒，最终位置误差8.659mm。",
+      "task_elapsed_wall_s": 293.2655645779996
+    },
+    {
+      "id": "order-a",
+      "label": "订单 A（完整原评分通过）",
+      "task_id": "733083a1-a01e-464b-81af-53f7a2760963",
+      "passed": true,
+      "route_seconds": 25.339425935999316,
+      "position_error_m": 0.005642282842137417,
+      "yaw_error_rad": 0.00928116365328016,
+      "visible_points": [
+        290,
+        232
+      ],
+      "selected_candidates": [
+        51,
+        97
+      ],
+      "failure_reason": null,
+      "component_summary": "装货290点／候选#51（obb）；卸货232点／候选#97（obb）。同任务实际抬升、放稳、卸货上架和回位均通过原独立评分；任务298.000墙秒，最终位置误差5.642mm。",
+      "task_elapsed_wall_s": 298.00044990099923
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/f2-warehouse-local-183948/timing.json",
+    "replay": "/workbench/f2-warehouse-local-183948/replay.json",
+    "video": "/workbench/f2-warehouse-local-183948/overview.mp4",
+    "video_index": "/workbench/f2-warehouse-local-183948/video-frame-index.json",
+    "sensor_experience": "/workbench/f2-warehouse-local-183948/sensor/sensor-experience.json",
+    "visual_chain": "/workbench/f2-warehouse-local-183948/visual/visual-chain.json",
+    "lidar_receipt": "/workbench/f2-warehouse-local-183948/native-lidar-consumer.json",
+    "poster": "/workbench/f2-warehouse-local-183948/visual/bc8e2149-1b0a-4cea-b0dd-d08a84f2933c-load-cargo_1-990/lift.jpg"
+  },
+  "video_caption": "原录像1165帧，按原2fps播放；下载索引仅派生媒体时间信息，不含运行日志。 封面来自本回合B抬升的原采样帧，不代表录像起点。",
+  "archive_status": "本机原件和本次网页派生材料待根owner归档；旧Drive归档不冒充包含该回合。",
+  "warnings": [
+    "停车保护辅助与观测/动作/物理评分分别保留；本页播放不能触发运动。",
+    "四段原模型调用确实完成；四次所选51/49/51/97均来自OBB几何候选池，不称神经网络proposal直接执行。原候选分数不代表成功概率。",
+    "雷达可视化只覆盖本episode启动阶段源1.9–12.2秒六帧，map TF1/6；原消费者探针是源6.700秒43条云。不是配送全程画面或逐消息消费ACK。",
+    "低障碍同时在静态collision_map中；实际3D回波、订阅和lethal cells不证明3D排他因果。",
+    "仅证明本次有限仿真原回合，不外推真机、任意货物或sim-to-real。"
+  ],
+  "provenance": {
+    "source_kind": "actual_local_terminal_factory_readonly_export",
+    "source_run_id": "ecfa94dd-0570-4691-b5f2-542e923f1a7f",
+    "source_run_directory": "/tmp/fishbot-closure-20261106/runs/f2-wide-warehouse-run-20261106-183948-52e90f",
+    "scene_id": "f1-j100-wide-continuous-ba",
+    "candidate_label": "f2-wide-warehouse",
+    "new_execution": false,
+    "rescored": false,
+    "raw_backup": {
+      "confirmed": false,
+      "status": "pending_root_archive"
+    },
+    "original_components_report": "/workbench/f2-warehouse-local-183948/original-components.json",
+    "episode_ids": [
+      "bc8e2149-1b0a-4cea-b0dd-d08a84f2933c"
+    ],
+    "original_whole_passed": true,
+    "source_revision_provided_by_owner": "08b0cb2",
+    "native_consumer_binding": {
+      "kind": "original_receipt_in_same_run_directory",
+      "source_stamp_s": 6.7,
+      "native_receipt_itself_has_episode_id": false,
+      "scope": "startup-only bounded probe, not delivery-time coverage or per-message ACK"
+    },
+    "video_poster_source": {
+      "task_id": "b928563d-9729-4003-917d-5116b27ffe98",
+      "phase": "load",
+      "video_frame": 116,
+      "source_s": 63.28000000003137
+    }
+  }
+}

@@ -1,0 +1,1172 @@
+{
+  "schema": "fishbot.delivery-timing.v1",
+  "scope": "historical_simulation_import",
+  "label": "配送记录 · J100 B→A",
+  "new_execution": false,
+  "rescored": false,
+  "limits": [
+    "Stage boundaries are sampled HTTP intervals, not exact event timestamps.",
+    "Wall receipt intervals and source time stay separate; route elapsed uses the original monotonic receipt.",
+    "Native terminal status / forwarding are not controller-consumption acknowledgements.",
+    "Historical simulation results do not establish real hardware or sim-to-real success."
+  ],
+  "source_run_id": "ecfa94dd-0570-4691-b5f2-542e923f1a7f",
+  "original_run_passed": true,
+  "warnings": [],
+  "cases": [
+    {
+      "start_wall_s": 1793961617.2064404,
+      "end_wall_s": 1793961910.464389,
+      "task_budget_s": 540.0,
+      "task_elapsed_s": 293.2655645779996,
+      "route": {
+        "start_wall_s": 1793961753.479539,
+        "end_wall_s": 1793961801.8572526,
+        "elapsed_s": 48.37773537099929,
+        "budget_s": 120.0,
+        "remaining_s": 71.62226462900071,
+        "clock": "monotonic_wall",
+        "boundary": "after_required_egress_through_final_nav_stop_and_hold",
+        "passed": true
+      },
+      "physical": {
+        "final_position_error_m": 0.008658546665959235,
+        "final_yaw_error_rad": 0.031948165346125,
+        "continuous_final_stop_source_s": 1.0000000000047748
+      },
+      "sampling": {
+        "records": 167426,
+        "physics_records": 14635,
+        "task_physics_records": 14631,
+        "malformed_records": 0,
+        "foreign_episode_records": 0,
+        "nonadvancing_records": 0,
+        "gaps": [
+          {
+            "missing": 16,
+            "before_source_s": 12.260000000000764,
+            "after_source_s": 12.600000000000877,
+            "before_wall_s": 1793961617.734046,
+            "after_wall_s": 1793961618.0806954,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": false,
+            "hold_after": false,
+            "line": 286
+          },
+          {
+            "missing": 16,
+            "before_source_s": 13.360000000001131,
+            "after_source_s": 13.700000000001245,
+            "before_wall_s": 1793961618.832841,
+            "after_wall_s": 1793961619.1864192,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 777
+          }
+        ],
+        "expected_source_period_s": 0.02,
+        "missing_samples": 32
+      },
+      "guard": [
+        {
+          "tripped_observed_contiguous_source_duration_s": 0.8399999999995345,
+          "plant_assistance_observed": true,
+          "pure_vision_precision_claimed": false
+        }
+      ],
+      "unavailable": [
+        "Nav2 planner CPU time",
+        "controller compute time / consumption acknowledgement",
+        "exact HTTP stage transition time"
+      ],
+      "warnings": [
+        "Named active-arm binding or measured joints unavailable in 3 display samples; no primary-arm fallback"
+      ],
+      "import_status": "partial",
+      "evidence_refs": [
+        "result.json#orders/0",
+        "order-1/markers.json",
+        "order-1/observer/observer.jsonl.gz"
+      ],
+      "trajectory": {
+        "stream_ref": "order-1-trajectory-10hz.jsonl",
+        "sample_count": 2927,
+        "byte_count": 1769264,
+        "policy": "first sample per 100ms source bin; retain break samples; no interpolation",
+        "clock": "source",
+        "frame": "world",
+        "units": "m / rad",
+        "score_input": false,
+        "sequence_start": 586.0,
+        "sequence_end": 15248.0
+      },
+      "scope": "transport",
+      "full_transport_acceptance_claimed": true,
+      "id": "ecfa94dd-0570-4691-b5f2-542e923f1a7f:order-b",
+      "label": "order-b",
+      "source_run_id": "ecfa94dd-0570-4691-b5f2-542e923f1a7f",
+      "task_id": "b928563d-9729-4003-917d-5116b27ffe98",
+      "episode_id": "bc8e2149-1b0a-4cea-b0dd-d08a84f2933c",
+      "vehicle": "jackal_j100",
+      "sensor": "lidar3d",
+      "scene_id": "f1-j100-wide-continuous-ba",
+      "observation_mode": "vision",
+      "original_verdict": {
+        "task_verdict": "passed",
+        "original_score_passed": true,
+        "original_k_passed": true
+      },
+      "spans": [
+        {
+          "id": "route",
+          "label": "配送预算区间",
+          "layer": "budget",
+          "start_wall_s": 1793961753.479539,
+          "end_wall_s": 1793961801.8572526,
+          "duration_s": 48.37773537099929,
+          "clock": "monotonic_wall",
+          "boundary": "after_required_egress_through_final_nav_stop_and_hold",
+          "parent_id": null
+        },
+        {
+          "id": "native-0",
+          "label": "离站 · DriveOnHeading",
+          "layer": "native",
+          "start_wall_s": 1793961728.9054031,
+          "end_wall_s": 1793961751.3072217,
+          "duration_s": 22.40181851387024,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "goal_id": "e1a005c99b0b4e65af1e9eaf930d74b9",
+          "terminal_status": 4,
+          "evidence": "result.native_route",
+          "consumption_ack": false
+        },
+        {
+          "id": "interval-1",
+          "label": "动作间隔（未细分）",
+          "layer": "interval",
+          "start_wall_s": 1793961753.479539,
+          "end_wall_s": 1793961753.4803822,
+          "duration_s": 0.0008432865142822266,
+          "clock": "observer_wall_receipt",
+          "parent_id": "route"
+        },
+        {
+          "id": "native-1",
+          "label": "配送目标 · Nav2",
+          "layer": "native",
+          "start_wall_s": 1793961753.4803822,
+          "end_wall_s": 1793961800.2441688,
+          "duration_s": 46.76378655433655,
+          "clock": "observer_wall_receipt",
+          "parent_id": "route",
+          "goal_id": "eccf7c9443c14c488fed636a5d578a8b",
+          "terminal_status": 4,
+          "evidence": "result.native_route",
+          "consumption_ack": false
+        },
+        {
+          "id": "route-confirmation",
+          "label": "终态至停稳确认区间",
+          "layer": "interval",
+          "start_wall_s": 1793961800.2441688,
+          "end_wall_s": 1793961801.8572526,
+          "duration_s": 1.613083839416504,
+          "clock": "observer_wall_receipt",
+          "parent_id": "route"
+        },
+        {
+          "id": "stage-0",
+          "label": "car_to_dock",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961617.3979313,
+          "end_wall_s": 1793961625.6673841,
+          "duration_s": 8.269452810287476,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            null,
+            1793961617.3979313
+          ],
+          "start_source_s": 11.900000000000643,
+          "end_source_s": 20.179999999999694,
+          "end_boundary_wall_s": [
+            1793961625.1594563,
+            1793961625.6673841
+          ],
+          "start_monotonic_s": 31795.392454113,
+          "end_monotonic_s": 31803.661906766,
+          "start_ref": "observer.jsonl:137",
+          "end_ref": "observer.jsonl:5636",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-1",
+          "label": "dock_stopped",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961625.6673841,
+          "end_wall_s": 1793961628.9882255,
+          "duration_s": 3.3208413124084473,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961625.1594563,
+            1793961625.6673841
+          ],
+          "start_source_s": 20.179999999999694,
+          "end_source_s": 23.479999999997865,
+          "end_boundary_wall_s": [
+            1793961628.4663239,
+            1793961628.9882255
+          ],
+          "start_monotonic_s": 31803.661906766,
+          "end_monotonic_s": 31806.982748192,
+          "start_ref": "observer.jsonl:5636",
+          "end_ref": "observer.jsonl:7448",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-2",
+          "label": "arm_grasp",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961628.9882255,
+          "end_wall_s": 1793961665.8827858,
+          "duration_s": 36.89456033706665,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961628.4663239,
+            1793961628.9882255
+          ],
+          "start_source_s": 23.479999999997865,
+          "end_source_s": 60.40000000002785,
+          "end_boundary_wall_s": [
+            1793961665.3680565,
+            1793961665.8827858
+          ],
+          "start_monotonic_s": 31806.982748192,
+          "end_monotonic_s": 31843.87730847,
+          "start_ref": "observer.jsonl:7448",
+          "end_ref": "observer.jsonl:27153",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-3",
+          "label": "arm_lift",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961665.8827858,
+          "end_wall_s": 1793961678.4975166,
+          "duration_s": 12.614730834960938,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961665.3680565,
+            1793961665.8827858
+          ],
+          "start_source_s": 60.40000000002785,
+          "end_source_s": 73.00000000001127,
+          "end_boundary_wall_s": [
+            1793961677.9826822,
+            1793961678.4975166
+          ],
+          "start_monotonic_s": 31843.87730847,
+          "end_monotonic_s": 31856.492039014,
+          "start_ref": "observer.jsonl:27153",
+          "end_ref": "observer.jsonl:33739",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-4",
+          "label": "arm_transport",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961678.4975166,
+          "end_wall_s": 1793961711.6893418,
+          "duration_s": 33.19182515144348,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961677.9826822,
+            1793961678.4975166
+          ],
+          "start_source_s": 73.00000000001127,
+          "end_source_s": 106.1999999999339,
+          "end_boundary_wall_s": [
+            1793961711.176439,
+            1793961711.6893418
+          ],
+          "start_monotonic_s": 31856.492039014,
+          "end_monotonic_s": 31889.683864398,
+          "start_ref": "observer.jsonl:33739",
+          "end_ref": "observer.jsonl:51013",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-5",
+          "label": "arm_release",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961711.6893418,
+          "end_wall_s": 1793961718.9987059,
+          "duration_s": 7.309364080429077,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961711.176439,
+            1793961711.6893418
+          ],
+          "start_source_s": 106.1999999999339,
+          "end_source_s": 113.49999999991688,
+          "end_boundary_wall_s": [
+            1793961718.479258,
+            1793961718.9987059
+          ],
+          "start_monotonic_s": 31889.683864398,
+          "end_monotonic_s": 31896.993228726,
+          "start_ref": "observer.jsonl:51013",
+          "end_ref": "observer.jsonl:54836",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-6",
+          "label": "arm_retreat",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961718.9987059,
+          "end_wall_s": 1793961726.2704012,
+          "duration_s": 7.271695375442505,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961718.479258,
+            1793961718.9987059
+          ],
+          "start_source_s": 113.49999999991688,
+          "end_source_s": 120.77999999989991,
+          "end_boundary_wall_s": [
+            1793961725.756544,
+            1793961726.2704012
+          ],
+          "start_monotonic_s": 31896.993228726,
+          "end_monotonic_s": 31904.264924112,
+          "start_ref": "observer.jsonl:54836",
+          "end_ref": "observer.jsonl:58635",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-7",
+          "label": "cargo_settle",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961726.2704012,
+          "end_wall_s": 1793961728.8854616,
+          "duration_s": 2.615060329437256,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961725.756544,
+            1793961726.2704012
+          ],
+          "start_source_s": 120.77999999989991,
+          "end_source_s": 123.3599999998939,
+          "end_boundary_wall_s": [
+            1793961728.331795,
+            1793961728.8854616
+          ],
+          "start_monotonic_s": 31904.264924112,
+          "end_monotonic_s": 31906.87998426,
+          "start_ref": "observer.jsonl:58635",
+          "end_ref": "observer.jsonl:60001",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-8",
+          "label": "arm_retreat",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961728.8854616,
+          "end_wall_s": 1793961729.4040034,
+          "duration_s": 0.5185418128967285,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961728.331795,
+            1793961728.8854616
+          ],
+          "start_source_s": 123.3599999998939,
+          "end_source_s": 123.9199999998926,
+          "end_boundary_wall_s": [
+            1793961728.8854616,
+            1793961729.4040034
+          ],
+          "start_monotonic_s": 31906.87998426,
+          "end_monotonic_s": 31907.398525949,
+          "start_ref": "observer.jsonl:60001",
+          "end_ref": "observer.jsonl:60334",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-9",
+          "label": "car_to_delivery",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961729.4040034,
+          "end_wall_s": 1793961803.3392365,
+          "duration_s": 73.9352331161499,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961728.8854616,
+            1793961729.4040034
+          ],
+          "start_source_s": 123.9199999998926,
+          "end_source_s": 197.86000000021664,
+          "end_boundary_wall_s": [
+            1793961802.819023,
+            1793961803.3392365
+          ],
+          "start_monotonic_s": 31907.398525949,
+          "end_monotonic_s": 31981.333759376,
+          "start_ref": "observer.jsonl:60334",
+          "end_ref": "observer.jsonl:114198",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-10",
+          "label": "delivery_stopped",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961803.3392365,
+          "end_wall_s": 1793961806.5841496,
+          "duration_s": 3.244913101196289,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961802.819023,
+            1793961803.3392365
+          ],
+          "start_source_s": 197.86000000021664,
+          "end_source_s": 201.08000000023202,
+          "end_boundary_wall_s": [
+            1793961806.0636058,
+            1793961806.5841496
+          ],
+          "start_monotonic_s": 31981.333759376,
+          "end_monotonic_s": 31984.578671919,
+          "start_ref": "observer.jsonl:114198",
+          "end_ref": "observer.jsonl:115784",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-11",
+          "label": "unload_grasp",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961806.5841496,
+          "end_wall_s": 1793961839.6009696,
+          "duration_s": 33.01681995391846,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961806.0636058,
+            1793961806.5841496
+          ],
+          "start_source_s": 201.08000000023202,
+          "end_source_s": 234.10000000038968,
+          "end_boundary_wall_s": [
+            1793961839.0787067,
+            1793961839.6009696
+          ],
+          "start_monotonic_s": 31984.578671919,
+          "end_monotonic_s": 32017.595492302,
+          "start_ref": "observer.jsonl:115784",
+          "end_ref": "observer.jsonl:132360",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-12",
+          "label": "unload_transport",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961839.6009696,
+          "end_wall_s": 1793961907.733525,
+          "duration_s": 68.13255548477173,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961839.0787067,
+            1793961839.6009696
+          ],
+          "start_source_s": 234.10000000038968,
+          "end_source_s": 302.24000000071504,
+          "end_boundary_wall_s": [
+            1793961907.2215755,
+            1793961907.733525
+          ],
+          "start_monotonic_s": 32017.595492302,
+          "end_monotonic_s": 32085.728048061,
+          "start_ref": "observer.jsonl:132360",
+          "end_ref": "observer.jsonl:166068",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-13",
+          "label": "unloaded",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961907.733525,
+          "end_wall_s": 1793961910.3110201,
+          "duration_s": 2.5774950981140137,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961907.2215755,
+            1793961907.733525
+          ],
+          "start_source_s": 302.24000000071504,
+          "end_source_s": null,
+          "end_boundary_wall_s": [
+            1793961910.3110201,
+            null
+          ],
+          "start_monotonic_s": 32085.728048061,
+          "end_monotonic_s": 32088.305542653,
+          "start_ref": "observer.jsonl:166068",
+          "end_ref": null,
+          "evidence": "http_state.task.stage; sampled, not exact transition",
+          "right_censored": true
+        }
+      ]
+    },
+    {
+      "start_wall_s": 1793961935.3712354,
+      "end_wall_s": 1793962233.3498082,
+      "task_budget_s": 540.0,
+      "task_elapsed_s": 298.00044990099923,
+      "route": {
+        "start_wall_s": 1793962098.2811012,
+        "end_wall_s": 1793962123.6164663,
+        "elapsed_s": 25.339425935999316,
+        "budget_s": 120.0,
+        "remaining_s": 94.66057406400068,
+        "clock": "monotonic_wall",
+        "boundary": "after_required_egress_through_final_nav_stop_and_hold",
+        "passed": true
+      },
+      "physical": {
+        "final_position_error_m": 0.005642282842137417,
+        "final_yaw_error_rad": 0.00928116365328016,
+        "continuous_final_stop_source_s": 1.0199999999758802
+      },
+      "sampling": {
+        "records": 170832,
+        "physics_records": 14887,
+        "task_physics_records": 14881,
+        "malformed_records": 0,
+        "foreign_episode_records": 0,
+        "nonadvancing_records": 0,
+        "gaps": [
+          {
+            "missing": 16,
+            "before_source_s": 329.9800000008475,
+            "after_source_s": 330.3200000008491,
+            "before_wall_s": 1793961935.7504117,
+            "after_wall_s": 1793961936.0903711,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": false,
+            "hold_after": false,
+            "line": 305
+          },
+          {
+            "missing": 1,
+            "before_source_s": 353.74000000096095,
+            "after_source_s": 353.78000000096114,
+            "before_wall_s": 1793961959.5149019,
+            "after_wall_s": 1793961959.5544643,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": false,
+            "hold_after": false,
+            "line": 18328
+          },
+          {
+            "missing": 1,
+            "before_source_s": 562.3800000005252,
+            "after_source_s": 562.4200000005243,
+            "before_wall_s": 1793962168.150383,
+            "after_wall_s": 1793962168.1906035,
+            "stage_before": "unload_transport",
+            "stage_after": "unload_transport",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 138517
+          }
+        ],
+        "expected_source_period_s": 0.02,
+        "missing_samples": 18
+      },
+      "guard": [
+        {
+          "tripped_observed_contiguous_source_duration_s": 0.7800000000037244,
+          "plant_assistance_observed": true,
+          "pure_vision_precision_claimed": false
+        }
+      ],
+      "unavailable": [
+        "Nav2 planner CPU time",
+        "controller compute time / consumption acknowledgement",
+        "exact HTTP stage transition time"
+      ],
+      "warnings": [
+        "Named active-arm binding or measured joints unavailable in 2 display samples; no primary-arm fallback"
+      ],
+      "import_status": "partial",
+      "evidence_refs": [
+        "result.json#orders/1",
+        "order-2/markers.json",
+        "order-2/observer/observer.jsonl.gz"
+      ],
+      "trajectory": {
+        "stream_ref": "order-2-trajectory-10hz.jsonl",
+        "sample_count": 2978,
+        "byte_count": 1796929,
+        "policy": "first sample per 100ms source bin; retain break samples; no interpolation",
+        "clock": "source",
+        "frame": "world",
+        "units": "m / rad",
+        "score_input": false,
+        "sequence_start": 16480.0,
+        "sequence_end": 31378.0
+      },
+      "scope": "transport",
+      "full_transport_acceptance_claimed": true,
+      "id": "ecfa94dd-0570-4691-b5f2-542e923f1a7f:order-a",
+      "label": "order-a",
+      "source_run_id": "ecfa94dd-0570-4691-b5f2-542e923f1a7f",
+      "task_id": "733083a1-a01e-464b-81af-53f7a2760963",
+      "episode_id": "bc8e2149-1b0a-4cea-b0dd-d08a84f2933c",
+      "vehicle": "jackal_j100",
+      "sensor": "lidar3d",
+      "scene_id": "f1-j100-wide-continuous-ba",
+      "observation_mode": "vision",
+      "original_verdict": {
+        "task_verdict": "passed",
+        "original_score_passed": true,
+        "original_k_passed": false
+      },
+      "spans": [
+        {
+          "id": "route",
+          "label": "配送预算区间",
+          "layer": "budget",
+          "start_wall_s": 1793962098.2811012,
+          "end_wall_s": 1793962123.6164663,
+          "duration_s": 25.339425935999316,
+          "clock": "monotonic_wall",
+          "boundary": "after_required_egress_through_final_nav_stop_and_hold",
+          "parent_id": null
+        },
+        {
+          "id": "native-0",
+          "label": "离站 · DriveOnHeading",
+          "layer": "native",
+          "start_wall_s": 1793962073.8372207,
+          "end_wall_s": 1793962096.135885,
+          "duration_s": 22.298664331436157,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "goal_id": "f585371572f14a3db3bca73d7d15f15b",
+          "terminal_status": 4,
+          "evidence": "result.native_route",
+          "consumption_ack": false
+        },
+        {
+          "id": "interval-1",
+          "label": "动作间隔（未细分）",
+          "layer": "interval",
+          "start_wall_s": 1793962098.2811012,
+          "end_wall_s": 1793962098.2822988,
+          "duration_s": 0.0011975765228271484,
+          "clock": "observer_wall_receipt",
+          "parent_id": "route"
+        },
+        {
+          "id": "native-1",
+          "label": "配送目标 · Nav2",
+          "layer": "native",
+          "start_wall_s": 1793962098.2822988,
+          "end_wall_s": 1793962121.3215353,
+          "duration_s": 23.039236545562744,
+          "clock": "observer_wall_receipt",
+          "parent_id": "route",
+          "goal_id": "08b01be15e8046a387df9bf6e3698b93",
+          "terminal_status": 4,
+          "evidence": "result.native_route",
+          "consumption_ack": false
+        },
+        {
+          "id": "route-confirmation",
+          "label": "终态至停稳确认区间",
+          "layer": "interval",
+          "start_wall_s": 1793962121.3215353,
+          "end_wall_s": 1793962123.6164663,
+          "duration_s": 2.294930934906006,
+          "clock": "observer_wall_receipt",
+          "parent_id": "route"
+        },
+        {
+          "id": "stage-0",
+          "label": "car_to_dock",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961935.5654573,
+          "end_wall_s": 1793961971.5772655,
+          "duration_s": 36.01180815696716,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            null,
+            1793961935.5654573
+          ],
+          "start_source_s": 329.78000000084654,
+          "end_source_s": 365.78000000101844,
+          "end_boundary_wall_s": [
+            1793961971.0598202,
+            1793961971.5772655
+          ],
+          "start_monotonic_s": 32113.559979923,
+          "end_monotonic_s": 32149.571788253,
+          "start_ref": "observer.jsonl:176",
+          "end_ref": "observer.jsonl:27296",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-1",
+          "label": "dock_stopped",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961971.5772655,
+          "end_wall_s": 1793961974.361345,
+          "duration_s": 2.7840795516967773,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961971.0598202,
+            1793961971.5772655
+          ],
+          "start_source_s": 365.78000000101844,
+          "end_source_s": 368.5800000010318,
+          "end_boundary_wall_s": [
+            1793961973.8437028,
+            1793961974.361345
+          ],
+          "start_monotonic_s": 32149.571788253,
+          "end_monotonic_s": 32152.355867579,
+          "start_ref": "observer.jsonl:27296",
+          "end_ref": "observer.jsonl:28743",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-2",
+          "label": "arm_grasp",
+          "layer": "observed_stage",
+          "start_wall_s": 1793961974.361345,
+          "end_wall_s": 1793962011.4092243,
+          "duration_s": 37.047879219055176,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793961973.8437028,
+            1793961974.361345
+          ],
+          "start_source_s": 368.5800000010318,
+          "end_source_s": 405.62000000120867,
+          "end_boundary_wall_s": [
+            1793962010.8987184,
+            1793962011.4092243
+          ],
+          "start_monotonic_s": 32152.355867579,
+          "end_monotonic_s": 32189.403747203,
+          "start_ref": "observer.jsonl:28743",
+          "end_ref": "observer.jsonl:48483",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-3",
+          "label": "arm_lift",
+          "layer": "observed_stage",
+          "start_wall_s": 1793962011.4092243,
+          "end_wall_s": 1793962024.0608373,
+          "duration_s": 12.651612997055054,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793962010.8987184,
+            1793962011.4092243
+          ],
+          "start_source_s": 405.62000000120867,
+          "end_source_s": 418.2800000012691,
+          "end_boundary_wall_s": [
+            1793962023.5484343,
+            1793962024.0608373
+          ],
+          "start_monotonic_s": 32189.403747203,
+          "end_monotonic_s": 32202.055360107,
+          "start_ref": "observer.jsonl:48483",
+          "end_ref": "observer.jsonl:55065",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-4",
+          "label": "arm_transport",
+          "layer": "observed_stage",
+          "start_wall_s": 1793962024.0608373,
+          "end_wall_s": 1793962056.7999935,
+          "duration_s": 32.7391562461853,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793962023.5484343,
+            1793962024.0608373
+          ],
+          "start_source_s": 418.2800000012691,
+          "end_source_s": 451.00000000142535,
+          "end_boundary_wall_s": [
+            1793962056.2834566,
+            1793962056.7999935
+          ],
+          "start_monotonic_s": 32202.055360107,
+          "end_monotonic_s": 32234.794516236,
+          "start_ref": "observer.jsonl:55065",
+          "end_ref": "observer.jsonl:72144",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-5",
+          "label": "arm_release",
+          "layer": "observed_stage",
+          "start_wall_s": 1793962056.7999935,
+          "end_wall_s": 1793962063.5895653,
+          "duration_s": 6.789571762084961,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793962056.2834566,
+            1793962056.7999935
+          ],
+          "start_source_s": 451.00000000142535,
+          "end_source_s": 457.8000000014578,
+          "end_boundary_wall_s": [
+            1793962063.0750494,
+            1793962063.5895653
+          ],
+          "start_monotonic_s": 32234.794516236,
+          "end_monotonic_s": 32241.58408822,
+          "start_ref": "observer.jsonl:72144",
+          "end_ref": "observer.jsonl:75699",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-6",
+          "label": "arm_retreat",
+          "layer": "observed_stage",
+          "start_wall_s": 1793962063.5895653,
+          "end_wall_s": 1793962071.383226,
+          "duration_s": 7.793660640716553,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793962063.0750494,
+            1793962063.5895653
+          ],
+          "start_source_s": 457.8000000014578,
+          "end_source_s": 465.60000000149506,
+          "end_boundary_wall_s": [
+            1793962070.8560212,
+            1793962071.383226
+          ],
+          "start_monotonic_s": 32241.58408822,
+          "end_monotonic_s": 32249.377748662,
+          "start_ref": "observer.jsonl:75699",
+          "end_ref": "observer.jsonl:79735",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-7",
+          "label": "cargo_settle",
+          "layer": "observed_stage",
+          "start_wall_s": 1793962071.383226,
+          "end_wall_s": 1793962073.9837465,
+          "duration_s": 2.600520610809326,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793962070.8560212,
+            1793962071.383226
+          ],
+          "start_source_s": 465.60000000149506,
+          "end_source_s": 468.1800000015074,
+          "end_boundary_wall_s": [
+            1793962073.4595876,
+            1793962073.9837465
+          ],
+          "start_monotonic_s": 32249.377748662,
+          "end_monotonic_s": 32251.978269591,
+          "start_ref": "observer.jsonl:79735",
+          "end_ref": "observer.jsonl:81098",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-8",
+          "label": "car_to_delivery",
+          "layer": "observed_stage",
+          "start_wall_s": 1793962073.9837465,
+          "end_wall_s": 1793962125.0888803,
+          "duration_s": 51.10513377189636,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793962073.4595876,
+            1793962073.9837465
+          ],
+          "start_source_s": 468.1800000015074,
+          "end_source_s": 519.3000000015439,
+          "end_boundary_wall_s": [
+            1793962124.5694177,
+            1793962125.0888803
+          ],
+          "start_monotonic_s": 32251.978269591,
+          "end_monotonic_s": 32303.083402997,
+          "start_ref": "observer.jsonl:81098",
+          "end_ref": "observer.jsonl:116881",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-9",
+          "label": "delivery_stopped",
+          "layer": "observed_stage",
+          "start_wall_s": 1793962125.0888803,
+          "end_wall_s": 1793962128.3425732,
+          "duration_s": 3.253692865371704,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793962124.5694177,
+            1793962125.0888803
+          ],
+          "start_source_s": 519.3000000015439,
+          "end_source_s": 522.5400000014673,
+          "end_boundary_wall_s": [
+            1793962127.8081584,
+            1793962128.3425732
+          ],
+          "start_monotonic_s": 32303.083402997,
+          "end_monotonic_s": 32306.337095766,
+          "start_ref": "observer.jsonl:116881",
+          "end_ref": "observer.jsonl:118498",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-10",
+          "label": "unload_grasp",
+          "layer": "observed_stage",
+          "start_wall_s": 1793962128.3425732,
+          "end_wall_s": 1793962167.1854994,
+          "duration_s": 38.842926263809204,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793962127.8081584,
+            1793962128.3425732
+          ],
+          "start_source_s": 522.5400000014673,
+          "end_source_s": 561.4000000005484,
+          "end_boundary_wall_s": [
+            1793962166.667816,
+            1793962167.1854994
+          ],
+          "start_monotonic_s": 32306.337095766,
+          "end_monotonic_s": 32345.180022134,
+          "start_ref": "observer.jsonl:118498",
+          "end_ref": "observer.jsonl:138017",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-11",
+          "label": "unload_transport",
+          "layer": "observed_stage",
+          "start_wall_s": 1793962167.1854994,
+          "end_wall_s": 1793962227.8868473,
+          "duration_s": 60.70134782791138,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793962166.667816,
+            1793962167.1854994
+          ],
+          "start_source_s": 561.4000000005484,
+          "end_source_s": 622.0799999991135,
+          "end_boundary_wall_s": [
+            1793962227.3617172,
+            1793962227.8868473
+          ],
+          "start_monotonic_s": 32345.180022134,
+          "end_monotonic_s": 32405.881369971,
+          "start_ref": "observer.jsonl:138017",
+          "end_ref": "observer.jsonl:168109",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-12",
+          "label": "unloaded",
+          "layer": "observed_stage",
+          "start_wall_s": 1793962227.8868473,
+          "end_wall_s": 1793962233.1426387,
+          "duration_s": 5.255791425704956,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793962227.3617172,
+            1793962227.8868473
+          ],
+          "start_source_s": 622.0799999991135,
+          "end_source_s": null,
+          "end_boundary_wall_s": [
+            1793962233.1426387,
+            null
+          ],
+          "start_monotonic_s": 32405.881369971,
+          "end_monotonic_s": 32411.137161277,
+          "start_ref": "observer.jsonl:168109",
+          "end_ref": null,
+          "evidence": "http_state.task.stage; sampled, not exact transition",
+          "right_censored": true
+        }
+      ]
+    }
+  ],
+  "loop_diagnostics": {
+    "scope": "whole_world_session; not attributed to a Nav2 goal",
+    "stages": {
+      "spin_once": {
+        "count": 0.0,
+        "total_s": 0.0,
+        "max_s": 0.0,
+        "slow_count": 0.0
+      },
+      "command_apply": {
+        "count": 325230.0,
+        "total_s": 4.040763592736766,
+        "max_s": 0.02667066900175996,
+        "slow_count": 0.0
+      },
+      "mj_step": {
+        "count": 325230.0,
+        "total_s": 217.3453362983637,
+        "max_s": 0.37185639399831416,
+        "slow_count": 1.0
+      },
+      "publish": {
+        "count": 32523.0,
+        "total_s": 99.57919776690687,
+        "max_s": 0.3160962980000477,
+        "slow_count": 2.0
+      },
+      "snapshot_refresh": {
+        "count": 32523.0,
+        "total_s": 14.015528238374827,
+        "max_s": 0.002813253999192966,
+        "slow_count": 0.0
+      },
+      "clock_publish": {
+        "count": 32523.0,
+        "total_s": 1.3737552583406796,
+        "max_s": 0.0033493549999548122,
+        "slow_count": 0.0
+      },
+      "joint_publish": {
+        "count": 32523.0,
+        "total_s": 1.4559599771237117,
+        "max_s": 0.0007191529984993394,
+        "slow_count": 0.0
+      },
+      "odom_publish": {
+        "count": 32523.0,
+        "total_s": 2.547459842997341,
+        "max_s": 0.002054355998552637,
+        "slow_count": 0.0
+      },
+      "tf_publish": {
+        "count": 0.0,
+        "total_s": 0.0,
+        "max_s": 0.0,
+        "slow_count": 0.0
+      },
+      "truth_publish": {
+        "count": 32523.0,
+        "total_s": 1.6330378630991618,
+        "max_s": 0.002947774999483954,
+        "slow_count": 0.0
+      },
+      "cargo_publish": {
+        "count": 97569.0,
+        "total_s": 2.5321120870212326,
+        "max_s": 0.001711567001621006,
+        "slow_count": 0.0
+      },
+      "imu_publish": {
+        "count": 32523.0,
+        "total_s": 1.1130891056927794,
+        "max_s": 0.005071111001598183,
+        "slow_count": 0.0
+      },
+      "state_publish": {
+        "count": 32522.0,
+        "total_s": 2.2865656645735726,
+        "max_s": 0.31314946499696816,
+        "slow_count": 2.0
+      },
+      "record_write": {
+        "count": 0.0,
+        "total_s": 0.0,
+        "max_s": 0.0,
+        "slow_count": 0.0
+      },
+      "record_flush": {
+        "count": 0.0,
+        "total_s": 0.0,
+        "max_s": 0.0,
+        "slow_count": 0.0
+      },
+      "scan": {
+        "count": 6504.0,
+        "total_s": 5.951798346082796,
+        "max_s": 0.0030569690025004093,
+        "slow_count": 0.0
+      },
+      "scan_publish": {
+        "count": 6504.0,
+        "total_s": 0.26039552274232847,
+        "max_s": 0.0034334319971094374,
+        "slow_count": 0.0
+      },
+      "beacon_publish": {
+        "count": 0.0,
+        "total_s": 0.0,
+        "max_s": 0.0,
+        "slow_count": 0.0
+      },
+      "frame_offer": {
+        "count": 32522.0,
+        "total_s": 0.6833131399580452,
+        "max_s": 0.0137967260016012,
+        "slow_count": 0.0
+      },
+      "camera_offer": {
+        "count": 32522.0,
+        "total_s": 1.015649994566047,
+        "max_s": 0.0031536389979009982,
+        "slow_count": 0.0
+      },
+      "lidar_offer": {
+        "count": 6504.0,
+        "total_s": 0.12619798694504425,
+        "max_s": 0.00020282900004531257,
+        "slow_count": 0.0
+      }
+    }
+  }
+}

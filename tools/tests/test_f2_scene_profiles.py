@@ -85,7 +85,11 @@ class F2SceneProfiles(unittest.TestCase):
         lane_y = -2. + vehicle['dock_offset_m'][1]
         for candidate, source in zip(entities['unload_stations'], original['unload_stations']):
             self.assertAlmostEqual(candidate['delivery_pose']['y'], lane_y)
+            # Reuse the original station transform input: at yaw +pi/2 this
+            # moves the complete unload fixture world X -0.10m toward cargo.
+            self.assertEqual(candidate['pickup_xy_m'], [.24, .04])
             normalized = dict(candidate, delivery_pose=dict(candidate['delivery_pose'], y=source['delivery_pose']['y']))
+            normalized.pop('pickup_xy_m')
             self.assertEqual(normalized, source)
         self.assertEqual(entities['budgets_wall_s'], original['budgets_wall_s'])
         self.assertEqual(entities['cargo_slots'], original['cargo_slots'])
