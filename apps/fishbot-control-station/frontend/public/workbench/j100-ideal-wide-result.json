@@ -10,7 +10,7 @@
     "原宽场景缓存已不存在，旧场景报告只作为单独可选记录，不填入本回合。",
     "同world/episode、2start/0reset/0cancel；两次停车保护各约0.8源秒。"
   ],
-  "archive_status": "现存原报告与摘要正在统一归档Drive；已删除原件不记作可恢复。",
+  "archive_status": "现存摘要/阶段报告已存指定Drive，统一包实际下载读回39文件、12,933,605字节。未找到的物理日志、轨迹与录像未计作备份。",
   "availability_note": "当前未找到该回合的位置采样或录像原件，仅展示已保存报告；不以插值或其他回合代替。",
   "title": "J100宽通道 · ideal配送",
   "recorded_at": "2026-10-29",
@@ -67,5 +67,6 @@
     "rescored": false
   },
   "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
-  "scene_label": "J100宽通道 · full-ba-g"
+  "scene_label": "J100宽通道 · full-ba-g",
+  "archive_url": "https://drive.google.com/file/d/1OvvVnfa1n2xfNtAel3QVJmDnKhuaEc6d/view?usp=drivesdk"
 }
