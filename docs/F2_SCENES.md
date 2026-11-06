@@ -79,3 +79,6 @@ python3 tools/cooperation_factory.py run \
 返站仍用GridBased/NavFn，RPP碰撞拒绝后Spin恢复导致托盘触台沿。实验配置器增加显式`--staging-planner HeadingAware`，同时绑定原树的所有规划引用，复用已有SmacLattice；默认不改原树。原控制器、恢复、碰撞、速度和预算不变。此参数存在和单测通过不代表路线或完整配送已通过，原生结果以当前progress为准。
 
 车间单次源龄.36秒失败。`dedicated_station_receiver: true`是默认关闭的实验manifest选项，给原工位pose/detection/quality独立标准ROS接收执行器。原exact同步队列5、QoS5、来源和时龄阈值保持。入口receipt仅诊断，不作为接纳或控制器消费回执，也不据单次成功宣称长期时钟空档已消除。
+
+
+新车间 `mounted_load_fixture` 只在 coaxial 配方启用：保留原挡块尺寸，将其固定在 local(.05,.15,.065)，增加从地面到原挡块底部的真实支架。原默认、两个卸货工位与货物均保持，生成后的几何和地图必须一致。两货物关键抓放段、47.341mm障碍余量和25.652mm车体扫掠是静态候选证据；完整B→A仍看原Factory结果。Clock/physics恢复交错读取已改为在原接收预算内等待真实Clock，再按原门槛验收，绝不替换时间源或给旧帧改stamp。

@@ -300,6 +300,11 @@ class BridgeRaceTests(unittest.TestCase):
         p.episode_id=None;p.history=[];p.task_worker=None;p.reset_worker=None;p.reset_clearers=[];p.reset_records={};p.reset_acks={};p.reset_runtime={};p.last_reset_id=None
         p.lock=threading.RLock();p.physics_cache_lock=threading.RLock()
         p.station_receiver=None;p.station_receipt_lock=threading.RLock();p.station_receipts={}
+        class ClockUpdateEvent:
+            def clear(unused):pass
+            def set(unused):pass
+            def wait(unused,timeout):self.clock+=timeout;return False
+        p.clock_update_event=ClockUpdateEvent();p.last_physics_clock_recovery=None;p.last_freshness_failure=None
         p.worker=threading.local();p.execution_token=('task-a',1);p.worker.token=p.execution_token
         p.delivery_geometry_lock=threading.RLock();p.delivery_geometry=None;p.delivery_geometry_error=None
         p.task_epoch=1;p.dispatch_epoch=0;p.dispatches=[];p.cancel_event=threading.Event();p.abort_event=threading.Event()
@@ -606,6 +611,81 @@ class BridgeRaceTests(unittest.TestCase):
         result=p.fresh()
         self.assertEqual(calls,['validate','clock','copy']);self.assertEqual(result,p.raw)
         self.assertIsNot(result,p.raw)
+
+    def test_fresh_waits_only_for_real_clock_callback_within_original_receive_budget(self):
+        p=self.bridge;now=[9.22];cleared=[];woken=[]
+        p.get_clock=lambda:NS(now=lambda:NS(nanoseconds=round(now[0]*1e9)))
+        class Wake:
+            def clear(unused):cleared.append(True)
+            def set(unused):woken.append(True)
+            def wait(unused,timeout):
+                self.assertLessEqual(timeout,.5)
+                self.clock+=.001
+                p.observe_clock(NS(clock=NS(sec=10,nanosec=20000000)),NS(),
+                                lambda message:now.__setitem__(0,10.02))
+                return True
+        p.clock_update_event=Wake()
+        raw=p.fresh()
+        self.assertEqual(raw['stamp'],10.)
+        self.assertEqual(p.raw['stamp'],10.)
+        self.assertEqual(p.received,100.)
+        self.assertTrue(woken);self.assertGreaterEqual(len(cleared),2)
+        diagnostic=p.last_physics_clock_recovery
+        self.assertEqual(diagnostic['outcome'],'recovered')
+        self.assertAlmostEqual(diagnostic['initial_invalid_pair']['source_age_s'],-.78)
+        self.assertAlmostEqual(diagnostic['accepted_pair']['source_age_s'],.02)
+        self.assertAlmostEqual(diagnostic['waited_wall_s'],.001)
+        self.assertFalse(diagnostic['invalid_pair_admitted'])
+        self.assertIsNone(p.last_freshness_failure)
+
+    def test_fresh_future_timeout_never_extends_when_new_physics_arrives(self):
+        p=self.bridge;p.get_clock=lambda:NS(now=lambda:NS(nanoseconds=9_000_000_000))
+        waits=[]
+        class Wake:
+            def clear(unused):pass
+            def set(unused):pass
+            def wait(unused,timeout):
+                waits.append(timeout);self.clock+=.2
+                p.raw=copy.deepcopy(p.raw)
+                p.raw['stamp']+=.2;p.raw['time_s']=p.raw['stamp'];p.raw['sequence']+=1
+                p.received=self.clock
+                return True
+        p.clock_update_event=Wake()
+        with self.assertRaisesRegex(RuntimeError,'时间失效'):p.fresh()
+        self.assertAlmostEqual(p.last_physics_clock_recovery['deadline_monotonic'],100.5)
+        self.assertEqual(p.last_physics_clock_recovery['outcome'],'timeout')
+        self.assertEqual(len(waits),3)
+        self.assertAlmostEqual(waits[-1],.1)
+        self.assertLess(self.clock,100.7)
+        self.assertFalse(p.last_physics_clock_recovery['invalid_pair_admitted'])
+
+    def test_fresh_clock_recovery_keeps_exact_receive_boundary_and_rejects_one_ns_late(self):
+        p=self.bridge;now=[9.22]
+        p.get_clock=lambda:NS(now=lambda:NS(nanoseconds=round(now[0]*1e9)))
+        for delay in (.5,.500000001):
+            self.clock=100.;p.received=100.;now[0]=9.22;p.last_physics_clock_recovery=None
+            class Wake:
+                def clear(unused):pass
+                def set(unused):pass
+                def wait(unused,timeout):
+                    self.clock=100.+delay;now[0]=10.02
+                    return True
+            p.clock_update_event=Wake()
+            if delay==.5:
+                self.assertEqual(p.fresh()['stamp'],10.)
+                self.assertEqual(p.last_physics_clock_recovery['accepted_pair']['received_age_s'],.5)
+                self.assertEqual(p.last_physics_clock_recovery['outcome'],'recovered')
+            else:
+                with self.assertRaisesRegex(RuntimeError,'时间失效'):p.fresh()
+                self.assertEqual(p.last_physics_clock_recovery['outcome'],'timeout')
+                self.assertGreater(p.last_freshness_failure['received_age_s'],.5)
+
+    def test_fresh_positive_old_frame_does_not_wait_for_clock(self):
+        p=self.bridge;p.get_clock=lambda:NS(now=lambda:NS(nanoseconds=10_250_000_001))
+        p.clock_update_event=NS(clear=lambda:None,wait=lambda timeout:self.fail('Old input must fail immediately'))
+        with self.assertRaisesRegex(RuntimeError,'时间失效'):p.fresh()
+        self.assertIsNone(p.last_physics_clock_recovery)
+        self.assertEqual(self.clock,100.)
 
     def test_fresh_preserves_original_source_and_receive_age_boundaries(self):
         p=self.bridge;now=[10.];p.get_clock=lambda:NS(now=lambda:NS(nanoseconds=round(now[0]*1e9)))

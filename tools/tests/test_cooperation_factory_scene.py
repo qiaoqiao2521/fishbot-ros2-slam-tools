@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 import uuid
+import xml.etree.ElementTree as ET
 
 PROJECT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT/'tools'))
@@ -99,6 +100,35 @@ class FactoryDeliveryContractTests(unittest.TestCase):
             self.assertIs(apply_factory_scene(manifest, self.config()), manifest)
             self.assertEqual({key: Path(path).read_bytes() for key, path in paths.items()}, before)
             self.assertEqual(manifest['factory_delivery']['pickup_station']['id'], 'so101_station')
+
+    def test_mounted_load_fixture_preserves_obstacle_and_has_same_floor_support_in_each_frame(self):
+        config=self.config()
+        config['mounted_load_fixture']={'position_local_m':[.05,.15,.065],
+                                        'pedestal_half_size_xy_m':[.04,.04]}
+        with tempfile.TemporaryDirectory() as folder:
+            paths={key:str(Path(folder)/(key+'.xml')) for key in ('world_xml','arm_contact_xml','rig_xml')}
+            unchanged={'type':'box','size':'.025 .028 .065','contype':'1','conaffinity':'3','rgba':'.78 .39 .12 1'}
+            for key,path in paths.items():
+                tree=ET.Element('mujoco');world=ET.SubElement(tree,'worldbody')
+                ET.SubElement(world,'geom',name='approach_obstacle',pos='0.265 0 0.065',**unchanged)
+                ET.SubElement(world,'geom',name='unload_line_b__pick_bench',pos='8 8 8',size='1 1 1')
+                ET.ElementTree(tree).write(path,encoding='unicode')
+            manifest={**paths,'dock_pose':[-1.6,-1.64,0.],'station_offset':[-2.,-2.,.221]}
+            apply_factory_scene(manifest,config)
+            for key,path in paths.items():
+                world=ET.parse(path).getroot().find('worldbody');geom=world.find("geom[@name='approach_obstacle']")
+                self.assertEqual({k:geom.get(k)for k in unchanged},unchanged)
+                offset=[0.,0.,0.]if key=='world_xml'else manifest['station_offset']
+                position=[float(v)+o for v,o in zip(geom.get('pos').split(),offset)]
+                for actual,expected in zip(position,[-1.95,-1.85,.286]):self.assertAlmostEqual(actual,expected)
+                pedestal=world.find("geom[@name='workshop_fixture_pedestal']")
+                center=[float(v)+o for v,o in zip(pedestal.get('pos').split(),offset)]
+                size=list(map(float,pedestal.get('size').split()))
+                self.assertAlmostEqual(center[2]-size[2],0.)
+                self.assertAlmostEqual(center[2]+size[2],.221)
+                self.assertEqual(size[:2],[.04,.04])
+                self.assertEqual(world.find("geom[@name='unload_line_b__pick_bench']").get('pos'),'8 8 8')
+            self.assertEqual(manifest['factory_delivery']['mounted_load_fixture']['generated']['support_bottom_world_m'],0.)
 
 
 class FactoryDeliveryGeometryTests(unittest.TestCase):

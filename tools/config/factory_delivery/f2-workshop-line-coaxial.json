@@ -3,6 +3,12 @@
   "id": "f2-workshop-line",
   "description": "Coaxial workshop delivery candidate: both unloading stations share the mecanum pickup lane y=-1.64; relative handover geometry unchanged.",
   "frame": "map",
+  "mounted_load_fixture": {
+    "position_local_m": [0.05, 0.15, 0.065],
+    "pedestal_half_size_xy_m": [0.04, 0.04],
+    "basis": "New workshop fixed fixture outside both forward cargo lanes; original obstacle size retained on a floor-mounted pedestal.",
+    "boundary": "Static full-body checks passed; complete physical delivery remains independently required."
+  },
   "units": {
     "position": "m",
     "angle": "rad",

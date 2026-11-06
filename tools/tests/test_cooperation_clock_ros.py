@@ -174,6 +174,82 @@ class ClockReceiverTests(unittest.TestCase):
             executor.shutdown(); thread.join()
             probe.destroy_node(); receiver.destroy_node(); clock.destroy_node(); rclpy.shutdown()
 
+    def test_fresh_negative_age_waits_for_native_timesource_then_rejects_frozen_or_old_input(self):
+        from types import SimpleNamespace as S
+        from cooperation_core import validate_physics
+        from tools.tests.test_cooperation_core import measurement
+        tree = ast.parse((Path(__file__).parents[1] / 'cooperation_bridge.py').read_text())
+        bridge = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == 'Bridge')
+        methods = [copy.deepcopy(n) for n in bridge.body if isinstance(n, ast.FunctionDef)
+                   and n.name in ('create_subscription', 'destroy_subscription', 'fresh',
+                                  'observe_clock', 'timing_context', 'timing_record')]
+        module = ast.Module(body=[ast.ClassDef(name='Probe', bases=[ast.Name(id='Node', ctx=ast.Load())],
+                           keywords=[], body=methods, decorator_list=[])], type_ignores=[])
+        namespace = dict(Node=Node, Clock=Clock, TimeSource=TimeSource, time=time, copy=copy,
+                         math=__import__('math'), validate_physics=validate_physics,
+                         scene_sha='a'*64, manifest_sha='b'*64, manifest={})
+        exec(compile(ast.fix_missing_locations(module), '<actual-native-fresh-clock-race>', 'exec'), namespace)
+        rclpy.init()
+        receiver = Node('test_fresh_clock_receiver')
+        probe = namespace['Probe'].__new__(namespace['Probe'])
+        probe.clock_receiver = receiver;probe.clock_callbacks = MutuallyExclusiveCallbackGroup()
+        probe.clock_update_event = threading.Event();probe.last_physics_clock_recovery = None
+        probe.lock = threading.RLock();probe.physics_cache_lock = threading.RLock()
+        probe.raw = measurement();probe.received = time.monotonic();probe.episode_id = None
+        probe.observation_error = None;probe.task = {'id':'native-clock-race'}
+        probe.last_freshness_failure = None
+        Node.__init__(probe, 'test_fresh_unspun_control', parameter_overrides=[Parameter('use_sim_time', value=True)])
+        qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
+        publisher = receiver.create_publisher(Clock, '/clock', qos)
+        executor = SingleThreadedExecutor();executor.add_node(receiver)
+        worker = threading.Thread(target=executor.spin);worker.start()
+        def clock_message(value):
+            message = Clock();message.clock.sec=int(value)
+            message.clock.nanosec=round((value-int(value))*1e9)
+            return message
+        def advance(value):
+            deadline = time.monotonic()+3.
+            while time.monotonic()<deadline:
+                publisher.publish(clock_message(value))
+                if probe.get_clock().now().nanoseconds == round(value*1e9):return
+                time.sleep(.005)
+            self.fail('Native TimeSource did not receive the controlled clock input')
+        sender = None
+        try:
+            advance(9.22)
+            probe.received = time.monotonic()
+            # The original clock callback, not fresh(), is the only clock writer.
+            sender = threading.Thread(target=lambda:(time.sleep(.025),publisher.publish(clock_message(10.02))))
+            sender.start()
+            accepted = probe.fresh();sender.join()
+            self.assertEqual(accepted['stamp'],10.)
+            self.assertEqual(probe.get_clock().now().nanoseconds,10_020_000_000)
+            self.assertEqual(probe.last_physics_clock_recovery['outcome'],'recovered')
+            self.assertAlmostEqual(probe.last_physics_clock_recovery['initial_invalid_pair']['source_age_s'],-.78)
+            self.assertAlmostEqual(probe.last_physics_clock_recovery['accepted_pair']['source_age_s'],.02)
+            self.assertIsNone(probe.last_freshness_failure)
+            advance(9.22)
+            probe.received = time.monotonic();began = time.monotonic()
+            with self.assertRaises(RuntimeError):probe.fresh()
+            elapsed = time.monotonic()-began
+            self.assertGreaterEqual(elapsed,.45);self.assertLess(elapsed,.75)
+            self.assertEqual(probe.last_physics_clock_recovery['outcome'],'timeout')
+            self.assertEqual(probe.raw['stamp'],10.)
+            advance(10.250000001)
+            probe.received = time.monotonic();probe.last_physics_clock_recovery = None
+            began = time.monotonic()
+            with self.assertRaisesRegex(RuntimeError,'时间失效'):probe.fresh()
+            self.assertLess(time.monotonic()-began,.1)
+            self.assertIsNone(probe.last_physics_clock_recovery)
+            # Both original inclusive source-age boundaries remain accepted.
+            for value in (9.9,10.25):
+                advance(value);probe.received=time.monotonic()
+                self.assertEqual(probe.fresh()['stamp'],10.)
+        finally:
+            if sender is not None:sender.join(timeout=1)
+            executor.shutdown();worker.join()
+            probe.destroy_node();receiver.destroy_node();rclpy.shutdown()
+
     def test_receiver_failure_propagates_to_native_owner_executor(self):
         tree = ast.parse((Path(__file__).parents[1] / 'cooperation_bridge.py').read_text())
         function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'spin_clock_receiver')

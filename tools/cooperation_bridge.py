@@ -223,6 +223,8 @@ def run(args):
                 "fishbot_cooperation_clock_receiver",
                 parameter_overrides=[rclpy.parameter.Parameter("use_sim_time", value=False)])
             self.clock_callbacks = MutuallyExclusiveCallbackGroup()
+            self.clock_update_event = threading.Event()
+            self.last_physics_clock_recovery = None
             # Opt-in candidate: keep exact-pair reception separate from both
             # control dispatch and the clock/physics executor. Admission still
             # uses the original lock, identity checks and freshness limits.
@@ -472,7 +474,11 @@ def run(args):
             context['node_clock_stamp_at_entry'] = self.get_clock().now().nanoseconds*1e-9
             update_at = time.monotonic()
             try:
-                return original_callback(message)
+                result = original_callback(message)
+                # Wake a sampler only after the standard TimeSource has
+                # applied this real /clock input. Never write the clock here.
+                self.clock_update_event.set()
+                return result
             finally:
                 context['node_clock_stamp_after_update'] = self.get_clock().now().nanoseconds*1e-9
                 self.timing_record('clock_update', update_at, context)
@@ -621,29 +627,82 @@ def run(args):
 
         def fresh(self):
             with self.lock:
-                with self.physics_cache_lock:
-                    raw, received, episode, error = self.raw, self.received, self.episode_id, self.observation_error
-                if raw is None or time.monotonic()-received > .5:
-                    raise RuntimeError(error or '共享物理反馈中断')
-                validate_physics(raw, scene_sha, manifest_sha,
-                    (manifest.get('nq',22), manifest.get('nv',20), manifest.get('nu',8)))
-                if episode is not None and raw.get('episode_id') != episode:
-                    raise RuntimeError('等待新回合的物理反馈')
-                now_ns = self.get_clock().now().nanoseconds
-                # Match the producer's standard ROS Time rounding. MuJoCo's
-                # accumulated float stamp can otherwise cross an exact bound
-                # by a fraction of a nanosecond while /clock is still on it.
-                whole_seconds = int(raw['stamp'])
-                physics_ns = whole_seconds*1_000_000_000 + round(
-                    (raw['stamp']-whole_seconds)*1_000_000_000)
-                age_ns = now_ns-physics_ns
-                if not -100_000_000 <= age_ns <= 250_000_000:
-                    self.last_freshness_failure = {'wall_time':time.time(),'task_id':self.task.get('id'),
+                recovery = None
+                deadline = None
+                def finish_recovery(outcome):
+                    if recovery is not None:
+                        recovery.update(outcome=outcome, waited_wall_s=time.monotonic()-recovery['started_monotonic'])
+                while True:
+                    # Clear before sampling so a clock update between this
+                    # sample and wait cannot be lost. Waiting releases the GIL
+                    # and never holds the physics cache lock.
+                    self.clock_update_event.clear()
+                    with self.physics_cache_lock:
+                        raw, received, episode, error = self.raw, self.received, self.episode_id, self.observation_error
+                    sampled_at = time.monotonic()
+                    if raw is None or sampled_at-received > .5:
+                        finish_recovery('timeout' if deadline is not None and sampled_at > deadline else 'feedback_unavailable')
+                        if recovery is not None:
+                            self.last_freshness_failure = dict(recovery['last_invalid_pair'],
+                                wall_time=time.time(), received_age_s=sampled_at-received)
+                            if raw is not None and error is None:
+                                raise RuntimeError('共享物理反馈时间失效')
+                        raise RuntimeError(error or '共享物理反馈中断')
+                    try:
+                        validate_physics(raw, scene_sha, manifest_sha,
+                            (manifest.get('nq',22), manifest.get('nv',20), manifest.get('nu',8)))
+                    except (ValueError, KeyError, TypeError, IndexError):
+                        finish_recovery('invalid_physics')
+                        raise
+                    if episode is not None and raw.get('episode_id') != episode:
+                        finish_recovery('episode_changed')
+                        raise RuntimeError('等待新回合的物理反馈')
+                    now_ns = self.get_clock().now().nanoseconds
+                    # Match the producer's standard ROS Time rounding.
+                    whole_seconds = int(raw['stamp'])
+                    physics_ns = whole_seconds*1_000_000_000 + round(
+                        (raw['stamp']-whole_seconds)*1_000_000_000)
+                    age_ns = now_ns-physics_ns
+                    pair = {'wall_time':time.time(),'task_id':self.task.get('id'),
                         'episode_id':episode,'clock_stamp':now_ns*1e-9,'physics_stamp':raw['stamp'],
                         'clock_stamp_ns':now_ns,'physics_stamp_ns':physics_ns,'source_age_ns':age_ns,
-                        'source_age_s':age_ns*1e-9,'received_age_s':time.monotonic()-received}
-                    raise RuntimeError('共享物理反馈时间失效')
-                return copy.deepcopy(raw)
+                        'source_age_s':age_ns*1e-9,'received_age_s':sampled_at-received,
+                        'physics_sequence':raw.get('sequence')}
+                    if recovery is not None and sampled_at > deadline:
+                        finish_recovery('timeout')
+                        self.last_freshness_failure = pair
+                        raise RuntimeError('共享物理反馈时间失效')
+                    if -100_000_000 <= age_ns <= 250_000_000:
+                        if recovery is not None:
+                            recovery['accepted_pair'] = pair
+                            finish_recovery('recovered')
+                        return copy.deepcopy(raw)
+                    if age_ns > 250_000_000:
+                        finish_recovery('old_physics')
+                        self.last_freshness_failure = pair
+                        raise RuntimeError('共享物理反馈时间失效')
+                    if recovery is None:
+                        # A just-committed physics sample can precede its real
+                        # /clock callback after executor reception resumes.
+                        # Spend only this first frame's existing receive budget;
+                        # neither a newer frame nor a wake-up extends it.
+                        deadline = received+.5
+                        recovery = {'outcome':'waiting','started_monotonic':sampled_at,
+                            'deadline_monotonic':deadline,'initial_invalid_pair':pair,
+                            'last_invalid_pair':pair,'original_receive_budget_s':.5,
+                            'original_source_age_limits_s':[-.1,.25],
+                            'invalid_pair_admitted':False,'native_consumption_ack':False}
+                        self.last_physics_clock_recovery = recovery
+                    else:
+                        recovery['last_invalid_pair'] = pair
+                    # At the inclusive receive boundary a coherent valid pair
+                    # above is still accepted; a pair still in the future has
+                    # no remaining wait budget.
+                    if sampled_at >= deadline:
+                        finish_recovery('timeout')
+                        self.last_freshness_failure = pair
+                        raise RuntimeError('共享物理反馈时间失效')
+                    self.clock_update_event.wait(max(0., deadline-time.monotonic()))
 
         def localized(self):
             transform = self.buffer.lookup_transform('map', 'base_footprint', Time())
@@ -2306,6 +2365,7 @@ def run(args):
             if timing is not None:
                 result['bridge_timing'] = timing.snapshot()
             result['station_receiver_receipts'] = self.station_receiver_snapshot()
+            result['physics_clock_recovery'] = copy.deepcopy(self.last_physics_clock_recovery)
             return result
 
         def frame_state(self, raw=None):

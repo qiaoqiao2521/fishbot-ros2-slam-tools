@@ -83,6 +83,17 @@ def normalize_factory_config(value):
         yaw = obstacle.get('yaw_rad', 0.)
         obstacle['yaw_rad'] = _vector([yaw], 1, 'obstacle.yaw_rad')[0]
         channel['obstacle'] = obstacle
+    mounted = result.get('mounted_load_fixture')
+    if mounted is not None:
+        if not isinstance(mounted, dict):
+            raise ValueError('mounted_load_fixture must be an object')
+        mounted['position_local_m'] = _vector(mounted.get('position_local_m'), 3,
+                                               'mounted_load_fixture.position_local_m')
+        mounted['pedestal_half_size_xy_m'] = _vector(
+            mounted.get('pedestal_half_size_xy_m', [.04, .04]), 2,
+            'mounted_load_fixture.pedestal_half_size_xy_m')
+        if min(mounted['pedestal_half_size_xy_m']) <= 0:
+            raise ValueError('mounted fixture pedestal requires positive half sizes')
     return result
 
 
@@ -111,6 +122,43 @@ def apply_factory_scene(manifest, config):
         'delivery_semantics': 'original handover, retained cargo, target arrival and quiet cleanup',
         'not_implemented': ['destination unloading', 'factory equipment automation', 'ARIAC scoring']}
     channel = factory['channel']
+    mounted = factory.get('mounted_load_fixture')
+    if mounted is not None:
+        # This one existing clutter fixture is mounted on a real floor-to-bench
+        # pedestal. Other arms, fixtures and all collision dimensions stay intact.
+        position = mounted['position_local_m']
+        half_xy = mounted['pedestal_half_size_xy_m']
+        readback = {}
+        for key in ('world_xml', 'arm_contact_xml', 'rig_xml'):
+            path = Path(manifest[key]);tree = ET.parse(path)
+            world = tree.getroot().find('worldbody')
+            geom = world.find("geom[@name='approach_obstacle']")
+            if geom is None:
+                raise ValueError('mounted load fixture requires original approach_obstacle')
+            size = _vector([float(v) for v in geom.get('size').split()], 3, 'approach_obstacle.size')
+            top = manifest['station_offset'][2]+position[2]-size[2]
+            if top <= 0 or any(half_xy[i] < size[i] for i in (0, 1)):
+                raise ValueError('mounted fixture pedestal must reach its bottom and support its footprint')
+            offset = [0., 0., 0.] if key == 'world_xml' else manifest['station_offset']
+            world_position = [a+b for a, b in zip(position, manifest['station_offset'])]
+            geom.set('pos', _numbers(a-b for a, b in zip(world_position, offset)))
+            pedestal_world = [world_position[0], world_position[1], top/2]
+            pedestal = world.find("geom[@name='workshop_fixture_pedestal']")
+            if pedestal is None:
+                pedestal = ET.SubElement(world, 'geom', name='workshop_fixture_pedestal')
+            pedestal.attrib.update(type='box',
+                pos=_numbers(a-b for a, b in zip(pedestal_world, offset)),
+                size=_numbers([*half_xy, top/2]), contype='1', conaffinity='3',
+                group='0' if key == 'world_xml' else '3', rgba='.35 .37 .40 1')
+            tree.write(path, encoding='utf-8', xml_declaration=True)
+            readback[key] = {'fixture_position_m': [float(v) for v in geom.get('pos').split()],
+                             'fixture_half_size_m': size,
+                             'pedestal_position_m': [float(v) for v in pedestal.get('pos').split()],
+                             'pedestal_half_size_m': [*half_xy, top/2]}
+        mounted['generated'] = {'geometry': 'original approach_obstacle plus workshop_fixture_pedestal',
+            'scope': 'fixed load-station fixture only; no unloading fixture or cargo relocation',
+            'support_bottom_world_m': 0., 'support_top_world_m': top,
+            'models': readback}
     if channel['occupied']:
         obstacle = channel['obstacle']
         for key in ('world_xml', 'arm_contact_xml', 'rig_xml'):

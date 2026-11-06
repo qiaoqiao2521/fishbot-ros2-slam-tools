@@ -619,3 +619,26 @@ A task549e4ee7-c67f-4e2b-bb88-34340ceff766返站失败。source364.460首次接�
 原生短验补充：default dock task6a0e6063-4229-4ecd-8924-51fd8e4ef17b/UUID4d16c73b59c54644b39d6860f35f6042与dedicated task138c02ba-c417-4d39-b0d0-a41863020a67/UUIDb02365a6e1c1448fa2838d60dd10df59均status4、原Oracle通过、hold/guard-off连续静止清理成立、保护快照未变/owned survivors=[]。这两次样本不能归因独立线程改善或宣称偶发空档已消除；候选只获得单停靠运行资格。
 
 返站冻结初态新实例仅规划：GridBased263pose、HeadingAware94pose，两者在这个新costmap均原生status4且完整几何采样通过，保守余量约50.000/53.772mm。不能把旧实际NavFn曲线路径问题泛化为NavFn必然失败；新实例静态costmap不等价原连续任务动态历史。原source/scene/cargo位置与新零初速度区别明确。接下来验证HeadingAware+原StagingPath实际倒车跟踪与参数回读，再回原Factory完整任务。path-only result.passed=false为没有执行控制，不改成业务成功。
+
+
+返站follow-a取消后定位为私有探针单线程接收阻塞：SceneGeometry编译/全路径扫描时无spin，observer本地间隙9.730/6.828墙秒；原plant持续推进。原请求header15.62，接受Goal原源已22.42，旧TimeSource与新physics恢复次序可能触发future guard；日志缺throw精确clock，不编造。原nativeUUIDecc90c4d0adf4e62836b5e411bbe6e1f取消5、零接触、hold/静止/进程清理成立，参数服务实际回读全部匹配。该探针不能作为跟踪失败或成功证据，也不以修探针完美化阻塞原业务。
+
+源码494b1e4已提交并推送；本机第二完整两场景批次c采用同源码，J100显式--staging-planner HeadingAware、Mec dedicated_station_receiver=true。原Factory有独立clock/physics接收；原两单/同世界/零reset及全部原预算/物理门槛不变。根新增两前端文件11测试及typecheck通过；此前全量733仍为当时基线，当前源码有11局部和127core+15candidate+6真实ROS相关验证，不能把旧全量无条件冒称新全量。新回合尚未终态，不预写通过。
+
+
+### 第二完整批次c的实际失败与局部修复（source494b1e4）
+
+J100 task5d4cc38c-fc95-44eb-bdf5-da8dc1b74086在载货路线阶段source168.82失败“共享物理反馈时间失效”，尚未到Lattice返站；首单与A均不计完成。精确失败不是旧数据：physics167.80、clock167.02、源龄-.78s，接收龄.000508s。原clock/physics专用接收均约.8s入口空档，恢复先提交physics，约312µs后任务检查、再约808µs后clock回调追至167.82。独立observer源仍每20ms连续；不把全局调度/GIL起因写成已知。拟只在future-pair时等待真实TimeSource回调、固定首次received+.5预算，重采后仍满足原[-.1,.25]与接收<=.5才能接纳，超期旧帧立即拒绝，绝不改时钟/改stamp/扩大门槛。
+
+Mec task2c7e8978-289d-4e98-b583-8da0e600ca34在接近原棕色approach_obstacle时规划余量失效，raw forbidden contact仍0，不称实体碰撞。原139点计划最小1.002224mm，实际最窄约.516510mm，拒绝帧.869103mm；参考跟踪误差max.01814rad。参考.3rad/s/.006step不是物理关节速度限幅，曾观测1.2058rad/s，原执行参数不改。最近点位于box+y上沿，正y移动.03/.05/.08三候选静态更坏，明确拒绝；只评估新workshop局部-y .03位置及两货物/上下行/交接，不缩小或去掉障碍，真实门槛保持。两Factory终态false、清理true/survivors[]/源起止一致，全部失败保留。
+
+首次本机仓库B已用原cooperation_oracle.py --score-only直接读原gz独立复算，newphysics0/inference0，无展开副本；passed、完整命名抓放/货架交付、连续交接、任务到站、guard、recording与source integrity逐项完全相同。receipt在本机closure/local-independent-oracle-replay-receipt.json；B实际成功的视觉/F3单样本结论保留，仍不外推完整B→A。
+
+
+### 配对竞态与工位清场候选已验证，等待完整复验
+
+fresh仅对negative future-pair等待标准TimeSource回调，固定首received+.5，不随新帧续期；重采后仍需原源龄[-.1,.25]/接收<=.5/同身份。正向旧帧即时拒绝，Clock冻结按原接收预算失败，精确.5可接纳/.500000001拒绝。原invalid pair、recovered pair/timeout单列；没有把raw时间写到Clock、没有重盖stamp。原生clock模块7/7、core130完整及最终5相关边界通过。原反馈control在正确ROS/规划环境下1148/1148通过，0skip/依赖缺失/失败；首试1113因未source ROS且未指FISHBOT_SO101_PYTHON而缺旧venv路径失败保留，属调用环境不冒称代码根因。
+
+新workshop固定挡块明确移到local(.05,.15,.065)，原半尺寸(.025,.028,.065)保持；增加接地真实固定支架，xy半尺寸.04，底0顶.221。仅mounted_load_fixture可选字段/本coaxial配方启用，默认none保旧世界；业务先compose、factory后apply，66个卸货工位geom属性逐一等值。实际生成world箱心(-1.95,-1.85,.286)，支架心(-1.95,-1.85,.1105)，两地图占据。两cargo direct/descent/ascent及home/grasp/lift/transfer原fullchecker全过；uncapped实际距离最小47.341mm，非2mm cap伪余量；整车465样本5487pair，原几何认证余量25.652mm。14局部合同通过，newRRT0/physics0，不能据静态算新完整配送成功。
+
+knowledge_status=updated：原《Wiki/ROS2 与 FishBot.md》“原生 ROS 时钟与回调组”增加恢复后跨话题交错读取/固定首接收预算等待/原门槛复检，原《Wiki/开发知识入口.md》同条增加触发；两原页实际读回619/168。未写Codex memory或capmesh。当前模型/两单任务继续由根Codex原Factory接续。
