@@ -14,9 +14,9 @@ function perceptionValues(sample,scene){
  // map is the author's local ENU frame, initialized at this world's takeoff origin.
  // Keep the actual points; do not align them to oracle obstacle boxes.
  const entities=scene.entities.filter(e=>!e.id.startsWith('observed-')&&!e.id.startsWith('obstacle-'));
- for(const kind of ['tracked','dynamic'])if(fresh(p[kind]))for(const box of p[kind].boxes){
-  entities.push({id:`${kind}-${box.id}`,frame_id:'world',timestamp:stamp(time),lifetime:stamp(.5),frame_locked:false,metadata:[{key:'source',value:`/onboard_detector/${kind}_bboxes`}],
-   lines:[{type:2,pose:identity,thickness:.035,scale_invariant:false,points:box.points.map(([x,y,z])=>({x,y,z})),color:kind==='dynamic'?{r:1,g:.3,b:.4,a:1}:{r:1,g:.8,b:.2,a:1},colors:[],indices:[]}]});
+ for(const kind of ['tracked','dynamic','predicted'])if(fresh(p[kind]))for(const box of p[kind].boxes){
+  entities.push({id:`${kind}-${box.id}`,frame_id:'world',timestamp:stamp(time),lifetime:stamp(.5),frame_locked:false,metadata:[{key:'source',value:`/onboard_detector/${kind}_bboxes`},{key:'source_stamp',value:String(box.source_s??'unavailable')},{key:'track',value:box.text??''}],
+   lines:[{type:2,pose:identity,thickness:.035,scale_invariant:false,points:box.points.map(([x,y,z])=>({x,y,z})),color:kind==='dynamic'?{r:1,g:.3,b:.4,a:1}:kind==='predicted'?{r:1,g:.45,b:.05,a:1}:{r:1,g:.8,b:.2,a:1},colors:[],indices:[]}]});
  }
  return {
   perceptionScene:{deletions:[{timestamp:stamp(time),type:1,id:''}],entities},
@@ -26,7 +26,7 @@ function perceptionValues(sample,scene){
    depth_source_s:p.depth?.source_s??0,depth_age_s:p.depth?.source_s!=null?time-p.depth.source_s:-1,
    cloud_receive_age_s:cloud?.received_s!=null?time-cloud.received_s:-1,
    cloud_source_stamp_available:cloud?.source_s!=null,
-   tracked_boxes:fresh(p.tracked)?p.tracked.boxes.length:0,dynamic_boxes:fresh(p.dynamic)?p.dynamic.boxes.length:0},
+   tracked_boxes:fresh(p.tracked)?p.tracked.boxes.length:0,dynamic_boxes:fresh(p.dynamic)?p.dynamic.boxes.length:0,predicted_boxes:fresh(p.predicted)?p.predicted.boxes.length:0},
  };
 }
 // Both flight recordings and read-only diagnostic exports use the native MCAP writer.
@@ -66,7 +66,7 @@ async function writeRecording(dir,options={}){
  if(hasPerception){
   definitions.perceptionScene={name:'foxglove.SceneUpdate',schema,topic:'/drone/perception/scene'};
   definitions.cloud={name:'foxglove.PointCloud',schema:pointCloudSchema,topic:'/drone/perception/points'};
-  definitions.perceptionStatus={name:'drone.PerceptionObservation',schema:{type:'object',properties:Object.fromEntries(['display_points','input_points','depth_source_s','depth_age_s','cloud_receive_age_s','tracked_boxes','dynamic_boxes'].map(k=>[k,{type:'number'}]))},topic:'/drone/perception/status'};
+  definitions.perceptionStatus={name:'drone.PerceptionObservation',schema:{type:'object',properties:Object.fromEntries(['display_points','input_points','depth_source_s','depth_age_s','cloud_receive_age_s','tracked_boxes','dynamic_boxes','predicted_boxes'].map(k=>[k,{type:'number'}]))},topic:'/drone/perception/status'};
  }
  async function* frames(){
   const lines=readline.createInterface({input:fs.createReadStream(input),crlfDelay:Infinity});
