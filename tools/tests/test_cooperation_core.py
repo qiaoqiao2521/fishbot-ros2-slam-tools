@@ -299,6 +299,7 @@ class BridgeRaceTests(unittest.TestCase):
         self.bridge=self.namespace['BridgeProbe']();p=self.bridge
         p.episode_id=None;p.history=[];p.task_worker=None;p.reset_worker=None;p.reset_clearers=[];p.reset_records={};p.reset_acks={};p.reset_runtime={};p.last_reset_id=None
         p.lock=threading.RLock();p.physics_cache_lock=threading.RLock()
+        p.station_receiver=None;p.station_receipt_lock=threading.RLock();p.station_receipts={}
         p.worker=threading.local();p.execution_token=('task-a',1);p.worker.token=p.execution_token
         p.delivery_geometry_lock=threading.RLock();p.delivery_geometry=None;p.delivery_geometry_error=None
         p.task_epoch=1;p.dispatch_epoch=0;p.dispatches=[];p.cancel_event=threading.Event();p.abort_event=threading.Event()

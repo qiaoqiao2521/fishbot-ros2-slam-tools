@@ -1,0 +1,131 @@
+{
+  "status": "complete",
+  "reasons": [],
+  "warnings": [],
+  "topic": "/sensors/lidar3d/points",
+  "costmap_topic": "/global_costmap/costmap",
+  "point_layout": "unorganized",
+  "target": [
+    -0.25,
+    0.55
+  ],
+  "region_half_size": 0.12,
+  "pointcloud": {
+    "frame": "lidar3d_link",
+    "width": 4000,
+    "height": 1,
+    "valid_points": 1396,
+    "height_bins_2cm": 65,
+    "z_min": -0.3224937617778778,
+    "z_max": 0.9671692848205566,
+    "messages": 54,
+    "source_stamp_sec": 6,
+    "source_stamp_nanosec": 700000000
+  },
+  "subscription_endpoints": [
+    {
+      "node": "/local_costmap/local_costmap",
+      "type": "sensor_msgs/msg/PointCloud2",
+      "reliability": "2"
+    },
+    {
+      "node": "/global_costmap/global_costmap",
+      "type": "sensor_msgs/msg/PointCloud2",
+      "reliability": "2"
+    },
+    {
+      "node": "/collision_monitor",
+      "type": "sensor_msgs/msg/PointCloud2",
+      "reliability": "2"
+    },
+    {
+      "node": "/cooperation_sensor_experience_capture",
+      "type": "sensor_msgs/msg/PointCloud2",
+      "reliability": "2"
+    }
+  ],
+  "global_parameters": {
+    "plugins": [
+      "static_layer",
+      "obstacle_layer",
+      "lidar3d_voxel_layer",
+      "inflation_layer"
+    ],
+    "lidar3d_voxel_layer.plugin": "nav2_costmap_2d::VoxelLayer",
+    "lidar3d_voxel_layer.enabled": true,
+    "lidar3d_voxel_layer.observation_sources": "lidar3d",
+    "lidar3d_voxel_layer.lidar3d.topic": "/sensors/lidar3d/points",
+    "lidar3d_voxel_layer.lidar3d.data_type": "PointCloud2",
+    "lidar3d_voxel_layer.lidar3d.marking": true,
+    "lidar3d_voxel_layer.lidar3d.clearing": true,
+    "lidar3d_voxel_layer.lidar3d.min_obstacle_height": 0.025,
+    "lidar3d_voxel_layer.lidar3d.max_obstacle_height": 0.30956659275674586
+  },
+  "costmap": {
+    "frame": "map",
+    "resolution": 0.019999999552965164,
+    "cells": 144,
+    "lethal_cells": 57,
+    "occupied_cells": 144,
+    "unknown_cells": 0,
+    "max_occupancy": 100
+  },
+  "target_cloud": {
+    "frame": "map",
+    "points": 2,
+    "z_min": 0.10662877922959127,
+    "z_max": 0.1118585666919154,
+    "source_stamp_sec": 6,
+    "source_stamp_nanosec": 700000000,
+    "source_age_sec": 0.02,
+    "transform_wait_wall_sec": 0.03271601300002658
+  },
+  "evidence": {
+    "actual_spatial_unorganized_pointcloud": true,
+    "global_costmap_subscription_found": true,
+    "global_3d_source_configured": true,
+    "low_obstacle_has_3d_returns": true,
+    "low_obstacle_costmap_has_lethal_cells": true
+  },
+  "probe_scope": "low_obstacle_and_interface",
+  "not_applicable": {},
+  "tf": {
+    "lookup_attempts": 3,
+    "successful_lookups": 2,
+    "failed_lookups": 1,
+    "exception_types": {
+      "ExtrapolationException": 1
+    },
+    "first_exception": {
+      "type": "ExtrapolationException",
+      "message": "Lookup would require extrapolation into the future.  Requested time 6.700000 but the latest data is at time 6.680000, when looking up transform from frame [lidar3d_link] to frame [map]",
+      "source_frame": "lidar3d_link",
+      "target_frame": "map",
+      "requested_stamp_sec": 6,
+      "requested_stamp_nanosec": 700000000
+    },
+    "last_exception": {
+      "type": "ExtrapolationException",
+      "message": "Lookup would require extrapolation into the future.  Requested time 6.700000 but the latest data is at time 6.680000, when looking up transform from frame [lidar3d_link] to frame [map]",
+      "source_frame": "lidar3d_link",
+      "target_frame": "map",
+      "requested_stamp_sec": 6,
+      "requested_stamp_nanosec": 700000000
+    },
+    "frames_yaml": "laser_link: \n  parent: 'base_footprint'\n  broadcaster: 'default_authority'\n  rate: 10000.000\n  most_recent_transform: 0.000000\n  oldest_transform: 0.000000\n  buffer_length: 0.000\nbase_footprint: \n  parent: 'odom'\n  broadcaster: 'default_authority'\n  rate: 45.219\n  most_recent_transform: 6.700000\n  oldest_transform: 1.680000\n  buffer_length: 5.020\nimu_link: \n  parent: 'base_footprint'\n  broadcaster: 'default_authority'\n  rate: 10000.000\n  most_recent_transform: 0.000000\n  oldest_transform: 0.000000\n  buffer_length: 0.000\nlidar3d_link: \n  parent: 'laser_link'\n  broadcaster: 'default_authority'\n  rate: 10000.000\n  most_recent_transform: 0.000000\n  oldest_transform: 0.000000\n  buffer_length: 0.000\ncooperation_camera_optical_frame: \n  parent: 'base_footprint'\n  broadcaster: 'default_authority'\n  rate: 10000.000\n  most_recent_transform: 0.000000\n  oldest_transform: 0.000000\n  buffer_length: 0.000\nodom: \n  parent: 'map'\n  broadcaster: 'default_authority'\n  rate: 10.200\n  most_recent_transform: 7.700000\n  oldest_transform: 2.700000\n  buffer_length: 5.000\n",
+    "observer_clock_nanoseconds": 6720000000
+  },
+  "elapsed_wall_sec": 6.831750238001405,
+  "pending_clouds": {
+    "max_frames": 32,
+    "source_window_sec": 3.0,
+    "pending_frames": 0,
+    "processed_frames": 2,
+    "dropped": {
+      "capacity": 0,
+      "source_window": 22,
+      "superseded": 30,
+      "duplicate": 0
+    }
+  }
+}

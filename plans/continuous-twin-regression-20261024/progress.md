@@ -595,3 +595,27 @@ v6同任务装货链已在/results完整接起实际RGBD/312点/selected51/抬�
 本机余量已做必要前检，未无据重跑完整任务：Ryzen7435H16逻辑/32GB，RTX3050 4GB；同一完整模型5000次原Physics.step推进10源秒1.585墙秒（不含传感器/发布，非任务）。复用系统/opt/ros Jazzy1.3.13和原云overlay，不改全局ROS；7 overlay库及contact-audit ldd-r无缺失符号。模型环境临时放/tmp，公开权重和官方代码沿原revision，Torch2.6+cu124；官方UV prerelease配置用于解决依赖解析。导入检查一度未设模型目录触发重复checkpoint clone，已仅终止该owned进程组并清理477,002,688字节重复件，完整models/release保留；正式serve/infer原入口本就设置该目录。CUDA真实保存点云前检返回408候选、完整CLI12.945秒（纯推理.879秒），非新物理任务。
 
 本机原完整ROS/500Hz/传感器栈preflight实际10.04源秒/10.730298墙秒，RTF.935668；0任务/start/reset，owned descendants0、清理true。主Native库、模型与原任务预算保持，准备本机完整两场景复验；不把GPU导入/短吞吐或K分项计完整业务通过。原107/114单位使用原Factory保护快照，本机不使用cloud的isolated-runtime跳过项。临时依赖/权重在最终原件Drive读回后清理。knowledge_status=already_covered：双时钟、同源物理评分和观测刷新经验原页已有；项目状态不回写知识页。owner=root。
+
+
+本机首批17:45两个场景均在动作派发前退出：桌面工具进程未继承DBUS_SESSION_BUS_ADDRESS/XDG_RUNTIME_DIR，原protected_snapshot的systemctl --user返回No medium found。保留两原失败日志，无task/result，不计一次配送失败或完成。已核实/run/user/1000/bus可连接，原114单位not-found/inactive；仅命令级补现有总线地址，未修改服务或跳过保护。17:51:45新独占191/9161开始宽仓库，随后192/9162车间，原Factory/预算与同源码6c4555e保持；任务未终态前不填写pass。owner=root。
+
+
+v6原件/真实装货视觉链、同源传感器、v4补侧车与两份v5小日志已归档指定Drive：1iFbVFE0yK9FMDXJg5_BYBeBxjiL-4CMI（51,572,838B）。真实下载流完整逐成员读回153项/59,632,658解码字节；本机上传tar重复件51,572,838B已删除，原件与当前运行材料保持。原v6整单失败未改；当前本机新回合另行归档。
+
+
+### 本机仓库B完整视觉配送与剩余F2（2026-11-06）
+
+新run132c3ad1-dfc3-4f3b-826a-284a4a30e55f/episode9bd6edac-b336-4167-9189-015bacafc579，B task9cca0ce7-611e-4505-a006-76c29b8b6976原task/native/命名物理与业务评分通过，实际货架卸货/机械臂回位完成。整单317.858墙秒，路线71.131/120，末XY10.522mm/yaw.026249rad/停稳1源秒；原碰撞、源龄及预算保持。真实RGBD装/卸312/235点，模型请求1.001842/.484494秒各408候选，实际所选51/49均origin=obb，明确为神经候选已生成＋OBB几何被执行的混合闭环，不声称扩散候选执行。实际同阶段抬升/托盘与货架放稳画面已接/results新卡，2单/2visual entries，A无图和查询不借B数据。16局部前端测试、typecheck/ESLint及桌面390px零写/零pageerror通过，333.5秒原录像实际解码；root已查看真实卸货截图。
+
+同episode原MID-360式4000×1点云/原Nav2订阅端与6.7源秒低障碍probe已记录，B任务完成构成这一配置的单业务样本；传感器对比仅启动6帧，TF0/6与probe TF2/3分别明示，无全过程点云录像/逐消息控制消费ACK/3D排他因果。F1完整视觉/本次调用取证与F3单样本交付成立，不外推新场景整轮B→A。
+
+A task549e4ee7-c67f-4e2b-bb88-34340ceff766返站失败。source364.460首次接触，B站pick_bench与place_floor/place_wall_y_-1，车yaw.6816；NavFn向北绕行后RPP拒碰撞，原恢复Spin1.57rad导致托盘接触。staging reverse虽启用，但实际staging planner仍GridBased/NavFn，未用原transport HeadingAware/SmacLattice。现加默认关闭的显式staging planner绑定，原RPP/恢复/外廓/门槛不变；15相关测试通过。私有原生返站path probe首试因移XML时忽略compiler.meshdir而在动作前失败，无规划/导航，原失败保留，正在修复路径解析后局部验证，不计完整业务通过。
+
+车间run175833-67a56d taskc53a0f40-451a-4b2d-aa42-aa97ca5f9b20，首次align已通过但Dock期间source age.36>.25、receive age.3566<.5，原UUID取消5，A未执行。独立observer每20ms收到物理/观测，桥缓存仍11.22直到clock11.58；原clock亦有345.98ms入口间隙。原mutex17.31ms/query8.49ms最大值不能证明长持锁；根因不写成已确定。新增默认关闭dedicated_station_receiver候选，标准独立Node/executor、原exact队列5/QoS5及全部接纳/时龄规则保持，入口receipt仅诊断非接纳/消费ACK。真实ROS6项通过；core127原测试补三默认fixture字段后通过，初次缺PYTHONPATH及fixture17errors/1fail日志均保留。下一步原单次dock default/候选短验，不把线程隔离单测算业务修复。
+
+两Factory清理true、survivors=[]、原保护快照未变、源码起止相同；仓库同世界零reset继续到A失败。当前新本机原件/派生素材待最终Drive归档，owner=root。knowledge_status=already_covered：原双时钟/候选与动作/物理分层经验适用，项目状态不回写知识页。
+
+
+原生短验补充：default dock task6a0e6063-4229-4ecd-8924-51fd8e4ef17b/UUID4d16c73b59c54644b39d6860f35f6042与dedicated task138c02ba-c417-4d39-b0d0-a41863020a67/UUIDb02365a6e1c1448fa2838d60dd10df59均status4、原Oracle通过、hold/guard-off连续静止清理成立、保护快照未变/owned survivors=[]。这两次样本不能归因独立线程改善或宣称偶发空档已消除；候选只获得单停靠运行资格。
+
+返站冻结初态新实例仅规划：GridBased263pose、HeadingAware94pose，两者在这个新costmap均原生status4且完整几何采样通过，保守余量约50.000/53.772mm。不能把旧实际NavFn曲线路径问题泛化为NavFn必然失败；新实例静态costmap不等价原连续任务动态历史。原source/scene/cargo位置与新零初速度区别明确。接下来验证HeadingAware+原StagingPath实际倒车跟踪与参数回读，再回原Factory完整任务。path-only result.passed=false为没有执行控制，不改成业务成功。

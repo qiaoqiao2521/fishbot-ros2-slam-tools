@@ -68,6 +68,14 @@ describe('visual evidence panel', () => {
     expect(html).toContain('下载全部生成候选'); expect(html).toContain('未提供已执行的候选选择')
     expect(html).toContain('不是所选候选'); expect(html).toContain('模型分数 0.660')
   })
+  it('keeps task-bound model queries out of another order while legacy run queries remain visible', () => {
+    const report = { ...fixture, queries: [{ ...fixture.queries[0], task_id: 'task-b' }] }
+    const html = renderToStaticMarkup(<VisualEvidencePanel sourceUrl="/workbench/ui-chain.json" initialReport={report} taskId="task-a" />)
+    expect(html).toContain('当前订单没有匹配的查询，未借用其他订单取证')
+    expect(html).not.toContain('查询 ui-query')
+    const legacy = renderToStaticMarkup(<VisualEvidencePanel sourceUrl="/workbench/ui-chain.json" initialReport={fixture} taskId="task-a" />)
+    expect(legacy).toContain('查询 ui-query')
+  })
   it('keeps a different run out of the active order without blocking other materials', () => {
     const html = renderToStaticMarkup(<VisualEvidencePanel sourceUrl="/workbench/ui-chain.json" initialReport={fixture} expectedRunId="other-run" />)
     expect(html).toContain('与当前配送运行不一致')

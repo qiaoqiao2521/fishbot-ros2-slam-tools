@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
+import xml.etree.ElementTree as ET
 
 import yaml
 
@@ -143,6 +144,33 @@ class NativeTransportSelectionTests(unittest.TestCase):
         CANDIDATE.configure(self.path, lattice_smooth_path=False)
         _, nav = self.read()
         self.assertFalse(nav['planner_server']['ros__parameters']['HeadingAware']['smooth_path'])
+
+    def test_opt_in_staging_planner_binds_all_xml_references_and_preserves_contracts(self):
+        tree_path=self.folder/'staging.xml'
+        original='<!-- Nav2 1.3.13 Apache-2.0 -->\n<root><PlannerSelector default_planner="GridBased"/>' \
+            '<ComputePathToPose planner_id="GridBased"/><ComputePathToPose planner_id="{selected_planner}"/>' \
+            '<ComputePathThroughPoses planner_id="GridBased"/><FollowPath controller_id="StagingPath"/>' \
+            '<Spin spin_dist="1.57"/></root>'
+        tree_path.write_text(original)
+        self.manifest['staging_navigation_behavior_tree']=str(tree_path)
+        self.manifest['navigation_planner']={'staging_planner':'GridBased'}
+        self.path.write_text(json.dumps(self.manifest))
+        CANDIDATE.configure(self.path)
+        self.assertEqual(tree_path.read_text(),original)
+        subprocess.run([sys.executable,str(ROOT/'experiments/kaggle/f1_candidate.py'),str(self.path),
+                        '--staging-planner','HeadingAware'],check=True,capture_output=True,text=True)
+        manifest,nav=self.read();self.assert_shared_contracts(manifest,nav)
+        tree=ET.fromstring(tree_path.read_text())
+        self.assertTrue(tree_path.read_text().startswith('<!-- Nav2 1.3.13 Apache-2.0 -->'))
+        self.assertEqual([v.get('default_planner') for v in tree.iter('PlannerSelector')],['HeadingAware'])
+        for tag in ('ComputePathToPose','ComputePathThroughPoses'):
+            self.assertTrue(all(v.get('planner_id')=='HeadingAware' for v in tree.iter(tag)))
+        self.assertEqual(next(tree.iter('FollowPath')).get('controller_id'),'StagingPath')
+        self.assertEqual(next(tree.iter('Spin')).get('spin_dist'),'1.57')
+        self.assertEqual(manifest['navigation_planner']['staging_planner'],'HeadingAware')
+        self.assertFalse(manifest['staging_planner_selection']['qualified'])
+        bound=tree_path.read_text();CANDIDATE.configure(self.path)
+        self.assertEqual(tree_path.read_text(),bound)
 
     def test_native_selection_without_progress_does_not_leave_empty_adapter(self):
         self.manifest['vehicle_profile']['loaded_controller'] = {'FollowPath.desired_linear_vel': .03}

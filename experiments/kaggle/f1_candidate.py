@@ -4,12 +4,13 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 import yaml
 
 
 def configure(manifest_path, transport_controller_yaml=None, *, lattice_smooth_path=None,
-              global_extra_padding_m=.025):
+              global_extra_padding_m=.025, staging_planner=None):
     path = Path(manifest_path)
     manifest = json.loads(path.read_text())
     nav_path = Path(manifest["nav2_yaml"])
@@ -29,6 +30,24 @@ def configure(manifest_path, transport_controller_yaml=None, *, lattice_smooth_p
                    analytic_expansion_max_cost=252.)
     if lattice_smooth_path is not None:
         planner["smooth_path"] = lattice_smooth_path
+    if staging_planner is not None:
+        # Explicit experiment selection reuses an already configured native
+        # planner. Defaults retain the original staging tree and controller.
+        if staging_planner not in nav["planner_server"]["ros__parameters"]:
+            raise ValueError(f"Staging planner is not configured: {staging_planner}")
+        tree_path = Path(manifest["staging_navigation_behavior_tree"])
+        original = tree_path.read_text()
+        tree = ET.fromstring(original)
+        for selector in tree.iter("PlannerSelector"):
+            selector.set("default_planner", staging_planner)
+        for tag in ("ComputePathToPose", "ComputePathThroughPoses"):
+            for compute in tree.iter(tag):
+                compute.set("planner_id", staging_planner)
+        tree_path.write_text(original.partition("<root")[0]+ET.tostring(tree, encoding="unicode")+"\n")
+        manifest.setdefault("navigation_planner", {})["staging_planner"] = staging_planner
+        manifest["staging_planner_selection"] = {
+            "id": staging_planner, "qualified": False,
+            "scope": "explicit staging tree planner binding; controller, recovery, geometry and budgets unchanged"}
     nav["global_costmap"]["global_costmap"]["ros__parameters"]["footprint_padding"] = global_extra_padding_m
     manifest["global_extra_padding_m"] = global_extra_padding_m
     nav["velocity_smoother"]["ros__parameters"].update(
@@ -82,7 +101,10 @@ if __name__ == "__main__":
                         default=None, help="Explicit native HeadingAware path smoothing; otherwise preserve input")
     parser.add_argument("--global-extra-padding-m", type=float, default=.025,
                         help="Extra global footprint padding in metres; local costmap and body geometry remain unchanged")
+    parser.add_argument("--staging-planner", choices=("GridBased", "HeadingAware"), default=None,
+                        help="Opt in to an existing native planner for all staging-tree planner references")
     args = parser.parse_args()
     configure(args.manifest, args.transport_controller_yaml,
               lattice_smooth_path=args.lattice_smooth_path,
-              global_extra_padding_m=args.global_extra_padding_m)
+              global_extra_padding_m=args.global_extra_padding_m,
+              staging_planner=args.staging_planner)

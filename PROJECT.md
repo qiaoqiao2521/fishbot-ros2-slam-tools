@@ -1,6 +1,6 @@
 # FishBot
 
-2026-11-06 当前主线：完成剩余视觉证据链/30秒模型调用取证、F2宽仓库与车间线边、F3同源传感器/真值对比及新扫描profile。用户最新已授权为这些项执行必要有限仿真；四组现有资料整理已交付，不是整体新能力完成。根Codex统一云端原任务与物理评分，原件继续存指定Drive并下载读回；保留历史成功、失败、ideal/visual与MID-360式近似边界，不训练、不操作实车、不把组件或RUNNING当任务通过。见[当前计划](plans/continuous-twin-regression-20261024/task_plan.md)。
+2026-11-06 当前主线：F1已接真实完整视觉装卸链与模型分段取证；本机新仓库B完整原评分通过，RGBD装/卸312/235点、实际所选OBB51/49，不能称扩散候选执行。F3已交同源观测/真值、原16线与MID-360式近似profile，MID真实输入及B单样本成立，启动帧/消费者证据范围明示。F2两场景完整B→A仍未完成：仓库A返站NavFn路径失败后恢复旋转接触台沿，车间观测缓存过期；先做Lattice返站及独立观测接收候选的原生短验。原件存指定Drive并实际读回，不训练、不操作实车、不外推硬件或sim-to-real。见[当前计划](plans/continuous-twin-regression-20261024/task_plan.md)。
 
 2026-10-31 预训练视觉配送已完成本轮仿真闭环：官方GraspGen-X实际推理＋工位RGB-D＋原mink/OMPL，J100/3D雷达在同一世界无reset完成B→A，两单命名原物理/业务评分及独立原记录重算均通过。路线49.90/20.97秒，末XY31.07/21.22mm；原时限、碰撞和接触门槛保持。保留停车保护辅助、采样缺口及全部早期失败，不称任意物体或sim-to-real。配置与边界见[预训练感知接入](docs/PRETRAINED_PERCEPTION.md)，详见[本轮进度](plans/continuous-twin-regression-20261024/progress.md)。
 

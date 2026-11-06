@@ -223,6 +223,14 @@ def run(args):
                 "fishbot_cooperation_clock_receiver",
                 parameter_overrides=[rclpy.parameter.Parameter("use_sim_time", value=False)])
             self.clock_callbacks = MutuallyExclusiveCallbackGroup()
+            # Opt-in candidate: keep exact-pair reception separate from both
+            # control dispatch and the clock/physics executor. Admission still
+            # uses the original lock, identity checks and freshness limits.
+            self.station_receiver = (Node('fishbot_cooperation_station_receiver',
+                parameter_overrides=[rclpy.parameter.Parameter('use_sim_time', value=False)])
+                if manifest.get('dedicated_station_receiver') is True else None)
+            self.station_receipt_lock = threading.RLock()
+            self.station_receipts = {}
             super().__init__('fishbot_so101_cooperation', parameter_overrides=[rclpy.parameter.Parameter('use_sim_time', value=True)])
             self.lock = threading.RLock()
             # Control may hold its lock while querying/publishing perception.
@@ -372,6 +380,18 @@ def run(args):
                                 callback_group=None, event_callbacks=None,
                                 qos_overriding_options=None, raw=False,
                                 content_filter_options=None):
+            station_receiver = getattr(self, 'station_receiver', None)
+            if station_receiver is not None and topic in (
+                    '/cooperation/station_pose', '/cooperation/station_detection',
+                    '/cooperation/vision_quality'):
+                original_callback = callback
+                def received_station(message, info):
+                    self.observe_station_receipt(topic, message, info)
+                    return original_callback(message)
+                return station_receiver.create_subscription(
+                    msg_type, topic, received_station, qos_profile, callback_group=callback_group,
+                    event_callbacks=event_callbacks, qos_overriding_options=qos_overriding_options,
+                    raw=raw, content_filter_options=content_filter_options)
             receiver = getattr(self, 'clock_receiver', None)
             if topic == '/cooperation/physics_state' and receiver is not None:
                 return receiver.create_subscription(
@@ -399,11 +419,45 @@ def run(args):
                 raw=raw, content_filter_options=content_filter_options)
 
         def destroy_subscription(self, subscription):
-            # TimeSource owns lifecycle, including use_sim_time disable/re-enable.
-            receiver = getattr(self, 'clock_receiver', None)
-            if receiver is not None and subscription in receiver.subscriptions:
-                return receiver.destroy_subscription(subscription)
+            # TimeSource/message_filters own subscription lifecycle.
+            for name in ('station_receiver', 'clock_receiver'):
+                receiver = getattr(self, name, None)
+                if receiver is not None and subscription in receiver.subscriptions:
+                    return receiver.destroy_subscription(subscription)
             return super().destroy_subscription(subscription)
+
+        def observe_station_receipt(self, topic, message, info):
+            # Subscription entry is distinct from exact-pair admission and
+            # controller consumption. Never restamp or copy the input frame.
+            now = time.monotonic()
+            header = message.header
+            stamp = header.stamp.sec+header.stamp.nanosec*1e-9
+            sequence = None
+            for status in getattr(message, 'status', ()):
+                for item in status.values:
+                    if item.key == 'sequence':
+                        try: sequence = int(item.value)
+                        except (ValueError, TypeError): pass
+            with self.station_receipt_lock:
+                previous = self.station_receipts.get(topic, {})
+                gap = now-previous['received_monotonic'] if previous else 0.
+                self.station_receipts[topic] = {
+                    'count': previous.get('count', 0)+1, 'source_stamp': stamp,
+                    'sequence': sequence, 'received_monotonic': now,
+                    'received_wall_time': time.time(), 'entry_gap_s': gap,
+                    'maximum_entry_gap_s': max(previous.get('maximum_entry_gap_s', 0.), gap),
+                    'node_clock_stamp_at_entry': self.get_clock().now().nanoseconds*1e-9,
+                    'dds_source_timestamp_ns': (info.get('source_timestamp') if isinstance(info, dict)
+                                                else getattr(info, 'source_timestamp', None)),
+                    'dds_received_timestamp_ns': (info.get('received_timestamp') if isinstance(info, dict)
+                                                  else getattr(info, 'received_timestamp', None))}
+
+        def station_receiver_snapshot(self):
+            with self.station_receipt_lock:
+                return {'enabled': self.station_receiver is not None,
+                        'topics': copy.deepcopy(self.station_receipts),
+                        'boundary': 'subscription entry only; not admission or native consumption',
+                        'dds_timestamp_clock': 'RMW timestamp basis unverified; raw nanoseconds only'}
 
         def observe_clock(self, message, info, original_callback):
             started = time.monotonic()
@@ -2251,6 +2305,7 @@ def run(args):
             timing = getattr(self, 'bridge_timing', None)
             if timing is not None:
                 result['bridge_timing'] = timing.snapshot()
+            result['station_receiver_receipts'] = self.station_receiver_snapshot()
             return result
 
         def frame_state(self, raw=None):
@@ -2394,6 +2449,14 @@ def run(args):
         args=(clock_executor, executor, ExternalShutdownException),
         name='cooperation-clock', daemon=True)
     clock_thread.start()
+    station_executor = station_thread = None
+    if bridge.station_receiver is not None:
+        station_executor = SingleThreadedExecutor(context=bridge.context)
+        station_executor.add_node(bridge.station_receiver)
+        station_thread = threading.Thread(target=spin_clock_receiver,
+            args=(station_executor, executor, ExternalShutdownException),
+            name='cooperation-station', daemon=True)
+        station_thread.start()
     runtime = RuntimeIdentity('cooperation', 'simulation', args.domain, [
         capability('transport', 'native_action', cancel=True, event_history='bounded'),
     ], scene_id=scene_sha)
@@ -2406,8 +2469,14 @@ def run(args):
         bridge.cancel_event.set()
         if bridge.context.ok():
             bridge.hold(True)
-        server.shutdown();executor.shutdown();clock_executor.shutdown();clock_thread.join()
-        bridge.destroy_node();bridge.clock_receiver.destroy_node();rclpy.try_shutdown()
+        server.shutdown();executor.shutdown()
+        if station_executor is not None:
+            station_executor.shutdown();station_thread.join()
+        clock_executor.shutdown();clock_thread.join()
+        bridge.destroy_node()
+        if bridge.station_receiver is not None:
+            bridge.station_receiver.destroy_node()
+        bridge.clock_receiver.destroy_node();rclpy.try_shutdown()
 
 
 def main():

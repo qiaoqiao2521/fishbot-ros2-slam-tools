@@ -136,6 +136,16 @@
       "source": "/workbench/f2-warehouse-v6-result.json",
       "coverage": "同任务视觉装货与载货K通过；360秒总预算耗尽；B/卸货/A未完成",
       "materials": "原RGBD/点云/所选候选→真实抬升/托盘放稳，826帧录像/阶段回放"
+    },
+    {
+      "id": "f2-warehouse-local-175145",
+      "title": "本机仓库 · B成功，A返站失败",
+      "vehicle": "j100",
+      "sensor": "3d",
+      "configuration": "本机J100 / MID-360式 / GraspGen-X视觉配送",
+      "source": "/workbench/f2-warehouse-local-175145-result.json",
+      "coverage": "B完整原评分通过；A返站接触失败；整轮1/2",
+      "materials": "B装货/卸货两条视觉链、实际MID与消费者回执、录像/阶段回放"
     }
   ]
 }

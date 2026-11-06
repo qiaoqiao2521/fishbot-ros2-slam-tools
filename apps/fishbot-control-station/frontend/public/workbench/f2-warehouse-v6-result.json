@@ -45,7 +45,7 @@
   },
   "video_caption": "本回合826个真实全景采样帧，按原2fps独立播放。下载索引为实际记录派生的媒体索引，未插值；完整录像帧原件保留于Drive归档。",
   "availability_note": "真实失败位置与阶段记录已只读导入；不补造静态场景或机械臂世界FK。",
-  "archive_status": "v6原始记录已回收，Drive归档待根owner收尾；网页派生资产另待归档",
+  "archive_status": "v6原件与当时网页派生材料已存Drive，实际下载逐成员读回153项；归档51,572,838字节，解码59,632,658字节。本次Drive链接更新晚于该归档快照。",
   "warnings": [
     "原整单false保持；同任务装货分项通过不等于完整视觉配送成功。",
     "抬升/托盘图原video_frame288/509，源偏差0.040/0.120秒，均在同episode及实际阶段内；未跨任务、未插值。",
@@ -62,11 +62,16 @@
     "scene_id": "f1-j100-wide-continuous-ba",
     "candidate_label": "f2-wide-warehouse",
     "raw_backup": {
-      "confirmed": false,
-      "status": "pending_root_archive"
+      "confirmed": true,
+      "drive_id": "1iFbVFE0yK9FMDXJg5_BYBeBxjiL-4CMI",
+      "read_members": 153,
+      "archive_bytes": 51572838,
+      "decoded_bytes": 59632658,
+      "verification": "actual Drive stream full gzip/tar member read"
     },
-    "derived_ui_archive_status": "pending_root_archive",
+    "derived_ui_archive_status": "verified_snapshot_before_drive_pointer_update",
     "original_components_report": "/workbench/f2-warehouse-v6/original-components.json",
     "related_run_boundaries_report": "/workbench/f2-warehouse-v6/related-run-boundaries.json"
-  }
+  },
+  "archive_url": "https://drive.google.com/file/d/1iFbVFE0yK9FMDXJg5_BYBeBxjiL-4CMI/view?usp=drivesdk"
 }

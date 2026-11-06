@@ -1,0 +1,185 @@
+{
+  "schema": "fishbot.sensor-experience.v1",
+  "status": "complete",
+  "new_execution": false,
+  "read_only": true,
+  "rescored": false,
+  "frame_id": "lidar3d_link",
+  "sensor": {
+    "frame_id": "lidar3d_link",
+    "parent_body": "laser_link",
+    "mount_xyz": [
+      0.0,
+      0.0,
+      0.035
+    ],
+    "horizontal_samples": 4000,
+    "lines": 1,
+    "vertical_degrees": [
+      -7.0,
+      52.0
+    ],
+    "min_range_m": 0.1,
+    "max_range_m": 8.0,
+    "rate_hz": 10.0,
+    "topic": "/sensors/lidar3d/points",
+    "metadata_topic": "/sensors/lidar3d/frame_metadata",
+    "basis": "official_mid360_csv_stride5_frame_instantaneous_native_mj_multiRay",
+    "layout_source": "Livox-SDK/livox_laser_simulation@1cce1073633a062b92e30243a4c2920e45551bb5",
+    "plugin_3_12_loaded": false,
+    "scan_pattern": "livox_mid360_csv_stride5",
+    "nominal_hardware_points_per_s": 200000,
+    "angular_downsample": 5,
+    "hardware_fidelity": "No reflectivity, intensity, weather, per-ray motion distortion, physical IMU or Livox UDP protocol emulation",
+    "scope": "MID-360 official angular CSV only; 5x decimation and frame-instantaneous pose; range clipped to this task",
+    "self_filter": {
+      "enabled": true,
+      "type": "compiled_body_convex_containment",
+      "frame_id": "base_footprint",
+      "footprint_xy": [
+        [
+          -0.244,
+          -0.22279499999999997
+        ],
+        [
+          -0.22000000000000008,
+          -0.24
+        ],
+        [
+          -0.09999999999999998,
+          -0.24
+        ],
+        [
+          0.244,
+          -0.22279499999999997
+        ],
+        [
+          0.244,
+          0.22279499999999997
+        ],
+        [
+          -0.244,
+          0.22279499999999997
+        ]
+      ],
+      "padding_xy_m": 0.0,
+      "z_min_m": 1.734723475976807e-18,
+      "z_max_m": 0.29756659275674585,
+      "basis": "compiled full vehicle footprint and declared rigid loaded height envelope",
+      "decision_inputs": "source-stamped point coordinates only; no task, cargo identity or contact state",
+      "removed_value": "NaN",
+      "reraycast_removed_rays": false
+    },
+    "raw_topic": "/sensors/lidar3d/points_raw"
+  },
+  "frames": [
+    {
+      "url": "frame-0.json",
+      "identity": {
+        "scene_sha256": "eeeb1a0deea373df67f3eb992827cba4224247517457bb506fc9e8120dd9f2cf",
+        "manifest_sha256": "bd24222a09be5df071c7bfe47ead1ec87f03b4c6e139669c9a972ff571f61d82",
+        "episode_id": "9bd6edac-b336-4167-9189-015bacafc579",
+        "sequence": "89"
+      },
+      "source_s": 1.8000000000000014,
+      "valid_points": 1404
+    },
+    {
+      "url": "frame-1.json",
+      "identity": {
+        "scene_sha256": "eeeb1a0deea373df67f3eb992827cba4224247517457bb506fc9e8120dd9f2cf",
+        "manifest_sha256": "bd24222a09be5df071c7bfe47ead1ec87f03b4c6e139669c9a972ff571f61d82",
+        "episode_id": "9bd6edac-b336-4167-9189-015bacafc579",
+        "sequence": "194"
+      },
+      "source_s": 3.899999999999792,
+      "valid_points": 1393
+    },
+    {
+      "url": "frame-2.json",
+      "identity": {
+        "scene_sha256": "eeeb1a0deea373df67f3eb992827cba4224247517457bb506fc9e8120dd9f2cf",
+        "manifest_sha256": "bd24222a09be5df071c7bfe47ead1ec87f03b4c6e139669c9a972ff571f61d82",
+        "episode_id": "9bd6edac-b336-4167-9189-015bacafc579",
+        "sequence": "299"
+      },
+      "source_s": 5.999999999999561,
+      "valid_points": 1422
+    },
+    {
+      "url": "frame-3.json",
+      "identity": {
+        "scene_sha256": "eeeb1a0deea373df67f3eb992827cba4224247517457bb506fc9e8120dd9f2cf",
+        "manifest_sha256": "bd24222a09be5df071c7bfe47ead1ec87f03b4c6e139669c9a972ff571f61d82",
+        "episode_id": "9bd6edac-b336-4167-9189-015bacafc579",
+        "sequence": "404"
+      },
+      "source_s": 8.099999999999374,
+      "valid_points": 1416
+    },
+    {
+      "url": "frame-4.json",
+      "identity": {
+        "scene_sha256": "eeeb1a0deea373df67f3eb992827cba4224247517457bb506fc9e8120dd9f2cf",
+        "manifest_sha256": "bd24222a09be5df071c7bfe47ead1ec87f03b4c6e139669c9a972ff571f61d82",
+        "episode_id": "9bd6edac-b336-4167-9189-015bacafc579",
+        "sequence": "504"
+      },
+      "source_s": 10.100000000000042,
+      "valid_points": 1439
+    },
+    {
+      "url": "frame-5.json",
+      "identity": {
+        "scene_sha256": "eeeb1a0deea373df67f3eb992827cba4224247517457bb506fc9e8120dd9f2cf",
+        "manifest_sha256": "bd24222a09be5df071c7bfe47ead1ec87f03b4c6e139669c9a972ff571f61d82",
+        "episode_id": "9bd6edac-b336-4167-9189-015bacafc579",
+        "sequence": "604"
+      },
+      "source_s": 12.10000000000071,
+      "valid_points": 1415
+    }
+  ],
+  "warnings": [
+    "Same-source map TF unavailable: \"map\" passed to lookupTransform argument target_frame does not exist. ",
+    "Same-source map TF unavailable: Lookup would require extrapolation into the future.  Requested time 6.000000 but the latest data is at time 5.980000, when looking up transform from frame [lidar3d_link] to frame [map]",
+    "Same-source map TF unavailable: Lookup would require extrapolation into the future.  Requested time 8.100000 but the latest data is at time 8.080000, when looking up transform from frame [lidar3d_link] to frame [map]",
+    "Same-source map TF unavailable: Lookup would require extrapolation into the future.  Requested time 10.100000 but the latest data is at time 10.080000, when looking up transform from frame [lidar3d_link] to frame [map]",
+    "Same-source map TF unavailable: Lookup would require extrapolation into the future.  Requested time 12.100000 but the latest data is at time 12.080000, when looking up transform from frame [lidar3d_link] to frame [map]",
+    "此6帧仅是本episode启动阶段样本，不是B配送时的观测画面；与B任务完成的联系限于使用相同传感器profile和episode，不能声称逐帧消费ACK或完整时间覆盖。"
+  ],
+  "actual_subscribers": [
+    {
+      "node": "/local_costmap/local_costmap",
+      "type": "sensor_msgs/msg/PointCloud2"
+    },
+    {
+      "node": "/global_costmap/global_costmap",
+      "type": "sensor_msgs/msg/PointCloud2"
+    },
+    {
+      "node": "/collision_monitor",
+      "type": "sensor_msgs/msg/PointCloud2"
+    }
+  ],
+  "message_counts": {
+    "pointcloud": 101,
+    "metadata": 102,
+    "physics": 504
+  },
+  "tf": {
+    "requested": 6,
+    "matched_source": 0,
+    "failed": 6
+  },
+  "consumer_evidence_scope": "DDS endpoint discovery only; not a per-message consumer ACK",
+  "truth_to_control": false,
+  "coordinate_frame": "sensor_xyz_m",
+  "projection": {
+    "horizontal": "atan2(y,x)",
+    "vertical": "atan2(z,hypot(x,y))",
+    "same_view_for_truth_and_observation": true
+  },
+  "elapsed_wall_s": 10.749168697999266,
+  "presentation_scope_annotation": "same_episode_startup_only; native consumer receipt separately captured at source6.700s"
+}

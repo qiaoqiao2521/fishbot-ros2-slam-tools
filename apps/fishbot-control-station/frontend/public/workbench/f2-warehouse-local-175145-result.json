@@ -1,0 +1,95 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "本机仓库 · B成功，A返站失败",
+  "recorded_at": "2026-11-06",
+  "run_id": "132c3ad1-dfc3-4f3b-826a-284a4a30e55f",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "Jackal J100",
+  "sensor": "MID-360式扫描 · 4000×1槽位",
+  "scene_label": "本机宽通道仓库 · f2-wide-warehouse",
+  "observation_mode": "vision",
+  "model": "GraspGen-X实际推理＋原SO101 IK/OMPL",
+  "description": "本机同一世界中，B已完成视觉装货、载货导航与实体卸货，原独立评分通过；A返站阶段发生非预期物理接触并失败。整轮原评分1/2，不能计B→A全部通过。",
+  "evidence_note": "同一原Factory回合与原独立评分，只读导入，不跨麦轮或旧回合拼链；图像/查询/抓放与整体业务分别记账。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 377.7251770199982,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（完整原评分通过）",
+      "task_id": "9cca0ce7-611e-4505-a006-76c29b8b6976",
+      "passed": true,
+      "route_seconds": 71.13135935299943,
+      "position_error_m": 0.01052150685283604,
+      "yaw_error_rad": 0.02624890403297141,
+      "visible_points": [
+        312,
+        235
+      ],
+      "selected_candidates": [
+        51,
+        49
+      ],
+      "failure_reason": null,
+      "component_summary": "同一任务原装货/卸货两段视觉输入312/235点，实际所选候选51/49；双指抬升、托盘放稳、目的地卸货与回位均有原分项证据。载货路线71.131s，末位置误差10.522mm、偏航0.026249rad。 原装/卸所选51/49均为OBB几何候选；模型实际推理和混合池生成已发生，但所选抓取不记为神经网络proposal。"
+    },
+    {
+      "id": "order-a",
+      "label": "订单 A（返站失败）",
+      "task_id": "549e4ee7-c67f-4e2b-bb88-34340ceff766",
+      "passed": false,
+      "route_seconds": null,
+      "position_error_m": null,
+      "yaw_error_rad": null,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": "A返站阶段停止：车体或机械臂发生非预期物理接触。原独立评分未通过；具体接触对由运行owner复盘。",
+      "component_summary": "本任务尚无模型视觉输入或候选；不借用B的模型查询、图像或物理动作证明A成功。"
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/f2-warehouse-local-175145/timing.json",
+    "replay": "/workbench/f2-warehouse-local-175145/replay.json",
+    "video": "/workbench/f2-warehouse-local-175145/overview.mp4",
+    "video_index": "/workbench/f2-warehouse-local-175145/video-frame-index.json",
+    "sensor_experience": "/workbench/f2-warehouse-local-175145/sensor/sensor-experience.json",
+    "visual_chain": "/workbench/f2-warehouse-local-175145/visual/visual-chain.json",
+    "lidar_receipt": "/workbench/f2-warehouse-local-175145/native-lidar-consumer.json",
+    "poster": "/workbench/f2-warehouse-local-175145/overview.jpg"
+  },
+  "video_caption": "原录像667帧，按原2fps播放；下载索引仅派生媒体时间信息，不含运行日志。",
+  "archive_status": "本机原件和本次网页派生材料待根owner归档；旧Drive归档不冒充包含该回合。",
+  "warnings": [
+    "停车保护辅助与观测/动作/物理评分分别保留；本页播放不能触发运动。",
+    "A原任务失败保持；B完整装卸成功不构成整轮B→A通过。",
+    "查询task_id由原episode与cargo唯一对应关系派生，A不显示B的模型查询。",
+    "原混合候选池48扩散＋360 OBB；本次装/卸实际选择OBB 51/49，不把模型调用等同神经网络候选被执行，原分数不代表成功概率。",
+    "雷达面板仅覆盖同episode启动阶段6帧，原map TF0/6；消费者探针为源6.700s、TF2/3。它们不是B配送阶段的3D画面或逐帧控制消费ACK，实际时间覆盖有限。",
+    "低障碍同时在静态collision_map中；消费者发现与lethal cells不证明3D排他因果或逐消息消费ACK。"
+  ],
+  "provenance": {
+    "source_kind": "actual_local_terminal_factory_readonly_export",
+    "source_run_id": "132c3ad1-dfc3-4f3b-826a-284a4a30e55f",
+    "source_run_directory": "/tmp/fishbot-closure-20261106/runs/f2-wide-warehouse-run-20261106-175145-3b8c9b",
+    "scene_id": "f1-j100-wide-continuous-ba",
+    "candidate_label": "f2-wide-warehouse",
+    "new_execution": false,
+    "rescored": false,
+    "raw_backup": {
+      "confirmed": false,
+      "status": "pending_root_archive"
+    },
+    "original_components_report": "/workbench/f2-warehouse-local-175145/original-components.json",
+    "episode_ids": [
+      "9bd6edac-b336-4167-9189-015bacafc579"
+    ],
+    "native_consumer_binding": {
+      "kind": "source_file_recovered_from_same_terminal_run_directory",
+      "episode_id": "9bd6edac-b336-4167-9189-015bacafc579",
+      "source_stamp_s": 6.7,
+      "native_receipt_itself_has_episode_id": false,
+      "scope": "bounded startup probe; not B delivery-time capture or per-message consumption acknowledgement"
+    }
+  }
+}

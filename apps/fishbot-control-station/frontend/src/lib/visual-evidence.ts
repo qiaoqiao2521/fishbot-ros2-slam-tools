@@ -22,7 +22,7 @@ export interface VisualEvidenceEntry {
   milestones: { lift: VisualMilestone | null; placement: VisualMilestone | null }; warnings: string[]
 }
 export interface VisualQuery {
-  id: string; outcome: string; timeout: number | null
+  id: string; taskId?: string; outcome: string; timeout: number | null
   stages: { stage: string; elapsed: number | null; phase: string; candidateIndex: number | null }[]
 }
 export interface VisualEvidence {
@@ -65,7 +65,7 @@ export function parseVisualEvidence(value: unknown): VisualEvidence {
       milestones: { lift: milestone(milestones.lift), placement: milestone(milestones.placement) }, warnings: entryWarnings }]
   })
   return { runId: text(raw.run_id), sceneId: text(raw.scene_id, '场景未提供'), taskId: text(raw.task_id), sourceConfirmed, entries,
-    queries: list(raw.queries).flatMap(value => { const row = record(value); return Object.keys(row).length ? [{ id: text(row.id, '查询身份未提供'), outcome: text(row.outcome, '终态未提供'), timeout: number(row.timeout_s), stages: list(row.stages).map(value => { const stage = record(value); return { stage: text(stage.stage, '事件未提供'), elapsed: number(stage.elapsed_wall_s), phase: text(stage.phase), candidateIndex: number(stage.candidate_index) } }) }] : [] }), warnings }
+    queries: list(raw.queries).flatMap(value => { const row = record(value); return Object.keys(row).length ? [{ id: text(row.id, '查询身份未提供'), taskId: text(row.task_id), outcome: text(row.outcome, '终态未提供'), timeout: number(row.timeout_s), stages: list(row.stages).map(value => { const stage = record(value); return { stage: text(stage.stage, '事件未提供'), elapsed: number(stage.elapsed_wall_s), phase: text(stage.phase), candidateIndex: number(stage.candidate_index) } }) }] : [] }), warnings }
 }
 export async function readVisualEvidence(url: string, signal?: AbortSignal): Promise<VisualEvidence> {
   const response = await fetch(url, { method: 'GET', cache: 'no-store', signal })

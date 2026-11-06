@@ -107,6 +107,73 @@ class ClockReceiverTests(unittest.TestCase):
             executor.shutdown(); thread.join()
             probe.destroy_node(); receiver.destroy_node(); rclpy.shutdown()
 
+    def test_station_pairs_are_received_only_by_optin_receiver_without_control_or_clock_spin(self):
+        from geometry_msgs.msg import PoseStamped
+        from message_filters import Subscriber, TimeSynchronizer
+        tree = ast.parse((Path(__file__).parents[1] / 'cooperation_bridge.py').read_text())
+        bridge = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == 'Bridge')
+        methods = [copy.deepcopy(n) for n in bridge.body if isinstance(n, ast.FunctionDef)
+                   and n.name in ('create_subscription', 'destroy_subscription',
+                                  'observe_station_receipt', 'station_receiver_snapshot')]
+        module = ast.Module(body=[ast.ClassDef(name='Probe', bases=[ast.Name(id='Node', ctx=ast.Load())],
+                           keywords=[], body=methods, decorator_list=[])], type_ignores=[])
+        namespace = dict(Node=Node, Clock=Clock, TimeSource=TimeSource, time=time, copy=copy)
+        exec(compile(ast.fix_missing_locations(module), '<actual-station-routing>', 'exec'), namespace)
+        rclpy.init()
+        receiver = Node('test_dedicated_station_receiver')
+        clock = Node('test_unspun_station_clock_receiver')
+        probe = namespace['Probe'].__new__(namespace['Probe'])
+        probe.clock_receiver = clock
+        probe.clock_callbacks = MutuallyExclusiveCallbackGroup()
+        probe.station_receiver = None  # Original default must stay on the control node.
+        probe.station_receipt_lock = threading.RLock()
+        probe.station_receipts = {}
+        Node.__init__(probe, 'test_unspun_station_control')
+        qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
+        default = probe.create_subscription(PoseStamped, '/cooperation/station_pose', lambda msg: None, qos)
+        self.assertIn(default, probe.subscriptions)
+        self.assertNotIn(default, clock.subscriptions)
+        self.assertFalse(probe.station_receiver_snapshot()['enabled'])
+        self.assertTrue(probe.destroy_subscription(default))
+        probe.station_receiver = receiver
+        topics = ('/cooperation/station_pose', '/cooperation/station_detection')
+        filters = [Subscriber(probe, PoseStamped, topic, qos_profile=qos,
+                              callback_group=MutuallyExclusiveCallbackGroup()) for topic in topics]
+        sync = TimeSynchronizer(filters, queue_size=5)
+        pairs = []
+        sync.registerCallback(lambda a, b: pairs.append((a.header.stamp.sec, b.header.stamp.sec)))
+        publishers = [receiver.create_publisher(PoseStamped, topic, qos) for topic in topics]
+        executor = SingleThreadedExecutor(); executor.add_node(receiver)
+        thread = threading.Thread(target=executor.spin); thread.start()
+        try:
+            deadline = time.monotonic()+3.
+            while not all(p.get_subscription_count() for p in publishers) and time.monotonic()<deadline:
+                time.sleep(.01)
+            self.assertTrue(all(p.get_subscription_count() for p in publishers))
+            for tick in range(1, 31):
+                for publisher in publishers:
+                    message = PoseStamped(); message.header.stamp.sec = tick
+                    publisher.publish(message)
+                time.sleep(.02)
+            deadline = time.monotonic()+1.
+            while (not pairs or pairs[-1] != (30, 30)) and time.monotonic()<deadline:
+                time.sleep(.01)
+            self.assertTrue(pairs, 'Exact-pair reception stalled with control and clock executors unspun')
+            self.assertEqual(pairs[-1], (30, 30))
+            snapshot = probe.station_receiver_snapshot()
+            self.assertTrue(snapshot['enabled'])
+            for topic, subscription in zip(topics, filters):
+                self.assertIn(subscription.sub, receiver.subscriptions)
+                self.assertNotIn(subscription.sub, clock.subscriptions)
+                self.assertEqual(snapshot['topics'][topic]['source_stamp'], 30.)
+                self.assertGreater(snapshot['topics'][topic]['count'], 0)
+                self.assertGreaterEqual(snapshot['topics'][topic]['maximum_entry_gap_s'], 0.)
+                self.assertTrue(probe.destroy_subscription(subscription.sub))
+                self.assertNotIn(subscription.sub, receiver.subscriptions)
+        finally:
+            executor.shutdown(); thread.join()
+            probe.destroy_node(); receiver.destroy_node(); clock.destroy_node(); rclpy.shutdown()
+
     def test_receiver_failure_propagates_to_native_owner_executor(self):
         tree = ast.parse((Path(__file__).parents[1] / 'cooperation_bridge.py').read_text())
         function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'spin_clock_receiver')
@@ -185,3 +252,40 @@ class ClockReceiverTests(unittest.TestCase):
         finally:
             executor.shutdown(); thread.join()
             probe.destroy_node(); receiver.destroy_node(); rclpy.shutdown()
+
+
+class StationReceiptObservationTests(unittest.TestCase):
+    def test_receipts_preserve_source_and_count_without_control_lock_or_refresh(self):
+        from types import SimpleNamespace as S
+        from unittest.mock import Mock
+        tree = ast.parse((Path(__file__).parents[1] / 'cooperation_bridge.py').read_text())
+        bridge = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == 'Bridge')
+        methods = [copy.deepcopy(n) for n in bridge.body if isinstance(n, ast.FunctionDef)
+                   and n.name in ('observe_station_receipt', 'station_receiver_snapshot')]
+        module = ast.Module(body=[ast.ClassDef(name='Probe', bases=[], keywords=[],
+                                              body=methods, decorator_list=[])], type_ignores=[])
+        clock = S(monotonic=Mock(side_effect=[10., 10.4]), time=Mock(side_effect=[20., 20.4]))
+        namespace = dict(time=clock, copy=copy)
+        exec(compile(ast.fix_missing_locations(module), '<actual-station-receipt>', 'exec'), namespace)
+        probe = namespace['Probe']()
+        probe.station_receipt_lock = threading.RLock(); probe.station_receipts = {}
+        probe.station_receiver = object()
+        probe.get_clock = lambda: S(now=lambda: S(nanoseconds=5000000000))
+        message = S(header=S(stamp=S(sec=3, nanosec=120000000)),
+                    status=[S(values=[S(key='sequence', value='156')])])
+        info = S(source_timestamp=100, received_timestamp=200)
+        for _ in range(2):
+            probe.observe_station_receipt('/cooperation/station_detection', message, info)
+        value = probe.station_receiver_snapshot()['topics']['/cooperation/station_detection']
+        self.assertEqual(value['count'], 2)
+        self.assertAlmostEqual(value['maximum_entry_gap_s'], .4)
+        self.assertEqual(value['source_stamp'], 3.12)
+        self.assertEqual(value['sequence'], 156)
+        self.assertEqual(value['dds_source_timestamp_ns'], 100)
+        self.assertEqual(value['dds_received_timestamp_ns'], 200)
+        self.assertEqual(value['node_clock_stamp_at_entry'], 5.)
+        self.assertEqual(message.header.stamp.sec, 3)
+        self.assertEqual(message.header.stamp.nanosec, 120000000)
+        # Snapshot is independent; a caller cannot mutate live receipt counters.
+        value['count'] = 999
+        self.assertEqual(probe.station_receiver_snapshot()['topics']['/cooperation/station_detection']['count'], 2)
