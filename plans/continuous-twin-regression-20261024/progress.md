@@ -553,3 +553,7 @@ source-v11只保留已原生验证的候选：fresh postgrasp快照由owner刷�
 第五轮已获官方versionNumber5提交回执，source-v11数据集ready后提交，独立原kernel最大3600墙秒，367个Python文件语法通过。SDK首次调用用错accelerator关键字，在发请求前TypeError；按安装SDK的acc参数修正后仅一次实际提交，无重复会话。API提交不计业务验收。v3/v4原件及source-v10/v11已存选定weiyuyang147 Drive：1AOuKbKN0Lwr22YB3JlDm0J-vCCcyMUGw，90,585,551B；从Drive实际流式下载逐成员读回233项/101,777,602解码字节。已删除已验证上传tar副本90,585,551B，保留所需原件/源码/receipt，未触碰其他任务。
 
 新增整合后BridgeRace原107项通过；单独调用首次缺PYTHONPATH=tools导入失败，按原项目入口修正后通过，无断言变更。独立只读审查确认原碰撞validator、细分辨率与detach prefix保持，执行receipt只按真实applied标记。特别边界：视觉cooperation_model_grasp.py接近分支仍用原.005rad直接/OMPL，未套本轮空手简化；本轮只覆盖ideal approach及各自placement的空手home段，不宣称所有视觉RRT已优化。原query/owner deadline继续覆盖完整前后校验。
+
+v4实际素材已加入/results两独立失败卡，原四组及v2/v3均保留。仓库640×480 RGB/固定米制depth可见，同query frozen snapshot stamp33.280、seq1663从原request派生，明确缺原observation receipt；无模型/点云/候选。车间实际抬升66.260源秒、托盘释放137.300、回位164.660，装运362.759墙秒超360（含清理总执行另计372.7095），无卸货/A。两原录像100.5/351.5秒，产品索引保留原帧时间，不提交raw JSONL。4项局部前端测试、typecheck/lint与真实桌面/390px浏览器通过，0写请求/0pageerror；读回qa-v4-actual-final-source/ui-result.json。本次网页派生资产待最终Drive归档，不与已读回的原件归档混淆。
+
+空间收尾：已验证Drive包分别含source-v9/source-v10，删除这两份可恢复本地源码包副本，共22,408,287字节；当前source-v11、运行所需证据及receipt保持。runtime补丁已提交918f4dd并推送既有qiaoqiao2521远端；这是组件交付，不是F2验收通过。

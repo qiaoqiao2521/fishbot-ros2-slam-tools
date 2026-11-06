@@ -1,0 +1,66 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "新车间 v4 · 已装货，配送超时",
+  "recorded_at": "2026-11-06",
+  "run_id": "7bf05ac0-6044-4933-b908-87cc02a24e78",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "麦克纳姆 robot_base",
+  "sensor": "原通用16线3D雷达 · 360×16槽位",
+  "scene_label": "车间线边 · f2-workshop-line",
+  "observation_mode": "ideal",
+  "model": "原SO101 IK/OMPL · ideal货物观测",
+  "description": "同一实际回合已完成双指抓取、抬升、托盘释放落稳和机械臂回位；随后配送未在原360秒内完成。",
+  "evidence_note": "本轮是ideal货物观测，不是GraspGen-X视觉成功。实际装货分项与整体失败分开记账；没有目的地到达或实体卸货证据。源时刻只作事件定位，不当墙钟耗时。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 433.483315673,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（失败）",
+      "task_id": "3ad6a897-15e7-4e47-a893-fbeffcd75dc2",
+      "passed": false,
+      "route_seconds": null,
+      "position_error_m": null,
+      "yaw_error_rad": null,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": "装货与配送窗口362.759墙秒超过原360秒；B原评分失败、A未派发、目的地及卸货未完成。",
+      "component_summary": "原独立分项通过：双指接触与抬升（源66.260s）、托盘释放与支撑落稳（137.300s）、机械臂回位（164.660s）。货物最大真实位移0.339883m、车辆0.334834m；载货净位移和最终到站未通过，不能计完整配送。"
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/f2-workshop-v4/timing.json",
+    "replay": "/workbench/f2-workshop-v4/replay.json",
+    "video": "/workbench/f2-workshop-v4/overview.mp4",
+    "video_index": "/workbench/f2-workshop-v4/video-frame-index.json",
+    "poster": "/workbench/f2-workshop-v4/overview.jpg",
+    "sensor_experience": "/workbench/f2-workshop-v4/sensor-experience.json"
+  },
+  "video_caption": "本回合703个真实全景采样帧，按原2fps独立播放。下载索引为实际记录派生的媒体索引，未插值；完整录像帧原件保留于Drive归档。",
+  "availability_note": "真实失败位置与阶段记录已只读导入；不补造静态场景或机械臂世界FK。",
+  "archive_status": "v3/v4原件已存Drive，并实际下载逐成员读回（233项，90,585,551字节）；本次网页派生资产另待归档",
+  "warnings": [
+    "本轮ideal观测没有RGB-D模型输入/候选，不创建虚构视觉链；双指抬升、托盘释放和回位来自原独立评分。",
+    "原360秒门槛保持；任务和整轮耗时是不同边界，不能把部分装货成功当整单通过。",
+    "卸货样本0，目的地与A未完成；真实录像只展示实际发生的动作。"
+  ],
+  "provenance": {
+    "source_kind": "recovered_original_failed_run_and_same_episode_capture",
+    "source_run_id": "7bf05ac0-6044-4933-b908-87cc02a24e78",
+    "task_id": "3ad6a897-15e7-4e47-a893-fbeffcd75dc2",
+    "episode_id": "14f98d9f-8aeb-4eeb-85c9-2186b81857c8",
+    "new_execution": false,
+    "rescored": false,
+    "original_components_report": "/workbench/f2-workshop-v4/original-components.json",
+    "raw_backup": {
+      "confirmed": true,
+      "drive_id": "1AOuKbKN0Lwr22YB3JlDm0J-vCCcyMUGw",
+      "read_members": 233,
+      "archive_bytes": 90585551,
+      "verification": "actual Drive stream gzip/tar full member read"
+    },
+    "derived_ui_archive_status": "pending_root_archive"
+  },
+  "archive_url": "https://drive.google.com/file/d/1AOuKbKN0Lwr22YB3JlDm0J-vCCcyMUGw/view?usp=drivesdk"
+}

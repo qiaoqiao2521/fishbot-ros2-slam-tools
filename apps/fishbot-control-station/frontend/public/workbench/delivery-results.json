@@ -86,6 +86,26 @@
       "source": "/workbench/f2-warehouse-v3-result.json",
       "coverage": "B接近查询30秒超时；尚未实际推理；A未执行",
       "materials": "真实MID采样、原生接口回执、空视觉链与实际query、录像/耗时"
+    },
+    {
+      "id": "f2-warehouse-v4",
+      "title": "新仓库 v4 · RGB-D提取失败",
+      "vehicle": "j100",
+      "sensor": "3d",
+      "configuration": "J100 / MID-360式扫描 / RGB-D失败",
+      "source": "/workbench/f2-warehouse-v4-result.json",
+      "coverage": "B在9.989秒ABI错误失败；未推理；A未执行",
+      "materials": "原始RGB/深度、提取失败query、MID采样、录像与阶段图"
+    },
+    {
+      "id": "f2-workshop-v4",
+      "title": "新车间 v4 · 已装货，配送超时",
+      "vehicle": "mecanum",
+      "sensor": "3d",
+      "configuration": "麦轮 / 原16线3D / ideal装货",
+      "source": "/workbench/f2-workshop-v4-result.json",
+      "coverage": "实际双指抓放/回位通过；B配送360秒超时；A未执行",
+      "materials": "实际装货录像、原分项/源时刻、同源传感器、位置回放与耗时"
     }
   ]
 }

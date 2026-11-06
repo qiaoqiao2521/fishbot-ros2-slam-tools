@@ -1,0 +1,71 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "新仓库 v4 · RGB-D提取失败",
+  "recorded_at": "2026-11-06",
+  "run_id": "39653fb8-4cdd-4992-a610-c41b327c2a55",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "Jackal J100",
+  "sensor": "MID-360式扫描 · 4000×1槽位",
+  "scene_label": "新宽通道仓库 · f2-wide-warehouse",
+  "observation_mode": "vision",
+  "model": "GraspGen-X尚未实际调用",
+  "description": "RGB-D原始输入已回收，可直接观看；随后可见点云提取遇到NumPy/SciPy ABI导入错误，查询9.989墙秒失败，没有模型推理请求。",
+  "evidence_note": "本轮原RGB和米制深度已回收；原observation.json未生成。目录与原query绑定到同一episode/sequence/arm/cargo，源33.280s派生自原request.snapshot冻结状态，不作截图墙钟。MID扫描/订阅配置不代表逐消息ACK或3D排他因果。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 132.6162485399999,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（失败）",
+      "task_id": "00b5db27-b67c-47c7-8f31-4f20ceedcdce",
+      "passed": false,
+      "route_seconds": null,
+      "position_error_m": null,
+      "yaw_error_rad": null,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": "接近查询9.988783墙秒失败：numpy.core.multiarray failed to import。B失败、A未派发；未推理、未抓取、未卸货。",
+      "component_summary": "规划初始化5.572s；RGB-D渲染5.590→8.027s，原RGB/深度可看；可见点云提取8.266s开始，子进程9.483s报告ImportError，查询9.989s失败。无模型请求，不能当作实际推理。"
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/f2-warehouse-v4/timing.json",
+    "replay": "/workbench/f2-warehouse-v4/replay.json",
+    "video": "/workbench/f2-warehouse-v4/overview.mp4",
+    "video_index": "/workbench/f2-warehouse-v4/video-frame-index.json",
+    "poster": "/workbench/f2-warehouse-v4/overview.jpg",
+    "sensor_experience": "/workbench/f2-warehouse-v4/sensor-experience.json",
+    "visual_chain": "/workbench/f2-warehouse-v4/visual-chain.json",
+    "lidar_receipt": "/workbench/f2-warehouse-v4/native-lidar-consumer.json"
+  },
+  "video_caption": "本回合201个真实全景采样帧，按原2fps独立播放。下载索引为实际记录派生的媒体索引，未插值；完整录像帧原件保留于Drive归档。",
+  "availability_note": "真实失败位置与阶段记录已只读导入；不补造静态场景或机械臂世界FK。",
+  "archive_status": "v3/v4原件已存Drive，并实际下载逐成员读回（233项，90,585,551字节）；本次网页派生资产另待归档",
+  "warnings": [
+    "真实RGB/深度已回收；可见点云提取未完成，没有原云/掩码/所选候选/推理或抓放里程碑。",
+    "原30秒上限未到期；本轮是9.989秒ABI错误，不能写成30秒推理超时。",
+    "MID-360式扫描仍为官方角度表抽稀近似；静态层含同一低障碍，不做3D独有归因。"
+  ],
+  "provenance": {
+    "source_kind": "recovered_original_failed_run_and_same_episode_capture",
+    "source_run_id": "39653fb8-4cdd-4992-a610-c41b327c2a55",
+    "task_id": "00b5db27-b67c-47c7-8f31-4f20ceedcdce",
+    "episode_id": "a53d191f-b310-4b7a-a89d-2bd5fc198f1e",
+    "new_execution": false,
+    "rescored": false,
+    "original_components_report": "/workbench/f2-warehouse-v4/original-components.json",
+    "raw_backup": {
+      "confirmed": true,
+      "drive_id": "1AOuKbKN0Lwr22YB3JlDm0J-vCCcyMUGw",
+      "read_members": 233,
+      "archive_bytes": 90585551,
+      "verification": "actual Drive stream gzip/tar full member read"
+    },
+    "derived_ui_archive_status": "pending_root_archive",
+    "scene_id": "f1-j100-wide-continuous-ba",
+    "candidate_label": "f2-wide-warehouse",
+    "scene_identity_basis": "Original result.declaration.scene_id; manifest factory_delivery.id is the scene configuration label"
+  },
+  "archive_url": "https://drive.google.com/file/d/1AOuKbKN0Lwr22YB3JlDm0J-vCCcyMUGw/view?usp=drivesdk"
+}

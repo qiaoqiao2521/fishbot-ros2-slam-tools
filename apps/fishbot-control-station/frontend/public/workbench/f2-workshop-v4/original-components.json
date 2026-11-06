@@ -1,0 +1,80 @@
+{
+  "schema": "fishbot.original-component-evidence.v1",
+  "run_id": "7bf05ac0-6044-4933-b908-87cc02a24e78",
+  "task_id": "3ad6a897-15e7-4e47-a893-fbeffcd75dc2",
+  "episode_id": "14f98d9f-8aeb-4eeb-85c9-2186b81857c8",
+  "new_execution": false,
+  "rescored": false,
+  "original_task_passed": false,
+  "pickup_and_transport_observed": {
+    "dock_true_pose_and_stop": {
+      "passed": true,
+      "first_pass_stamp": 11.80000000000061,
+      "longest_source_duration_s": 0.7000000000002338,
+      "required_duration_s": 0.7,
+      "max_source_gap_s": 0.1
+    },
+    "actual_lift_and_two_tip_forces": {
+      "passed": true,
+      "first_pass_stamp": 66.26000000002698,
+      "longest_source_duration_s": 68.99999999988351,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "released_full_footprint_supported_and_relative_rest": {
+      "passed": true,
+      "first_pass_stamp": 137.29999999992748,
+      "longest_source_duration_s": 1.0000000000047748,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "arm_home_before_motion": {
+      "passed": true,
+      "first_pass_stamp": 164.66000000005812,
+      "longest_source_duration_s": 4.380000000020914,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "final_car_and_cargo_rest": {
+      "passed": false,
+      "first_pass_stamp": null,
+      "longest_source_duration_s": 0.0,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "transport": {
+      "passed": false,
+      "max_true_cargo_displacement_m": 0.3398829880738819,
+      "max_true_car_displacement_m": 0.33483383874005984,
+      "first_car_motion_after_release_stamp": 167.98000000007397,
+      "car_moved_before_home_dwell": false,
+      "full_footprint_violation_samples_after_release": 0
+    },
+    "forbidden_contacts": {
+      "passed": true,
+      "first_violation": []
+    },
+    "independent_pose_crosschecks": {
+      "passed": true,
+      "bad_samples": 0
+    },
+    "cargo_baseline_z_m": 0.23092145032031106,
+    "scored_samples": 8997,
+    "passed": false
+  },
+  "wall_budget": {
+    "required": true,
+    "passed": false,
+    "load_and_delivery_limit_wall_s": 360.0,
+    "declared": {
+      "load_and_delivery": 360,
+      "unload": 180
+    },
+    "load_and_delivery_wall_s": 362.75876927375793,
+    "load_and_delivery_complete": false,
+    "load_and_delivery_time_basis": "elapsed_until_first_terminal_observation_or_window_end",
+    "full_task_wall_s": 372.5767152309418
+  },
+  "task_stop_reason": "协同任务超过总执行时间",
+  "unload_samples_after_arrival": 0
+}

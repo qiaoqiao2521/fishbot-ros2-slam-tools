@@ -1,0 +1,80 @@
+{
+  "schema": "fishbot.original-component-evidence.v1",
+  "run_id": "39653fb8-4cdd-4992-a610-c41b327c2a55",
+  "task_id": "00b5db27-b67c-47c7-8f31-4f20ceedcdce",
+  "episode_id": "a53d191f-b310-4b7a-a89d-2bd5fc198f1e",
+  "new_execution": false,
+  "rescored": false,
+  "original_task_passed": false,
+  "pickup_and_transport_observed": {
+    "dock_true_pose_and_stop": {
+      "passed": true,
+      "first_pass_stamp": 33.219999999994634,
+      "longest_source_duration_s": 0.7000000000008555,
+      "required_duration_s": 0.7,
+      "max_source_gap_s": 0.1
+    },
+    "actual_lift_and_two_tip_forces": {
+      "passed": false,
+      "first_pass_stamp": null,
+      "longest_source_duration_s": 0.0,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "released_full_footprint_supported_and_relative_rest": {
+      "passed": false,
+      "first_pass_stamp": null,
+      "longest_source_duration_s": 0.0,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "arm_home_before_motion": {
+      "passed": false,
+      "first_pass_stamp": null,
+      "longest_source_duration_s": 0.0,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "final_car_and_cargo_rest": {
+      "passed": false,
+      "first_pass_stamp": null,
+      "longest_source_duration_s": 0.0,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "transport": {
+      "passed": false,
+      "max_true_cargo_displacement_m": 0.0,
+      "max_true_car_displacement_m": 0.0,
+      "first_car_motion_after_release_stamp": null,
+      "car_moved_before_home_dwell": false,
+      "full_footprint_violation_samples_after_release": 0
+    },
+    "forbidden_contacts": {
+      "passed": true,
+      "first_violation": []
+    },
+    "independent_pose_crosschecks": {
+      "passed": true,
+      "bad_samples": 0
+    },
+    "cargo_baseline_z_m": 0.27642145032031074,
+    "scored_samples": 1563,
+    "passed": false
+  },
+  "wall_budget": {
+    "required": true,
+    "passed": true,
+    "load_and_delivery_limit_wall_s": 360.0,
+    "declared": {
+      "load_and_delivery": 360,
+      "unload": 180
+    },
+    "load_and_delivery_wall_s": 60.74106693267822,
+    "load_and_delivery_complete": false,
+    "load_and_delivery_time_basis": "elapsed_until_first_terminal_observation_or_window_end",
+    "full_task_wall_s": 65.38950634002686
+  },
+  "task_stop_reason": "Approach query failed: numpy.core.multiarray failed to import",
+  "unload_samples_after_arrival": 0
+}

@@ -1,0 +1,973 @@
+{
+  "schema": "fishbot.delivery-timing.v1",
+  "scope": "historical_simulation_import",
+  "label": "新车间 v4 · 已装货，配送超时",
+  "new_execution": false,
+  "rescored": false,
+  "limits": [
+    "Stage boundaries are sampled HTTP intervals, not exact event timestamps.",
+    "Wall receipt intervals and source time stay separate; route elapsed uses the original monotonic receipt.",
+    "Native terminal status / forwarding are not controller-consumption acknowledgements.",
+    "Historical simulation results do not establish real hardware or sim-to-real success."
+  ],
+  "source_run_id": "7bf05ac0-6044-4933-b908-87cc02a24e78",
+  "original_run_passed": false,
+  "warnings": [
+    "loop-timing.json: FileNotFoundError"
+  ],
+  "cases": [
+    {
+      "start_wall_s": 1793950815.4532213,
+      "end_wall_s": 1793951188.0299366,
+      "task_budget_s": 540.0,
+      "task_elapsed_s": 372.70951406899997,
+      "route": {
+        "start_wall_s": null,
+        "end_wall_s": null,
+        "elapsed_s": null,
+        "budget_s": null,
+        "remaining_s": null,
+        "clock": "unknown",
+        "boundary": "unknown",
+        "passed": null
+      },
+      "physical": {
+        "final_position_error_m": null,
+        "final_yaw_error_rad": null,
+        "continuous_final_stop_source_s": 0.0
+      },
+      "sampling": {
+        "records": 121881,
+        "physics_records": 9002,
+        "task_physics_records": 8997,
+        "malformed_records": 0,
+        "foreign_episode_records": 0,
+        "nonadvancing_records": 0,
+        "gaps": [
+          {
+            "missing": 7,
+            "before_source_s": 5.959999999999566,
+            "after_source_s": 6.119999999999548,
+            "before_wall_s": 1793950817.395398,
+            "after_wall_s": 1793950817.6960328,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 674
+          },
+          {
+            "missing": 1,
+            "before_source_s": 7.09999999999944,
+            "after_source_s": 7.139999999999436,
+            "before_wall_s": 1793950819.905125,
+            "after_wall_s": 1793950819.9903595,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": false,
+            "hold_after": false,
+            "line": 1833
+          },
+          {
+            "missing": 1,
+            "before_source_s": 10.920000000000316,
+            "after_source_s": 10.96000000000033,
+            "before_wall_s": 1793950828.2839425,
+            "after_wall_s": 1793950828.3261425,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": false,
+            "hold_after": false,
+            "line": 5886
+          },
+          {
+            "missing": 1,
+            "before_source_s": 21.879999999998752,
+            "after_source_s": 21.91999999999873,
+            "before_wall_s": 1793950850.9614677,
+            "after_wall_s": 1793950850.997995,
+            "stage_before": "dock_stopped",
+            "stage_after": "dock_stopped",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 12946
+          },
+          {
+            "missing": 1,
+            "before_source_s": 23.339999999997943,
+            "after_source_s": 23.37999999999792,
+            "before_wall_s": 1793950854.3029168,
+            "after_wall_s": 1793950854.399164,
+            "stage_before": "dock_stopped",
+            "stage_after": "dock_stopped",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 13900
+          },
+          {
+            "missing": 1,
+            "before_source_s": 26.13999999999639,
+            "after_source_s": 26.17999999999637,
+            "before_wall_s": 1793950860.9522443,
+            "after_wall_s": 1793950861.0340967,
+            "stage_before": "dock_stopped",
+            "stage_after": "dock_stopped",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 15729
+          },
+          {
+            "missing": 1,
+            "before_source_s": 26.859999999995992,
+            "after_source_s": 26.89999999999597,
+            "before_wall_s": 1793950863.0345862,
+            "after_wall_s": 1793950863.094009,
+            "stage_before": "dock_stopped",
+            "stage_after": "dock_stopped",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 16194
+          },
+          {
+            "missing": 1,
+            "before_source_s": 27.41999999999568,
+            "after_source_s": 27.45999999999566,
+            "before_wall_s": 1793950864.31759,
+            "after_wall_s": 1793950864.4238591,
+            "stage_before": "dock_stopped",
+            "stage_after": "dock_stopped",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 16562
+          },
+          {
+            "missing": 1,
+            "before_source_s": 29.779999999994374,
+            "after_source_s": 29.81999999999435,
+            "before_wall_s": 1793950870.0938807,
+            "after_wall_s": 1793950870.1565754,
+            "stage_before": "dock_stopped",
+            "stage_after": "dock_stopped",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 18114
+          },
+          {
+            "missing": 1,
+            "before_source_s": 29.879999999994318,
+            "after_source_s": 29.919999999994296,
+            "before_wall_s": 1793950870.310031,
+            "after_wall_s": 1793950870.3577595,
+            "stage_before": "dock_stopped",
+            "stage_after": "dock_stopped",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 18173
+          },
+          {
+            "missing": 5,
+            "before_source_s": 30.339999999994063,
+            "after_source_s": 30.459999999993997,
+            "before_wall_s": 1793950871.518343,
+            "after_wall_s": 1793950871.660887,
+            "stage_before": "dock_stopped",
+            "stage_after": "dock_stopped",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 18481
+          },
+          {
+            "missing": 1,
+            "before_source_s": 38.800000000001454,
+            "after_source_s": 38.8400000000015,
+            "before_wall_s": 1793950888.1992476,
+            "after_wall_s": 1793950888.2233405,
+            "stage_before": "arm_grasp",
+            "stage_after": "arm_grasp",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 23980
+          },
+          {
+            "missing": 1,
+            "before_source_s": 41.36000000000458,
+            "after_source_s": 41.40000000000463,
+            "before_wall_s": 1793950892.9315114,
+            "after_wall_s": 1793950892.9872222,
+            "stage_before": "arm_grasp",
+            "stage_after": "arm_grasp",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 25680
+          },
+          {
+            "missing": 1,
+            "before_source_s": 46.00000000001025,
+            "after_source_s": 46.0400000000103,
+            "before_wall_s": 1793950901.4827628,
+            "after_wall_s": 1793950901.5436451,
+            "stage_before": "arm_grasp",
+            "stage_after": "arm_grasp",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 28689
+          },
+          {
+            "missing": 1,
+            "before_source_s": 51.26000000001668,
+            "after_source_s": 51.30000000001673,
+            "before_wall_s": 1793950911.9205372,
+            "after_wall_s": 1793950911.9822743,
+            "stage_before": "arm_grasp",
+            "stage_after": "arm_grasp",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 32164
+          },
+          {
+            "missing": 1,
+            "before_source_s": 63.300000000031396,
+            "after_source_s": 63.340000000031445,
+            "before_wall_s": 1793950936.0354476,
+            "after_wall_s": 1793950936.1071544,
+            "stage_before": "arm_grasp",
+            "stage_after": "arm_grasp",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 40085
+          },
+          {
+            "missing": 1,
+            "before_source_s": 70.60000000001686,
+            "after_source_s": 70.64000000001677,
+            "before_wall_s": 1793950950.7246382,
+            "after_wall_s": 1793950950.8209128,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 44842
+          },
+          {
+            "missing": 1,
+            "before_source_s": 71.1400000000156,
+            "after_source_s": 71.18000000001551,
+            "before_wall_s": 1793950952.1116686,
+            "after_wall_s": 1793950952.1833375,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 45199
+          },
+          {
+            "missing": 1,
+            "before_source_s": 71.98000000001365,
+            "after_source_s": 72.02000000001355,
+            "before_wall_s": 1793950954.3452256,
+            "after_wall_s": 1793950954.3791168,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 45740
+          },
+          {
+            "missing": 1,
+            "before_source_s": 73.24000000001071,
+            "after_source_s": 73.28000000001062,
+            "before_wall_s": 1793950957.3674178,
+            "after_wall_s": 1793950957.4400275,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 46576
+          },
+          {
+            "missing": 1,
+            "before_source_s": 73.32000000001052,
+            "after_source_s": 73.36000000001043,
+            "before_wall_s": 1793950957.549783,
+            "after_wall_s": 1793950957.618891,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 46613
+          },
+          {
+            "missing": 1,
+            "before_source_s": 73.42000000001029,
+            "after_source_s": 73.4600000000102,
+            "before_wall_s": 1793950957.7984374,
+            "after_wall_s": 1793950957.8603666,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 46688
+          },
+          {
+            "missing": 1,
+            "before_source_s": 76.52000000000307,
+            "after_source_s": 76.56000000000297,
+            "before_wall_s": 1793950965.6878128,
+            "after_wall_s": 1793950965.7416115,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 48749
+          },
+          {
+            "missing": 1,
+            "before_source_s": 80.13999999999463,
+            "after_source_s": 80.17999999999454,
+            "before_wall_s": 1793950974.2112312,
+            "after_wall_s": 1793950974.2531698,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 51129
+          },
+          {
+            "missing": 1,
+            "before_source_s": 80.81999999999304,
+            "after_source_s": 80.85999999999295,
+            "before_wall_s": 1793950975.6868742,
+            "after_wall_s": 1793950975.767945,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 51593
+          },
+          {
+            "missing": 1,
+            "before_source_s": 81.03999999999253,
+            "after_source_s": 81.07999999999244,
+            "before_wall_s": 1793950976.216884,
+            "after_wall_s": 1793950976.3230011,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 51743
+          },
+          {
+            "missing": 1,
+            "before_source_s": 81.63999999999113,
+            "after_source_s": 81.67999999999104,
+            "before_wall_s": 1793950977.6693232,
+            "after_wall_s": 1793950977.7793655,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 52142
+          },
+          {
+            "missing": 1,
+            "before_source_s": 82.25999999998969,
+            "after_source_s": 82.2999999999896,
+            "before_wall_s": 1793950979.0925481,
+            "after_wall_s": 1793950979.169811,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 52547
+          },
+          {
+            "missing": 1,
+            "before_source_s": 82.99999999998796,
+            "after_source_s": 83.03999999998787,
+            "before_wall_s": 1793950980.7417185,
+            "after_wall_s": 1793950980.8334033,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 53000
+          },
+          {
+            "missing": 1,
+            "before_source_s": 85.5999999999819,
+            "after_source_s": 85.63999999998181,
+            "before_wall_s": 1793950986.94077,
+            "after_wall_s": 1793950987.005566,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 54709
+          },
+          {
+            "missing": 1,
+            "before_source_s": 86.63999999997948,
+            "after_source_s": 86.67999999997939,
+            "before_wall_s": 1793950989.3525593,
+            "after_wall_s": 1793950989.4169607,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 55396
+          },
+          {
+            "missing": 1,
+            "before_source_s": 88.09999999997608,
+            "after_source_s": 88.13999999997598,
+            "before_wall_s": 1793950992.6972613,
+            "after_wall_s": 1793950992.79436,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 56372
+          },
+          {
+            "missing": 1,
+            "before_source_s": 89.09999999997375,
+            "after_source_s": 89.13999999997365,
+            "before_wall_s": 1793950995.051217,
+            "after_wall_s": 1793950995.1453023,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 57001
+          },
+          {
+            "missing": 1,
+            "before_source_s": 89.83999999997202,
+            "after_source_s": 89.87999999997193,
+            "before_wall_s": 1793950996.7947018,
+            "after_wall_s": 1793950996.8312418,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 57489
+          },
+          {
+            "missing": 1,
+            "before_source_s": 89.87999999997193,
+            "after_source_s": 89.91999999997184,
+            "before_wall_s": 1793950996.8312418,
+            "after_wall_s": 1793950996.8941169,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 57504
+          },
+          {
+            "missing": 1,
+            "before_source_s": 91.89999999996722,
+            "after_source_s": 91.93999999996713,
+            "before_wall_s": 1793951001.9138606,
+            "after_wall_s": 1793951001.9786394,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 58839
+          },
+          {
+            "missing": 1,
+            "before_source_s": 102.81999999994177,
+            "after_source_s": 102.85999999994168,
+            "before_wall_s": 1793951025.055291,
+            "after_wall_s": 1793951025.1465585,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 65787
+          },
+          {
+            "missing": 1,
+            "before_source_s": 104.97999999993674,
+            "after_source_s": 105.01999999993664,
+            "before_wall_s": 1793951030.0087845,
+            "after_wall_s": 1793951030.053771,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 67174
+          },
+          {
+            "missing": 1,
+            "before_source_s": 105.6399999999352,
+            "after_source_s": 105.6799999999351,
+            "before_wall_s": 1793951031.420532,
+            "after_wall_s": 1793951031.502657,
+            "stage_before": "arm_lift",
+            "stage_after": "arm_lift",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 67629
+          },
+          {
+            "missing": 1,
+            "before_source_s": 111.87999999992066,
+            "after_source_s": 111.91999999992056,
+            "before_wall_s": 1793951043.5264888,
+            "after_wall_s": 1793951043.5602636,
+            "stage_before": "arm_transport",
+            "stage_after": "arm_transport",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 71705
+          },
+          {
+            "missing": 1,
+            "before_source_s": 114.67999999991413,
+            "after_source_s": 114.71999999991404,
+            "before_wall_s": 1793951049.092673,
+            "after_wall_s": 1793951049.1202712,
+            "stage_before": "arm_transport",
+            "stage_after": "arm_transport",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 73540
+          },
+          {
+            "missing": 1,
+            "before_source_s": 129.33999999988947,
+            "after_source_s": 129.37999999988966,
+            "before_wall_s": 1793951075.80577,
+            "after_wall_s": 1793951075.8622181,
+            "stage_before": "arm_transport",
+            "stage_after": "arm_transport",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 83156
+          },
+          {
+            "missing": 1,
+            "before_source_s": 130.1199999998932,
+            "after_source_s": 130.1599999998934,
+            "before_wall_s": 1793951077.2078173,
+            "after_wall_s": 1793951077.281717,
+            "stage_before": "arm_transport",
+            "stage_after": "arm_transport",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 83687
+          },
+          {
+            "missing": 1,
+            "before_source_s": 130.89999999989692,
+            "after_source_s": 130.9399999998971,
+            "before_wall_s": 1793951078.6165643,
+            "after_wall_s": 1793951078.6941266,
+            "stage_before": "arm_transport",
+            "stage_after": "arm_transport",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 84193
+          },
+          {
+            "missing": 1,
+            "before_source_s": 149.6199999999863,
+            "after_source_s": 149.6599999999865,
+            "before_wall_s": 1793951116.1265147,
+            "after_wall_s": 1793951116.1969116,
+            "stage_before": "arm_retreat",
+            "stage_after": "arm_retreat",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 96494
+          },
+          {
+            "missing": 1,
+            "before_source_s": 154.84000000001123,
+            "after_source_s": 154.88000000001142,
+            "before_wall_s": 1793951126.2354813,
+            "after_wall_s": 1793951126.313761,
+            "stage_before": "arm_retreat",
+            "stage_after": "arm_retreat",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 99900
+          },
+          {
+            "missing": 1,
+            "before_source_s": 161.5800000000434,
+            "after_source_s": 161.6200000000436,
+            "before_wall_s": 1793951139.9029076,
+            "after_wall_s": 1793951140.0061913,
+            "stage_before": "arm_retreat",
+            "stage_after": "arm_retreat",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 104344
+          },
+          {
+            "missing": 1,
+            "before_source_s": 162.20000000004637,
+            "after_source_s": 162.24000000004656,
+            "before_wall_s": 1793951141.0920649,
+            "after_wall_s": 1793951141.1844923,
+            "stage_before": "arm_retreat",
+            "stage_after": "arm_retreat",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 104760
+          },
+          {
+            "missing": 1,
+            "before_source_s": 168.8000000000779,
+            "after_source_s": 168.84000000007808,
+            "before_wall_s": 1793951153.8595984,
+            "after_wall_s": 1793951153.8853946,
+            "stage_before": "car_to_delivery",
+            "stage_after": "car_to_delivery",
+            "hold_before": false,
+            "hold_after": false,
+            "line": 109165
+          },
+          {
+            "missing": 1,
+            "before_source_s": 178.0600000001221,
+            "after_source_s": 178.1000000001223,
+            "before_wall_s": 1793951171.5088437,
+            "after_wall_s": 1793951171.540322,
+            "stage_before": "car_to_delivery",
+            "stage_after": "car_to_delivery",
+            "hold_before": false,
+            "hold_after": false,
+            "line": 116207
+          }
+        ],
+        "expected_source_period_s": 0.02,
+        "missing_samples": 60
+      },
+      "guard": [
+        {
+          "tripped_observed_contiguous_source_duration_s": 0.0,
+          "plant_assistance_observed": false,
+          "pure_vision_precision_claimed": false
+        }
+      ],
+      "unavailable": [
+        "Nav2 planner CPU time",
+        "controller compute time / consumption acknowledgement",
+        "exact HTTP stage transition time"
+      ],
+      "warnings": [
+        "Named active-arm binding or measured joints unavailable in 7 display samples; no primary-arm fallback"
+      ],
+      "import_status": "partial",
+      "evidence_refs": [
+        "result.json#orders/0",
+        "order-1/markers.json",
+        "order-1/observer/observer.jsonl.gz"
+      ],
+      "trajectory": {
+        "stream_ref": "order-1-trajectory-10hz.jsonl",
+        "sample_count": 1845,
+        "byte_count": 1096425,
+        "policy": "first sample per 100ms source bin; retain break samples; no interpolation",
+        "clock": "source",
+        "frame": "world",
+        "units": "m / rad",
+        "score_input": false,
+        "sequence_start": 251.0,
+        "sequence_end": 9307.0
+      },
+      "scope": "transport",
+      "full_transport_acceptance_claimed": true,
+      "id": "7bf05ac0-6044-4933-b908-87cc02a24e78:order-b",
+      "label": "order-b",
+      "source_run_id": "7bf05ac0-6044-4933-b908-87cc02a24e78",
+      "task_id": "3ad6a897-15e7-4e47-a893-fbeffcd75dc2",
+      "episode_id": "14f98d9f-8aeb-4eeb-85c9-2186b81857c8",
+      "vehicle": "robot_base_mecanum",
+      "sensor": "lidar3d",
+      "scene_id": "f1-continuous-b-a-entities",
+      "observation_mode": "ideal",
+      "original_verdict": {
+        "task_verdict": "failed",
+        "original_score_passed": false,
+        "original_k_passed": false
+      },
+      "spans": [
+        {
+          "id": "native-0",
+          "label": "离站 · DriveOnHeading",
+          "layer": "native",
+          "start_wall_s": 1793951152.1995773,
+          "end_wall_s": null,
+          "duration_s": null,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "goal_id": "5417d9f193974b29991b1e6025563a16",
+          "terminal_status": 5,
+          "evidence": "result.native_route",
+          "consumption_ack": false
+        },
+        {
+          "id": "stage-0",
+          "label": "car_to_dock",
+          "layer": "observed_stage",
+          "start_wall_s": 1793950816.711054,
+          "end_wall_s": 1793950830.6066353,
+          "duration_s": 13.895581245422363,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            null,
+            1793950816.711054
+          ],
+          "start_source_s": 5.619999999999603,
+          "end_source_s": 11.900000000000643,
+          "end_boundary_wall_s": [
+            1793950829.9862177,
+            1793950830.6066353
+          ],
+          "start_monotonic_s": 882.338229568,
+          "end_monotonic_s": 896.233810765,
+          "start_ref": "observer.jsonl:467",
+          "end_ref": "observer.jsonl:6654",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-1",
+          "label": "dock_stopped",
+          "layer": "observed_stage",
+          "start_wall_s": 1793950830.6066353,
+          "end_wall_s": 1793950872.6509984,
+          "duration_s": 42.044363021850586,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793950829.9862177,
+            1793950830.6066353
+          ],
+          "start_source_s": 11.900000000000643,
+          "end_source_s": 30.859999999993775,
+          "end_boundary_wall_s": [
+            1793950872.051864,
+            1793950872.6509984
+          ],
+          "start_monotonic_s": 896.233810765,
+          "end_monotonic_s": 938.278173638,
+          "start_ref": "observer.jsonl:6654",
+          "end_ref": "observer.jsonl:18798",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-2",
+          "label": "arm_grasp",
+          "layer": "observed_stage",
+          "start_wall_s": 1793950872.6509984,
+          "end_wall_s": 1793950937.146714,
+          "duration_s": 64.49571561813354,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793950872.051864,
+            1793950872.6509984
+          ],
+          "start_source_s": 30.859999999993775,
+          "end_source_s": 63.82000000003203,
+          "end_boundary_wall_s": [
+            1793950936.5006378,
+            1793950937.146714
+          ],
+          "start_monotonic_s": 938.278173638,
+          "end_monotonic_s": 1002.77388923,
+          "start_ref": "observer.jsonl:18798",
+          "end_ref": "observer.jsonl:40412",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-3",
+          "label": "arm_lift",
+          "layer": "observed_stage",
+          "start_wall_s": 1793950937.146714,
+          "end_wall_s": 1793951034.3200252,
+          "duration_s": 97.17331123352051,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793950936.5006378,
+            1793950937.146714
+          ],
+          "start_source_s": 63.82000000003203,
+          "end_source_s": 106.91999999993222,
+          "end_boundary_wall_s": [
+            1793951033.7267377,
+            1793951034.3200252
+          ],
+          "start_monotonic_s": 1002.77388923,
+          "end_monotonic_s": 1099.947200503,
+          "start_ref": "observer.jsonl:40412",
+          "end_ref": "observer.jsonl:68469",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-4",
+          "label": "arm_transport",
+          "layer": "observed_stage",
+          "start_wall_s": 1793951034.3200252,
+          "end_wall_s": 1793951088.8895504,
+          "duration_s": 54.56952524185181,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793951033.7267377,
+            1793951034.3200252
+          ],
+          "start_source_s": 106.91999999993222,
+          "end_source_s": 136.07999999992165,
+          "end_boundary_wall_s": [
+            1793951088.309789,
+            1793951088.8895504
+          ],
+          "start_monotonic_s": 1099.947200503,
+          "end_monotonic_s": 1154.516725373,
+          "start_ref": "observer.jsonl:68469",
+          "end_ref": "observer.jsonl:87587",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-5",
+          "label": "arm_release",
+          "layer": "observed_stage",
+          "start_wall_s": 1793951088.8895504,
+          "end_wall_s": 1793951102.997056,
+          "duration_s": 14.107505559921265,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793951088.309789,
+            1793951088.8895504
+          ],
+          "start_source_s": 136.07999999992165,
+          "end_source_s": 143.25999999995594,
+          "end_boundary_wall_s": [
+            1793951102.277933,
+            1793951102.997056
+          ],
+          "start_monotonic_s": 1154.516725373,
+          "end_monotonic_s": 1168.624231232,
+          "start_ref": "observer.jsonl:87587",
+          "end_ref": "observer.jsonl:92281",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-6",
+          "label": "arm_retreat",
+          "layer": "observed_stage",
+          "start_wall_s": 1793951102.997056,
+          "end_wall_s": 1793951147.197113,
+          "duration_s": 44.20005702972412,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793951102.277933,
+            1793951102.997056
+          ],
+          "start_source_s": 143.25999999995594,
+          "end_source_s": 165.32000000006127,
+          "end_boundary_wall_s": [
+            1793951146.6282537,
+            1793951147.197113
+          ],
+          "start_monotonic_s": 1168.624231232,
+          "end_monotonic_s": 1212.824288281,
+          "start_ref": "observer.jsonl:92281",
+          "end_ref": "observer.jsonl:106795",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-7",
+          "label": "cargo_settle",
+          "layer": "observed_stage",
+          "start_wall_s": 1793951147.197113,
+          "end_wall_s": 1793951152.6370084,
+          "duration_s": 5.439895391464233,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793951146.6282537,
+            1793951147.197113
+          ],
+          "start_source_s": 165.32000000006127,
+          "end_source_s": 168.12000000007464,
+          "end_boundary_wall_s": [
+            1793951152.0504327,
+            1793951152.6370084
+          ],
+          "start_monotonic_s": 1212.824288281,
+          "end_monotonic_s": 1218.264183817,
+          "start_ref": "observer.jsonl:106795",
+          "end_ref": "observer.jsonl:108671",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-8",
+          "label": "car_to_delivery",
+          "layer": "observed_stage",
+          "start_wall_s": 1793951152.6370084,
+          "end_wall_s": 1793951178.2119906,
+          "duration_s": 25.574982166290283,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793951152.0504327,
+            1793951152.6370084
+          ],
+          "start_source_s": 168.12000000007464,
+          "end_source_s": 181.54000000013872,
+          "end_boundary_wall_s": [
+            1793951177.6383076,
+            1793951178.2119906
+          ],
+          "start_monotonic_s": 1218.264183817,
+          "end_monotonic_s": 1243.839165889,
+          "start_ref": "observer.jsonl:108671",
+          "end_ref": "observer.jsonl:118820",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-9",
+          "label": "failed",
+          "layer": "observed_stage",
+          "start_wall_s": 1793951178.2119906,
+          "end_wall_s": 1793951187.825943,
+          "duration_s": 9.613952398300171,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793951177.6383076,
+            1793951178.2119906
+          ],
+          "start_source_s": 181.54000000013872,
+          "end_source_s": null,
+          "end_boundary_wall_s": [
+            1793951187.825943,
+            null
+          ],
+          "start_monotonic_s": 1243.839165889,
+          "end_monotonic_s": 1253.453118405,
+          "start_ref": "observer.jsonl:118820",
+          "end_ref": null,
+          "evidence": "http_state.task.stage; sampled, not exact transition",
+          "right_censored": true
+        }
+      ]
+    }
+  ],
+  "loop_diagnostics": {
+    "scope": "whole_world_session; not attributed to a Nav2 goal",
+    "stages": {}
+  }
+}

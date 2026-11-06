@@ -1,0 +1,191 @@
+{
+  "schema": "fishbot.visual-chain.v1",
+  "run_id": "39653fb8-4cdd-4992-a610-c41b327c2a55",
+  "scene_id": "f1-j100-wide-continuous-ba",
+  "new_execution": false,
+  "rescored": false,
+  "entries": [
+    {
+      "id": "a53d191f-b310-4b7a-a89d-2bd5fc198f1e-load-cargo_1-1663",
+      "task_id": "00b5db27-b67c-47c7-8f31-4f20ceedcdce",
+      "arm_id": "load",
+      "cargo_id": "cargo_1",
+      "phase": "load",
+      "observation": {
+        "sequence": 1663,
+        "stamp": 33.27999999999471,
+        "episode_id": "a53d191f-b310-4b7a-a89d-2bd5fc198f1e",
+        "frame": "workcell_load_camera_optical_frame",
+        "point_count": null
+      },
+      "images": {
+        "rgb": "/workbench/f2-warehouse-v4/rgbd-input/rgb.png",
+        "depth": "/workbench/f2-warehouse-v4/rgbd-input/depth.png",
+        "mask": null,
+        "grasp_overlay": null
+      },
+      "points": {
+        "frame": "workcell_load_camera_optical_frame",
+        "xyz": []
+      },
+      "selected": null,
+      "inference": {
+        "status": "未调用：可见点云提取ImportError",
+        "request_wall_s": null,
+        "total_s": null,
+        "candidate_count": null,
+        "source_report": null
+      },
+      "milestones": {
+        "lift": null,
+        "placement": null
+      },
+      "depth_legend": {
+        "kind": "optical_z_m",
+        "min_m": 0.05,
+        "max_m": 1.5,
+        "invalid": "black",
+        "per_frame_normalization": false
+      },
+      "provenance": {
+        "source": "Recovered image directory identity matches original query_id, arm_id, cargo_id and frozen request.snapshot episode/sequence",
+        "original_observation_receipt_present": false,
+        "derived_input_manifest": true,
+        "camera_receipt": "/workbench/f2-warehouse-v4/rgbd-input/camera.json",
+        "source_stamp_basis": "derived_from_query_request",
+        "frozen_snapshot_stamp": 33.27999999999471
+      },
+      "warnings": [
+        "原始RGB/深度文件已回收；本目录为只读产品索引，不是运行时补写observation.json。",
+        "原observation.json未生成；源33.280s派生自同一原query request.snapshot冻结状态，不是截图墙钟或原观察回执。",
+        "可见点云提取失败；没有原points.npy、mask、模型请求、候选、抬升或放货，不以修复后的离线312点替代本轮控制输入。"
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "id": "3a6d3b71-f6c0-4224-99c7-b9a9303fd4e5",
+      "stages": [
+        {
+          "stage": "query_started",
+          "elapsed_wall_s": 0.00021229100002528867
+        },
+        {
+          "stage": "prepared_models_save_started",
+          "elapsed_wall_s": 0.06186911000008877
+        },
+        {
+          "stage": "prepared_models_save_completed",
+          "elapsed_wall_s": 0.8997096060001013
+        },
+        {
+          "stage": "child_spawned",
+          "elapsed_wall_s": 1.001391290000015
+        },
+        {
+          "stage": "child_started",
+          "elapsed_wall_s": 1.2129170460000296
+        },
+        {
+          "stage": "planner_init_started",
+          "elapsed_wall_s": 1.2130578550001019
+        },
+        {
+          "stage": "source_modules_import_started",
+          "elapsed_wall_s": 1.2131512130000601
+        },
+        {
+          "stage": "source_modules_import_completed",
+          "elapsed_wall_s": 2.970023083000001
+        },
+        {
+          "stage": "world_model_binary_load_started",
+          "elapsed_wall_s": 2.970443635000038
+        },
+        {
+          "stage": "world_model_binary_load_completed",
+          "elapsed_wall_s": 4.0496418200000335
+        },
+        {
+          "stage": "named_entity_view_started",
+          "elapsed_wall_s": 4.050610604000099
+        },
+        {
+          "stage": "named_entity_view_completed",
+          "elapsed_wall_s": 4.05752506400006
+        },
+        {
+          "stage": "prepared_collision_models_load_started",
+          "elapsed_wall_s": 4.059441130000096
+        },
+        {
+          "stage": "prepared_collision_models_load_completed",
+          "elapsed_wall_s": 5.512109925000004
+        },
+        {
+          "stage": "collision_checkers_init_started",
+          "elapsed_wall_s": 5.512262534000001
+        },
+        {
+          "stage": "collision_checkers_init_completed",
+          "elapsed_wall_s": 5.5716922960000375
+        },
+        {
+          "stage": "planner_init_completed",
+          "elapsed_wall_s": 5.571996390000095
+        },
+        {
+          "stage": "rgbd_query_data_started",
+          "elapsed_wall_s": 5.579315449000092
+        },
+        {
+          "stage": "rgbd_render_started",
+          "elapsed_wall_s": 5.590083047999997
+        },
+        {
+          "stage": "rgbd_render_completed",
+          "elapsed_wall_s": 8.027055102000077
+        },
+        {
+          "stage": "visible_cloud_extraction_started",
+          "elapsed_wall_s": 8.266497337000033
+        },
+        {
+          "stage": "child_failed",
+          "elapsed_wall_s": 9.482753567000032,
+          "error_type": "ImportError"
+        },
+        {
+          "stage": "child_response_writing",
+          "elapsed_wall_s": 9.482911149000074
+        },
+        {
+          "stage": "child_exited",
+          "elapsed_wall_s": 9.950438065000071
+        },
+        {
+          "stage": "query_failed",
+          "elapsed_wall_s": 9.988783045000105,
+          "error_type": "RuntimeError"
+        },
+        {
+          "stage": "query_cleanup_completed",
+          "elapsed_wall_s": 9.999825912999995
+        }
+      ],
+      "outcome": "RuntimeError",
+      "timeout_s": 30.0,
+      "arm_id": "load",
+      "cargo_id": "cargo_1",
+      "episode_id": "a53d191f-b310-4b7a-a89d-2bd5fc198f1e",
+      "source_sequence": 1663
+    }
+  ],
+  "warnings": [
+    "RGB-D输入已回收，但可见点云提取失败，尚无模型调用。原查询终态保留；整单失败。"
+  ],
+  "scope": "actual recorded observations; model scores are not success probabilities; milestones use independent original scores",
+  "candidate_label": "f2-wide-warehouse",
+  "scene_profile_label": "f2-wide-warehouse",
+  "scene_identity_basis": "Original full-run/result.json declaration.scene_id; candidate_label/scene_profile_label preserve manifest-used.json factory_delivery.id as configuration label, not source scene identity"
+}
