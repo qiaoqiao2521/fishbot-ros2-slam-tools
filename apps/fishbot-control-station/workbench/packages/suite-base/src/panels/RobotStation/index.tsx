@@ -448,9 +448,6 @@ function RobotStation({
     };
   }, [refresh, platform]);
   useEffect(() => {
-    if (!drone) {
-      return;
-    }
     const controller = new AbortController();
     void requestSimulation<{ tasks: SimulationTask[] }>(
       "/tasks",
@@ -723,6 +720,10 @@ function RobotStation({
     // The template must not replace this task selection when the page reloads.
     const url = new URL(window.location.href);
     url.searchParams.delete("layoutUrl");
+    const name = getCurrentLayoutState().selectedLayout?.name;
+    if (name) {
+      url.searchParams.set("layout", name);
+    }
     window.history.replaceState(window.history.state, "", url);
     try {
       const result = await requestSimulation<SimulationTask>(
@@ -2101,50 +2102,56 @@ function RobotStation({
           </Typography>
         )}
         {drone && (
-          <>
-            <Typography variant="body2">
-              <a
-                href={`${task && !taskIsActive(task) ? `/drone-diagnostics?taskId=${encodeURIComponent(task.id)}` : "/drone-diagnostics?"}${window.innerWidth < 600 ? "&mobile=1" : ""}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                打开历史飞行诊断
-              </a>
-            </Typography>
-            <TextField
-              select
-              size="small"
-              label="历史任务"
-              value={
-                taskHistory.some((item) => item.id === taskId) ? taskId : ""
-              }
-              disabled={submitting || cancelling || taskIsActive(task)}
-              onChange={(event) => {
-                const selectedTask = taskHistory.find(
-                  (item) => item.id === event.target.value,
-                );
-                if (!selectedTask) {
-                  return;
-                }
-                setTaskId(selectedTask.id);
-                setTask(selectedTask);
-                setExecutionError("");
-                rejectedTaskId.current = "";
-                saveConfig({ executionTaskId: selectedTask.id });
-                void changeScene("task", station, selectedTask.id);
-              }}
+          <Typography variant="body2">
+            <a
+              href={`${task && !taskIsActive(task) ? `/drone-diagnostics?taskId=${encodeURIComponent(task.id)}` : "/drone-diagnostics?"}${window.innerWidth < 600 ? "&mobile=1" : ""}`}
+              target="_blank"
+              rel="noreferrer"
             >
-              <MenuItem value="">选择一次已保存任务</MenuItem>
-              {taskHistory.map((item) => (
-                <MenuItem key={item.id} value={item.id}>
-                  {item.submittedAt ?? item.id} · {taskStatusLabel(item.status)}{" "}
-                  · {item.station?.name ?? item.id}
-                </MenuItem>
-              ))}
-            </TextField>
-            {historyError && <Alert severity="warning">{historyError}</Alert>}
-          </>
+              打开历史飞行诊断
+            </a>
+          </Typography>
         )}
+        <TextField
+          select
+          size="small"
+          label="历史任务"
+          value={
+            taskHistory.some((item) => item.id === taskId) ? taskId : ""
+          }
+          disabled={submitting || cancelling || taskIsActive(task)}
+          onChange={(event) => {
+            const selectedTask = taskHistory.find(
+              (item) => item.id === event.target.value,
+            );
+            if (!selectedTask) {
+              return;
+            }
+            setTaskId(selectedTask.id);
+            setTask(selectedTask);
+            setExecutionError("");
+            rejectedTaskId.current = "";
+            saveConfig({ executionTaskId: selectedTask.id });
+            // Restore the saved task selection, rather than reimporting the template.
+            const url = new URL(window.location.href);
+            url.searchParams.delete("layoutUrl");
+            const name = getCurrentLayoutState().selectedLayout?.name;
+            if (name) {
+              url.searchParams.set("layout", name);
+            }
+            window.history.replaceState(window.history.state, "", url);
+            void changeScene("task", station, selectedTask.id);
+          }}
+        >
+          <MenuItem value="">选择一次已保存任务</MenuItem>
+          {taskHistory.map((item) => (
+            <MenuItem key={item.id} value={item.id}>
+              {item.submittedAt ?? item.id} · {taskStatusLabel(item.status)}{" "}
+              · {item.station?.name ?? item.id}
+            </MenuItem>
+          ))}
+        </TextField>
+        {historyError && <Alert severity="warning">{historyError}</Alert>}
         {executionError && <Alert severity="warning">{executionError}</Alert>}
         {taskId && (
           <Typography variant="caption" style={{ overflowWrap: "anywhere" }}>

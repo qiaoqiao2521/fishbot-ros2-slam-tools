@@ -173,7 +173,7 @@ describe("SO101 simulation task transport", () => {
     const replay = new URL(simulationTaskReplayUrl(task, origin, "so101")!, origin);
     expect(replay.searchParams.get("ds")).toBe("remote-file");
     expect(replay.searchParams.get("ds.url")).toBe(origin + task.artifacts.mcap);
-    expect(replay.searchParams.get("layoutUrl")).toBe(origin + "/layouts/so101-review.json");
+    expect(replay.searchParams.get("layoutUrl")).toBe(origin + "/layouts/so101-task-review.json");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

@@ -178,7 +178,7 @@ export function simulationReplayUrl(
     ds: "remote-file",
     "ds.url": recording.href,
     layoutUrl: new URL(
-      platform === "px4" ? "/layouts/drone-review.json" : "/layouts/so101-review.json",
+      platform === "px4" ? "/layouts/drone-review.json" : "/layouts/so101-task-review.json",
       origin,
     ).href,
   });

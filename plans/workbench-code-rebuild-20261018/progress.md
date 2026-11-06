@@ -678,3 +678,17 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 根逐段核对station-execution.cjs的既有未提交Carry扩展，保留为显式STATION_QA_CARRY_ACTION=resume/cancel入口。未设置该环境变量的原默认流程，本轮真实新正常＋取消两回合已经通过；语法检查通过。扩展只影响QA，不修改任务运行时。
 
 两个Carry分支本轮没有实际执行，不能记M2持物接续通过。保留最短入口：STATION_DOCUMENT指向原station-carry-m2.json，再显式选择resume/cancel；owner=根Codex后续Carry验收。它不作为A2回放的强前序，不据此新增物理任务。原无响应只查原ID、不重复POST与物理成功判据保持。
+
+## 2026-11-06 — SO101 A2逐任务回放交付
+
+复用无人机onTaskFinished/ensureArtifacts、通用产物URL和原生播放器；SO101任务自动生成自己的episode.mcap，结果页沿用视频、报告和抓取证据，历史选择支持SO101。新增so101-task-review布局，不显示没有逐帧图像映射的Image面板。新轨迹只增加目标旋转记录，不改物理／控制／评分。
+
+原网页新正常b996faa5-fedb-4712-a67e-aca132d743e3通过，76.58sim/47.115wall，抓放、释放、脱离、回位、静稳通过，safety_stop=false、障碍接触0；另一新任务4e11341d-9269-4325-ac27-12bcf52eff12在4.94sim取消，原物理报告保持false。首次c792ef86在0sim因缺cv2失败，保留原失败，恢复专用环境后新UUID重试。
+
+独立Python审计逐行核对正常3829／取消247个关节、命令、接触力和完整目标位姿；原report、skill_evidence、UUID、终态与seek一致。位置误差0、旋转误差至3.50e-15。视频479／31帧全解码、HTTP range通过。原28项Station、8项产物合同与18项前端测试通过，生产构建仅既有两项体积建议。
+
+常用5186的v6真实浏览器同context两任务均通过：历史选择／刷新、3D首中末与倒退、播放、阶段定位、回放刷新、关闭回放后主工位再刷新。0控制POST、0回放写入、0pageError，2次scene-mode查看切换。修复复用原去layoutUrl逻辑与现有layout=名字；不扩展上游布局系统。QA首次contact=0系未订阅该topic的计数误读，已撤回；独立JS审计正常3829／取消247，和Python全等回读一致，证据明确标成浏览器后只读审计，不冒称重跑浏览器。
+
+使用／复跑见[SO101_TASK_REPLAY](../../docs/SO101_TASK_REPLAY.md)。原始任务保留apps/fishbot-control-station/workbench-tools/output/station-tasks/UUID；最终浏览器证据位于workbench-review-tests/output/so101-task-replay-a2-5186-v6-20261106/。原报告通过与独立验收／来源认证分别显示，不伪造后者；视频独立播放，不声明逐帧同步。完整50Hz、20＋20与Carry接续原边界不变。
+
+收尾：临时5187与QA Chrome已释放，常用5186保留且SO101 ready=true。验证重复夹具来源后回收14,263,487字节，旧QA证据9,430,546字节归档7,527,528字节，净释放16,166,505字节。旧失败证据可在workbench-review-tests/output执行tar -xJf a2-intermediate-qa-20261106.tar.xz恢复；新正常／取消任务和最终证据保留。当前无人机6f02430已有成果保留，不重跑飞行或修改其状态；Carry QA验收边界见前节。Knowledge=already_covered，Wiki《ROS2 与 FishBot》§20；后续owner=根Codex。
