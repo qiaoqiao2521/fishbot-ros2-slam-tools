@@ -1,4 +1,5 @@
 """Behavioral fixtures for historical timing import; no ROS or physical execution."""
+import gzip
 import json
 from pathlib import Path
 import sqlite3
@@ -52,6 +53,64 @@ class TimingImportTest(unittest.TestCase):
         path = self.run / "order-1/observer/observer.jsonl"
         path.write_text("\n".join(x if isinstance(x, str) else json.dumps(x) for x in items) + "\n")
         return path
+
+    def test_gzip_stream_preserves_samples_gaps_and_stages_without_expansion(self):
+        raw = self.rows([self.http(100, "load"), self.physics(100, 10, 1),
+                         self.physics(100.08, 10.08, 5), self.http(110, "delivery")])
+        first = import_run(self.run, self.output)
+        before = (self.output / first['cases'][0]['trajectory']['stream_ref']).read_bytes()
+        archived = raw.with_suffix('.jsonl.gz')
+        with gzip.open(archived, 'wb') as stream:
+            stream.write(raw.read_bytes())
+        raw.unlink()
+        second = import_run(self.run, self.root / 'gzip-derived')
+        after = (self.root / 'gzip-derived' / second['cases'][0]['trajectory']['stream_ref']).read_bytes()
+        self.assertEqual(before, after)
+        self.assertEqual(first['cases'][0]['sampling'], second['cases'][0]['sampling'])
+        self.assertEqual(first['cases'][0]['spans'], second['cases'][0]['spans'])
+        self.assertFalse(raw.exists())
+        self.assertTrue(archived.exists())
+
+    def configure_named_delivery(self):
+        self.write('manifest-used.json', {'business_entities': {
+            'cargo': {'cargo_1': {}, 'cargo_2': {}},
+            'arms': {'load': {}, 'unload_a': {}},
+            'unload_stations': {'line_a': {'arm_id': 'unload_a'}}}})
+        declaration = json.loads((self.run / 'declaration.json').read_text())
+        declaration['orders'] = [{'id': 'B', 'business_delivery': {
+            'cargo_id': 'cargo_2', 'pickup_arm_id': 'load', 'unload_station_id': 'line_a'}}]
+        self.write('declaration.json', declaration)
+
+    def test_named_order_uses_second_cargo_and_observed_unload_arm(self):
+        self.configure_named_delivery()
+        http = self.http(100, 'unload_grasp')
+        http['payload']['task']['active_arm_id'] = 'unload_a'
+        physics = self.physics(100.01, 10, 1)
+        physics['payload']['q6'] = [99.] * 6
+        physics['payload']['business_entities'] = {
+            'cargo': {'cargo_1': {'position': [99, 99, 99]}, 'cargo_2': {'position': [3, 4, .5]}},
+            'arms': {'load': {'qpos6': [88.] * 6}, 'unload_a': {'qpos6': [.2] * 6}}}
+        self.rows([http, physics])
+        case = import_run(self.run, self.output)['cases'][0]
+        point = json.loads((self.output / case['trajectory']['stream_ref']).read_text())
+        self.assertEqual(point['cargo_id'], 'cargo_2')
+        self.assertEqual(point['cargo_position_m'], [3., 4., .5])
+        self.assertEqual(point['arm_id'], 'unload_a')
+        self.assertEqual(point['arm_q6_rad'], [.2] * 6)
+
+    def test_missing_named_binding_and_measurement_never_fall_back_to_primary(self):
+        self.configure_named_delivery()
+        self.write('declaration.json', {'orders': []})
+        physics = self.physics(100, 10, 1)
+        physics['payload']['q6'] = [99.] * 6
+        self.rows([self.http(100, 'unload_grasp'), physics])
+        case = import_run(self.run, self.output)['cases'][0]
+        point = json.loads((self.output / case['trajectory']['stream_ref']).read_text())
+        self.assertIsNone(point['cargo_position_m'])
+        self.assertIsNone(point['arm_q6_rad'])
+        self.assertEqual(point['car_position_m'], [1., 2., 0.])
+        self.assertEqual(case['import_status'], 'partial')
+        self.assertTrue(any('no legacy cargo fallback' in w for w in case['warnings']))
 
     def test_r2_route_markers_keep_samples_without_claiming_full_transport(self):
         result=json.loads((self.run/'result.json').read_text())

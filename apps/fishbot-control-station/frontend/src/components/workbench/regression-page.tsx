@@ -24,7 +24,7 @@ function Vehicle({ frame, report, color, ghost = false }: { frame: ReplayFrame |
   </g>
 }
 
-function ReplayViewport({ report, run, other, elapsed, anchor, color, ghost }: {
+export function ReplayViewport({ report, run, other, elapsed, anchor, color, ghost }: {
   report: ReplayReport; run: ReplayRun; other: ReplayRun | undefined; elapsed: number; anchor: string; color: string; ghost: boolean
 }) {
   const path = useMemo(() => replayPath(run), [run])

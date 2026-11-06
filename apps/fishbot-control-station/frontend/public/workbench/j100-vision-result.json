@@ -1,0 +1,72 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "J100 视觉配送",
+  "recorded_at": "2026-10-31",
+  "run_id": "a7264eae-5138-4ee7-9e14-1a727d550d57",
+  "evidence_kind": "documented_acceptance",
+  "vehicle": "Jackal J100",
+  "sensor": "3D 雷达",
+  "model": "GraspGen-X ＋ SO101",
+  "reset_count": 0,
+  "elapsed_wall_s": 958.2774075009984,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B",
+      "task_id": "b8e18c78-0a1d-442d-8fdb-8d5269f2b8ac",
+      "passed": true,
+      "route_seconds": 49.90201967599933,
+      "position_error_m": 0.0310652216357429,
+      "yaw_error_rad": 0.0013652303960429723,
+      "visible_points": [
+        312,
+        226
+      ],
+      "selected_candidates": [
+        51,
+        85
+      ],
+      "task_seconds": 448.6488778370003,
+      "missing_samples": 227,
+      "guard_seconds": 0.8
+    },
+    {
+      "id": "order-a",
+      "label": "订单 A",
+      "task_id": "62e383a7-64c3-4672-bdce-8d3ec8e16662",
+      "passed": true,
+      "route_seconds": 20.967781600000308,
+      "position_error_m": 0.021215095000753786,
+      "yaw_error_rad": 0.014968363685574707,
+      "visible_points": [
+        291,
+        227
+      ],
+      "selected_candidates": [
+        87,
+        61
+      ],
+      "task_seconds": 415.0546511680004,
+      "missing_samples": 28,
+      "guard_seconds": 0.74
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/j100-vision-timing.json",
+    "replay": null,
+    "video": null
+  },
+  "availability_note": "原始归档已误删。当前保留已提交的验收摘要，位置采样、阶段区间和相机录像待重新录制后接入。",
+  "archive_status": "源码、前端覆盖与历史验收摘要已上传Drive并读回10,776,708字节；新视觉补录另行归档",
+  "provenance": {
+    "source_kind": "committed_acceptance_summary",
+    "source_revision": "2fbd051",
+    "references": [
+      "docs/PRETRAINED_PERCEPTION.md",
+      "plans/continuous-twin-regression-20261024/progress.md"
+    ],
+    "raw_material_available": false,
+    "new_execution": false
+  },
+  "archive_url": "https://drive.google.com/file/d/1SPHKQqheI0NQXC4T4c1lLN0h7aYIki2J/view?usp=drivesdk"
+}

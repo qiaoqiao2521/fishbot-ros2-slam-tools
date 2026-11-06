@@ -16,12 +16,22 @@ from cooperation_timing import import_run, number, obj, vector
 SCHEMA='fishbot.delivery-comparison.v1'
 
 
-def arm_projection(manifest):
+def arm_projection(manifest, *, named=False):
     """FK on independent query data. No step, controller or live world writes."""
     import mujoco
     import numpy as np
-    model=mujoco.MjModel.from_xml_path(manifest['rig_xml'])
+    model=mujoco.MjModel.from_xml_path(manifest['world_xml'] if named else manifest['rig_xml'])
     data=mujoco.MjData(model)
+    if named:
+        configured=obj(obj(manifest.get('business_entities')).get('arms'))
+        resolved={name:[model.joint(joint).id for joint in arm['joint_names']]
+                  for name,arm in configured.items()}
+        def project_named(q,arm_id):
+            joints=resolved[arm_id]
+            data.qpos[[int(model.jnt_qposadr[j]) for j in joints]]=q
+            mujoco.mj_forward(model,data)
+            return data.xanchor[joints].tolist()
+        return project_named
     names=manifest['arm_joint_names']
     joints=[model.joint(name).id for name in names]
     positions=[int(model.jnt_qposadr[j]) for j in joints]
@@ -52,7 +62,7 @@ def scene_projection(manifest):
         'cargo_half_size':np.asarray(model.geom_size[geom]).tolist()}
 
 
-def project_case(case,points,*,label,manifest,project_arm=None,group='unassigned'):
+def project_case(case,points,*,label,manifest,project_arm=None,project_named_arm=None,group='unassigned'):
     """Keep absolute coordinates and source gaps; no interpolation or rescore."""
     frames=[];warnings=list(case.get('warnings',[]));previous=None
     route_start=case['route'].get('start_wall_s')
@@ -65,13 +75,19 @@ def project_case(case,points,*,label,manifest,project_arm=None,group='unassigned
         previous=source
         q=vector(p.get('arm_q6_rad'),6)
         arm=None
-        if q is not None and project_arm is not None:
-            try:arm=project_arm(q)
-            except (ValueError,RuntimeError):warnings.append('Arm FK unavailable for one sample')
+        if q is not None:
+            try:
+                if p.get('named_entities'):
+                    if project_named_arm is not None and p.get('arm_id') is not None:
+                        arm=project_named_arm(q,p['arm_id'])
+                    else:warnings.append('Named arm FK unavailable; primary-arm projection not substituted')
+                elif project_arm is not None:arm=project_arm(q)
+            except (KeyError,ValueError,RuntimeError):warnings.append('Arm FK unavailable for one sample')
         frame={k:p.get(k) for k in ('sequence','stage','hold','gap_before')}
         frame.update(source_s=source,receive_wall_s=number(p.get('receive_wall_s')),
             car=vector(p.get('car_position_m'),3),quaternion=vector(p.get('car_quaternion_wxyz'),4),
-            cargo=vector(p.get('cargo_position_m'),3),arm_q6=q,arm_joints_world=arm)
+            cargo=vector(p.get('cargo_position_m'),3),arm_q6=q,arm_joints_world=arm,
+            cargo_id=p.get('cargo_id'),arm_id=p.get('arm_id'))
         frames.append(frame)
         if isinstance(p.get('stage'),str):anchors.setdefault('stage:'+p['stage'],source)
         if (route_start is not None and frame['receive_wall_s'] is not None
@@ -95,7 +111,9 @@ def build_comparison(run_paths,output,*,labels=None,groups=None,geometry=True):
         imported=output/('import-'+str(i+1))
         report=import_run(path,imported)
         manifest=json.loads((path/'manifest-used.json').read_text())
-        projection=arm_projection(manifest) if geometry else None
+        named=bool(manifest.get('business_entities'))
+        projection=arm_projection(manifest) if geometry and not named else None
+        named_projection=arm_projection(manifest,named=True) if geometry and named else None
         shape=scene_projection(manifest) if geometry else {'frame':'world','static_boxes':[],
                 'car_footprint_xy':manifest.get('car_footprint_xy'),'cargo_half_size':None}
         if scene is not None and shape!=scene:compatible=False
@@ -105,7 +123,7 @@ def build_comparison(run_paths,output,*,labels=None,groups=None,geometry=True):
             with source.open() as stream:
                 points=(json.loads(line) for line in stream)
                 runs.append(project_case(case,points,label=labels[i] if labels and i<len(labels) else path.name,
-                    manifest=manifest,project_arm=projection,
+                    manifest=manifest,project_arm=projection,project_named_arm=named_projection,
                     group=groups[i] if groups and i<len(groups) else 'unassigned'))
     snapshots={run['snapshot_id'] for run in runs}
     same_snapshot=len(snapshots)==1 and None not in snapshots

@@ -1,0 +1,150 @@
+{
+  "schema": "fishbot.delivery-timing.v1",
+  "scope": "historical_simulation_import",
+  "label": "J100 视觉B→A · 已提交验收摘要",
+  "source_run_id": "a7264eae-5138-4ee7-9e14-1a727d550d57",
+  "original_run_passed": true,
+  "new_execution": false,
+  "rescored": false,
+  "cases": [
+    {
+      "id": "a7264eae-5138-4ee7-9e14-1a727d550d57:order-b",
+      "label": "order-b",
+      "task_id": "b8e18c78-0a1d-442d-8fdb-8d5269f2b8ac",
+      "episode_id": "38b64699-d53e-4248-9fe5-5cc88d9c481c",
+      "scope": "transport",
+      "vehicle": "jackal_j100",
+      "sensor": "lidar3d",
+      "scene_id": "unknown",
+      "observation_mode": "vision",
+      "start_wall_s": null,
+      "end_wall_s": null,
+      "task_budget_s": 540,
+      "task_elapsed_s": 448.6488778370003,
+      "route": {
+        "start_wall_s": null,
+        "end_wall_s": null,
+        "elapsed_s": 49.90201967599933,
+        "budget_s": 120,
+        "remaining_s": 70.09798032400067,
+        "boundary": "after_required_egress_through_final_nav_stop_and_hold"
+      },
+      "physical": {
+        "final_position_error_m": 0.0310652216357429,
+        "final_yaw_error_rad": 0.0013652303960429723,
+        "continuous_final_stop_source_s": null
+      },
+      "sampling": {
+        "physics_records": null,
+        "task_physics_records": null,
+        "missing_samples": 227,
+        "gaps": []
+      },
+      "trajectory": {
+        "sample_count": null,
+        "byte_count": null
+      },
+      "guard": [
+        {
+          "tripped_observed_contiguous_source_duration_s": 0.8,
+          "plant_assistance_observed": true,
+          "pure_vision_precision_claimed": false
+        }
+      ],
+      "spans": [],
+      "warnings": [
+        "仅已提交的验收摘要；原始阶段时间、轨迹和媒体缺失，未补造时间轴。"
+      ],
+      "import_status": "partial",
+      "unavailable": [
+        "Original observer stream",
+        "Stage intervals",
+        "Position replay",
+        "Camera recording"
+      ],
+      "original_verdict": {
+        "original_score_passed": true,
+        "task_verdict": "passed",
+        "original_k_passed": true
+      },
+      "evidence_refs": [
+        "docs/PRETRAINED_PERCEPTION.md",
+        "plans/continuous-twin-regression-20261024/progress.md"
+      ]
+    },
+    {
+      "id": "a7264eae-5138-4ee7-9e14-1a727d550d57:order-a",
+      "label": "order-a",
+      "task_id": "62e383a7-64c3-4672-bdce-8d3ec8e16662",
+      "episode_id": "38b64699-d53e-4248-9fe5-5cc88d9c481c",
+      "scope": "transport",
+      "vehicle": "jackal_j100",
+      "sensor": "lidar3d",
+      "scene_id": "unknown",
+      "observation_mode": "vision",
+      "start_wall_s": null,
+      "end_wall_s": null,
+      "task_budget_s": 540,
+      "task_elapsed_s": 415.0546511680004,
+      "route": {
+        "start_wall_s": null,
+        "end_wall_s": null,
+        "elapsed_s": 20.967781600000308,
+        "budget_s": 120,
+        "remaining_s": 99.03221839999969,
+        "boundary": "after_required_egress_through_final_nav_stop_and_hold"
+      },
+      "physical": {
+        "final_position_error_m": 0.021215095000753786,
+        "final_yaw_error_rad": 0.014968363685574707,
+        "continuous_final_stop_source_s": null
+      },
+      "sampling": {
+        "physics_records": null,
+        "task_physics_records": null,
+        "missing_samples": 28,
+        "gaps": []
+      },
+      "trajectory": {
+        "sample_count": null,
+        "byte_count": null
+      },
+      "guard": [
+        {
+          "tripped_observed_contiguous_source_duration_s": 0.74,
+          "plant_assistance_observed": true,
+          "pure_vision_precision_claimed": false
+        }
+      ],
+      "spans": [],
+      "warnings": [
+        "仅已提交的验收摘要；原始阶段时间、轨迹和媒体缺失，未补造时间轴。"
+      ],
+      "import_status": "partial",
+      "unavailable": [
+        "Original observer stream",
+        "Stage intervals",
+        "Position replay",
+        "Camera recording"
+      ],
+      "original_verdict": {
+        "original_score_passed": true,
+        "task_verdict": "passed",
+        "original_k_passed": false
+      },
+      "evidence_refs": [
+        "docs/PRETRAINED_PERCEPTION.md",
+        "plans/continuous-twin-regression-20261024/progress.md"
+      ]
+    }
+  ],
+  "warnings": [
+    "历史验收数值来自已提交文档；原记录已删除，逐阶段瀑布图待新录制原件。"
+  ],
+  "limits": [
+    "Summary-only import; no invented stage boundaries or trajectory."
+  ],
+  "loop_diagnostics": {
+    "stages": {}
+  }
+}

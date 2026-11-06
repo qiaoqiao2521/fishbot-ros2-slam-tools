@@ -12,19 +12,23 @@ const phases: Record<string, string> = {
   arm_place: '托盘放置', arm_release: '释放货物', arm_retreat: '机械臂退让', arm_home: '机械臂回位',
   car_egress: '小车离站', car_to_delivery: '驶向交付点', delivery_stop: '交付点停稳', completed: '任务完成',
   dock_stopped: '工位停稳', arm_transport: '机械臂搬运', cargo_settle: '货物落稳', delivery_stopped: '交付点停稳',
+  unload_grasp: '卸货抓取', unload_transport: '转运至货架', unloaded: '货架落稳与回位',
 }
 const label = (s: TimingSpan) => phases[s.label] ?? s.label
 const boundary = (values: (number | null)[], origin: number | null) => values.length && origin !== null
   ? values.map(v => v === null ? '未知' : `${(v - origin).toFixed(3)}s`).join(' ～ ') : '未提供精确边界'
 
-export function DeliveryTimingPanel({ initialReport }: { initialReport?: unknown }) {
+export function DeliveryTimingPanel({ initialReport, initialSource = 'j100', caseTaskId, onCaseChange, onReplayRequest, replayTaskIds = [] }: {
+  initialReport?: unknown; initialSource?: DeliveryTimingSource; caseTaskId?: string
+  onCaseChange?: (taskId: string) => void; onReplayRequest?: (taskId: string, sourceTime: number) => void; replayTaskIds?: string[]
+}) {
   const [report, setReport] = useState(() => initialReport === undefined ? null : parseDeliveryTiming(initialReport))
   const [caseIndex, setCaseIndex] = useState(0)
   const [mode, setMode] = useState<'route' | 'task'>('route')
   const [selected, setSelected] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(initialReport === undefined)
-  const [source, setSource] = useState<DeliveryTimingSource>('j100')
+  const [source, setSource] = useState<DeliveryTimingSource>(initialSource)
   const request = useRef<AbortController | null>(null)
   const generation = useRef(0)
 
@@ -52,6 +56,11 @@ export function DeliveryTimingPanel({ initialReport }: { initialReport?: unknown
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    const index = report?.cases.findIndex(item => item.task_id === caseTaskId) ?? -1
+    if (index >= 0) { setCaseIndex(index); setSelected(null) }
+  }, [caseTaskId, report])
+
   function download() {
     if (!report) return
     // Download the readable source snapshot, not a new score or live run.
@@ -68,8 +77,8 @@ export function DeliveryTimingPanel({ initialReport }: { initialReport?: unknown
   const chartPercent = (wall: number) => view?.origin === null || !view ? 0 : Math.max(0, Math.min(100, (wall - view.origin) / view.limit * 100))
   return <Card className="delivery-timing-panel" id="workbench-delivery-timing" aria-labelledby="delivery-timing-heading">
     <div className="delivery-timing-heading"><div><span className="delivery-timing-eyebrow"><Timer size={14} aria-hidden="true" />F1 配送 · 时间分析</span>
-      <CardTitle id="delivery-timing-heading">120 秒，花在了哪里</CardTitle><p>原生动作、阶段采样与独立物理结果放在同一时间轴，保留各自含义。</p></div>
-      <div className="delivery-timing-actions"><label>配送记录<select aria-label="选择配送记录" value={source} disabled={loading} onChange={event => { const value = event.target.value as DeliveryTimingSource; setSource(value); void load(undefined, value) }}><option value="j100">J100 · 原完整 K</option><option value="mecanum">麦克纳姆 · P2 历史</option><option value="mecanum2d">麦克纳姆 · 2D 回归</option><option value="mecanum3d">麦克纳姆 · 3D 雷达</option></select></label>
+      <CardTitle id="delivery-timing-heading">配送阶段与耗时</CardTitle><p>原生动作、阶段采样与独立物理结果放在同一时间轴，保留各自含义。</p></div>
+      <div className="delivery-timing-actions"><label>配送记录<select aria-label="选择配送记录" value={source} disabled={loading} onChange={event => { const value = event.target.value as DeliveryTimingSource; setSource(value); void load(undefined, value) }}><option value="j100vision">J100 · 视觉配送</option><option value="j100">J100 · 原完整 K（历史）</option><option value="mecanum">麦克纳姆 · P2 历史</option><option value="mecanum2d">麦克纳姆 · 2D 回归</option><option value="mecanum3d">麦克纳姆 · 3D 雷达</option></select></label>
         <Button size="sm" variant="outline" disabled={loading} onClick={() => void load()}><RefreshCw size={14} aria-hidden="true" />{loading ? '读取中' : '刷新报告'}</Button>
         <label className="delivery-timing-upload"><FileUp size={14} aria-hidden="true" />导入 JSON<input type="file" accept=".json,application/json" aria-label="导入配送耗时 JSON" onChange={e => { const file = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (file) void load(file) }} /></label></div>
     </div>
@@ -77,7 +86,7 @@ export function DeliveryTimingPanel({ initialReport }: { initialReport?: unknown
     {!report ? <p role="status">{loading ? '正在读取历史耗时报告…' : '暂无报告。可刷新或导入本地摘要。'}</p> : <>
       <div className="delivery-timing-provenance"><strong>{report.label}</strong><span>{report.historical && report.new_execution === false && report.rescored === false ? '历史仿真导入 · 未新执行或重评分' : '来源边界待确认'}</span></div>
       {report.warnings.length > 0 && <ul className="delivery-timing-warning">{report.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>}
-      <div className="delivery-timing-toolbar"><div role="group" aria-label="选择配送订单">{report.cases.map((c, i) => <button type="button" key={`${c.id}-${i}`} aria-pressed={i === caseIndex} onClick={() => { setCaseIndex(i); setSelected(null) }}>{c.label.replace('order-', '订单 ').toUpperCase()}</button>)}</div>
+      <div className="delivery-timing-toolbar"><div role="group" aria-label="选择配送订单">{report.cases.map((c, i) => <button type="button" key={`${c.id}-${i}`} aria-pressed={i === caseIndex} onClick={() => { setCaseIndex(i); setSelected(null); onCaseChange?.(c.task_id) }}>{c.label.replace('order-', '订单 ').toUpperCase()}</button>)}</div>
         <div role="group" aria-label="时间预算范围"><button type="button" aria-pressed={mode === 'route'} onClick={() => { setMode('route'); setSelected(null) }}>配送路线</button><button type="button" aria-pressed={mode === 'task'} onClick={() => { setMode('task'); setSelected(null) }}>{item?.scope === 'route' ? '路线任务（未装货）' : '完整任务'}</button></div></div>
       {!item || !view ? <p>当前报告没有可展示案例，请补齐 cases 后重新导入。</p> : <>
         <dl className="delivery-timing-metrics"><div><dt>{mode === 'route' ? '配送路线耗时' : '完整任务耗时'}</dt><dd><span>{seconds(view.elapsed)}</span><small>原预算 {seconds(view.budget, 0)}</small></dd></div>
@@ -99,7 +108,7 @@ export function DeliveryTimingPanel({ initialReport }: { initialReport?: unknown
             <div className="delivery-timing-gap-row"><span>物理采样缺口</span><div>{item.sampling.gaps.filter(g => g.before_wall_s !== null && g.after_wall_s !== null && g.after_wall_s >= view.origin! && g.before_wall_s <= view.origin! + view.limit).map((g, i) => <span key={i} className="delivery-timing-gap-mark" title={`缺 ${g.missing ?? '未知'} 帧`} style={{ left: `${chartPercent(g.before_wall_s!)}%`, width: `${Math.max(.5, chartPercent(g.after_wall_s!) - chartPercent(g.before_wall_s!))}%` }} />)}<span className="delivery-timing-budget-label">虚线：原 {seconds(view.budget, 0)} 预算</span></div></div>
           </div>
         </div>}
-        {detail && <div className="delivery-timing-detail" role="region" aria-label="所选阶段来源"><strong>{label(detail)} · {seconds(detail.duration_s)}</strong><p>{detail.evidence}</p>
+        {detail && <div className="delivery-timing-detail" role="region" aria-label="所选阶段来源"><strong>{label(detail)} · {seconds(detail.duration_s)}</strong><p>{detail.evidence}</p>{onReplayRequest && detail.start_source_s !== null && replayTaskIds.includes(item.task_id) && <Button type="button" size="sm" variant="outline" onClick={() => onReplayRequest(item.task_id, detail.start_source_s!)}>在回放中定位此阶段</Button>}
           {detail.goal_id && <p>原 Goal UUID <code>{detail.goal_id}</code> · 终态 {detail.terminal_status ?? '未知'}。终态回执不等于控制器消费回执。</p>}
           {detail.layer === 'observed_stage' && <p>起点区间 {boundary(detail.start_boundary_wall_s, view.origin)}；终点区间 {boundary(detail.end_boundary_wall_s, view.origin)}{detail.right_censored ? '。末阶段仅知最后一次观测，之后状态未知。' : '。不能将采样边界当作精确事件。'}</p>}
           <p>源时间 {seconds(detail.start_source_s)} → {seconds(detail.end_source_s)}；与本图墙钟分别记录。</p></div>}

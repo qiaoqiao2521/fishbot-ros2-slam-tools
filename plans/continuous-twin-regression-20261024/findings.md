@@ -406,3 +406,11 @@ G（run b8dc8641-77e6-4bc3-b32c-822767b011f0）总889.584墙秒，B任务bbb987c
 MuJoCo3.3.7 Renderer 已返回 float32 米制 optical Z。原生2m平面中心及角点均2m，不是射线距离。新增深度使用原生640×480，不把RGB的BOX降采样用于深度。只输出标准图像/CameraInfo、已有来源白名单和相对静态TF；不对模型暴露世界真值。
 
 原camera calibration把FishBot base_link的.092m偏移写死；车型不同必须从编译MJCF相对基座计算安装变换。当前相机依旧后向且带原标记夹具，尚不证明可见抓取货物。原默认RGB分支保持，新增RGB-D不切换ideal/vision任务模式。
+
+## 2026-11-06 F1素材缺口与恢复
+
+用户确认原缓存及归档已删除；不再从摘要重建轨迹或虚构阶段起止。2026-10-31 K的源码验收记录可用于历史成果卡，实际位置回放/录像/阶段采样仍需新记录。复用原ReplayViewport、delivery-timing面板及导入器，不新增播放器或评分器。
+
+Kaggle原私有基础数据集仍可读取，约220.66MiB；旧入口是CPU ideal，不能冒充当前视觉。当前视觉环境/权重需恢复。账号隔离须同时指定KAGGLE_CONFIG_DIR与对应KAGGLE_API_TOKEN文件路径，否则新版SDK可能读取默认token。新补录保留原门槛、配置和成功/失败，不能回填旧K为新运行。
+
+Drive目标已由用户选定，沿现有ROS2文档账号。持久恢复资料先存~/.local/share/fishbot/results-f1-20261106/，上传并读回后再移除可再生大副本；网页只保留轻量公开展示数据。

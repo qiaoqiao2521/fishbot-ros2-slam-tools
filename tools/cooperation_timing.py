@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import math
 from pathlib import Path
@@ -78,6 +79,14 @@ def route_spans(order: dict, receipt: dict) -> list[dict]:
     return result
 
 
+def observer_lines(source, warnings):
+    """Keep readable records when an archived stream ends prematurely."""
+    try:
+        yield from source
+    except (OSError, EOFError, UnicodeError) as error:
+        warnings.append(f"Observer stream incomplete: {type(error).__name__}")
+
+
 def scan_observer(path: Path, case: dict, trajectory: Path) -> dict:
     warnings = case["warnings"]
     counts = {"records": 0, "physics_records": 0, "task_physics_records": 0,
@@ -92,17 +101,23 @@ def scan_observer(path: Path, case: dict, trajectory: Path) -> dict:
     written = 0
     clock_break_pending = False
     sequence_start = sequence_end = None
+    active_arm_id = None
+    binding = obj(case.get("entity_binding"))
+    named = case.get("named_entities") is True
+    missing_cargo = missing_arm = 0
     start, end = case["start_wall_s"], case["end_wall_s"]
     before_stat = None
     try:
+        if not path.exists() and path.with_suffix(path.suffix + ".gz").exists():
+            path = path.with_suffix(path.suffix + ".gz")
         before_stat = path.stat()
-        source = path.open()
+        source = gzip.open(path, "rt", encoding="utf-8") if path.suffix == ".gz" else path.open(encoding="utf-8")
     except OSError as error:
         warnings.append(f"observer.jsonl: {type(error).__name__}")
         return {**counts, "gaps": [], "stages": [], "trajectory_points": 0, "trajectory_bytes": 0,
                 "sequence_start": None, "sequence_end": None}
     with source, trajectory.open("w") as stream:
-        for line_no, line in enumerate(source, 1):
+        for line_no, line in enumerate(observer_lines(source, warnings), 1):
             counts["records"] += 1
             try:
                 row = json.loads(line)
@@ -124,6 +139,7 @@ def scan_observer(path: Path, case: dict, trajectory: Path) -> dict:
                 if last_http_wall is not None and wall < last_http_wall:
                     counts["nonadvancing_records"] += 1
                     continue
+                active_arm_id = task.get("active_arm_id")
                 name = task.get("stage")
                 if not isinstance(name, str):
                     continue
@@ -185,10 +201,22 @@ def scan_observer(path: Path, case: dict, trajectory: Path) -> dict:
             if sample_bin == last_bin and not gap_before and not clock_break_pending:
                 continue
             last_bin = sample_bin
-            car, cargo = obj(payload.get("car")), obj(payload.get("cargo"))
+            car = obj(payload.get("car"))
+            if named:
+                measured = obj(payload.get("business_entities"))
+                cargo = obj(obj(measured.get("cargo")).get(binding.get("cargo_id")))
+                allowed_arms = (binding.get("pickup_arm_id"), binding.get("unload_arm_id"))
+                selected_arm = active_arm_id if active_arm_id in allowed_arms else None
+                q6 = vector(obj(obj(measured.get("arms")).get(selected_arm)).get("qpos6"), 6)
+                if vector(cargo.get("position"), 3) is None: missing_cargo += 1
+                if q6 is None: missing_arm += 1
+            else:
+                cargo, q6, selected_arm = obj(payload.get("cargo")), vector(payload.get("q6"), 6), None
             sample = {**current, "gap_before": gap_before or clock_break_pending,
                       "car_position_m": vector(car.get("position"), 3), "car_quaternion_wxyz": vector(car.get("quaternion_wxyz"), 4),
-                      "cargo_position_m": vector(cargo.get("position"), 3), "arm_q6_rad": vector(payload.get("q6"), 6)}
+                      "cargo_position_m": vector(cargo.get("position"), 3), "arm_q6_rad": q6,
+                      "named_entities": named, "cargo_id": binding.get("cargo_id") if named else None,
+                      "arm_id": selected_arm}
             stream.write(json.dumps(sample, allow_nan=False, separators=(",", ":")) + "\n")
             written += 1
             clock_break_pending = False
@@ -203,6 +231,10 @@ def scan_observer(path: Path, case: dict, trajectory: Path) -> dict:
             warnings.append("observer.jsonl changed while reading; import is partial")
     except OSError:
         warnings.append("observer.jsonl unavailable after reading; import is partial")
+    if missing_cargo:
+        warnings.append(f"Named cargo binding or measured position unavailable in {missing_cargo} display samples; no legacy cargo fallback")
+    if missing_arm:
+        warnings.append(f"Named active-arm binding or measured joints unavailable in {missing_arm} display samples; no primary-arm fallback")
     if counts["task_physics_records"] == 0:
         warnings.append("No valid physics records in task window")
     if not stages:
@@ -268,9 +300,20 @@ def import_run(run_path: Path, output: Path) -> dict:
         end = next((event.get("wall_time") for event in matching if event.get("kind") == prefix+"_finished"), None)
         receipt = obj(obj(order.get("delivery_route_budget")).get("receipt"))
         metric = obj(order.get("metrics"))
+        declared = next((obj(item) for item in (declaration.get("orders") or []) if obj(item).get("id") == order.get("id")), {})
+        raw_binding = obj(order.get("business_delivery")) or obj(declared.get("business_delivery"))
+        binding = {key: raw_binding.get(key) if isinstance(raw_binding.get(key), str) else None
+                   for key in ("cargo_id", "pickup_arm_id", "unload_station_id")}
+        entities = obj(manifest.get("business_entities"))
+        named_entities = bool(entities) or bool(raw_binding)
+        station = obj(obj(entities.get("unload_stations")).get(binding.get("unload_station_id")))
+        binding = {**binding, "unload_arm_id": station.get("arm_id")}
+        if named_entities and not binding.get("cargo_id"):
+            case_warnings.append("Named scene has no order cargo binding; measured cargo remains unavailable")
         case = {"id": f"{source.get('run_id', 'unknown')}:{order.get('id', index)}", "label": order.get("id", f"order-{index}"),
                 'scope':scope,'full_transport_acceptance_claimed':scope=='transport',
                 "source_run_id": source.get("run_id"), "task_id": order.get("task_id"), "episode_id": order.get("episode_id"),
+                "named_entities": named_entities, "entity_binding": binding,
                 "vehicle": profile.get("vehicle", "unknown"), "sensor": profile.get("sensors", "unknown"),
                 "scene_id": declaration.get("scene_id", "unknown"),
                 "observation_mode": obj(manifest.get("station_perception")).get("mode", "unknown"),
@@ -291,7 +334,10 @@ def import_run(run_path: Path, output: Path) -> dict:
         if duration(start, end) is None or not case["task_id"] or not case["episode_id"]:
             case_warnings.append("Missing task identity or valid marker interval")
         stream_ref = f"order-{index}-trajectory-10hz.jsonl"
-        observed = scan_observer(folder / "observer/observer.jsonl", case, output / stream_ref)
+        observer_path = folder / "observer/observer.jsonl"
+        if not observer_path.exists() and observer_path.with_suffix('.jsonl.gz').exists():
+            case['evidence_refs'][-1] += '.gz'
+        observed = scan_observer(observer_path, case, output / stream_ref)
         case["spans"].extend(observed.pop("stages"))
         case["trajectory"] = {"stream_ref": stream_ref, "sample_count": observed.pop("trajectory_points"),
                               "byte_count": observed.pop("trajectory_bytes"), "policy": "first sample per 100ms source bin; retain break samples; no interpolation",

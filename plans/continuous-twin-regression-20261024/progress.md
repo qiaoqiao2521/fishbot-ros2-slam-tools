@@ -387,3 +387,19 @@ knowledge_status=updated：原Wiki/ROS2 与 FishBot“预训练抓取”“放�
 恢复任一原记录：`gzip -dk ~/.cache/fishbot/pretrained-vision-20261031/full-ba-k/order-1/observer/observer.jsonl.gz`；第二单替换order-2。恢复后可按原score-only或耗时导入命令重算。归档保留原路径，原JSON报告不改写；未声称当前不存在的展开文件仍可直接读取。私有总摘要verified-k-summary.json包含现场/离线比较和边界，原输入图像/深度在grasp-observations对应episode目录。
 
 最终25个改动Python文件AST、84个本地文档链接和git diff --check通过；无额外全仓构建。根Agent已核实qiaoqiao2521账号及既有origin，Git交付覆盖本轮已验源码、文档与测试，具体版本以仓库当前提交及远端读回为准；模型、原日志、私有快照和本地会话不入Git。
+
+## 2026-11-06 F1实施中
+
+已接历史K成果摘要、J100视觉专属报告源、复用回放视图和阶段定位回调。缺失轨迹/媒体单独降级，不制造采样或阶段区间；历史ideal入口保留。前端类型检查及新增3项测试通过；实际浏览器与既有相关测试待完成。
+
+用户授权有限补录。原K原始文件已删除，当前不能重算其独立评分或回放。独立子任务恢复Kaggle视觉入口，不触及共享计划和前端；旧云kernel ERROR不算有效运行。待核验新job及输出，当前未计补录成功。
+
+Drive目标已由用户选定；根Codex负责归档读回与最终集成。knowledge_status=already_covered：双时钟、真值隔离、原评分与展示边界沿用既有FishBot知识；当前无新增知识回写。CY候选仍保留未审，不随F1提交。
+
+F1首份恢复包已上传并读回：Drive file `1SPHKQqheI0NQXC4T4c1lLN0h7aYIki2J`，10,776,708字节；原始下载入口可取完整ZIP。包内源码基线3fa9bb7、前端覆盖、历史K摘要与网页QA，不包含已删除原件；前端已提供恢复包链接。
+
+Kaggle新私有kernel `muqiaoqiao/fishbot-f1-visual-recovery-20261106` v1于10:29:40提交并读回RUNNING，请求T4，整作业3600墙秒上限；domain187/API9157/模型10157。当前尚未得到业务结果。审查发现旧candidate会关闭overview，故本轮可能无全景录像；不为补录像重复派发，实际RGBD和遥测独立保留。
+
+已有13项历史耗时浏览器行为检查、新4项视觉成果行为检查通过，均零write请求/零未捕获异常；合成回放fixture只用于UI交互检查，不计物理成功。390px无水平溢出，桌面/手机截图已观察。相关25项前端单测首次因旧标题断言失败，已按新标题修正并复跑该11项全过；生产构建通过，最终统一复查待收尾。
+
+Drive进一步验收已完成：实际下载远端ZIP至本轮临时副本，逐成员解压检查通过，1378项且恢复说明存在，长度10,776,708字节与本地相同；随后已删除该重复下载副本。不是仅收到上传回执。新模型环境仍只在云端，本机仅准备小型MuJoCo查询环境供离线投影，不恢复完整规划/权重环境。

@@ -2,6 +2,12 @@
 
 目标：用相机观测替代任务中的理想观测，继续复用 Nav2、SO101 的 mink/OMPL 和原独立物理评分。复用官方预训练推理，不新建训练平台或大批量故障面板。2026-10-31 已完成实际官方推理、模型驱动抓放和同一世界完整 ROS 视觉 B→A；两单独立物理/业务评分及原记录重算均通过。该结果限以下固定工位仿真范围，状态见当前 SpecMesh。
 
+## 原件与恢复状态（2026-11-06）
+
+用户确认旧`~/.cache/fishbot`归档已删除，包括K的原始observer、图像和录像。以下历史验收事实保留，但旧缓存恢复命令已失效，当前不能据此重算旧K或补出时间轴。[Drive源码与历史摘要恢复包](https://drive.google.com/file/d/1SPHKQqheI0NQXC4T4c1lLN0h7aYIki2J/view?usp=drivesdk)已完成上传、元数据与原始下载入口读回，10,776,708字节；它不包含已删除原件。
+
+`/results`使用`j100-vision-result.json`和专属耗时源，位置回放复用原ReplayViewport。无原采样时保留partial，不用ideal录像替代。新视觉补录使用独立Kaggle作业，结果与历史K分开；实际状态见当前计划进度。后续本地持久入口为`~/.local/share/fishbot/results-f1-20261106/`，需要保留的原件上传Drive并读回后再清理展开副本。
+
 ## 当前能力
 
 `cooperation_prepare.py` 增加 `--camera-rgbd`。将它追加到原准备命令，并使用新的输出目录。开关只增加传感器，不改变 `station_perception.mode`；ideal 仍明确是 ideal，不会被相机开启伪装为视觉控制。默认不增加深度渲染。

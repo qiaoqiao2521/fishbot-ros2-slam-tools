@@ -27,6 +27,28 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(result['snapshot_id'],'same')
         self.assertEqual(result['frames'][0]['arm_joints_world'][1],[4.,5.,6.])
 
+    def test_named_unload_arm_uses_its_world_projection_and_preserves_identity(self):
+        case={'id':'case','task_id':'task','episode_id':'episode','scene_id':'scene',
+              'vehicle':'jackal_j100','sensor':'lidar3d','physical':{},'route':{},
+              'original_verdict':{},'sampling':{},'spans':[]}
+        calls=[]
+        def project_named(q,arm_id):
+            calls.append((q,arm_id))
+            return [[4.,5.,6.]]
+        def forbidden_primary(q):
+            self.fail('Named arm must not use primary station FK')
+        point={'source_s':1.,'named_entities':True,'cargo_id':'cargo_2','arm_id':'unload_a',
+               'arm_q6_rad':[.2]*6,'cargo_position_m':[3.,4.,.5]}
+        result=project_case(case,[point],label='named',manifest={},
+                            project_arm=forbidden_primary,project_named_arm=project_named)
+        self.assertEqual(calls,[([.2]*6,'unload_a')])
+        self.assertEqual(result['frames'][0]['arm_joints_world'],[[4.,5.,6.]])
+        self.assertEqual(result['frames'][0]['cargo_id'],'cargo_2')
+        self.assertEqual(result['frames'][0]['arm_id'],'unload_a')
+        partial=project_case(case,[point],label='missing',manifest={},project_arm=forbidden_primary)
+        self.assertIsNone(partial['frames'][0]['arm_joints_world'])
+        self.assertTrue(any('not substituted' in w for w in partial['warnings']))
+
     def test_missing_source_does_not_discard_other_valid_samples(self):
         case={'id':'case','task_id':'task','episode_id':'episode','scene_id':'scene',
               'vehicle':'unknown','sensor':'unknown','physical':{},'route':{},

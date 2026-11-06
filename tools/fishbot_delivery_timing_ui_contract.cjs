@@ -40,6 +40,7 @@ async function main() {
     const response = await page.goto(new URL('/results', base).href);
     assert.equal(response.status(), 200);
     const panel = page.locator('#workbench-delivery-timing');
+    await panel.getByLabel('选择配送记录').selectOption('j100');
     await panel.getByText('119.794 s', { exact: true }).waitFor();
     assert.ok(await panel.getByText('0.206 s', { exact: true }).isVisible());
     assert.equal(await panel.locator('.delivery-timing-row').count(), 5);
