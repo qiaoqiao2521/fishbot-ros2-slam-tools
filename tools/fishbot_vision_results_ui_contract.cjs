@@ -10,7 +10,7 @@ async function main() {
   const base = new URL(args.base || 'http://127.0.0.1:5194');
   assert.equal(base.hostname, '127.0.0.1'); assert.ok(args.output);
   fs.mkdirSync(args.output, { recursive: true });
-  const result = { passed: false, checks: [], writes: [], errors: [], scope: 'Static historical summary and synthetic UI-only playback fixture; no ROS or new physical scoring.' };
+  const result = { passed: false, checks: [], writes: [], errors: [], scope: 'Real imported v4/v5 ROS-MuJoCo records plus synthetic UI fixtures; this UI test never launches or scores ROS.' };
   const browser = await chromium.launch({ executablePath: args.chromium || '/opt/google/chrome/chrome', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
   let fixture = false, missingReplay = false, unknownReplay = false;
@@ -32,7 +32,7 @@ async function main() {
       if (!['GET','HEAD','OPTIONS'].includes(req.method())) { result.writes.push(url.pathname); return route.fulfill({ status: 405, json: {} }); }
       if (url.pathname === '/workbench/ui-only-alternate.json') return route.fulfill({ json: { ...summary, run_id: 'ui-alternate', recordings, orders: summary.orders.map(o => ({ ...o, task_id: 'ui-' + o.task_id, route_seconds: 9.87 })), assets: { timing: '/workbench/ui-only-alternate-timing.json' } } });
       if (url.pathname === '/workbench/ui-only-alternate-timing.json') return route.fulfill({ json: alternateTiming });
-      if (fixture && url.pathname === '/workbench/j100-vision-result.json') return route.fulfill({ json: { ...summary, recordings, assets: { ...summary.assets, replay: '/workbench/ui-only-replay.json', video: missingReplay ? '/workbench/ui-only-missing.mp4' : null } } });
+      if (fixture && url.pathname === '/workbench/j100-vision-result.json') return route.fulfill({ json: { ...summary, preferred_recording: null, recordings, assets: { ...summary.assets, replay: '/workbench/ui-only-replay.json', video: missingReplay ? '/workbench/ui-only-missing.mp4' : null } } });
       if (fixture && url.pathname === '/workbench/j100-vision-timing.json') return route.fulfill({ json: fixtureTiming });
       if (url.pathname === '/workbench/ui-only-missing.mp4') return route.fulfill({ status: 404, body: '' });
       if (url.pathname === '/workbench/ui-only-replay.json') return route.fulfill(missingReplay ? { status: 404, json: {} } : { json: unknownReplay ? { ...replay, schema: 'editable', read_only: false, rescored: true } : replay });
@@ -41,6 +41,7 @@ async function main() {
     });
     await page.goto(new URL('/results', base).href);
     const card = page.locator('#j100-vision-delivery'), panel = page.locator('#workbench-delivery-timing');
+    if (summary.preferred_recording) await card.getByLabel('选择视觉配送成果').selectOption('/workbench/j100-vision-result.json');
     await card.getByText('49.90 s', { exact: true }).waitFor();
     await card.getByRole('button', { name: '订单 A', exact: true }).click();
     await card.getByText('20.97 s', { exact: true }).waitFor();
@@ -52,6 +53,43 @@ async function main() {
     await card.screenshot({ path: path.join(args.output, 'vision-mobile.png') });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     result.checks.push('390px viewport has no horizontal overflow');
+    if ((summary.recordings || []).some(item => item.url === '/workbench/j100-vision-v4-result.json')) {
+      await card.getByLabel('选择视觉配送成果').selectOption('/workbench/j100-vision-v4-result.json');
+      await card.getByText('原评分未通过', { exact: true }).waitFor();
+      await panel.getByText('13.165 s', { exact: true }).waitFor();
+      await card.getByRole('slider', { name: '视觉配送源时间' }).waitFor();
+      await page.waitForFunction(() => document.querySelector('#j100-vision-delivery video')?.readyState >= 1);
+      assert.ok((await card.innerText()).includes('未到抓取或载货导航'));
+      await panel.locator('.delivery-timing-row').first().click();
+      await panel.getByRole('button', { name: '在回放中定位此阶段' }).click();
+      await card.screenshot({ path: path.join(args.output, 'actual-v4-mobile.png') });
+      await page.setViewportSize({ width: 1440, height: 1100 });
+      await card.screenshot({ path: path.join(args.output, 'actual-v4-desktop.png') });
+      await panel.screenshot({ path: path.join(args.output, 'actual-v4-timing.png') });
+      await card.getByLabel('选择视觉配送成果').selectOption('/workbench/j100-vision-result.json');
+      await card.getByText('49.90 s', { exact: true }).waitFor();
+      result.checks.push('Actual v4 failed task replay, 13.165s stage report and 9-frame video load separately from historical K');
+    }
+    if ((summary.recordings || []).some(item => item.url === '/workbench/j100-vision-v5-result.json')) {
+      await card.getByLabel('选择视觉配送成果').selectOption('/workbench/j100-vision-v5-result.json');
+      await card.getByText('原评分未通过', { exact: true }).waitFor();
+      await panel.getByText('89.187 s', { exact: true }).waitFor();
+      await card.getByText('已证实的分项', { exact: true }).waitFor();
+      assert.ok((await card.innerText()).includes('保护介入0.82'));
+      assert.ok((await card.innerText()).includes('推理未证实'));
+      await card.getByRole('button', { name: '播放视觉配送回放' }).click();
+      await page.waitForFunction(() => Number(document.querySelector('#j100-vision-replay input[type=range]').value) > .5);
+      await card.getByRole('button', { name: '暂停视觉配送回放' }).click();
+      await page.waitForFunction(() => document.querySelector('#j100-vision-delivery video')?.readyState >= 1);
+      await card.screenshot({ path: path.join(args.output, 'actual-v5-desktop.png') });
+      await panel.screenshot({ path: path.join(args.output, 'actual-v5-timing.png') });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await card.screenshot({ path: path.join(args.output, 'actual-v5-mobile.png') });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      await card.getByLabel('选择视觉配送成果').selectOption('/workbench/j100-vision-result.json');
+      await card.getByText('49.90 s', { exact: true }).waitFor();
+      result.checks.push('Actual v5 docking component, guard assistance and failed whole task remain separate; new video and source playback work');
+    }
     fixture = true; await page.reload();
     await card.getByRole('slider', { name: '视觉配送源时间' }).waitFor();
     await card.getByRole('button', { name: '播放视觉配送回放' }).click();

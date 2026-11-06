@@ -45,3 +45,5 @@
 #j100-vision-replay { scroll-margin-top: 120px; }
 
 .vision-result-context select { border: 1px solid #cfdced; padding: 5px; border-radius: 5px; color: #17324d; max-width: 100%; }
+
+.vision-result-component { margin: 12px 0; padding: 12px; border: 1px solid #cfdced; border-radius: 7px; font-size: 12px; line-height: 1.8; color: #17324d; white-space: pre-line; }

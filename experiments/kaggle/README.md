@@ -3,6 +3,61 @@
 复用原 Jazzy、MuJoCo、Nav2、SO101 和 `tools/cooperation_factory.py`。
 本入口只适配云端依赖与启动，不增加控制器、训练流程或新评分器。
 
+## 视觉 B→A 补录入口（2026-11-06）
+
+`f1_visual_recovery.py` 复用本目录 `f1_run.py` 的部署与原生构建。
+它增加当前选定源码快照、官方 GraspGen-X 环境恢复及宽场景连续 B→A。
+AprilTag 停靠、实际 RGB-D 抓取、原 Factory 和独立评分保持。
+模型与环境放云端 `/tmp`，输出仅保留源码、场景、查询、日志与评分。
+完整 `observer.jsonl` 在退出后压缩，失败仍保留，不因压缩改写结果。
+
+```bash
+python3 experiments/kaggle/f1_visual_recovery.py \
+  --package "$HOME/.local/share/fishbot/results-f1-20261106/source-dataset" \
+  --so101 ../so101
+```
+
+新私有 GPU kernel 同时挂载原运行库 dataset 和生成的源码 dataset。
+源码包使用 `.tar.gz.bin`，防止 Kaggle 预展开；内容仍是标准 gzip/tar。
+使用独占 domain187/API9157，原每单360秒装运、180秒卸货、120秒路线不改。
+实际资源与最终结果应从本轮回执读取，不以提交成功代替配送验收。
+
+首次提交 v1 保留候选原 `render_overview=false`，因此没有现场全景录像；
+该显示标志不关闭实际传感器。不能把离线轨迹回放称为现场录像。
+已有 OverviewRecorder 只收集新实际帧，源时间另存索引，不插值补帧。
+v1 实际在 AprilTag 纹理准备时失败，没有启动业务。
+v2 增加默认系统 Python 和 Jazzy Python3.12 的 OpenCV 诊断；
+云端仅把两个视觉子进程选为通过预检的系统3.12，不改全局解释器。
+它复用 v1 已完成构建的原生安装，并显式开启显示用全景渲染。
+可用 `--native-install /absolute/native-install.tar.gz` 打包这份复用输入。
+
+新版 Kaggle SDK 会先读取默认 `~/.kaggle/access_token`。
+隔离账号时，同时设置 `KAGGLE_CONFIG_DIR` 与 `KAGGLE_API_TOKEN=账号令牌文件路径`；
+仅设置前者不能证明实际使用该账号。不要输出令牌内容。
+
+`f1_gl_audit.py` 是已有驱动的窄诊断入口。它读取 v4 场景和实际 R0 记录，
+只做 `mj_forward`，不推进物理或发布 ROS Goal。生产 RGB 保持2倍超采样，
+深度保持640×480；分别记录 forward、场景更新、RGB读回、缩采样和深度耗时。
+报告同时保存 GL_VENDOR、GL_RENDERER、GL_VERSION、EGL设备和现成GLVND配置。
+它只选择现有NVIDIA库／设备，不安装驱动或修改宿主内核。
+只有实际帧报告为NVIDIA硬件渲染，才在同一作业调用冻结的视觉B→A入口一次。
+否则保留诊断并结束，不下载GraspGen-X环境，不把CUDA可用当作图形可用。
+
+系统视觉环境复用已安装ROS包的 `package.xml` 运行依赖声明。
+已通过本机官方rosdep解析的6个Python依赖直接作为Ubuntu apt清单使用；
+仅出现新声明时才在同一云进程调用官方rosdep补齐，避免按缺失模块重开作业。
+
+本轮v4实际运行因旧图像拒绝，未进入装货。v5原GL报告确认默认为llvmpipe；
+选择现成NVIDIA EGL库后，同2倍RGB＋原深度的稳态总耗时从约580–619ms
+降到约15–16ms。完整ROS复验完成原生RGB停靠，随后在原30秒approach预算失败。
+它没有完成B→A，也没有可核验的GraspGen-X输入／候选／推理耗时收据。
+模型服务已加载权重不能替代推理证明。原失败、observer和录像分别保留。
+停靠有原plant guard辅助；不要把停车误差解释为纯视觉精度。
+
+v5选用私有GLVND JSON的路径与生成源码已记录，原临时JSON未进入该次输出；
+恢复时可按实际存在的 `libEGL_nvidia.so.0` 重建标准配置，标明这是恢复示例。
+当前入口已补保存该JSON；observer压缩后完整解码校验，再移除展开件。
+
 2026-10-24 已运行私有 CPU 前检。该回合是 Ubuntu24.04/glibc2.39、
 4核配额、约31GB可用内存、默认Python3.13，未安装ROS/MuJoCo。
 本机UDP成功；ROS仓库HTTPS出现证书主机名不匹配，未禁用TLS验证。

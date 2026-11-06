@@ -9,7 +9,7 @@ describe('delivery timing panel', () => {
     try {
       const html = renderToStaticMarkup(<DeliveryTimingPanel initialReport={snapshot} />)
       expect(html).toContain('119.794 s'); expect(html).toContain('0.206 s')
-      expect(html).toContain('历史仿真导入 · 未新执行或重评分')
+      expect(html).toContain('记录导入 · 本页不执行或重评分')
       expect(html).toContain('物理采样缺口'); expect(html).toContain('控制器计算 / 消费回执')
       expect(html).toContain('0.80 s'); expect(html).toContain('未归因区间')
       expect(html).not.toContain('/coop-api/start'); expect(html).not.toContain('file://')

@@ -6,7 +6,7 @@
 
 用户确认旧`~/.cache/fishbot`归档已删除，包括K的原始observer、图像和录像。以下历史验收事实保留，但旧缓存恢复命令已失效，当前不能据此重算旧K或补出时间轴。[Drive源码与历史摘要恢复包](https://drive.google.com/file/d/1SPHKQqheI0NQXC4T4c1lLN0h7aYIki2J/view?usp=drivesdk)已完成上传、元数据与原始下载入口读回，10,776,708字节；它不包含已删除原件。
 
-`/results`使用`j100-vision-result.json`和专属耗时源，位置回放复用原ReplayViewport。无原采样时保留partial，不用ideal录像替代。新视觉补录使用独立Kaggle作业，结果与历史K分开；实际状态见当前计划进度。后续本地持久入口为`~/.local/share/fishbot/results-f1-20261106/`，需要保留的原件上传Drive并读回后再清理展开副本。
+`/results`使用`j100-vision-result.json`和专属耗时源，位置回放复用原ReplayViewport。无原采样时保留partial，不用ideal录像替代。新视觉补录使用独立Kaggle作业，与历史K分开。现有库选择NVIDIA GLVND后，真实RGB-D时效与原生视觉停靠已验证；停靠最大XY9.33mm、guard介入0.82源秒。随后原30墙秒接近规划超时，完整运输及本轮GraspGen-X实际推理仍未证实，不能把加载权重当推理成功。实际状态见当前计划进度。后续本地持久入口为`~/.local/share/fishbot/results-f1-20261106/`，需要保留的原件上传Drive并读回后再清理展开副本。
 
 ## 当前能力
 

@@ -12,7 +12,7 @@ const phases: Record<string, string> = {
   arm_place: '托盘放置', arm_release: '释放货物', arm_retreat: '机械臂退让', arm_home: '机械臂回位',
   car_egress: '小车离站', car_to_delivery: '驶向交付点', delivery_stop: '交付点停稳', completed: '任务完成',
   dock_stopped: '工位停稳', arm_transport: '机械臂搬运', cargo_settle: '货物落稳', delivery_stopped: '交付点停稳',
-  unload_grasp: '卸货抓取', unload_transport: '转运至货架', unloaded: '货架落稳与回位',
+  unload_grasp: '卸货抓取', unload_transport: '转运至货架', unloaded: '货架落稳与回位', failed: '任务失败',
 }
 const label = (s: TimingSpan) => phases[s.label] ?? s.label
 const boundary = (values: (number | null)[], origin: number | null) => values.length && origin !== null
@@ -25,6 +25,7 @@ export function DeliveryTimingPanel({ initialReport, initialSource = 'j100', sou
   const [report, setReport] = useState(() => initialReport === undefined ? null : parseDeliveryTiming(initialReport))
   const [caseIndex, setCaseIndex] = useState(0)
   const [mode, setMode] = useState<'route' | 'task'>('route')
+  const [range, setRange] = useState<'budget' | 'recorded'>('budget')
   const [selected, setSelected] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(initialReport === undefined)
@@ -72,7 +73,13 @@ export function DeliveryTimingPanel({ initialReport, initialSource = 'j100', sou
     setTimeout(() => URL.revokeObjectURL(url), 0)
   }
   const item = report?.cases[caseIndex]
-  const view = item ? timingWindow(item, mode) : null
+  const noRoute = Boolean(item && item.route.elapsed_s === null && item.task_elapsed_s !== null)
+  useEffect(() => {
+    if (noRoute) setMode('task')
+    setRange(noRoute ? 'recorded' : 'budget')
+  }, [item?.id, noRoute])
+  const baseView = item ? timingWindow(item, mode) : null
+  const view = baseView && range === 'recorded' ? { ...baseView, limit: Math.max(1, baseView.elapsed ?? 1) * 1.04 } : baseView
   const detail = view?.spans.find(s => s.id === selected)
   const chartPercent = (wall: number) => view?.origin === null || !view ? 0 : Math.max(0, Math.min(100, (wall - view.origin) / view.limit * 100))
   return <Card className="delivery-timing-panel" id="workbench-delivery-timing" aria-labelledby="delivery-timing-heading">
@@ -84,10 +91,10 @@ export function DeliveryTimingPanel({ initialReport, initialSource = 'j100', sou
     </div>
     {error && <p role="alert" className="delivery-timing-warning">{error}</p>}
     {!report ? <p role="status">{loading ? '正在读取历史耗时报告…' : '暂无报告。可刷新或导入本地摘要。'}</p> : <>
-      <div className="delivery-timing-provenance"><strong>{report.label}</strong><span>{report.historical && report.new_execution === false && report.rescored === false ? '历史仿真导入 · 未新执行或重评分' : '来源边界待确认'}</span></div>
+      <div className="delivery-timing-provenance"><strong>{report.label}</strong><span>{report.historical && report.new_execution === false && report.rescored === false ? '记录导入 · 本页不执行或重评分' : '来源边界待确认'}</span></div>
       {report.warnings.length > 0 && <ul className="delivery-timing-warning">{report.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>}
       <div className="delivery-timing-toolbar"><div role="group" aria-label="选择配送订单">{report.cases.map((c, i) => <button type="button" key={`${c.id}-${i}`} aria-pressed={i === caseIndex} onClick={() => { setCaseIndex(i); setSelected(null); onCaseChange?.(c.task_id) }}>{c.label.replace('order-', '订单 ').toUpperCase()}</button>)}</div>
-        <div role="group" aria-label="时间预算范围"><button type="button" aria-pressed={mode === 'route'} onClick={() => { setMode('route'); setSelected(null) }}>配送路线</button><button type="button" aria-pressed={mode === 'task'} onClick={() => { setMode('task'); setSelected(null) }}>{item?.scope === 'route' ? '路线任务（未装货）' : '完整任务'}</button></div></div>
+        <div role="group" aria-label="时间预算范围"><button type="button" aria-pressed={mode === 'route'} onClick={() => { setMode('route'); setSelected(null) }}>配送路线</button><button type="button" aria-pressed={mode === 'task'} onClick={() => { setMode('task'); setSelected(null) }}>{item?.scope === 'route' ? '路线任务（未装货）' : '完整任务'}</button></div><div role="group" aria-label="时间轴缩放"><button type="button" aria-pressed={range === 'recorded'} onClick={() => setRange('recorded')}>记录窗口</button><button type="button" aria-pressed={range === 'budget'} onClick={() => setRange('budget')}>预算窗口</button></div></div>
       {!item || !view ? <p>当前报告没有可展示案例，请补齐 cases 后重新导入。</p> : <>
         <dl className="delivery-timing-metrics"><div><dt>{mode === 'route' ? '配送路线耗时' : '完整任务耗时'}</dt><dd><span>{seconds(view.elapsed)}</span><small>原预算 {seconds(view.budget, 0)}</small></dd></div>
           <div className={item.route.remaining_s !== null && item.route.remaining_s < 1 ? 'delivery-timing-tight' : ''}><dt>路线预算余量</dt><dd><span>{seconds(item.route.remaining_s)}</span><small>出站完成后起算，包含最终停稳确认</small></dd></div>
@@ -102,10 +109,10 @@ export function DeliveryTimingPanel({ initialReport, initialSource = 'j100', sou
               return <button type="button" key={s.id} className={`delivery-timing-row delivery-timing-${s.layer}`} aria-pressed={s.id === selected} onClick={() => setSelected(s.id)}>
                 <span className="delivery-timing-row-label">{label(s)}<small>{s.layer === 'observed_stage' ? '采样阶段 · 边界有区间' : s.layer === 'native' ? `原生终态 ${s.terminal_status ?? '未知'}` : s.layer === 'budget' ? '汇总区间 · 不与子行相加' : '未归因区间'}</small></span>
                 <span className="delivery-timing-track"><span className="delivery-timing-bar" style={{ left: `${left}%`, width: `${Math.max(.25, right - left)}%` }} /><span className="delivery-timing-duration">{seconds(s.duration_s)}</span>
-                  {view.budget !== null && <span className="delivery-timing-limit" style={{ left: `${view.budget / view.limit * 100}%` }} />}</span>
+                  {view.budget !== null && view.budget <= view.limit && <span className="delivery-timing-limit" style={{ left: `${view.budget / view.limit * 100}%` }} />}</span>
               </button>
             })}
-            <div className="delivery-timing-gap-row"><span>物理采样缺口</span><div>{item.sampling.gaps.filter(g => g.before_wall_s !== null && g.after_wall_s !== null && g.after_wall_s >= view.origin! && g.before_wall_s <= view.origin! + view.limit).map((g, i) => <span key={i} className="delivery-timing-gap-mark" title={`缺 ${g.missing ?? '未知'} 帧`} style={{ left: `${chartPercent(g.before_wall_s!)}%`, width: `${Math.max(.5, chartPercent(g.after_wall_s!) - chartPercent(g.before_wall_s!))}%` }} />)}<span className="delivery-timing-budget-label">虚线：原 {seconds(view.budget, 0)} 预算</span></div></div>
+            <div className="delivery-timing-gap-row"><span>物理采样缺口</span><div>{item.sampling.gaps.filter(g => g.before_wall_s !== null && g.after_wall_s !== null && g.after_wall_s >= view.origin! && g.before_wall_s <= view.origin! + view.limit).map((g, i) => <span key={i} className="delivery-timing-gap-mark" title={`缺 ${g.missing ?? '未知'} 帧`} style={{ left: `${chartPercent(g.before_wall_s!)}%`, width: `${Math.max(.5, chartPercent(g.after_wall_s!) - chartPercent(g.before_wall_s!))}%` }} />)}<span className="delivery-timing-budget-label">{view.budget !== null && view.budget > view.limit ? '窗口外：' : '虚线：'}原 {seconds(view.budget, 0)} 预算</span></div></div>
           </div>
         </div>}
         {detail && <div className="delivery-timing-detail" role="region" aria-label="所选阶段来源"><strong>{label(detail)} · {seconds(detail.duration_s)}</strong><p>{detail.evidence}</p>{onReplayRequest && detail.start_source_s !== null && replayTaskIds.includes(item.task_id) && <Button type="button" size="sm" variant="outline" onClick={() => onReplayRequest(item.task_id, detail.start_source_s!)}>在回放中定位此阶段</Button>}

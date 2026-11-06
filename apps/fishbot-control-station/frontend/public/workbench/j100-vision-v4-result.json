@@ -1,0 +1,54 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "J100 云端视觉补录 · 入站失败",
+  "recorded_at": "2026-11-06",
+  "run_id": "6f65d014-6994-4887-ac1b-aad60d044afe",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "Jackal J100",
+  "sensor": "3D 雷达",
+  "model": "原配置 GraspGen-X＋SO101（本轮未到抓取）",
+  "reset_count": 0,
+  "elapsed_wall_s": 86.38706837199993,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B",
+      "task_id": "cc7f5d25-3698-4b9b-b197-add596407015",
+      "passed": false,
+      "route_seconds": null,
+      "position_error_m": null,
+      "yaw_error_rad": null,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": "入站阶段拒绝过期工位观测；任务约13.16墙秒后失败。未到抓取或载货导航，A单未执行。"
+    }
+  ],
+  "assets": {
+    "replay": "/workbench/j100-vision-v4-replay.json",
+    "timing": "/workbench/j100-vision-v4-timing.json",
+    "video": "/workbench/j100-vision-v4-overview.mp4",
+    "poster": "/workbench/j100-vision-v4-overview.jpg"
+  },
+  "archive_status": "原始证据、场景、源码和展示数据已存Drive，实际下载逐成员读取通过：32,181,867字节、223文件",
+  "warnings": [
+    "实际派发1次、无reset/取消；任务内235物理采样，整会话1289采样。",
+    "5帧渲染各1.9–3.1墙秒、检测约0.04–0.07秒；vision_quality上报源龄0.74–1.14秒。桥事件发布时相对输入晚0.78–1.16秒，这是发布时上界，不是控制器消费回执；实际GL_VENDOR/RENDERER尚待核实。",
+    "录像只有9个实际全景采样帧，按2fps独立播放；不是完整B→A录像或真实时间轴。",
+    "本轮没有放宽时间、碰撞、质量或物理评分，不替代历史K成功。"
+  ],
+  "recordings": [
+    {
+      "label": "历史K · 成功摘要",
+      "url": "/workbench/j100-vision-result.json"
+    },
+    {
+      "label": "v4 · 入站旧帧失败",
+      "url": "/workbench/j100-vision-v4-result.json"
+    },
+    {
+      "label": "v5 · 精停靠后规划超时",
+      "url": "/workbench/j100-vision-v5-result.json"
+    }
+  ],
+  "archive_url": "https://drive.google.com/file/d/1atOL7Ewk7h2Z2gFpZQ7wtvbUWlMk7wPp/view?usp=drivesdk"
+}

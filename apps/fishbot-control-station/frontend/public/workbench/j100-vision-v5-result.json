@@ -1,0 +1,70 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "J100 视觉停靠完成 · 抓取规划超时",
+  "recorded_at": "2026-11-06",
+  "run_id": "df5b255c-b0e4-43be-bf31-241064633eb8",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "Jackal J100",
+  "sensor": "3D 雷达",
+  "model": "GraspGen-X＋SO101（推理未证实）",
+  "reset_count": 0,
+  "elapsed_wall_s": 155.584602604,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B",
+      "task_id": "17baf878-92df-43f1-a8ff-6ef0c2a6d6c3",
+      "passed": false,
+      "route_seconds": null,
+      "position_error_m": null,
+      "yaw_error_rad": null,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": "入站与原生视觉精停靠已完成；接近抓取规划超过原30墙秒预算，整体任务失败，A单未执行。",
+      "component_summary": "停靠分项：Nav2／DockRobot终态均为4；连续1.18源秒停稳，误差≤9.33mm／0.000270rad。\n原停车保护介入0.82源秒；这是辅助停靠结果，不代表纯视觉精度或完整运输成功。"
+    }
+  ],
+  "assets": {
+    "replay": "/workbench/j100-vision-v5-replay.json",
+    "timing": "/workbench/j100-vision-v5-timing.json",
+    "video": "/workbench/j100-vision-v5-overview.mp4",
+    "poster": "/workbench/j100-vision-v5-overview.jpg"
+  },
+  "video_caption": "本任务的实际采样录像经裁剪后按原片4×播放；原片与逐帧时间索引保留在Drive。与上方源时间数据回放独立。",
+  "archive_status": "本轮原始证据正在归档Drive；此前所有失败均独立保留",
+  "warnings": [
+    "这不是完整B→A运输：只派发B一次，未reset/取消，未进入载货导航或卸货。",
+    "692帧AprilTag检测与原生视觉停靠已经发生；这不是GraspGen-X神经推理收据。仅模型服务加载有证据，尚未恢复输入／候选／推理耗时收据。",
+    "实际GL为NVIDIA Corporation／Tesla T4，未安装新驱动。生产渲染中位63.7ms、P95 87.9ms；观测源龄中位0.08、P95 0.12源秒。",
+    "原observer中679条接纳／12条拒绝；末HTTP会话累计960接纳／12拒绝／960转发。统计窗口不同，不混加；转发不是控制器消费回执。",
+    "完整运输最终位置误差未测得，不将停靠9.33mm填成运输终点误差；原整体失败评分保留。"
+  ],
+  "recordings": [
+    {
+      "label": "历史K · 成功摘要",
+      "url": "/workbench/j100-vision-result.json"
+    },
+    {
+      "label": "v4 · 入站旧帧失败",
+      "url": "/workbench/j100-vision-v4-result.json"
+    },
+    {
+      "label": "v5 · 精停靠后规划超时",
+      "url": "/workbench/j100-vision-v5-result.json"
+    }
+  ],
+  "presentation": {
+    "scope": "local lightweight ffmpeg trim/speed only; no simulation re-render",
+    "source_frame_range_inclusive": [
+      61,
+      221
+    ],
+    "original_encoded_fps": 2,
+    "presentation_fps": 8,
+    "speed_relative_to_encoded_original": 4,
+    "input_original_retained": true,
+    "actual_output_frames": 161,
+    "duration_s": 20.125,
+    "output_frame_count_matches_source_selection": true
+  }
+}

@@ -415,3 +415,35 @@ v1失败证据完整归档至Drive `1h5Lrd-BnY1A3M_8mS4yyOGChvoZCNwZw`，9,266,1
 v2原生clock和完整几何预检通过，但owned launch 8.13秒退出，run dfa92391-86fe-4a54-ba06-500ad465170c，0start/0cancel/0reset、physics sample_count=0；B/A均未派发。首错为系统视觉cooperation_station_vision经fishbot_inspection导入PIL失败，后续KeyboardInterrupt/ekf异常是退出连带，不能记成多个根因。64/64输出已回收。默认系统Python实测3.13载入cp312系统NumPy失败；显式3.12/OpenCV4.6/NumPy1.26.4预检通过。GPU实际2×T4，不能把请求单档写成单卡实际资源。
 
 root按明确首错继续最小云依赖修复（python3-pil/scipy）与完整视觉模块导入预检，再执行v3；不修改导航/物理门槛。不是无依据重提，不把两轮零Goal当业务样本。
+
+v2完整失败包已上传Drive并实际下载/逐成员读取：`1QTjhm7zwDxQQqcIa9dDH5VC_WjdKm2Hu`，9,866,978字节、67文件；临时下载副本已删除。后续恢复仍需保留原归档，不能只保留前端摘要。
+
+knowledge_status=updated：已在原Wiki/ROS2 与 FishBot第20节追加“云端视觉：隔离解释器，也恢复完整运行依赖”，补充默认Python别名/ABI、ELF不覆盖Python exec_depend、完整入口与实际渲染分层预检；开发知识入口同步触发词。原页与索引已读回。只记录已证实的环境边界和复用方法，不把未运行的业务计成功；不写CapMesh或Codex记忆。
+
+v3完整入口预检提前发现系统侧缺ROS标准依赖PyYAML，尚未下载模型/构建原生/派任务；仍零业务。不再单模块逐轮重试：按实际使用ROS包的package.xml运行声明及既有rosdep映射，一次恢复系统Python依赖闭包；完整节点import后才执行后续准备。仅恢复原有环境契约，不改变系统全局Python或检测版本。v3证据待统一回收归档，owner=根Codex；v4尚未计提交或成功。
+
+v4真实失败slice已接/results：57展示采样来自235任务窗口physics，保留19缺失序号，两个HTTP采样阶段；图像录像仅9个真实全景帧，2fps独立播放。B/task cc7f5d25-3698-4b9b-b197-add596407015于13.164921墙秒失败，A未执行，run6f65d014-6994-4887-ac1b-aad60d044afe，原评分false保持。旧K摘要默认保留，可选新记录，未冒充旧K完整回放。真实三臂世界FK已在独立查询副本验证：三臂joint anchors误差0，32静态箱体；不修改原归档、不mj_step，不计任务成功。
+
+完整v4＋v3原件、源码基线/前端覆盖和恢复说明已存[Drive成果包](https://drive.google.com/file/d/1atOL7Ewk7h2Z2gFpZQ7wtvbUWlMk7wPp/view?usp=drivesdk)，32,181,867字节；实际远端下载逐成员读完223文件，临时副本已删除。v1/v2归档同样读回，三份重复本地上传包已删除，实际释放29,921,280分配字节。其他工作导致磁盘余量大幅变化，不据此归因本任务清理。
+
+真实v4网页：记录切换/视频metadata加载/源时间播放/阶段跳转均实际操作，desktop与390px截图已观察；7项视觉UI行为检查、零write请求/零未捕获异常。失败短记录默认展开已录时段，540秒原预算单列，原门槛未更改。新GL探针v5已报告一个现成NVIDIA路径并同job恢复v4配置复验，实际GL字符串/分段耗时与新业务结果仍待原报告读回核实。
+
+## 2026-11-06 首批成果页收口与v5真实边界
+
+root已读取GL原报告：默认Mesa/llvmpipe，已有NVIDIA EGL库未注册GLVND；私有vendor JSON指向现成库并选device0后，GL_VENDOR=NVIDIA Corporation、GL_RENDERER=Tesla T4/PCIe/SSE2、版本580.178.04，无驱动安装。相同v4 R0、1280×960 RGB＋640×480深度的两次稳态查询，默认579.8/619.4ms，NVIDIA15.76/14.61ms；forward均约0.8ms。不把离线3帧当完整任务成功。
+
+v5实际生产692帧检测全tag_detected，render median63.7/P95 87.9/max138ms，captureAge median.172/P95.252/max.484墙秒、sourceAge median.08/P95.12/max.14源秒。原observer Admission679接纳/12拒绝，末HTTP会话累计960接纳/12拒绝/960转发，统计窗口分列；转发不是控制器消费回执。这些检测耗时属于AprilTag，不是GraspGen-X。
+
+新run df5b255c-b0e4-43be-bf31-241064633eb8，B/task17baf878-92df-43f1-a8ff-6ef0c2a6d6c3，89.186926墙秒失败，A未执行，1start/0reset/0cancel。root独立重读原observer：Nav UUID18a8751274ea4a94be2240cde2b8e0d7、Dock UUID89a2ee0200b341208260f6cbf1e92e24均2→4；30.82–32.00源秒58条真实physics，max gap.04s、XY9.32859mm、yaw.000269575rad、速度约2.13e-8m/s。guard原记录介入.82源秒，不能称纯视觉精度。整体原评分false保留，停靠误差不填作运输终点误差。
+
+随后抓取接近规划超过原30墙秒预算。服务checkpoint加载和监听有证据，但尚未取得可核验的RGB-D输入、候选与神经推理时延收据；不从“正在提取”事件推断推理完成，不推断算法根因。未再派业务或调阈值。v5 owned launch/API/模型服务均已关闭，survivors=[]；子Agent的日志/下载器均已退出，无.part。
+
+/results默认打开最新v5记录，保留历史K摘要与v4旧帧失败可独立切换；479展示采样来自1864任务窗口physics，无插值，时间图4个原HTTP采样阶段，回放详情另列两个独立观测的Native UUID终态。视频从原242帧/121秒采样片按任务墙钟选61–221帧，原片4×，派生片161帧/20.125秒；原片/逐帧索引保留。仅本机ffmpeg轻量裁剪，不重渲染物理。桌面/390px真实新记录与全部8项UI行为检查通过，零write/零未捕获异常。
+
+v5必要证据89文件24,276,584字节已完整回收；可选逐帧预览/全部安装日志未穷尽，Kaggle私有version5仍保留全输出。原私有GLVND JSON未输出；原选用路径/库目录/生成源码和明确标记的派生恢复示例已保留，不冒充原件。新归档脚本的保存JSON及gzip CRC读回分支是v5结束后补丁，本轮未声称已用该分支。最终Drive归档、清理及Git读回由root继续完成。
+
+knowledge_status=updated：原Wiki第20节“云端视觉：隔离解释器，也恢复完整运行依赖”补EGL≠GPU、实际GL字符串、生产分段计时、私有GLVND复用；入口同步GL/llvmpipe触发词，原文与索引已读回。Vault其他变动未整库提交，CapMesh和Codex记忆未写。
+
+后续owner=根Codex：先在v5已归档现场证明捕获/模型请求/IK与回执等待链路，定位原Approach30秒边界，再做一次原配置完整B→A。完整成功运输录像本轮未补齐；不把首批内容交付标成整个F1或全计划完成。CY候选文档/目录仍保留待审，未随F1发布。
+
+最终相关检查：6文件27项前端测试、15项Python导入/投影测试通过，TypeScript、生产构建与相关ESLint零警告通过；旧原文案断言已随“本页不执行”说明修正，未把早期失败输出算通过。实际v4/v5与UI-only fixture范围分开，8项浏览器行为检查全部通过；无新全仓长测或完整运输成功声明。

@@ -5,15 +5,15 @@ const text = (v: unknown, fallback = '') => typeof v === 'string' && v.trim() ? 
 const array = (v: unknown): unknown[] => Array.isArray(v) ? v : []
 
 export interface VisionOrder {
-  id: string; label: string; taskId: string; passed: boolean | null
+  id: string; label: string; taskId: string; passed: boolean | null; failureReason: string; componentSummary: string
   routeSeconds: number | null; positionError: number | null; yawError: number | null
   points: number[]; candidates: number[]
 }
 export interface VisionResult {
   source: Record<string, unknown>; title: string; recordedAt: string; runId: string; evidenceKind: string
   vehicle: string; sensor: string; model: string; resets: number | null; elapsed: number | null
-  orders: VisionOrder[]; timingUrl: string | null; replayUrl: string | null; videoUrl: string | null
-  recordings: { label: string; url: string }[]
+  orders: VisionOrder[]; timingUrl: string | null; replayUrl: string | null; videoUrl: string | null; posterUrl: string | null
+  videoCaption: string; preferredUrl: string | null; recordings: { label: string; url: string }[]
   availabilityNote: string; archiveStatus: string; archiveUrl: string | null; warnings: string[]
 }
 
@@ -39,7 +39,7 @@ export function parseVisionResult(input: unknown): VisionResult {
     const row = object(entry)
     if (!Object.keys(row).length) { warnings.push(`跳过第${i + 1}条无法识别的订单。`); return [] }
     return [{ id: text(row.id, `order-${i}`), label: text(row.label, `订单 ${i + 1}`), taskId: text(row.task_id),
-      passed: typeof row.passed === 'boolean' ? row.passed : null,
+      passed: typeof row.passed === 'boolean' ? row.passed : null, failureReason: text(row.failure_reason), componentSummary: text(row.component_summary),
       routeSeconds: number(row.route_seconds), positionError: number(row.position_error_m), yawError: number(row.yaw_error_rad),
       points: array(row.visible_points).flatMap(v => number(v) === null ? [] : [v as number]),
       candidates: array(row.selected_candidates).flatMap(v => number(v) === null ? [] : [v as number]) }]
@@ -48,8 +48,8 @@ export function parseVisionResult(input: unknown): VisionResult {
     runId: text(source.run_id, '运行身份未提供'), evidenceKind: text(source.evidence_kind, '未确认来源'),
     vehicle: text(source.vehicle, 'J100'), sensor: text(source.sensor, '3D 雷达'), model: text(source.model, 'GraspGen-X'),
     resets: number(source.reset_count), elapsed: number(source.elapsed_wall_s), orders,
-    timingUrl: asset(assets.timing, warnings), replayUrl: asset(assets.replay, warnings), videoUrl: asset(assets.video, warnings),
-    recordings: array(source.recordings).flatMap(entry => { const row = object(entry), url = asset(row.url, warnings); return url ? [{ label: text(row.label, '配送记录'), url }] : [] }),
+    timingUrl: asset(assets.timing, warnings), replayUrl: asset(assets.replay, warnings), videoUrl: asset(assets.video, warnings), posterUrl: asset(assets.poster, warnings),
+    videoCaption: text(source.video_caption), preferredUrl: asset(source.preferred_recording, warnings), recordings: array(source.recordings).flatMap(entry => { const row = object(entry), url = asset(row.url, warnings); return url ? [{ label: text(row.label, '配送记录'), url }] : [] }),
     availabilityNote: text(source.availability_note), archiveStatus: text(source.archive_status, '归档状态未确认'), archiveUrl: driveArchive(source.archive_url), warnings }
 }
 

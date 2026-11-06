@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, CheckCircle2, FileDown, Pause, Play, RefreshCw } from 'lucide-react'
+import { ArrowDown, CheckCircle2, CircleHelp, CircleX, FileDown, Pause, Play, RefreshCw } from 'lucide-react'
 import { parseDeliveryComparison, runDuration, type ReplayReport } from '@/lib/delivery-comparison'
 import { parseDeliveryTiming, type TimingReport } from '@/lib/delivery-timing'
 import { parseVisionResult, readVisionResult, type VisionResult } from '@/lib/vision-delivery'
@@ -17,14 +17,19 @@ export function VisionDeliveryResult({ initialResult }: { initialResult?: unknow
   const [messages, setMessages] = useState<string[]>([]), [loading, setLoading] = useState(initialResult === undefined)
   const [orderIndex, setOrderIndex] = useState(0), [elapsed, setElapsed] = useState(0), [playing, setPlaying] = useState(false), [speed, setSpeed] = useState(8)
   const request = useRef<AbortController | null>(null), generation = useRef(0)
-  async function load(url = sourceUrl) {
+  async function load(url = sourceUrl, preferLatest = false) {
     const current = ++generation.current; request.current?.abort()
     const controller = new AbortController(); request.current = controller
     setLoading(true); setPlaying(false); setVideoError(false); setMessages([])
     try {
-      const next = await readVisionResult(controller.signal, url)
+      let next = await readVisionResult(controller.signal, url), resolvedUrl = url
+      const notes: string[] = []
+      if (preferLatest && next.preferredUrl && next.preferredUrl !== url) {
+        try { resolvedUrl = next.preferredUrl; next = await readVisionResult(controller.signal, resolvedUrl) }
+        catch { resolvedUrl = url; notes.push('最新补录暂不可读取，继续展示历史摘要。') }
+      }
       if (current !== generation.current) return
-      setResult(next); setSourceUrl(url); setReplay(null); setTiming(null); setOrderIndex(0); setElapsed(0)
+      setResult(next); setSourceUrl(resolvedUrl); setReplay(null); setTiming(null); setOrderIndex(0); setElapsed(0)
       const entries = await Promise.allSettled([next.replayUrl, next.timingUrl].map(async url => {
         if (!url) return null
         const response = await fetch(url, { method: 'GET', cache: 'no-store', signal: controller.signal })
@@ -34,16 +39,18 @@ export function VisionDeliveryResult({ initialResult }: { initialResult?: unknow
       if (current !== generation.current) return
       if (entries[0].status === 'fulfilled' && entries[0].value) setReplay(parseDeliveryComparison(entries[0].value))
       if (entries[1].status === 'fulfilled' && entries[1].value) setTiming(parseDeliveryTiming(entries[1].value))
-      setMessages(entries.flatMap(item => item.status === 'rejected' && !controller.signal.aborted ? [item.reason instanceof Error ? item.reason.message : '一项素材读取失败。'] : []))
+      setMessages([...notes, ...entries.flatMap(item => item.status === 'rejected' && !controller.signal.aborted ? [item.reason instanceof Error ? item.reason.message : '一项素材读取失败。'] : [])])
     } catch (error) {
       if (!controller.signal.aborted && current === generation.current) setMessages([error instanceof Error ? error.message : '成果读取失败，已有内容保留。'])
     } finally { if (current === generation.current) setLoading(false) }
   }
   useEffect(() => {
-    if (initialResult === undefined) void load()
+    if (initialResult === undefined) void load(sourceUrl, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Invalidate the latest request, not the mount's earlier generation.
     return () => { generation.current++; request.current?.abort() }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const order = result?.orders[orderIndex]
+  const VerdictIcon = order?.passed === true ? CheckCircle2 : order?.passed === false ? CircleX : CircleHelp
   const run = replay?.runs.find(item => item.taskId === order?.taskId)
   const anchor = run?.anchors.recording !== undefined ? 'recording' : 'route'
   const duration = run ? runDuration(run, anchor) : 0
@@ -83,12 +90,12 @@ export function VisionDeliveryResult({ initialResult }: { initialResult?: unknow
                 <output>{elapsed.toFixed(1)} / {duration.toFixed(1)} s</output><label>速度<select aria-label="视觉回放速度" value={speed} onChange={event => setSpeed(Number(event.target.value))}>{[1, 8, 32].map(value => <option key={value} value={value}>{value}×</option>)}</select></label></div>
               <p className="vision-result-caption">{replay.warnings.length ? '当前为已导入的展示采样，来源边界见下方告警。' : '车辆、货物与关节来自保存的实际采样。'}空档保持空白，播放不启动仿真。</p>{replay.warnings.length > 0 && <div className="vision-result-notice" role="status">{replay.warnings.map((warning, i) => <p key={i}>{warning}</p>)}</div>}
             </> : <div className="vision-result-unavailable"><h3>位置回放尚未载入</h3><p>{result.availabilityNote || '原记录恢复并导出轻量回放后，在这里查看实际轨迹。'}</p><p>已验收的结果继续展示；不以其他回合或插值轨迹代替本回合。</p></div>}
-            {result.videoUrl && <><video controls preload="metadata" src={result.videoUrl} aria-label="视觉配送场景采样录像" onError={() => setVideoError(true)} /><p className="vision-result-caption">场景采样录像独立播放；阶段跳转定位上方数据回放，不定位录像。</p></>}{videoError && <p className="vision-result-notice" role="status">录像加载失败；成果摘要与可用的数据回放继续保留。</p>}
+            {result.videoUrl && <><video controls preload="metadata" poster={result.posterUrl ?? undefined} src={result.videoUrl} aria-label="视觉配送场景采样录像" onError={() => setVideoError(true)} /><p className="vision-result-caption">{result.videoCaption || '场景采样录像独立播放；阶段跳转定位上方数据回放，不定位录像。'}</p></>}{videoError && <p className="vision-result-notice" role="status">录像加载失败；成果摘要与可用的数据回放继续保留。</p>}
           </div>
           <aside className="vision-result-ledger" aria-label="视觉配送订单成果">
-            <h3>两件货物，同一世界</h3><p>原任务与独立物理评分，分别对应每件货物。</p>
+            <h3>{result.orders.length > 1 ? '两件货物，同一世界' : '实际派发的订单'}</h3><p>原任务与独立物理评分，分别对应每件货物。</p>
             <div role="group" aria-label="选择视觉配送订单">{result.orders.map((item, i) => <button type="button" key={item.id} aria-pressed={orderIndex === i} onClick={() => chooseTask(item.taskId)}>{item.label}</button>)}</div>
-            {order && <><div className={`vision-result-verdict ${order.passed === true ? 'is-passed' : ''}`}><CheckCircle2 size={18} aria-hidden="true" />{order.passed === true ? '独立业务评分通过' : order.passed === false ? '原评分未通过' : '评分待确认'}</div>
+            {order && <><div className={`vision-result-verdict ${order.passed === true ? 'is-passed' : ''}`}><VerdictIcon size={18} aria-hidden="true" />{order.passed === true ? '独立业务评分通过' : order.passed === false ? '原评分未通过' : '评分待确认'}</div>{order.failureReason && <p className="vision-result-notice">{order.failureReason}</p>}{order.componentSummary && <p className="vision-result-component"><strong>已证实的分项</strong><br />{order.componentSummary}</p>}
               <dl><div><dt>配送路线</dt><dd>{metric(order.routeSeconds, 's')}</dd></div><div><dt>最终位置误差</dt><dd>{metric(order.positionError, 'cm', 100)}</dd></div><div><dt>最终偏航误差</dt><dd>{metric(order.yawError, 'rad')}</dd></div></dl>
               <p className="vision-result-observation">装货 / 卸货可见点：<strong>{order.points.length ? order.points.join(' / ') : '未提供'}</strong><br />所选模型候选：{order.candidates.length ? order.candidates.join(' / ') : '未提供'}</p></>}
             <p>{result.resets === null ? '重置次数未提供' : `${result.resets} 次世界重置`}；整轮 {metric(result.elapsed, 's')}。</p>

@@ -414,3 +414,9 @@ MuJoCo3.3.7 Renderer 已返回 float32 米制 optical Z。原生2m平面中心�
 Kaggle原私有基础数据集仍可读取，约220.66MiB；旧入口是CPU ideal，不能冒充当前视觉。当前视觉环境/权重需恢复。账号隔离须同时指定KAGGLE_CONFIG_DIR与对应KAGGLE_API_TOKEN文件路径，否则新版SDK可能读取默认token。新补录保留原门槛、配置和成功/失败，不能回填旧K为新运行。
 
 Drive目标已由用户选定，沿现有ROS2文档账号。持久恢复资料先存~/.local/share/fishbot/results-f1-20261106/，上传并读回后再移除可再生大副本；网页只保留轻量公开展示数据。
+
+### v4：准备通过不等于实际观测能及时消费
+
+三类入口import、静态EGL RGB-D和原native-clock均通过后，实际B在car_to_dock失败；不是新一轮环境零Goal。5条vision_quality均camera_capture_stale，render_duration为1.906–3.129墙秒，检测0.038–0.072秒，capture_age1.981–3.234墙秒；主要开销在原渲染链路。独立Clock/physics与bridge事件headerClock基本一致，不能认定为桥Clock落后造成future；事件发布时相对原输入晚0.78–1.16源秒，是发布时上界而非控制器消费回执。GL后端=egl及退出0均不能证明硬件渲染，须取实际GL_VENDOR/RENDERER并按生产2×RGB＋原深度分段计时。
+
+本轮不以换分辨率、减少超采样或放宽时龄规避本问题；GL小探针只选择已安装NVIDIA库/设备。若证据充分再同job原配置复验，不另造仿真平台。

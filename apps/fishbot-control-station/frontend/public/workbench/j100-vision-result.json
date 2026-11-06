@@ -68,5 +68,20 @@
     "raw_material_available": false,
     "new_execution": false
   },
-  "archive_url": "https://drive.google.com/file/d/1SPHKQqheI0NQXC4T4c1lLN0h7aYIki2J/view?usp=drivesdk"
+  "archive_url": "https://drive.google.com/file/d/1SPHKQqheI0NQXC4T4c1lLN0h7aYIki2J/view?usp=drivesdk",
+  "recordings": [
+    {
+      "label": "历史K · 成功摘要",
+      "url": "/workbench/j100-vision-result.json"
+    },
+    {
+      "label": "v4 · 入站旧帧失败",
+      "url": "/workbench/j100-vision-v4-result.json"
+    },
+    {
+      "label": "v5 · 精停靠后规划超时",
+      "url": "/workbench/j100-vision-v5-result.json"
+    }
+  ],
+  "preferred_recording": "/workbench/j100-vision-v5-result.json"
 }

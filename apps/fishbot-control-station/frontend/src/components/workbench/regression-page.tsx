@@ -31,7 +31,7 @@ export function ReplayViewport({ report, run, other, elapsed, anchor, color, gho
   const frame = replayFrame(run, elapsed, anchor), second = other ? replayFrame(other, elapsed, anchor) : null
   const [x0, y0, x1, y1] = report.bounds
   return <section className='regression-viewport' aria-label={`${run.label} 回放`}>
-    <header><div><strong style={{ color }}>{run.label}</strong><small>{run.scope === 'route' ? '载货路线切片' : run.scope === 'transport' ? '完整运输' : '范围未确认'} · {groupName(run.group)}</small></div>
+    <header><div><strong style={{ color }}>{run.label}</strong><small>{run.scope === 'route' ? '载货路线切片' : run.scope === 'transport' ? '运输任务记录' : '范围未确认'} · {groupName(run.group)}</small></div>
       <span className={`regression-verdict regression-verdict-${run.passed === true ? 'pass' : run.passed === false ? 'fail' : 'unknown'}`}>{run.passed === true ? '原独立评分通过' : run.passed === false ? '原独立评分未通过' : '评分未知'}</span></header>
     <svg viewBox={`${x0} ${-y1} ${x1 - x0} ${y1 - y0}`} role='img' aria-label={`${run.label} 原世界坐标轨迹`}>
       <rect x={x0} y={-y1} width={x1 - x0} height={y1 - y0} fill='#f7f9fc' />

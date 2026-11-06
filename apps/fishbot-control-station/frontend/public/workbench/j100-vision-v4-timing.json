@@ -1,0 +1,442 @@
+{
+  "schema": "fishbot.delivery-timing.v1",
+  "scope": "historical_simulation_import",
+  "label": "J100 云端视觉补录 · 入站失败（A未执行）",
+  "new_execution": false,
+  "rescored": false,
+  "limits": [
+    "Stage boundaries are sampled HTTP intervals, not exact event timestamps.",
+    "Wall receipt intervals and source time stay separate; route elapsed uses the original monotonic receipt.",
+    "Native terminal status / forwarding are not controller-consumption acknowledgements.",
+    "Historical simulation results do not establish real hardware or sim-to-real success."
+  ],
+  "source_run_id": "6f65d014-6994-4887-ac1b-aad60d044afe",
+  "original_run_passed": false,
+  "warnings": [
+    "这是2026-11-06的独立补录失败切片，不是2026-10-31历史K的原记录。"
+  ],
+  "cases": [
+    {
+      "start_wall_s": 1793934990.3197832,
+      "end_wall_s": 1793935003.4336138,
+      "task_budget_s": 540.0,
+      "task_elapsed_s": 13.164921068000012,
+      "route": {
+        "start_wall_s": null,
+        "end_wall_s": null,
+        "elapsed_s": null,
+        "budget_s": null,
+        "remaining_s": null,
+        "clock": "unknown",
+        "boundary": "unknown",
+        "passed": null
+      },
+      "physical": {
+        "final_position_error_m": null,
+        "final_yaw_error_rad": null,
+        "continuous_final_stop_source_s": 0.0
+      },
+      "sampling": {
+        "records": 2790,
+        "physics_records": 236,
+        "task_physics_records": 235,
+        "malformed_records": 0,
+        "foreign_episode_records": 0,
+        "nonadvancing_records": 0,
+        "gaps": [
+          {
+            "missing": 5,
+            "before_source_s": 19.979999999999805,
+            "after_source_s": 20.09999999999974,
+            "before_wall_s": 1793934990.0707903,
+            "after_wall_s": 1793934990.4158165,
+            "stage_before": "unknown",
+            "stage_after": "unknown",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 25
+          },
+          {
+            "missing": 1,
+            "before_source_s": 20.159999999999705,
+            "after_source_s": 20.199999999999683,
+            "before_wall_s": 1793934990.6719823,
+            "after_wall_s": 1793934990.7231934,
+            "stage_before": "unknown",
+            "stage_after": "unknown",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 59
+          },
+          {
+            "missing": 1,
+            "before_source_s": 20.399999999999572,
+            "after_source_s": 20.43999999999955,
+            "before_wall_s": 1793934991.3200388,
+            "after_wall_s": 1793934991.3860078,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": false,
+            "hold_after": false,
+            "line": 137
+          },
+          {
+            "missing": 1,
+            "before_source_s": 20.759999999999373,
+            "after_source_s": 20.79999999999935,
+            "before_wall_s": 1793934992.5905137,
+            "after_wall_s": 1793934992.6293325,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": false,
+            "hold_after": false,
+            "line": 304
+          },
+          {
+            "missing": 1,
+            "before_source_s": 21.419999999999007,
+            "after_source_s": 21.459999999998985,
+            "before_wall_s": 1793934994.6135926,
+            "after_wall_s": 1793934994.66296,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": false,
+            "hold_after": false,
+            "line": 924
+          },
+          {
+            "missing": 1,
+            "before_source_s": 22.799999999998242,
+            "after_source_s": 22.83999999999822,
+            "before_wall_s": 1793934998.2163491,
+            "after_wall_s": 1793934998.3389206,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 1883
+          },
+          {
+            "missing": 3,
+            "before_source_s": 22.83999999999822,
+            "after_source_s": 22.919999999998176,
+            "before_wall_s": 1793934998.3389206,
+            "after_wall_s": 1793934998.5085235,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 1893
+          },
+          {
+            "missing": 1,
+            "before_source_s": 23.279999999997976,
+            "after_source_s": 23.319999999997954,
+            "before_wall_s": 1793934999.2386668,
+            "after_wall_s": 1793934999.2934706,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 2074
+          },
+          {
+            "missing": 1,
+            "before_source_s": 23.339999999997943,
+            "after_source_s": 23.37999999999792,
+            "before_wall_s": 1793934999.3397691,
+            "after_wall_s": 1793934999.3861468,
+            "stage_before": "car_to_dock",
+            "stage_after": "car_to_dock",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 2089
+          },
+          {
+            "missing": 1,
+            "before_source_s": 23.619999999997788,
+            "after_source_s": 23.659999999997765,
+            "before_wall_s": 1793934999.9544318,
+            "after_wall_s": 1793935000.0211654,
+            "stage_before": "failed",
+            "stage_after": "failed",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 2213
+          },
+          {
+            "missing": 1,
+            "before_source_s": 24.059999999997544,
+            "after_source_s": 24.09999999999752,
+            "before_wall_s": 1793935001.1457863,
+            "after_wall_s": 1793935001.199323,
+            "stage_before": "failed",
+            "stage_after": "failed",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 2396
+          },
+          {
+            "missing": 1,
+            "before_source_s": 24.1399999999975,
+            "after_source_s": 24.179999999997477,
+            "before_wall_s": 1793935001.3076015,
+            "after_wall_s": 1793935001.3562312,
+            "stage_before": "failed",
+            "stage_after": "failed",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 2425
+          },
+          {
+            "missing": 1,
+            "before_source_s": 24.539999999997278,
+            "after_source_s": 24.579999999997256,
+            "before_wall_s": 1793935002.195037,
+            "after_wall_s": 1793935002.239551,
+            "stage_before": "failed",
+            "stage_after": "failed",
+            "hold_before": true,
+            "hold_after": true,
+            "line": 2584
+          }
+        ],
+        "expected_source_period_s": 0.02,
+        "missing_samples": 19
+      },
+      "guard": [
+        {
+          "tripped_observed_contiguous_source_duration_s": 0.0,
+          "plant_assistance_observed": false,
+          "pure_vision_precision_claimed": false
+        }
+      ],
+      "unavailable": [
+        "Nav2 planner CPU time",
+        "controller compute time / consumption acknowledgement",
+        "exact HTTP stage transition time"
+      ],
+      "warnings": [
+        "Named active-arm binding or measured joints unavailable in 3 display samples; no primary-arm fallback"
+      ],
+      "import_status": "partial",
+      "evidence_refs": [
+        "result.json#orders/0",
+        "order-1/markers.json",
+        "order-1/observer/observer.jsonl.gz"
+      ],
+      "trajectory": {
+        "stream_ref": "order-1-trajectory-10hz.jsonl",
+        "sample_count": 57,
+        "byte_count": 32471,
+        "policy": "first sample per 100ms source bin; retain break samples; no interpolation",
+        "clock": "source",
+        "frame": "world",
+        "units": "m / rad",
+        "score_input": false,
+        "sequence_start": 1004.0,
+        "sequence_end": 1252.0
+      },
+      "scope": "transport",
+      "full_transport_acceptance_claimed": true,
+      "id": "6f65d014-6994-4887-ac1b-aad60d044afe:order-b",
+      "label": "order-b",
+      "source_run_id": "6f65d014-6994-4887-ac1b-aad60d044afe",
+      "task_id": "cc7f5d25-3698-4b9b-b197-add596407015",
+      "episode_id": "1a522934-e032-4cc8-84a5-ca82b757123d",
+      "vehicle": "jackal_j100",
+      "sensor": "lidar3d",
+      "scene_id": "f1-j100-wide-continuous-ba",
+      "observation_mode": "vision",
+      "original_verdict": {
+        "task_verdict": "failed",
+        "original_score_passed": false,
+        "original_k_passed": false
+      },
+      "spans": [
+        {
+          "id": "stage-0",
+          "label": "car_to_dock",
+          "layer": "observed_stage",
+          "start_wall_s": 1793934991.337233,
+          "end_wall_s": 1793934999.7844574,
+          "duration_s": 8.447224378585815,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            null,
+            1793934991.337233
+          ],
+          "start_source_s": 20.399999999999572,
+          "end_source_s": 23.539999999997832,
+          "end_boundary_wall_s": [
+            1793934999.2136683,
+            1793934999.7844574
+          ],
+          "start_monotonic_s": 874.501131883,
+          "end_monotonic_s": 882.94835597,
+          "start_ref": "observer.jsonl:129",
+          "end_ref": "observer.jsonl:2183",
+          "evidence": "http_state.task.stage; sampled, not exact transition"
+        },
+        {
+          "id": "stage-1",
+          "label": "failed",
+          "layer": "observed_stage",
+          "start_wall_s": 1793934999.7844574,
+          "end_wall_s": 1793935003.3944967,
+          "duration_s": 3.610039234161377,
+          "clock": "observer_wall_receipt",
+          "parent_id": null,
+          "start_boundary_wall_s": [
+            1793934999.2136683,
+            1793934999.7844574
+          ],
+          "start_source_s": 23.539999999997832,
+          "end_source_s": null,
+          "end_boundary_wall_s": [
+            1793935003.3944967,
+            null
+          ],
+          "start_monotonic_s": 882.94835597,
+          "end_monotonic_s": 886.558395429,
+          "start_ref": "observer.jsonl:2183",
+          "end_ref": null,
+          "evidence": "http_state.task.stage; sampled, not exact transition",
+          "right_censored": true
+        }
+      ]
+    }
+  ],
+  "loop_diagnostics": {
+    "scope": "whole_world_session; not attributed to a Nav2 goal",
+    "stages": {
+      "spin_once": {
+        "count": 0.0,
+        "total_s": 0.0,
+        "max_s": 0.0,
+        "slow_count": 0.0
+      },
+      "command_apply": {
+        "count": 13625.0,
+        "total_s": 0.3176326270008758,
+        "max_s": 0.08219819300006748,
+        "slow_count": 0.0
+      },
+      "mj_step": {
+        "count": 13625.0,
+        "total_s": 40.482052577996,
+        "max_s": 2.06663206799999,
+        "slow_count": 1.0
+      },
+      "publish": {
+        "count": 1362.0,
+        "total_s": 30.41126151600156,
+        "max_s": 1.9131057620001002,
+        "slow_count": 1.0
+      },
+      "snapshot_refresh": {
+        "count": 1362.0,
+        "total_s": 2.394135092000056,
+        "max_s": 0.015567343000043365,
+        "slow_count": 0.0
+      },
+      "clock_publish": {
+        "count": 1362.0,
+        "total_s": 2.231881049000208,
+        "max_s": 0.01732593799999904,
+        "slow_count": 0.0
+      },
+      "joint_publish": {
+        "count": 1362.0,
+        "total_s": 0.2519107539982315,
+        "max_s": 0.007840194999971573,
+        "slow_count": 0.0
+      },
+      "odom_publish": {
+        "count": 1362.0,
+        "total_s": 0.44810772700043344,
+        "max_s": 0.012672659000031672,
+        "slow_count": 0.0
+      },
+      "tf_publish": {
+        "count": 0.0,
+        "total_s": 0.0,
+        "max_s": 0.0,
+        "slow_count": 0.0
+      },
+      "truth_publish": {
+        "count": 1362.0,
+        "total_s": 0.3181479090000039,
+        "max_s": 0.008115603999954146,
+        "slow_count": 0.0
+      },
+      "cargo_publish": {
+        "count": 4086.0,
+        "total_s": 0.5072402199947419,
+        "max_s": 0.01707626900008563,
+        "slow_count": 0.0
+      },
+      "imu_publish": {
+        "count": 1362.0,
+        "total_s": 0.36798998500159996,
+        "max_s": 0.012228339999978743,
+        "slow_count": 0.0
+      },
+      "state_publish": {
+        "count": 1362.0,
+        "total_s": 1.9823378369982265,
+        "max_s": 0.012488916999927824,
+        "slow_count": 0.0
+      },
+      "record_write": {
+        "count": 0.0,
+        "total_s": 0.0,
+        "max_s": 0.0,
+        "slow_count": 0.0
+      },
+      "record_flush": {
+        "count": 0.0,
+        "total_s": 0.0,
+        "max_s": 0.0,
+        "slow_count": 0.0
+      },
+      "scan": {
+        "count": 272.0,
+        "total_s": 0.955450639998844,
+        "max_s": 0.021323988000062855,
+        "slow_count": 0.0
+      },
+      "scan_publish": {
+        "count": 272.0,
+        "total_s": 0.2556616990011662,
+        "max_s": 0.006895691999943665,
+        "slow_count": 0.0
+      },
+      "beacon_publish": {
+        "count": 0.0,
+        "total_s": 0.0,
+        "max_s": 0.0,
+        "slow_count": 0.0
+      },
+      "frame_offer": {
+        "count": 1362.0,
+        "total_s": 0.08505605599918908,
+        "max_s": 0.02055769200001123,
+        "slow_count": 0.0
+      },
+      "camera_offer": {
+        "count": 1362.0,
+        "total_s": 0.40158794299929923,
+        "max_s": 0.011659098999984963,
+        "slow_count": 0.0
+      },
+      "lidar_offer": {
+        "count": 272.0,
+        "total_s": 0.1432777350003107,
+        "max_s": 0.013340485999947305,
+        "slow_count": 0.0
+      }
+    }
+  }
+}
