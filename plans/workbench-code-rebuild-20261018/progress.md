@@ -672,3 +672,9 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 - 既存station-execution.cjs为SO101持物接续resume/cancel QA扩展，已读diff、保留；本轮不以无人机测试替代其真实持物验收。保留未提交，owner=根Codex后续SO101范围，最短入口STATION_QA_CARRY_ACTION=resume/cancel与原station-carry-m2.json。
 - 知识收尾already_covered：沿用Wiki/ROS2与FishBot§20的动作、交接、物理结果分列；本轮接线发现留项目，不更新memory。
 - 最终读回：5186默认CERLAB、限高/速度配置标签和禁用项、历史选中25a1b511、功能/落地/动态安全分列文案、本次轨迹链接及SO101只读页面均通过，零任务写请求。常用端口原生回放复验通过；隔离5187释放，保留5186服务。最终构建2警告均为webpack资产/入口体积建议。
+
+## 2026-11-06 — Station既有Carry QA遗留收口
+
+根逐段核对station-execution.cjs的既有未提交Carry扩展，保留为显式STATION_QA_CARRY_ACTION=resume/cancel入口。未设置该环境变量的原默认流程，本轮真实新正常＋取消两回合已经通过；语法检查通过。扩展只影响QA，不修改任务运行时。
+
+两个Carry分支本轮没有实际执行，不能记M2持物接续通过。保留最短入口：STATION_DOCUMENT指向原station-carry-m2.json，再显式选择resume/cancel；owner=根Codex后续Carry验收。它不作为A2回放的强前序，不据此新增物理任务。原无响应只查原ID、不重复POST与物理成功判据保持。
