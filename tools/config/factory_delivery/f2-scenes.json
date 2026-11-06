@@ -58,13 +58,14 @@
       "label": "\u8f66\u95f4\u7ebf\u8fb9",
       "scene_profile": "tools/config/cooperation_profiles/robot_base_mecanum-lidar3d-transport.json",
       "arena_xml": "tools/config/factory_delivery/f2-workshop-line-arena.xml",
-      "factory_config": "tools/config/factory_delivery/f2-workshop-line.json",
-      "continuous_delivery": "tools/config/factory_delivery/continuous-ba-entities.json",
+      "factory_config": "tools/config/factory_delivery/f2-workshop-line-coaxial.json",
+      "continuous_delivery": "tools/config/factory_delivery/f2-workshop-line-coaxial-entities.json",
       "continuous_deliveries": "tools/config/factory_delivery/continuous-ba-orders.json",
       "observation": "ideal",
       "prepare_flags": [
         "--queued-ros-dispatch",
-        "--terminal-stop-heartbeat"
+        "--terminal-stop-heartbeat",
+        "--staging-reversing"
       ],
       "spawn": [
         -0.9,
@@ -86,18 +87,19 @@
         ],
         [
           0.0,
-          -2.0
+          -1.64
         ],
         [
           0.7,
-          -2.0
+          -1.64
         ]
       ],
       "assumptions": [
         "Machine cells are static solid collision boxes, not articulated manufacturing equipment",
         "Mecanum physics is original four-wheel/roller model",
         "Ideal station input is explicit and is not visual control",
-        "Initial car is in a declared empty pickup waiting bay; this does not validate remote unloaded ingress from line A."
+        "Initial car is in a declared empty pickup waiting bay; this does not validate remote unloaded ingress from line A.",
+        "Previous y=-2 station run 67252549 failed original 360s budget during final-yaw RPP collision; coaxial y=-1.64 plus native reversing staging is an unaccepted candidate."
       ]
     }
   ]

@@ -76,6 +76,22 @@ class F2SceneProfiles(unittest.TestCase):
         # [0,-2] overlaps unload_line_a__collision_base_1 in the actual v2
         # warehouse world. Changing the native check or body is not a fix.
 
+    def test_workshop_coaxial_candidate_preserves_relative_handover_and_budgets(self):
+        workshop = self.scenes()[1]
+        entities = load(workshop['continuous_delivery'])
+        original = load('tools/config/factory_delivery/continuous-ba-entities.json')
+        self.assertIn('--staging-reversing', workshop['prepare_flags'])
+        vehicle = vehicle_profile(load(workshop['scene_profile']))
+        lane_y = -2. + vehicle['dock_offset_m'][1]
+        for candidate, source in zip(entities['unload_stations'], original['unload_stations']):
+            self.assertAlmostEqual(candidate['delivery_pose']['y'], lane_y)
+            normalized = dict(candidate, delivery_pose=dict(candidate['delivery_pose'], y=source['delivery_pose']['y']))
+            self.assertEqual(normalized, source)
+        self.assertEqual(entities['budgets_wall_s'], original['budgets_wall_s'])
+        self.assertEqual(entities['cargo_slots'], original['cargo_slots'])
+        factory = load(workshop['factory_config'])
+        self.assertTrue(all(abs(s['pose']['y']-lane_y)<1e-12 for s in factory['destinations']))
+
     def test_vision_and_ideal_are_explicit_and_never_inferred_from_camera_toggle(self):
         warehouse, workshop = self.scenes()
         self.assertEqual(warehouse['observation'], 'vision')

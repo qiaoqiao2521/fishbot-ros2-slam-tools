@@ -454,7 +454,7 @@ def cloud():
             '--perception-config', 'tools/config/perception/apriltag-station.example.json',
             '--pretrained-grasp-config', str(grasp)]
         if recipe and recipe.get('observation') == 'ideal':
-            for option, count in [('--perception-config', 2), ('--pretrained-grasp-config', 2), ('--lattice-filepath', 2), ('--navigation-planner', 2), ('--lattice-allow-reversing', 1), ('--lattice-rotation-shim', 1), ('--staging-reversing', 1)]:
+            for option, count in [('--perception-config', 2), ('--pretrained-grasp-config', 2), ('--lattice-filepath', 2), ('--navigation-planner', 2), ('--lattice-allow-reversing', 1), ('--lattice-rotation-shim', 1)]:
                 if option in prepare_args:
                     offset = prepare_args.index(option); del prepare_args[offset:offset+count]
         if recipe and recipe['id'] == 'f2-wide-warehouse':

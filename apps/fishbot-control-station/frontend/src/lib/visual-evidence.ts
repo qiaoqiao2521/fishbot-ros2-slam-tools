@@ -18,6 +18,7 @@ export interface VisualEvidenceEntry {
   points: { frame: string; xyz: [number, number, number][] }
   selected: { index: number | null; score: number | null; origin: string; poseCamera: number[][] | null } | null
   inference: { status: string; requestWall: number | null; total: number | null; candidateCount: number | null; sourceReport: string | null }
+  generatedCandidates: { count: number | null; sourceReport: string | null; overlay: string | null; preview: { index: number | null; score: number | null; origin: string }[] } | null
   milestones: { lift: VisualMilestone | null; placement: VisualMilestone | null }; warnings: string[]
 }
 export interface VisualQuery {
@@ -45,6 +46,7 @@ export function parseVisualEvidence(value: unknown): VisualEvidence {
     const entry = record(value)
     if (!Object.keys(entry).length) { warnings.push(`第${index + 1}项视觉材料无法识别，其他材料继续展示。`); return [] }
     const observation = record(entry.observation), images = record(entry.images), points = record(entry.points)
+    const generated = record(entry.generated_candidates)
     const selected = record(entry.selected), inference = record(entry.inference), milestones = record(entry.milestones)
     const xyz = list(points.xyz).flatMap((value): [number, number, number][] => {
       const vector = list(value).map(number)
@@ -59,6 +61,7 @@ export function parseVisualEvidence(value: unknown): VisualEvidence {
       points: { frame: text(points.frame, text(observation.frame, '坐标系未提供')), xyz },
       selected: Object.keys(selected).length ? { index: number(selected.index), score: number(selected.score), origin: text(selected.origin, '来源未提供'), poseCamera: pose(selected.pose_camera) } : null,
       inference: { status: text(inference.status, '未取得推理回执'), requestWall: number(inference.request_wall_s), total: number(inference.total_s), candidateCount: number(inference.candidate_count), sourceReport: visualAsset(inference.source_report) },
+      generatedCandidates: Object.keys(generated).length ? { count: number(generated.count), sourceReport: visualAsset(generated.source_report), overlay: visualAsset(generated.overlay), preview: list(generated.preview).map(value => { const candidate = record(value); return { index: number(candidate.index), score: number(candidate.score), origin: text(candidate.origin, '来源未提供') } }) } : null,
       milestones: { lift: milestone(milestones.lift), placement: milestone(milestones.placement) }, warnings: entryWarnings }]
   })
   return { runId: text(raw.run_id), sceneId: text(raw.scene_id, '场景未提供'), taskId: text(raw.task_id), sourceConfirmed, entries,

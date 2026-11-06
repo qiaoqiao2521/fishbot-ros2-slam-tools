@@ -557,3 +557,23 @@ source-v11只保留已原生验证的候选：fresh postgrasp快照由owner刷�
 v4实际素材已加入/results两独立失败卡，原四组及v2/v3均保留。仓库640×480 RGB/固定米制depth可见，同query frozen snapshot stamp33.280、seq1663从原request派生，明确缺原observation receipt；无模型/点云/候选。车间实际抬升66.260源秒、托盘释放137.300、回位164.660，装运362.759墙秒超360（含清理总执行另计372.7095），无卸货/A。两原录像100.5/351.5秒，产品索引保留原帧时间，不提交raw JSONL。4项局部前端测试、typecheck/lint与真实桌面/390px浏览器通过，0写请求/0pageerror；读回qa-v4-actual-final-source/ui-result.json。本次网页派生资产待最终Drive归档，不与已读回的原件归档混淆。
 
 空间收尾：已验证Drive包分别含source-v9/source-v10，删除这两份可恢复本地源码包副本，共22,408,287字节；当前source-v11、运行所需证据及receipt保持。runtime补丁已提交918f4dd并推送既有qiaoqiao2521远端；这是组件交付，不是F2验收通过。
+
+### 本次Kaggle v5真实取证（source-v11）
+
+官方kernel已COMPLETE，但两个业务场景均false。仓库run6a354697-e3a8-451e-9022-6e0014a07bb5、taske7f68d94-7365-45ac-b0a3-ddf41196ab54、query9c4de232-055a-4a93-9769-7bfb488addeb首次实际完成模型调用。原输入episodeb98bf0fa-4522-42a3-974c-6b3dc69db49d/seq1474/source29.500：RGBD7.175秒完成，312可见点7.726秒保存；官方请求8.870→13.446=4.576809s，服务器同次receipt4.572916s，返回408候选（48diff+360OBB）。root实际读回points.npy[312,3]和candidates.npz[408,4,4]/scores[408]、report及observation，均有限且身份对应。client_torch_imported=false；服务器加载8.204522秒独立于本次推理，不相加冒作推理耗时。物理grasp_verified=false。
+
+13.597秒开始候选规划，前40个不满足原IK；candidate51于17.315秒完成grasp/pre/end IK，release sweep2.695秒、descent.689、ascent.758、closure2.567、direct.850且blocked；24.900秒才开始原OMPL5秒，30.033秒原query取消、30.224完成清理。由此本轮30秒耗时已定位到查询准备/真实推理/后续几何规划，而非模型未调用或单独GPU4.577秒超时；旧视觉v5因缺原件仍不能倒推同因。未取得accepted selected、抬升或放货。
+
+车间run67252549-ed13-4f1c-b5ce-faaa2d33c27a、task81660e8d-b69d-4b3a-b2d0-9131fc581740：原抓放/回位/连续运输K分项均true，货物实际位移2.274200m，完整任务仍false。真实DriveOnHeading UUID0f296271f2f74b278a7ce540fd42beef以原.7m/.03m/s成功4；之后Nav2 UUIDd9a3989cd8a842cdb8afbbdcb123dfb8活动95.550866/原120墙秒，原360总装运预算耗尽后取消5。结束车位(.694953,-1.973219)，yaw=-.410404，目标(.7,-2,0)；末段RPP collision ahead，XY接近不代表朝向/到站通过。无人为重发，A未执行、卸货0样本。原load_and_delivery362.505526秒（终态观测），清理总429.08673秒；所有owned launch/API关闭、独立世界/episode未reset。source-v11局部优化真实提前进入配送，但不能冒称已解决路线或完整任务。
+
+下一步仅在真实冻结query优化纯位姿checker与原候选、在Mec专属新布局对齐出站/交付车道并复用原staging reverse；原几何/分辨率/预算/物理评分不变，先必要原生局部验证，再有限完整复验。原失败均保留。knowledge_status=already_covered（第19/20节分层证据与双时钟），本节项目状态只留项目。owner=root。
+
+source-v12候选准备：私有距离checker与源SO101原evaluate复用，只替换纯位姿更新及有限球远对迭代；2149状态严格差分和完整41候选/同51/同709×5路径均通过，32相关单测通过。根串行整合的两场景配方仍保原阈值。Mec专属同轴新配置由原prepare实际生成世界/两地图，5428碰撞对静态检查，往返最小认证25.652mm；半圈旋转仅.346mm余量，故不称环境可随意转身。原NavFn1.3.13路径yaw0、RPP carrot.x负号与RotationShim path orientation依据已核；实际反向速度、Goal与B→A仍待新回合。
+
+第六轮已获官方versionNumber6回执，source-v12 ready后同原私有kernel派发，两场景仍顺序独立、max3600墙秒。367 Python语法与所选源/配置字节读回相同；57项整合单测/原生渲染通过，最终独立只读审查未发现pair过滤/首pair/FK/global/contact阈值问题。实际完整回合仍待原结果，未预写pass。
+
+完整前端68文件/733测试通过、生产构建通过。v5两实际卡加入，15定向测试与桌面/390px浏览器0写/0pageerror；输入、生成候选、尝试与selected区分，selected/lift/placement缺失不补造。cloud partial exporter未复现：本机同源完整只读导出成功，所以未捏造optional异常根因或修改runtime exporter。
+
+v5原件/实际312点与408候选、原生诊断、source-v12冻结输入、v4/v5网页素材已存指定Drive：1XUIq0DCgp3GkAxdpILgFlb_CoBypZOYf。88,257,450B实际下载逐成员读回220项/109,340,949解码字节；删除已验证上传tar副本88,257,450B。网页原件/派生归档字段已据实更新，v4原件仍指向其独立v3/v4归档，不用新包替换未包含的旧原件。当前source-v12及必要运行材料继续保留。
+
+最终source-v12反馈control组在原180秒期限内1141项通过，0skip/0依赖缺失/0fail；覆盖新增pair adapter与既有控制/任务所有权回归。前端733为全量，不与旧465反馈子集重复相加；其余既有checkpoint22/mission209/autonomy61保持此前通过证据，无受影响实现再改。构建仍有原3D分块>500k提示，没有为此扩展重构。

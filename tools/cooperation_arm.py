@@ -34,6 +34,64 @@ class _PayloadQueryBackend:
         return pair_clearance(model, data, a, b, cutoff)
 
 
+class _CollisionQueryBackend:
+    """Update poses for the source distance-only checker, never contact forces.
+
+    CollisionChecker.evaluate consumes joint limits, geom transforms and native
+    mj_geomDistance. Its independent query data needs no dynamics or contacts.
+    Actual contact admission, RGB-D rendering and the live world keep mj_forward.
+    """
+    def __init__(self, native):
+        self.native = native
+
+    def __getattr__(self, name):
+        return getattr(self.native, name)
+
+    def mj_forward(self, model, data):
+        return self.native.mj_kinematics(model, data)
+
+
+class _CollisionQueryPairs:
+    """Conservative batch broad phase over the source checker's full pair set.
+
+    Iteration happens after its qpos admission and FK. Only pairs whose finite
+    MuJoCo bounding spheres are separated beyond the unchanged distance cap are
+    omitted from native narrow-phase calls. Keep order and the first cap tie.
+    """
+    def __init__(self, checker, native, numpy):
+        self.checker, self.np = checker, numpy
+        self.full_pairs = tuple(checker.pairs)
+        self.indices = numpy.asarray(self.full_pairs, dtype=int).reshape(-1, 2)
+        model = checker.model
+        radii = model.geom_rbound[self.indices]
+        finite_types = [int(getattr(native.mjtGeom, 'mjGEOM_'+name)) for name in
+                        ('SPHERE', 'CAPSULE', 'ELLIPSOID', 'CYLINDER', 'BOX', 'MESH')]
+        self.bounded = (numpy.isin(model.geom_type[self.indices], finite_types).all(axis=1) &
+                        numpy.isfinite(radii).all(axis=1) & (radii > 0).all(axis=1))
+        self.radius_sum = radii.sum(axis=1)
+
+    def __len__(self):
+        return len(self.full_pairs)
+
+    def __iter__(self):
+        if not self.full_pairs:
+            return iter(())
+        np = self.np
+        cap = self.checker.distance_cap_m
+        if not math.isfinite(cap) or cap <= 0:
+            return iter(self.full_pairs)
+        positions = self.checker.data.geom_xpos
+        with np.errstate(over='ignore', invalid='ignore'):
+            delta = positions[self.indices[:, 0]]-positions[self.indices[:, 1]]
+            lower_bound = np.linalg.norm(delta, axis=1)-self.radius_sum
+        # A micrometre of retention covers float32 mesh vertices and roundoff.
+        # It retains extra native checks, never enlarges the collision margin.
+        keep = (~self.bounded | ~np.isfinite(lower_bound) |
+                (lower_bound <= cap+1e-6))
+        keep[0] = True
+        return (self.full_pairs[index] for index in np.flatnonzero(keep))
+
+
 def query_approach(manifest, q6, car_pose, *, check, timeout_s=30.,
                    arm_id=None, cargo_id=None, snapshot=None, model_grasps=None, prepared_planner=None):
     """Original bounded approach query; input and its 30s limit stay intact."""
@@ -238,6 +296,13 @@ class ArmPlanner:
         self.payload_placement = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.payload_placement)
         self.payload_placement.mujoco = _PayloadQueryBackend(mujoco)
+        # Keep the exact source pair policy and distance calls in a private copy.
+        # Replacing its module binding cannot affect physics or other importers.
+        spec = importlib.util.spec_from_file_location(
+            '_fishbot_collision_query', self.modules['collision_scene'].__file__)
+        self.collision_query = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.collision_query)
+        self.collision_query.mujoco = _CollisionQueryBackend(mujoco)
         world_event = 'world_model_binary_load' if prepared_models is not None else 'world_model_compile'
         emit(trace, world_event+'_started')
         self.common = (mujoco.MjModel.from_binary_path(prepared_models['paths']['common'])
@@ -309,15 +374,16 @@ class ArmPlanner:
             self.rig = self.mujoco.MjModel.from_xml_string(ET.tostring(root, encoding="unicode"))
             emit(getattr(self, 'trace', None), 'rig_model_compile_completed')
         emit(getattr(self, 'trace', None), 'collision_checkers_init_started')
-        self.open_checker = self.modules["collision_scene"].CollisionChecker(
+        self.open_checker = self.collision_query.CollisionChecker(
             self.rig, gripper=.5, margin_m=.001)
-        self.closed_checker = self.modules["collision_scene"].CollisionChecker(
+        self.closed_checker = self.collision_query.CollisionChecker(
             self.rig, gripper=.025, margin_m=.001)
         # Reuse the source checker's local-distance API. Large distmax values
         # make legacy MPR report false near-collisions for separated box/meshes.
         # Twice the unchanged margin covers the full admission boundary.
         for checker in (self.open_checker, self.closed_checker):
             checker.distance_cap_m = 2*checker.margin_m
+            checker.pairs = _CollisionQueryPairs(checker, self.mujoco, self.np)
         if self.entity_view is not None:
             from cooperation_arm_entities import EntityPadChecker
             self.open_checker = EntityPadChecker(self.open_checker)
@@ -325,6 +391,8 @@ class ArmPlanner:
         self.query_clearance = {"backend": "source_legacy_mpr",
             "margin_m": self.closed_checker.margin_m,
             "distance_cap_m": self.closed_checker.distance_cap_m,
+            "pose_update": "query_only_mj_kinematics",
+            "pair_broadphase": "finite_geom_rbound_batch_original_first_pair_retained",
             "beyond_cap": "saturated_not_measured_clearance",
             "payload_query_backend": "disjoint_box_projection_lower_bound_else_native",
             "payload_source_isolated": True,

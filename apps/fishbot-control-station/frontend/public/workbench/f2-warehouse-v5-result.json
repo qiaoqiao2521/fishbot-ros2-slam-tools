@@ -1,0 +1,81 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "新仓库 v5 · 实际模型推理，规划超时",
+  "recorded_at": "2026-11-06",
+  "run_id": "6a354697-e3a8-451e-9022-6e0014a07bb5",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "Jackal J100",
+  "sensor": "MID-360式扫描 · 4000×1槽位",
+  "scene_label": "新宽通道仓库 · f2-wide-warehouse",
+  "observation_mode": "vision",
+  "model": "GraspGen-X · Tesla T4实际推理",
+  "description": "原RGB-D提取312个可见点，GraspGen-X实际请求4.577秒返回408个候选；后续候选IK/碰撞/OMPL规划触及原30秒期限。",
+  "evidence_note": "这次新增实际模型输入和输出证据，不能计视觉配送成功。候选51进入OMPL仅表示规划尝试；没有selected-candidate回执、实际抬升、放货或卸货。MID-360式回波与静态地图限制保持。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 132.27443350700003,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（失败）",
+      "task_id": "e7f68d94-7365-45ac-b0a3-ddf41196ab54",
+      "passed": false,
+      "route_seconds": null,
+      "position_error_m": null,
+      "yaw_error_rad": null,
+      "visible_points": [
+        312
+      ],
+      "selected_candidates": [],
+      "failure_reason": "模型实际调用已完成；候选51于24.900s进入OMPL接近规划，原查询30.033s到期。B失败、A未派发；候选51不是已执行选择。",
+      "component_summary": "原RGB-D输入312点；模型请求8.870→13.446s，实测4.576809s；408候选＝48 diffusion＋360 OBB。原模型报告和候选可下载，规划超时发生于后续OMPL，不能误记为模型未调用。"
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/f2-warehouse-v5/timing.json",
+    "replay": "/workbench/f2-warehouse-v5/replay.json",
+    "video": "/workbench/f2-warehouse-v5/overview.mp4",
+    "video_index": "/workbench/f2-warehouse-v5/video-frame-index.json",
+    "poster": "/workbench/f2-warehouse-v5/overview.jpg",
+    "sensor_experience": "/workbench/f2-warehouse-v5/sensor-experience.json",
+    "visual_chain": "/workbench/f2-warehouse-v5/visual/visual-chain.json",
+    "lidar_receipt": "/workbench/f2-warehouse-v5/native-lidar-consumer.json"
+  },
+  "video_caption": "本回合202个真实全景采样帧，按原2fps独立播放。下载索引为实际记录派生的媒体索引，未插值；完整录像帧原件保留于Drive归档。",
+  "availability_note": "真实失败位置与阶段记录已只读导入；不补造静态场景或机械臂世界FK。",
+  "archive_status": "v5原始输入/候选、失败记录与网页派生资产已存Drive；实际下载逐成员读回220项（88,257,450字节）",
+  "warnings": [
+    "真实模型已调用且生成408候选；没有已执行selected-candidate回执，不把候选51或最高分当成成功选择。",
+    "无实际抬升/放货/目的地卸货，B原整单失败、A未派发。",
+    "原查询30秒期限保持；server模型加载、实际推理4.577秒和候选规划耗时分别记账。",
+    "MID-360式为抽稀扫描近似；静态层含同一低障碍，不做3D排他因果或逐消息ACK声明。"
+  ],
+  "provenance": {
+    "source_kind": "recovered_original_failed_run_and_same_episode_capture",
+    "source_run_id": "6a354697-e3a8-451e-9022-6e0014a07bb5",
+    "task_id": "e7f68d94-7365-45ac-b0a3-ddf41196ab54",
+    "episode_id": "b98bf0fa-4522-42a3-974c-6b3dc69db49d",
+    "new_execution": false,
+    "rescored": false,
+    "scene_id": "f1-j100-wide-continuous-ba",
+    "candidate_label": "f2-wide-warehouse",
+    "scene_identity_basis": "Original result.declaration.scene_id; candidate_label is manifest factory_delivery.id",
+    "original_components_report": "/workbench/f2-warehouse-v5/original-components.json",
+    "raw_backup": {
+      "confirmed": true,
+      "drive_id": "1XUIq0DCgp3GkAxdpILgFlb_CoBypZOYf",
+      "read_members": 220,
+      "archive_bytes": 88257450,
+      "verification": "actual Drive stream gzip/tar full member read"
+    },
+    "derived_ui_archive_status": "verified_drive_readback",
+    "derived_ui_backup": {
+      "confirmed": true,
+      "drive_id": "1XUIq0DCgp3GkAxdpILgFlb_CoBypZOYf",
+      "read_members": 220,
+      "archive_bytes": 88257450,
+      "verification": "actual Drive stream gzip/tar full member read"
+    }
+  },
+  "archive_url": "https://drive.google.com/file/d/1XUIq0DCgp3GkAxdpILgFlb_CoBypZOYf/view?usp=drivesdk"
+}

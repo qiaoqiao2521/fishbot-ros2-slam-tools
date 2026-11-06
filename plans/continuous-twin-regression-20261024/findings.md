@@ -460,3 +460,11 @@ MID原生回执的target lethal来自合成costmap，低fixture也在静态层�
 已证实的耗时缺口分层：仓库真实RGBD后的NumPy/OpenCV ABI错误不是模型推理超时；车间重复冻结上下文与较长空手RRT路径消耗原装运墙钟。纯查询投影可复用官方mj_kinematics；真实接触力计算不可替换。冻结网格资产复用只改变资产槽，不改变每个碰撞geom几何。静态等价、较短路径和模型字节减少均不等同配送成功。
 
 采用OMPL原生ropeShortcutPath薄适配，只优化空手RRT，保留原validator和外层query/task期限。native接口的时间参数不保证内部批次可抢占，因此搜索截止后拒绝新昂贵检查、最终完整原验证另计；不得把1秒搜索预算解释为整个query只需1秒。正常候选还需真实完整B→A闭环。
+
+### 本次v5实际推理与距离调用瓶颈
+
+实际312点推理4.576809秒、408候选已发生；原30秒是在后续candidate51几何/OMPL阶段耗尽，不是GPU推理30秒。纯pose forward→kinematics在同机只省约3.5%，不能作为主要修复。真实2149状态中主checker调用mj_geomDistance3,367,483次。核对MuJoCo3.3.7 mjmodel.h:831 geom_rbound定义、user_objects.cc:3418 GetRBound和engine_support.c:447发现该距离入口直接narrow phase，不含通用批量球筛选。
+
+最小私有pair迭代视图在源checker已验证q并FK后，按官方有限球上界批量跳过明确远于原cap的对。平面/未知/非finite、原首pair保留，原序、完整len、.002m cap/.001m margin不变；额外1e-6m保留带只多留对。真实2149状态含2拒绝，verdict/distance/reason/首pair及19341 pose字段逐位相同；主native距离调用降至147,062，checker同机5.247→.992秒，完整同候选5.860→1.599秒，仍是candidate51和同709×5路径。无新IK/碰撞算法、无源SO101文件改写、无global MuJoCo替换；实际contact/渲染/物理仍用原forward。本地改善不能替代云30秒及完整物理配送验收。
+
+车间原y=-2交付位与出站y=-1.64错线，v5末XY近目标而yaw-.4104；RPP连续预测碰撞，不是控制器没有接到路径。候选采用真正同轴工位（工位实体/地图同步搬移），同时复用已有staging-reversing避免返程原地调头；这属于新布局版本，不把改变环境后的效果宣称纯算法A/B改善。原失败布局保持。

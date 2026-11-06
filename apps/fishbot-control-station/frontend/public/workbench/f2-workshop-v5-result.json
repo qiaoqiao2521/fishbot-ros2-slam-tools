@@ -1,0 +1,76 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "新车间 v5 · 载货已运输，到站未完成",
+  "recorded_at": "2026-11-06",
+  "run_id": "67252549-ed13-4f1c-b5ce-faaa2d33c27a",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "麦克纳姆 robot_base",
+  "sensor": "原通用16线3D雷达 · 360×16槽位",
+  "scene_label": "车间线边 · f2-workshop-line",
+  "observation_mode": "ideal",
+  "model": "原SO101 IK/OMPL · ideal货物观测",
+  "description": "真实双指装货、释放落稳、回位和载货位移2.274m通过原K分项；最终航向未达到目的地0rad，原360秒总预算到期取消。",
+  "evidence_note": "本轮是ideal货物观测，不是GraspGen-X视觉配送。原K抓放/运输分项通过与目的地/卸货/业务失败分开记账；最终yaw约−0.4104rad，不能以已运输代替配送到站。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 429.08672998300005,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（失败）",
+      "task_id": "81660e8d-b69d-4b3a-b2d0-9131fc581740",
+      "passed": false,
+      "route_seconds": null,
+      "position_error_m": null,
+      "yaw_error_rad": null,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": "原装货配送预算362.506墙秒超过360秒，载货Nav2原UUID终态5（取消）。目的地航向未到0rad，B未完成、A未派发、卸货样本0。",
+      "component_summary": "原K分项通过：双指抬升（源68.840s）、托盘释放落稳（123.980s）、回位（133.000s）、载货运输和停稳。货物真实位移2.274200m、车辆2.312948m；终点yaw约−0.4104rad，目的地和卸货未通过。"
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/f2-workshop-v5/timing.json",
+    "replay": "/workbench/f2-workshop-v5/replay.json",
+    "video": "/workbench/f2-workshop-v5/overview.mp4",
+    "video_index": "/workbench/f2-workshop-v5/video-frame-index.json",
+    "poster": "/workbench/f2-workshop-v5/overview.jpg",
+    "sensor_experience": "/workbench/f2-workshop-v5/sensor-experience.json"
+  },
+  "video_caption": "本回合706个真实全景采样帧，按原2fps独立播放。下载索引为实际记录派生的媒体索引，未插值；完整录像帧原件保留于Drive归档。",
+  "availability_note": "真实失败位置与阶段记录已只读导入；不补造静态场景或机械臂世界FK。",
+  "archive_status": "v5原始输入/候选、失败记录与网页派生资产已存Drive；实际下载逐成员读回220项（88,257,450字节）",
+  "warnings": [
+    "本轮ideal观测没有RGB-D模型输入/候选，不创建视觉模型证据。",
+    "原K分项通过不等于完整业务通过；目的地姿态、卸货和A均未完成。",
+    "原360秒预算及终态5保留，不把已取消任务改写成功。"
+  ],
+  "provenance": {
+    "source_kind": "recovered_original_failed_run_and_same_episode_capture",
+    "source_run_id": "67252549-ed13-4f1c-b5ce-faaa2d33c27a",
+    "task_id": "81660e8d-b69d-4b3a-b2d0-9131fc581740",
+    "episode_id": "d0446fb3-7f9d-4b74-8eee-2718146c3d3e",
+    "new_execution": false,
+    "rescored": false,
+    "scene_id": "f1-continuous-b-a-entities",
+    "candidate_label": "f2-workshop-line",
+    "scene_identity_basis": "Original result.declaration.scene_id; candidate_label is manifest factory_delivery.id",
+    "original_components_report": "/workbench/f2-workshop-v5/original-components.json",
+    "raw_backup": {
+      "confirmed": true,
+      "drive_id": "1XUIq0DCgp3GkAxdpILgFlb_CoBypZOYf",
+      "read_members": 220,
+      "archive_bytes": 88257450,
+      "verification": "actual Drive stream gzip/tar full member read"
+    },
+    "derived_ui_archive_status": "verified_drive_readback",
+    "derived_ui_backup": {
+      "confirmed": true,
+      "drive_id": "1XUIq0DCgp3GkAxdpILgFlb_CoBypZOYf",
+      "read_members": 220,
+      "archive_bytes": 88257450,
+      "verification": "actual Drive stream gzip/tar full member read"
+    }
+  },
+  "archive_url": "https://drive.google.com/file/d/1XUIq0DCgp3GkAxdpILgFlb_CoBypZOYf/view?usp=drivesdk"
+}

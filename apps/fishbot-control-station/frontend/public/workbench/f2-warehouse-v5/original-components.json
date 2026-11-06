@@ -1,0 +1,80 @@
+{
+  "schema": "fishbot.original-component-evidence.v1",
+  "run_id": "6a354697-e3a8-451e-9022-6e0014a07bb5",
+  "task_id": "e7f68d94-7365-45ac-b0a3-ddf41196ab54",
+  "episode_id": "b98bf0fa-4522-42a3-974c-6b3dc69db49d",
+  "new_execution": false,
+  "rescored": false,
+  "original_task_passed": false,
+  "pickup_and_transport_observed": {
+    "dock_true_pose_and_stop": {
+      "passed": true,
+      "first_pass_stamp": 29.379999999994595,
+      "longest_source_duration_s": 0.719999999999601,
+      "required_duration_s": 0.7,
+      "max_source_gap_s": 0.1
+    },
+    "actual_lift_and_two_tip_forces": {
+      "passed": false,
+      "first_pass_stamp": null,
+      "longest_source_duration_s": 0.0,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "released_full_footprint_supported_and_relative_rest": {
+      "passed": false,
+      "first_pass_stamp": null,
+      "longest_source_duration_s": 0.0,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "arm_home_before_motion": {
+      "passed": false,
+      "first_pass_stamp": null,
+      "longest_source_duration_s": 0.0,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "final_car_and_cargo_rest": {
+      "passed": false,
+      "first_pass_stamp": null,
+      "longest_source_duration_s": 0.0,
+      "required_duration_s": 1.0,
+      "max_source_gap_s": 0.1
+    },
+    "transport": {
+      "passed": false,
+      "max_true_cargo_displacement_m": 0.0,
+      "max_true_car_displacement_m": 0.0,
+      "first_car_motion_after_release_stamp": null,
+      "car_moved_before_home_dwell": false,
+      "full_footprint_violation_samples_after_release": 0
+    },
+    "forbidden_contacts": {
+      "passed": true,
+      "first_violation": []
+    },
+    "independent_pose_crosschecks": {
+      "passed": true,
+      "bad_samples": 0
+    },
+    "cargo_baseline_z_m": 0.2764214503203108,
+    "scored_samples": 1559,
+    "passed": false
+  },
+  "wall_budget": {
+    "required": true,
+    "passed": true,
+    "load_and_delivery_limit_wall_s": 360.0,
+    "declared": {
+      "load_and_delivery": 360,
+      "unload": 180
+    },
+    "load_and_delivery_wall_s": 65.81988787651062,
+    "load_and_delivery_complete": false,
+    "load_and_delivery_time_basis": "elapsed_until_first_terminal_observation_or_window_end",
+    "full_task_wall_s": 68.15707683563232
+  },
+  "task_stop_reason": "Approach planning exceeded its wall budget",
+  "unload_samples_after_arrival": 0
+}

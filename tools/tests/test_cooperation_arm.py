@@ -8,7 +8,51 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT/'tools'))
-from cooperation_arm import ArmPlanner, query_approach, query_placement
+from cooperation_arm import (ArmPlanner, query_approach, query_placement,
+                             _CollisionQueryBackend, _CollisionQueryPairs)
+
+
+class CollisionQueryBackendTests(unittest.TestCase):
+    def test_only_pose_only_query_forward_is_replaced(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        native = SimpleNamespace(mj_forward=Mock(), mj_kinematics=Mock(return_value='pose'),
+                                 mj_geomDistance=Mock(return_value=.002), mj_contactForce=Mock())
+        backend = _CollisionQueryBackend(native)
+        model, data = object(), object()
+        self.assertEqual(backend.mj_forward(model, data), 'pose')
+        native.mj_kinematics.assert_called_once_with(model, data)
+        native.mj_forward.assert_not_called()
+        self.assertIs(backend.mj_geomDistance, native.mj_geomDistance)
+        self.assertIs(backend.mj_contactForce, native.mj_contactForce)
+        native.mj_forward(model, data)
+        native.mj_forward.assert_called_once_with(model, data)
+
+    def test_broadphase_keeps_order_ties_unknown_shapes_and_reads_current_fk(self):
+        import numpy as np
+        from types import SimpleNamespace as NS
+        types = NS(**{'mjGEOM_'+name: i for i, name in enumerate(
+            ('SPHERE', 'CAPSULE', 'ELLIPSOID', 'CYLINDER', 'BOX', 'MESH'))})
+        model = NS(geom_rbound=np.full(9, .1), geom_type=np.zeros(9, dtype=int))
+        model.geom_rbound[7] = 0.
+        model.geom_type[6] = 99  # Unbounded or unknown types remain native checks.
+        model.geom_type[8] = 100
+        positions = np.zeros((9, 3))
+        pairs = [(0, i) for i in range(1, 9)]
+        checker = NS(model=model, data=NS(geom_xpos=positions),
+                     distance_cap_m=.002, pairs=pairs)
+        view = _CollisionQueryPairs(checker, NS(mjtGeom=types), np)
+        positions[:, 0] = [0., 100., 3., .19, .2020005, np.nan, 100., 100., 100.]
+        self.assertEqual(len(view), len(pairs))
+        self.assertEqual(view.full_pairs, tuple(pairs))
+        self.assertEqual(list(view), [pairs[0], *pairs[2:]])
+        positions[2, 0] = .19  # A later admitted qpos/FK must be observed.
+        self.assertEqual(list(view), pairs)
+        positions[2, 0] = .21
+        checker.distance_cap_m = .02
+        self.assertEqual(list(view), pairs)
+        checker.distance_cap_m = float('nan')
+        self.assertEqual(list(view), pairs)
 
 
 class ApproachProcessTests(unittest.TestCase):

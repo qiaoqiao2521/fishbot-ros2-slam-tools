@@ -41,7 +41,7 @@
   },
   "video_caption": "本回合201个真实全景采样帧，按原2fps独立播放。下载索引为实际记录派生的媒体索引，未插值；完整录像帧原件保留于Drive归档。",
   "availability_note": "真实失败位置与阶段记录已只读导入；不补造静态场景或机械臂世界FK。",
-  "archive_status": "v3/v4原件已存Drive，并实际下载逐成员读回（233项，90,585,551字节）；本次网页派生资产另待归档",
+  "archive_status": "v3/v4原件已从Drive读回233项；本卡网页派生资产另存v5素材归档，并实际读回220项",
   "warnings": [
     "真实RGB/深度已回收；可见点云提取未完成，没有原云/掩码/所选候选/推理或抓放里程碑。",
     "原30秒上限未到期；本轮是9.989秒ABI错误，不能写成30秒推理超时。",
@@ -62,10 +62,17 @@
       "archive_bytes": 90585551,
       "verification": "actual Drive stream gzip/tar full member read"
     },
-    "derived_ui_archive_status": "pending_root_archive",
+    "derived_ui_archive_status": "verified_drive_readback",
     "scene_id": "f1-j100-wide-continuous-ba",
     "candidate_label": "f2-wide-warehouse",
-    "scene_identity_basis": "Original result.declaration.scene_id; manifest factory_delivery.id is the scene configuration label"
+    "scene_identity_basis": "Original result.declaration.scene_id; manifest factory_delivery.id is the scene configuration label",
+    "derived_ui_backup": {
+      "confirmed": true,
+      "drive_id": "1XUIq0DCgp3GkAxdpILgFlb_CoBypZOYf",
+      "read_members": 220,
+      "archive_bytes": 88257450,
+      "verification": "actual Drive stream gzip/tar full member read"
+    }
   },
   "archive_url": "https://drive.google.com/file/d/1AOuKbKN0Lwr22YB3JlDm0J-vCCcyMUGw/view?usp=drivesdk"
 }

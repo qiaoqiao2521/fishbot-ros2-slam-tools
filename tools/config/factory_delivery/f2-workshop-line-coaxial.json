@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "id": "f2-workshop-line",
+  "description": "Coaxial workshop delivery candidate: both unloading stations share the mecanum pickup lane y=-1.64; relative handover geometry unchanged.",
+  "frame": "map",
+  "units": {
+    "position": "m",
+    "angle": "rad",
+    "size": "full edge lengths"
+  },
+  "destinations": [
+    {
+      "id": "line_a",
+      "name": "Line A delivery stop",
+      "pose": {
+        "x": 0.0,
+        "y": -1.64,
+        "yaw": 0.0
+      }
+    },
+    {
+      "id": "line_b",
+      "name": "Line B delivery stop",
+      "pose": {
+        "x": 0.7,
+        "y": -1.64,
+        "yaw": 0.0
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": "order-a",
+      "destination_id": "line_a"
+    },
+    {
+      "id": "order-b",
+      "destination_id": "line_b"
+    }
+  ],
+  "channel": {
+    "id": "f2-workshop-line-transfer-aisle",
+    "centerline_m": [
+      [
+        -1.6,
+        -1.64
+      ],
+      [
+        -0.9,
+        -1.64
+      ],
+      [
+        0.0,
+        -1.64
+      ],
+      [
+        0.7,
+        -1.64
+      ]
+    ],
+    "occupied": false
+  },
+  "reference": {
+    "source": "https://pages.nist.gov/ARIAC_docs/en/main/pages/scenario.html",
+    "scope": "Order-driven pickup, placement onto AGV, transport to a named station, separate evaluation.",
+    "boundary": "Task semantics only; no ARIAC assets, AGV locks, kit inspection, assembly or scoring are copied."
+  },
+  "layout": {
+    "arena_xml": "f2-workshop-line-arena.xml",
+    "new_scene": true,
+    "source_assets": "repository MJCF primitives only; no external models",
+    "preserved": "vehicle, pickup station, unloading fixtures and original physical scoring",
+    "boundary": "Candidate after v5 final-yaw collision and original 360-second failure; same-axis geometry does not prove native tracking or task completion.",
+    "variant": "coaxial-delivery-y-minus1.64",
+    "previous_variant": "y-minus2-v5-task81660e8d"
+  }
+}

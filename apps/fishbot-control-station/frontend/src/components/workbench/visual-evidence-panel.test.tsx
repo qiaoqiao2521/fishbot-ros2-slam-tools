@@ -57,6 +57,17 @@ describe('visual evidence panel', () => {
     expect(html).toContain('<code>candidate_phase_started</code>'); expect(html).toContain('<code>ompl_approach</code>')
     expect(html).toContain('候选 #0'); expect(html).toContain('候选 #51'); expect(html).toContain('累计 3.300 s')
   })
+  it('shows generated proposals independently of selected or executed candidates', () => {
+    const entry = { ...fixture.entries[0], selected: null, generated_candidates: {
+      count: 408, source_report: '/workbench/ui-generated.json', overlay: '/workbench/ui-generated.png',
+      preview: [{ index: 0, score: .66, origin: 'diff' }, { index: 51, score: .5, origin: 'obb' }],
+    } }
+    const html = renderToStaticMarkup(<VisualEvidencePanel sourceUrl="/workbench/ui-chain.json" initialReport={{ ...fixture, entries: [entry] }} />)
+    expect(html).toContain('模型生成候选（未执行）'); expect(html).toContain('原输出共 408 个候选')
+    expect(html).toContain('候选 #0'); expect(html).toContain('候选 #51')
+    expect(html).toContain('下载全部生成候选'); expect(html).toContain('未提供已执行的候选选择')
+    expect(html).toContain('不是所选候选'); expect(html).toContain('模型分数 0.660')
+  })
   it('keeps a different run out of the active order without blocking other materials', () => {
     const html = renderToStaticMarkup(<VisualEvidencePanel sourceUrl="/workbench/ui-chain.json" initialReport={fixture} expectedRunId="other-run" />)
     expect(html).toContain('与当前配送运行不一致')
