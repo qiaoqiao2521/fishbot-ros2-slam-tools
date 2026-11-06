@@ -78,6 +78,21 @@ class ImageInventoryTests(unittest.TestCase):
         second = object_points(self.rgb, self.depth, dict(self.config, target_id='cargo_2'))
         self.assertEqual(second['point_count'], 36)
 
+    def test_diagonal_pixels_remain_one_eight_connected_component(self):
+        rgb=np.zeros_like(self.rgb)
+        for row,col in [(33,18),(34,19),(35,20),(36,21)]:rgb[row,col]=[70,145,110]
+        result=object_points(rgb,self.depth,dict(self.config,target_id='cargo_1',minimum_points=4))
+        self.assertEqual(result['point_count'],4)
+        self.assertEqual(int(result['mask'].sum()),4)
+
+    def test_mask_extraction_does_not_import_the_system_opencv_abi(self):
+        from unittest.mock import patch
+        with patch.dict(sys.modules, {'cv2':None}):
+            result=object_points(self.rgb,self.depth,dict(self.config,target_id='cargo_1'))
+        self.assertEqual(result['point_count'],36)
+        self.assertEqual(result['points_camera'].dtype,np.float32)
+        self.assertTrue(result['points_camera'].flags.c_contiguous)
+
 
 class NativeWorkcellRenderTests(unittest.TestCase):
     @classmethod

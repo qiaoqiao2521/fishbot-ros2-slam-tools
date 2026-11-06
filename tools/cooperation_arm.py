@@ -49,7 +49,7 @@ def query_approach(manifest, q6, car_pose, *, check, timeout_s=30.,
 
 
 def query_placement(manifest, snapshot, centers_local, *, check, timeout_s,
-                    arm_id, cargo_id, car_pose=None):
+                    arm_id, cargo_id, car_pose=None, prepared_planner=None):
     """Pure named placement under the owner's remaining original task budget."""
     if not math.isfinite(timeout_s) or not 0 < timeout_s <= 360.:
         raise ValueError('Placement query requires remaining original task budget up to 360 seconds')
@@ -60,7 +60,7 @@ def query_placement(manifest, snapshot, centers_local, *, check, timeout_s,
     payload = {'manifest': manifest, 'snapshot': snapshot,
                'centers_local': centers_local, 'car_pose': [float(v) for v in car_pose],
                'arm_id': arm_id, 'cargo_id': cargo_id}
-    return _query('placement', payload, check=check, timeout_s=timeout_s)
+    return _query('placement', payload, check=check, timeout_s=timeout_s, prepared_planner=prepared_planner)
 
 
 def _query(kind, values, *, check, timeout_s, prepared_planner=None):
@@ -153,7 +153,9 @@ def _query(kind, values, *, check, timeout_s, prepared_planner=None):
                     sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest(),
                 'child_pid': process.pid, 'caller_pid': os.getpid(), 'child_exited': True,
                 'elapsed_wall_s': time.monotonic()-started, 'wall_budget_s': timeout_s,
-                'seed_scope': 'first_plan_of_each_query_process', 'shortcut_applied': False}
+                'seed_scope': 'first_plan_of_each_query_process',
+                'shortcut_applied': bool(plan.get('planning' if kind == 'approach' else 'retreat', {})
+                    .get('path_simplification', {}).get('applied', False))}
             if kind == 'placement':
                 execution['wall_remaining_s'] = max(0., timeout_s-execution['elapsed_wall_s'])
                 execution['is_controller_consumption_ack'] = False
@@ -373,6 +375,15 @@ class ArmPlanner:
             target[2] += .019-floor_top-half_height
         return target
 
+    def _simplify_unloaded(self, planned, resolution_rad):
+        budget = self.manifest.get('arm_path_simplification_s', 0)
+        if not budget:
+            return planned
+        from cooperation_path_simplify import simplify_joint_plan
+        return simplify_joint_plan(planned, self.open_checker.bounds,
+            self.open_checker.is_valid, self.modules['joint_planner'].validate_joint_path,
+            resolution_rad=resolution_rad, budget_s=budget)
+
     def prepare_approach(self, q6, *, car_pose=None, seed=0):
         """Plan from the actual arm state, with the stopped car as an obstacle."""
         if car_pose is not None:
@@ -391,6 +402,7 @@ class ArmPlanner:
                                          timeout_s=10, resolution_rad=.015)
         if planned["status"] != "solved":
             raise RuntimeError(f"Approach planning failed: {planned}")
+        planned = self._simplify_unloaded(planned, .015)
         descent = planner.validate_joint_path([approach, down], self.open_checker.is_valid, .015)
         ascent = planner.validate_joint_path([down, lift], self.closed_checker.is_valid, .015)
         if not descent["valid"] or not ascent["valid"]:
@@ -470,7 +482,7 @@ class ArmPlanner:
         self._refresh_models(car_pose)
         return local
 
-    def prepare_placement(self, snapshot, centers_local, *, car_pose=None):
+    def prepare_placement(self, snapshot, centers_local, *, car_pose=None, _context_prepared=False):
         """Explicit station route using the original carried checker and IK.
 
         The upstream transport function hardcodes the original tray route.
@@ -479,7 +491,13 @@ class ArmPlanner:
         the existing mink task; ideal grasps keep the original upright IK.
         """
         np, mj = self.np, self.mujoco
-        local = self.refresh_placement_context(snapshot, car_pose=car_pose)
+        # Only the owned query entrypoint sets this after constructing the
+        # planner from this exact snapshot, or loading its owner's fresh MJB.
+        # Public/direct callers retain the original refresh behavior.
+        local = (self.entity_view.canonical_snapshot(snapshot) if _context_prepared else
+                 self.refresh_placement_context(snapshot, car_pose=car_pose))
+        if 'ctrl' not in local:
+            raise ValueError('Measured station grasp requires the current actuator references')
         execution = mj.MjData(self.contact)
         execution.qpos[:] = local['qpos']; execution.qvel[:] = local['qvel']
         if 'ctrl' in local:
@@ -578,6 +596,7 @@ class ArmPlanner:
                 raise RuntimeError(f'Open-jaw vertical detachment rejected: {checked}')
         retreat = source.plan_joint_path(q if prefix is None else prefix[-1], self.home[:5],
             self.open_checker.bounds, self.open_checker.is_valid, seed=0, timeout_s=10, resolution_rad=.01)
+        retreat = self._simplify_unloaded(retreat, .01)
         if prefix is not None and retreat['status'] == 'solved':
             retreat['path'] = np.vstack([prefix, np.asarray(retreat['path'])[1:]]).tolist()
             combined = source.validate_joint_path(retreat['path'], self.open_checker.is_valid, .01)
@@ -633,7 +652,8 @@ def _query_main():
             else:
                 result['plan'] = planner.prepare_approach(payload['q6'], seed=0)
         else:
-            result['plan'] = planner.prepare_placement(payload['snapshot'], payload['centers_local'])
+            result['plan'] = planner.prepare_placement(payload['snapshot'], payload['centers_local'],
+                                                        _context_prepared=True)
     except Exception as error:
         result['error'] = str(error)[:2000]
         emit(trace, 'child_failed', error_type=type(error).__name__, error=str(error)[:1200])

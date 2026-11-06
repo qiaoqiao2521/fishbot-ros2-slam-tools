@@ -99,9 +99,25 @@ class OverviewRecorder:
         encoder = None
         previous = None
         count = 0
+        previous_task = None
+        task_poll = 0.
         try:
             with (self.output/'overview-frames.jsonl').open('w') as index:
                 while not self.stop.wait(.20):
+                    # Reuse the owned recorder thread and original task file.
+                    # This is visibility only; original native/physical scores decide.
+                    if time.monotonic()-task_poll >= 1.:
+                        task_poll = time.monotonic()
+                        try:
+                            task = json.loads((self.runtime/'tasks/task.json').read_text()).get('task', {})
+                            signature = tuple(task.get(key) for key in ('id', 'status', 'stage', 'stop_reason'))
+                            if task.get('id') and signature != previous_task:
+                                print(json.dumps({'observed_task': {key: task.get(key) for key in
+                                    ('id', 'status', 'stage', 'message', 'stop_reason')},
+                                    'source': 'owned_task_file_observation_only', 'task_acceptance': False}), flush=True)
+                                previous_task = signature
+                        except (OSError, ValueError, TypeError):
+                            pass  # Missing/partial diagnostics never stop the recorder.
                     directory = self.runtime/'frames'
                     metadata_path = directory/'latest.json'
                     if not metadata_path.exists():
@@ -441,7 +457,6 @@ def cloud():
             for option, count in [('--perception-config', 2), ('--pretrained-grasp-config', 2), ('--lattice-filepath', 2), ('--navigation-planner', 2), ('--lattice-allow-reversing', 1), ('--lattice-rotation-shim', 1), ('--staging-reversing', 1)]:
                 if option in prepare_args:
                     offset = prepare_args.index(option); del prepare_args[offset:offset+count]
-            prepare_args.append('--camera-rgbd')
         if recipe and recipe['id'] == 'f2-wide-warehouse':
             prepare_args += ['--lidar3d-config', 'tools/config/cooperation_profiles/mid360-sensor.json']
         run('scene-prepare', ['bash', '-ec',
@@ -455,8 +470,11 @@ def cloud():
         manifest_file = scene/'scene-manifest.json'
         manifest = json.loads(manifest_file.read_text())
         manifest['render_overview'] = True
+        manifest['arm_path_simplification_s'] = 1.0
         manifest['arm_query_evidence_directory'] = str(scene/'grasp-observations')
         manifest_file.write_text(json.dumps(manifest, indent=2)+'\n')
+        if 'station_camera' not in manifest:
+            return scene  # Ideal handover has no RGB-D control input.
         render_code = '''import json,sys,os
 from pathlib import Path
 import mujoco,numpy as np

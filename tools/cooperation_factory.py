@@ -179,7 +179,7 @@ def loaded_code_reference(extra_paths=()):
                       'cooperation_oracle_base.py', 'cooperation_core.py', 'cooperation_arm.py',
                       'cooperation_arm_entities.py', 'cooperation_business_scene.py', 'cooperation_business.py',
                       'cooperation_factory_policy.py', 'cooperation_delivery_route.py',
-                      'cooperation_visual_grasp.py', 'cooperation_model_grasp.py', 'cooperation_query_trace.py',
+                      'cooperation_visual_grasp.py', 'cooperation_model_grasp.py', 'cooperation_query_trace.py', 'cooperation_path_simplify.py',
                       'cooperation_workcell_vision.py', 'cooperation_grasp_inference.py',
                       'cooperation_camera.py', 'cooperation_station_vision.py',
                       'cooperation.launch.py', 'config/perception/so101-graspgenx-tip-region.json')]

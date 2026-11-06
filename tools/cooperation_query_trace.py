@@ -47,10 +47,8 @@ class QueryTrace:
 
 def optional_query_trace(manifest, query_id, started):
     config = manifest.get('pretrained_grasp', {})
-    if not isinstance(config, dict):
-        return None
     directory = manifest.get('arm_query_evidence_directory')
-    if not directory:
+    if not directory and isinstance(config, dict):
         directory = config.get('output_directory') if config.get('enabled') else None
     if not isinstance(directory, str) or not directory:
         return None

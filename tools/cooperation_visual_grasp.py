@@ -38,6 +38,12 @@ def model_proposals(manifest, snapshot, arm_id, cargo_id, *, model=None, trace=N
     Image.fromarray(rgb).save(directory/'rgb.png')
     np.save(directory/'depth.npy', depth)
     (directory/'camera.json').write_text(json.dumps(camera, indent=2)+'\n')
+    # Retain the actual image identity even if later extraction/inference fails.
+    observation = {'stamp': snapshot['stamp'], 'episode_id': snapshot['episode_id'],
+        'sequence': snapshot['sequence'], 'arm_id': arm_id, 'cargo_id': cargo_id,
+        'point_count': None, 'mask_kind': None, 'capture_status': 'rgbd_saved_only',
+        'frame': camera['frame_id'], 'source': 'rendered_rgbd_visible_surface_only'}
+    (directory/'observation.json').write_text(json.dumps(observation, indent=2)+'\n')
     emit(trace, 'visible_cloud_extraction_started')
     observed = object_points(rgb, depth, camera)
     points = observed['points_camera']
@@ -45,10 +51,8 @@ def model_proposals(manifest, snapshot, arm_id, cargo_id, *, model=None, trace=N
     calibration_path = directory/'camera-to-station.json'
     calibration_path.write_text(json.dumps(camera['T_station_camera'])+'\n')
     np.save(directory/'points.npy', np.ascontiguousarray(points, dtype=np.float32))
-    observation = {'stamp': snapshot['stamp'], 'episode_id': snapshot['episode_id'],
-        'sequence': snapshot['sequence'], 'arm_id': arm_id, 'cargo_id': cargo_id,
-        'point_count': len(points), 'mask_kind': 'declared_colour_prior',
-        'frame': camera['frame_id'], 'source': 'rendered_rgbd_visible_surface_only'}
+    observation.update(point_count=len(points), mask_kind='declared_colour_prior',
+                       capture_status='visible_cloud_extracted')
     (directory/'observation.json').write_text(json.dumps(observation, indent=2)+'\n')
     emit(trace, 'visible_cloud_saved', point_count=len(points), source_directory=str(directory),
          source_sequence=snapshot['sequence'], source_stamp=snapshot['stamp'])

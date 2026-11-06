@@ -14,6 +14,37 @@ def _numbers(values):
     return ' '.join(repr(float(value)) for value in values)
 
 
+class _FrozenMeshAssets:
+    """Reuse exact compiled meshes only inside one frozen query XML build."""
+    def __init__(self, assets, model, numpy):
+        self.assets, self.model, self.np = assets, model, numpy
+        self.by_id = {}
+        self.by_shape = {}
+        self.same_id_reuses = self.same_value_reuses = 0
+
+    def asset(self, mesh, geom):
+        if mesh in self.by_id:
+            self.same_id_reuses += 1
+            return self.by_id[mesh]
+        model = self.model
+        va, vn = int(model.mesh_vertadr[mesh]), int(model.mesh_vertnum[mesh])
+        fa, fn = int(model.mesh_faceadr[mesh]), int(model.mesh_facenum[mesh])
+        vertices, faces = model.mesh_vert[va:va+vn], model.mesh_face[fa:fa+fn]
+        bucket = self.by_shape.setdefault((vn, fn), [])
+        for previous_vertices, previous_faces, name in bucket:
+            if self.np.array_equal(vertices, previous_vertices) and self.np.array_equal(faces, previous_faces):
+                self.by_id[mesh] = name
+                self.same_value_reuses += 1
+                return name
+        name = f'entity_frozen_mesh_{geom}'
+        ET.SubElement(self.assets, 'mesh', name=name,
+                      vertex=_numbers(vertices.ravel()),
+                      face=' '.join(str(int(x)) for x in faces.ravel()))
+        bucket.append((vertices, faces, name))
+        self.by_id[mesh] = name
+        return name
+
+
 class EntityPadChecker:
     """Keep the source arm policy; also check pads against frozen entities.
 
@@ -84,7 +115,9 @@ class ArmEntityView:
             raise ValueError('Entity query requires a finite full common-world snapshot')
         data = mj.MjData(model)
         data.qpos[:] = q; data.qvel[:] = v
-        mj.mj_forward(model, data)
+        # Only body/geom transforms and the assigned qpos/qvel are consumed.
+        # The actual contact/checker/renderer paths keep their own mj_forward.
+        mj.mj_kinematics(model, data)
         self.data = data
 
     def point(self, world_xyz):
@@ -134,7 +167,9 @@ class ArmEntityView:
         if pose.shape != (7,) or not np.isfinite(pose).all() or not np.isclose(np.linalg.norm(pose[3:]), 1., atol=1e-4):
             raise ValueError('Entity car pose must be finite xyz/wxyz or xy/yaw')
         data.qpos[car:car+7] = pose
-        mj.mj_forward(model, data)
+        # Only body/geom transforms and the assigned qpos/qvel are consumed.
+        # The actual contact/checker/renderer paths keep their own mj_forward.
+        mj.mj_kinematics(model, data)
         excluded = {self.arm['body'], self.cargo['body']}
         for body in range(1, model.nbody):
             if int(model.body_parentid[body]) in excluded:
@@ -146,6 +181,7 @@ class ArmEntityView:
                  int(mj.mjtGeom.mjGEOM_CAPSULE): ('capsule', 2),
                  int(mj.mjtGeom.mjGEOM_SPHERE): ('sphere', 1)}
         self.frozen_geoms = []
+        frozen_mesh_assets = _FrozenMeshAssets(assets, model, np)
         prefix = '' if self.arm_id == 'load' else self.arm_id+'__'
         for geom in range(model.ngeom):
             if int(model.geom_bodyid[geom]) in excluded or not (model.geom_contype[geom] or model.geom_conaffinity[geom]):
@@ -161,18 +197,17 @@ class ArmEntityView:
                          friction=_numbers(model.geom_friction[geom]),
                          solref=_numbers(model.geom_solref[geom]), solimp=_numbers(model.geom_solimp[geom]))
             if int(model.geom_type[geom]) == int(mj.mjtGeom.mjGEOM_MESH):
-                mesh = int(model.geom_dataid[geom]); asset_name = f'entity_frozen_mesh_{geom}'
-                va, vn = int(model.mesh_vertadr[mesh]), int(model.mesh_vertnum[mesh])
-                fa, fn = int(model.mesh_faceadr[mesh]), int(model.mesh_facenum[mesh])
-                ET.SubElement(assets, 'mesh', name=asset_name,
-                              vertex=_numbers(model.mesh_vert[va:va+vn].ravel()),
-                              face=' '.join(str(int(x)) for x in model.mesh_face[fa:fa+fn].ravel()))
-                attrs.update(type='mesh', mesh=asset_name)
+                mesh = int(model.geom_dataid[geom])
+                attrs.update(type='mesh', mesh=frozen_mesh_assets.asset(mesh, geom))
             else:
                 kind, size = kinds[int(model.geom_type[geom])]
                 attrs.update(type=kind, size=_numbers(model.geom_size[geom, :size]))
             ET.SubElement(world, 'geom', **attrs)
             self.frozen_geoms.append({'source': source_name, 'query': name})
+        self.mesh_asset_reuse = {'scope': 'one_query_xml_only',
+            'same_mesh_id_reuses': frozen_mesh_assets.same_id_reuses,
+            'identical_array_reuses': frozen_mesh_assets.same_value_reuses,
+            'unique_frozen_mesh_assets': sum(len(bucket) for bucket in frozen_mesh_assets.by_shape.values())}
         # The selected cargo stays the original independent free-body geometry.
         target = world.find("body[@name='grasp_target']")
         qadr = int(model.jnt_qposadr[self.cargo['joint']])

@@ -103,7 +103,7 @@ def object_points(rgb, depth, camera):
     Missing, occluded or out-of-slot cargo raises a specific observation error;
     it never substitutes complete CAD geometry or a simulated cargo position.
     """
-    import cv2
+    from scipy import ndimage
     rgb, depth = np.asarray(rgb), np.asarray(depth)
     expected = (int(camera['height']), int(camera['width']))
     if rgb.shape != expected + (3,) or depth.shape != expected:
@@ -129,16 +129,17 @@ def object_points(rgb, depth, camera):
     valid_depth = np.isfinite(depth) & (depth >= near) & (depth <= far)
     in_slot = np.all(np.abs(station[..., :2] - center) <= half_extent, axis=-1)
     selected = (colour & valid_depth & in_slot).astype(np.uint8)
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(selected, 8)
+    labels, count = ndimage.label(selected, structure=np.ones((3, 3), dtype=np.uint8))
+    areas = np.bincount(labels.ravel())
     minimum = int(camera.get('minimum_points', 25))
-    candidates = [i for i in range(1, count) if stats[i, cv2.CC_STAT_AREA] >= minimum]
+    candidates = [i for i in range(1, count+1) if areas[i] >= minimum]
     if not candidates:
         raise ValueError('No visible declared-green cargo in inventory slot ' + str(target))
     # Rank image components by observed distance to the declared slot. Depth
     # disambiguates objects behind the slot without using any object truth.
     best = min(candidates, key=lambda i: (
         float(np.linalg.norm(np.median(station[labels == i, :2], axis=0)-center)),
-        -int(stats[i, cv2.CC_STAT_AREA])))
+        -int(areas[i])))
     mask = labels == best
     return {'points_camera': np.ascontiguousarray(points[mask], dtype=np.float32),
             'mask': mask, 'target_id': target,

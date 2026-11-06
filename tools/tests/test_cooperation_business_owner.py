@@ -72,13 +72,19 @@ class NamedOwnerTests(unittest.TestCase):
             calls.append((snapshot,centers,kwargs));kwargs['check']()
             return {'report':{'execution':execution},'segments':[]}
         self.case.namespace['query_placement']=query
-        planner=NS(refresh_placement_context=lambda snapshot,**kwargs:calls.append(('refresh',snapshot,kwargs)))
+        def refresh(snapshot,**kwargs):
+            calls.append(('refresh',snapshot,kwargs))
+            self.case.clock+=.1
+        planner=NS(refresh_placement_context=refresh)
         plan=p.placement_query(planner,raw,[[.18,0.,.06]])
-        self.assertEqual(calls[0][2]['arm_id'],'unload_b')
-        self.assertEqual(calls[0][2]['cargo_id'],'cargo_2')
-        self.assertEqual(calls[0][2]['timeout_s'],37.)
-        self.assertEqual(calls[1][0],'refresh')
-        self.assertIs(calls[1][1],raw)
+        self.assertEqual(calls[0][0],'refresh')
+        self.assertIs(calls[0][1],raw)
+        self.assertEqual(len(calls),2)  # No second parent refresh after query.
+        self.assertEqual(calls[1][2]['arm_id'],'unload_b')
+        self.assertEqual(calls[1][2]['cargo_id'],'cargo_2')
+        self.assertAlmostEqual(calls[1][2]['timeout_s'],36.9)
+        self.assertIs(calls[1][2]['prepared_planner'],planner)
+        self.assertAlmostEqual(p.task['arm_placement_planning']['context_refresh_wall_s'],.1)
         self.assertIsNot(p.task['arm_placement_planning']['execution'],execution)
         self.assertEqual(p.task['arm_placement_planning']['execution'],execution)
         self.assertEqual(plan['report']['execution']['child_pid'],123)

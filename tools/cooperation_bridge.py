@@ -1492,18 +1492,25 @@ def run(args):
             arm_id = self.task.get('active_arm_id', binding['pickup_arm_id'])
             pose = raw['car']['position']+raw['car']['quaternion_wxyz']
             self.check()
+            # Refresh once from this post-grasp measurement, not the original
+            # pre-grasp geometry. The child receives these exact compiled models.
+            # This preparation remains inside the original task wall deadline.
+            prepared = time.monotonic()
+            planner.refresh_placement_context(raw, car_pose=pose)
+            context_refresh_wall_s = time.monotonic()-prepared
+            self.check()
             remaining = self.wall_deadline-time.monotonic()
             plan = query_placement(manifest, raw, centers, check=self.check,
-                timeout_s=remaining, arm_id=arm_id, cargo_id=binding['cargo_id'], car_pose=pose)
-            self.check()
-            # The live segment checker must use the same frozen measured scene
-            # as the child, not the earlier pre-grasp query model.
-            planner.refresh_placement_context(raw, car_pose=pose)
+                timeout_s=remaining, arm_id=arm_id, cargo_id=binding['cargo_id'], car_pose=pose,
+                prepared_planner=planner)
             self.check()
             with self.lock:
                 self.owner()
                 self.task['arm_placement_planning'] = {
-                    'source_stamp': raw['stamp'], 'arm_id': arm_id, 'cargo_id': binding['cargo_id'],
+                    'source_stamp': raw['stamp'], 'source_sequence': raw.get('sequence'),
+                    'arm_id': arm_id, 'cargo_id': binding['cargo_id'],
+                    'context_refresh_wall_s': context_refresh_wall_s,
+                    'preparation_within_original_task_deadline': True,
                     'execution': copy.deepcopy(plan['report']['execution'])}
                 self.persist()
             return plan

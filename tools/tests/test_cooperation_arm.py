@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT/'tools'))
-from cooperation_arm import query_approach, query_placement
+from cooperation_arm import ArmPlanner, query_approach, query_placement
 
 
 class ApproachProcessTests(unittest.TestCase):
@@ -29,6 +29,7 @@ if placement: mode=mode[len('placement_'):]
 if mode=='timeout': time.sleep(5)
 result={'query_id':payload['query_id'],'plan':{'planning':{'status':'solved'},'segments':[{}]*5}}
 if placement: result['plan']={'retreat':{'status':'solved'},'report':{},'segments':[{}]*(len(payload['centers_local'])+3)}
+if mode=='shortcut': result['plan']['planning']['path_simplification']={'applied':True}
 if mode=='selection': result['plan'].update({k:payload[k] for k in ('arm_id','cargo_id','snapshot')})
 if placement and mode=='selection': result['plan']['centers_local']=payload['centers_local']
 if mode=='unsolved': result['plan']['retreat']['status']='timeout'
@@ -58,6 +59,26 @@ if mode=='error': sys.exit(1)
         self.assertRegex(result['planning']['execution']['query_id'], r'^[a-f0-9-]{36}$')
         self.assertRegex(result['planning']['execution']['input_sha256'], r'^[a-f0-9]{64}$')
         self.assertEqual(self.children[0].poll(), 0)
+
+    def test_real_shortcut_audit_is_preserved_in_execution_receipt(self):
+        with self.worker('shortcut'): result = self.query()
+        self.assertTrue(result['planning']['execution']['shortcut_applied'])
+
+    def test_unloaded_optimization_is_opt_in_and_preserves_original_checker(self):
+        from types import SimpleNamespace
+        original = {'status':'solved','path':[[0]*5,[1]*5]}
+        planner = ArmPlanner.__new__(ArmPlanner); planner.manifest = {}
+        with patch('cooperation_path_simplify.simplify_joint_plan') as optimize:
+            self.assertIs(planner._simplify_unloaded(original, .015), original)
+            optimize.assert_not_called()
+            planner.manifest['arm_path_simplification_s'] = 1.
+            checker = SimpleNamespace(bounds=[[-2,2]]*5,is_valid=lambda q:True)
+            validator = lambda *args: {'valid':True}
+            planner.open_checker = checker
+            planner.modules = {'joint_planner':SimpleNamespace(validate_joint_path=validator)}
+            planner._simplify_unloaded(original, .015)
+            optimize.assert_called_once_with(original, checker.bounds, checker.is_valid,
+                validator, resolution_rad=.015, budget_s=1.)
 
     def test_original_owner_cancel_terminates_and_joins_only_its_query(self):
         calls = 0
@@ -168,7 +189,7 @@ if mode=='error': sys.exit(1)
         from cooperation_query_trace import optional_query_trace
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
-            trace = optional_query_trace({'arm_query_evidence_directory':directory}, 'ideal-query', 0.)
+            trace = optional_query_trace({'arm_query_evidence_directory':directory, 'pretrained_grasp':None}, 'ideal-query', 0.)
             self.assertIsNotNone(trace)
             trace.emit('ideal_test', inference_called=False)
             self.assertTrue((Path(directory)/'query-receipts/ideal-query/stages.jsonl').is_file())
@@ -218,6 +239,21 @@ class PlacementProcessTests(unittest.TestCase):
         self.assertNotEqual(execution['child_pid'],execution['caller_pid'])
         self.assertEqual(self.children[0].poll(),0)
 
+    def test_placement_can_transfer_fresh_owner_models_without_changing_named_snapshot(self):
+        class Prepared:
+            def save_query_models(self, directory):
+                self.paths={}
+                for name in ('common','contact','rig'):
+                    path=directory/(name+'.mjb');path.write_bytes(b'placement fixture only')
+                    self.paths[name]=str(path)
+                return {'paths':self.paths,'frozen_geoms':[{'source':'post-grasp','query':'post-grasp'}]}
+        prepared=Prepared()
+        with self.worker('placement_prepared'):
+            result=self.query(prepared_planner=prepared,timeout_s=179.)
+        self.assertEqual(result['transfer_inputs']['frozen_geoms'],[{'source':'post-grasp','query':'post-grasp'}])
+        self.assertTrue(result['report']['execution']['prepared_model_transfer'])
+        self.assertTrue(all(not Path(path).exists() for path in prepared.paths.values()))
+
     def test_original_owner_cancel_kills_and_joins_only_placement_child(self):
         calls=0
         def canceled():
@@ -248,6 +284,44 @@ class PlacementProcessTests(unittest.TestCase):
             with self.subTest(mode=mode),self.worker('placement_'+mode),self.assertRaises(RuntimeError):
                 self.query()
         self.assertTrue(all(child.poll() is not None for child in self.children))
+
+
+class PlacementPreparedContextTests(unittest.TestCase):
+    def test_only_owned_prepared_context_skips_duplicate_refresh_but_maps_real_snapshot(self):
+        import numpy as np
+        from types import SimpleNamespace as NS
+        from unittest.mock import Mock
+        local = {'qpos': list(range(13)), 'qvel': list(range(12)), 'ctrl': list(range(6))}
+        raw = {'source_snapshot': 'post-grasp'}
+        for prepared in (False, True):
+            with self.subTest(prepared=prepared):
+                data = NS(qpos=np.zeros(13),qvel=np.zeros(12),ctrl=np.zeros(6))
+                planner = ArmPlanner.__new__(ArmPlanner)
+                planner.np=np;planner.contact=object()
+                def contact_boundary(model, actual):
+                    np.testing.assert_array_equal(actual.qpos, local['qpos'])
+                    np.testing.assert_array_equal(actual.qvel, local['qvel'])
+                    np.testing.assert_array_equal(actual.ctrl, local['ctrl'])
+                    raise RuntimeError('stop_after_real_contact_context_boundary')
+                planner.mujoco=NS(MjData=lambda model:data,mj_forward=contact_boundary)
+                planner.entity_view=NS(canonical_snapshot=Mock(return_value=local))
+                planner.refresh_placement_context=Mock(return_value=local)
+                with self.assertRaisesRegex(RuntimeError,'real_contact_context_boundary'):
+                    planner.prepare_placement(raw, [[.18,0.,.06]], _context_prepared=prepared)
+                if prepared:
+                    planner.entity_view.canonical_snapshot.assert_called_once_with(raw)
+                    planner.refresh_placement_context.assert_not_called()
+                else:
+                    planner.refresh_placement_context.assert_called_once_with(raw,car_pose=None)
+                    planner.entity_view.canonical_snapshot.assert_not_called()
+
+    def test_prepared_context_keeps_original_measured_control_requirement(self):
+        import numpy as np
+        from types import SimpleNamespace as NS
+        planner=ArmPlanner.__new__(ArmPlanner);planner.np=np;planner.mujoco=object()
+        planner.entity_view=NS(canonical_snapshot=lambda snapshot:{'qpos':[], 'qvel':[]})
+        with self.assertRaisesRegex(ValueError,'current actuator references'):
+            planner.prepare_placement({}, [[.18,0.,.06]], _context_prepared=True)
 
 
 if __name__ == '__main__': unittest.main()

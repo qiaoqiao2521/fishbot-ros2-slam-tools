@@ -454,3 +454,9 @@ v2先暴露错误出生点与卸货台旁旋转；新场景改用明确空载候
 选择官方MJB交接而非另建worker平台或跨任务缓存。已有SO101 deferred_video.py使用mj_saveModel/from_binary_path；[MuJoCo3.3.7官方Python](https://mujoco.readthedocs.io/en/3.3.7/python.html)及[二进制保存API](https://mujoco.readthedocs.io/en/3.3.7/APIreference/APIfunctions.html#mj-savemodel)可直接复用。discardvisual候选不采用：common负责真实RGB-D，且[官方XML文档](https://mujoco.readthedocs.io/en/3.3.7/XMLreference.html#compiler-discardvisual)明确射线会改变。当前handoff保存owner同次snapshot的完整三模型到原临时目录，30秒包含保存/加载；不减少任何mesh、视觉或碰撞，不改placement。真实快照本机读回逐项等价与生命周期测试通过，不能替代云端实际查询及完整运输。
 
 MID原生回执的target lethal来自合成costmap，低fixture也在静态层；页面将它与真实回波、TF和订阅配置同时展示，但不写排他消费结论。配置应先保留raw字段，在几何高度包络齐备后计算self_filter，避免提前默认False覆盖后续正确派生值。此顺序回归已覆盖，source-v10实际运行仍保留旧实现，不能倒签修复。
+
+### v4后的有界候选
+
+已证实的耗时缺口分层：仓库真实RGBD后的NumPy/OpenCV ABI错误不是模型推理超时；车间重复冻结上下文与较长空手RRT路径消耗原装运墙钟。纯查询投影可复用官方mj_kinematics；真实接触力计算不可替换。冻结网格资产复用只改变资产槽，不改变每个碰撞geom几何。静态等价、较短路径和模型字节减少均不等同配送成功。
+
+采用OMPL原生ropeShortcutPath薄适配，只优化空手RRT，保留原validator和外层query/task期限。native接口的时间参数不保证内部批次可抢占，因此搜索截止后拒绝新昂贵检查、最终完整原验证另计；不得把1秒搜索预算解释为整个query只需1秒。正常候选还需真实完整B→A闭环。

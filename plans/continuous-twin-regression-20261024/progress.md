@@ -537,3 +537,19 @@ v4/source-v10已收到实际kernel version4提交回执，仍原独立两场景/
 knowledge_status=updated：原Obsidian《Wiki/ROS2 与 FishBot.md》第20节模型接入经验新增`^query-model-preparation`（重复编译与同query原生MJB，静态等价不等于任务成功），既有“换车型与雷达”补派生自过滤计算顺序及静态地图消费混淆；《Wiki/开发知识入口.md》第168行同步触发。两原页实际读回。未写Codex memories、未写capmesh，项目状态/运行原件仍分别在本计划/Drive。owner=root。
 
 反馈最终control组1134项通过、0跳过（原180秒组时限保持）。合并此前有效checkpoint22、mission209、autonomy61、frontend465的原组结果，既有反馈五组均已取得通过证据；首次环境缺失与二次旧mock失败保留。完整前端719项另已通过，不与465子集重复相加。临时native环境待本轮原生/离线检查结束后清理。
+
+### v4原生边界与source-v11候选
+
+v4/source-v10完整终态仍失败。仓库run39653fb8-4cdd-4992-a610-c41b327c2a55、task00b5db27-b67c-47c7-8f31-4f20ceedcdce、query3a6d3b71-f6c0-4224-99c7-b9a9303fd4e5：RGBD真实渲染5.590→8.027s，8.266s开始可见点提取，9.483s子进程报NumPy2.5.4/system OpenCV4.6 ABI错误，9.989s拒绝、10.000s完成清理；未调用模型，不编造候选或推理耗时。原rgb.png/depth.npy/camera.json已回收。改用既有SciPy8连通标记；实际此帧312点、mask和float32点逐值相同。等秩多分量时OpenCV与SciPy的隐式标签顺序可能不同，该边界保留，不新增排序伪装完全通用等价。
+
+车间run7bf05ac0-6044-4933-b908-87cc02a24e78、task3ad6a897-15e7-4e47-a893-fbeffcd75dc2：Approach13.640s通过；placement64.294s通过但含重复上下文准备。真实双指抓取、抬升、托盘释放/支撑与回位均成立；源167.92s到出站，原装运360墙秒超时，实测372.7095s清理、source181.46；B未完成，A未执行。持续物理推进和观测发布争用，不能把全部墙钟耗时归给规划。原observer实测mj_step240.088s与publish139.519s，子项有嵌套，禁止相加重复解释。
+
+source-v11只保留已原生验证的候选：fresh postgrasp快照由owner刷新一次并交接MJB，子进程不重复构造同快照，接触力仍mj_forward；纯位姿投影用mj_kinematics。冻结query_root内完全相同mesh按实际顶点/faces复用；J100与Mec真实快照每个geom局部/世界几何、关节/惯量、10open/closed与5carried判定、双指力均一致。contact/rig各47→26mesh、两MJB合计减少182,077,358B，common/live/RGBD不变；全局asset索引预期改变，不冒称全数组一致。
+
+显式arm_path_simplification_s=1只在本轮F2启用；复用OMPL ropeShortcutPath，完整原碰撞/边界/分辨率复检，失败回原路径。Mec冻结Approach3.707061→2.324061rad，direct仍invalid；home3.430668→.353418rad；native搜索1.00385/.11091s，含原前后检查2.25074/1.35053s，本机静态无物理步进。持物Cartesian和垂直detach prefix不简化。shortcut_applied按实际audit记录，默认0兼容旧任务。去掉ideal分支额外、未参与控制的后向RGBD；保留overview和实际16线，这是恢复声明的ideal配置，不降低传感器/物理频率。
+
+整合后47项相关单测/真实渲染通过、2项见证测试通过、diff通过。第一次合并测试缺DISPLAY导致GLFW中止，osmesa重跑缺libGL接口；最终MUJOCO_GL=egl原生47项通过，前两次环境失败保留。source-v11已冻结并读回所选源码逐字一致，上传/业务验收另记。knowledge_status=updated沿用上节已读回原页；本节运行状态不写知识库。owner=root。
+
+第五轮已获官方versionNumber5提交回执，source-v11数据集ready后提交，独立原kernel最大3600墙秒，367个Python文件语法通过。SDK首次调用用错accelerator关键字，在发请求前TypeError；按安装SDK的acc参数修正后仅一次实际提交，无重复会话。API提交不计业务验收。v3/v4原件及source-v10/v11已存选定weiyuyang147 Drive：1AOuKbKN0Lwr22YB3JlDm0J-vCCcyMUGw，90,585,551B；从Drive实际流式下载逐成员读回233项/101,777,602解码字节。已删除已验证上传tar副本90,585,551B，保留所需原件/源码/receipt，未触碰其他任务。
+
+新增整合后BridgeRace原107项通过；单独调用首次缺PYTHONPATH=tools导入失败，按原项目入口修正后通过，无断言变更。独立只读审查确认原碰撞validator、细分辨率与detach prefix保持，执行receipt只按真实applied标记。特别边界：视觉cooperation_model_grasp.py接近分支仍用原.005rad直接/OMPL，未套本轮空手简化；本轮只覆盖ideal approach及各自placement的空手home段，不宣称所有视觉RRT已优化。原query/owner deadline继续覆盖完整前后校验。
