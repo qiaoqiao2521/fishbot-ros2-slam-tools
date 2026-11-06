@@ -82,7 +82,7 @@ const server = http.createServer(async (request, response) => {
   } else if (pathname === "/records/so101.mcap" && recordings) {
     publicPath = path.resolve(recordings);
     request.url = "/so101.mcap";
-  } else if (["/layouts/so101-review.json", "/layouts/so101-mobile.json", "/layouts/so101-station.json", "/layouts/so101-station-mobile.json", "/layouts/drone-station.json", "/layouts/drone-station-mobile.json", "/layouts/drone-review.json", "/layouts/drone-diagnostics.json", "/layouts/drone-diagnostics-mobile.json"].includes(pathname)) {
+  } else if (["/layouts/so101-review.json", "/layouts/so101-mobile.json", "/layouts/so101-station.json", "/layouts/so101-station-mobile.json", "/layouts/drone-station.json", "/layouts/drone-station-mobile.json", "/layouts/drone-review.json", "/layouts/drone-perception.json", "/layouts/drone-diagnostics.json", "/layouts/drone-diagnostics-mobile.json"].includes(pathname)) {
     publicPath = layouts;
     request.url = `/${path.basename(pathname)}`;
   } else if (pathname.startsWith("/records/") || pathname.startsWith("/layouts/")) {

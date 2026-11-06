@@ -10,6 +10,7 @@ const {PNG}=requireWorkbench('pngjs');
 const base=process.env.STATION_TEST_URL??'http://127.0.0.1:5187';
 const output=process.env.CERLAB_QA_OUTPUT??path.join(__dirname,'output/cerlab-browser');
 fs.mkdirSync(output,{recursive:true});
+const perceptionReplay=process.env.CERLAB_PERCEPTION_REPLAY==='1';
 const cancelRun=process.env.CERLAB_CANCEL==='1';
 const result={passed:false,posts:[],replayWrites:[],pageErrors:[],checks:[]};
 const save=()=>fs.writeFileSync(path.join(output,'result.json'),JSON.stringify(result,null,2));
@@ -75,6 +76,11 @@ const save=()=>fs.writeFileSync(path.join(output,'result.json'),JSON.stringify(r
    assert.match(vehicle.texts[0].text,/IRIS/);
   }
   assert(count>20);assert(airborne.z>.7);assert(last.z<.15);
+  if(perceptionReplay){
+   let nonempty=0,tracked=0;
+   for await(const m of reader.readMessages({topics:['/drone/perception/points','/drone/perception/status']})){const v=JSON.parse(Buffer.from(m.data));if(v.data)nonempty++;if(v.tracked_boxes>0)tracked++;}
+   assert(nonempty>20,'No actual depth point cloud recorded');result.perception={nonemptyClouds:nonempty,trackedFrames:tracked};result.checks.push('actual-depth-cloud-in-same-flight-recording');
+  }
   const reverse=[];for await(const m of reader.readMessages({topics:['/drone/live/status'],reverse:true})) {reverse.push(m.logTime);if(reverse.length===2)break;}
   assert(reverse[0]>=reverse[1]);result.mcap={frames:count,first,last,airborne,bytes:bytes.length};
   const replay=await browser.newContext({viewport:{width:1600,height:1100}, ...(process.env.CERLAB_REPLAY_VIDEO?{recordVideo:{dir:output,size:{width:1600,height:1100}}}:{})});
@@ -82,16 +88,18 @@ const save=()=>fs.writeFileSync(path.join(output,'result.json'),JSON.stringify(r
   await replay.routeWebSocket('**/*',ws=>{result.replayWrites.push('websocket:'+ws.url());ws.close();});
   const replayCreated=Date.now();
   const view=await replay.newPage();
-  result.replayUrl=base+'/?'+new URLSearchParams({ds:'remote-file','ds.url':artifact,layoutUrl:base+'/layouts/drone-review.json'});
+  result.replayUrl=base+'/?'+new URLSearchParams({ds:'remote-file','ds.url':artifact,layoutUrl:base+(perceptionReplay?'/layouts/drone-perception.json':'/layouts/drone-review.json')});
   await view.goto(result.replayUrl);
   const timeInput=view.getByTestId('PlaybackTime-text').locator('input');
   await expect(timeInput).toBeVisible({timeout:90000});
   await expect(view.getByTestId('play-button')).toBeEnabled();
-  const scenePanel=view.getByTestId('panel-mouseenter-container 3D!dronelive');
+  const scenePanel=view.getByTestId('panel-mouseenter-container '+(perceptionReplay?'3D!dronetruth':'3D!dronelive'));
+  const depthPanel=perceptionReplay?view.getByTestId('panel-mouseenter-container 3D!dronedepth'):null;
   for(const [name,frame]of [['initial',first],['airborne',airborne],['landed',last],['rewound',first]]){
    await timeInput.fill(frame.s.toFixed(9));await timeInput.press('Enter');await timeInput.blur();
    await expect.poll(async()=>Number(await timeInput.inputValue())).toBeCloseTo(frame.s,5);
    await scenePanel.screenshot({path:path.join(output,`replay-${name}.png`)});
+   if(depthPanel)await depthPanel.screenshot({path:path.join(output,`depth-${name}.png`)});
   }
   const initialTime=Number(await timeInput.inputValue());
   await view.getByTestId('play-button').click();
@@ -104,6 +112,7 @@ const save=()=>fs.writeFileSync(path.join(output,'result.json'),JSON.stringify(r
    await timeInput.fill(start.toFixed(9));await timeInput.press('Enter');await timeInput.blur();
    await expect.poll(async()=>Number(await timeInput.inputValue())).toBeCloseTo(start,5);
    const crop=await scenePanel.boundingBox();
+   if(depthPanel){const right=await depthPanel.boundingBox();crop.width=right.x+right.width-crop.x;crop.height=Math.max(crop.height,right.height);}
    const offset=(Date.now()-replayCreated)/1000;
    await view.getByTestId('play-button').click();
    await expect.poll(async()=>Number(await timeInput.inputValue()),{timeout:(last.s-start+30)*1000,intervals:[500]}).toBeGreaterThanOrEqual(last.s-.05);

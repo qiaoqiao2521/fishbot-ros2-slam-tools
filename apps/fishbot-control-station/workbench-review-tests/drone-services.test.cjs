@@ -91,6 +91,29 @@ test('drone discovery notices a newly built planner without restarting the serve
  assert.deepEqual(runtime.runtime().executor.planners,['waypoint','ego']);
 });
 
+test('perception replay keeps native XYZ, omits oracle geometry and clears stale clouds',async t=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'drone-perception-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+ fs.writeFileSync(path.join(root,'request.json'),JSON.stringify({id:'observations',station}));
+ const data=Buffer.alloc(12);[1,2,3].forEach((n,i)=>data.writeFloatLE(n,i*4));
+ const perception={cloud:{received_s:1,source_s:null,display_points:1,input_points:1,xyz_base64:data.toString('base64')},depth:{source_s:.98}};
+ const samples=[1.1,1.6].map(simulation_s=>({simulation_s,perception,pose:{position:[0,0,1]},obstacles:[{id:'oracle',position:[4,0,2],size:[.6,.6,4]}]}));
+ fs.writeFileSync(path.join(root,'telemetry.jsonl'),samples.map(s=>JSON.stringify(s)).join('\n'));
+ await writeRecording(root);
+ const bytes=fs.readFileSync(path.join(root,'flight.mcap'));
+ const reader=await McapIndexedReader.Initialize({readable:{size:async()=>BigInt(bytes.length),read:async(o,n)=>bytes.subarray(Number(o),Number(o+n))}});
+ const points=[],scenes=[],status=[];
+ for await(const m of reader.readMessages()){
+  const value=JSON.parse(Buffer.from(m.data)),topic=reader.channelsById.get(m.channelId).topic;
+  if(topic==='/drone/perception/points')points.push(value);
+  if(topic==='/drone/perception/scene')scenes.push(value);
+  if(topic==='/drone/perception/status')status.push(value);
+ }
+ assert.equal(points[0].data,data.toString('base64'));assert.equal(points[1].data,'');
+ assert.equal(status[0].cloud_source_stamp_available,false);assert.equal(status[1].display_points,0);
+ assert(scenes.every(s=>s.entities.every(e=>!e.id.startsWith('observed-'))));
+ assert(scenes.every(s=>s.deletions[0].type===1));
+});
+
 test('MCAP task links select the native file reader and retain range-readable aliases',async t=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'drone-artifacts-'));
  const id='recording-flight-123',dir=path.join(root,id);fs.mkdirSync(dir);
