@@ -1260,7 +1260,7 @@ class BridgeRaceTests(unittest.TestCase):
             def __init__(self,*args,**kwargs):pass
             def prepare_transport(self,raw):return {'segments':[{'stage':name} for name in ('release','retreat','settle')]}
         self.namespace['ArmPlanner']=Planner
-        def controlled_query(manifest,q6,car_pose,*,check,timeout_s):
+        def controlled_query(manifest,q6,car_pose,*,check,timeout_s,prepared_planner=None):
             check()
             return {'segments':[{'stage':'lift'}], 'planning':{
                 'path':[q6[:5]], 'execution':{'mode':'controlled_test_fixture'}}}

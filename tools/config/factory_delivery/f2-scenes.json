@@ -1,0 +1,104 @@
+{
+  "schema": 1,
+  "scope": "two new static layouts; existing prepare, Factory, Nav2 and Oracle",
+  "scenes": [
+    {
+      "id": "f2-wide-warehouse",
+      "label": "\u5bbd\u901a\u9053\u4ed3\u5e93",
+      "scene_profile": "tools/config/factory_delivery/j100-wide-profile.json",
+      "arena_xml": "tools/config/factory_delivery/f2-wide-warehouse-arena.xml",
+      "factory_config": "tools/config/factory_delivery/f2-wide-warehouse.json",
+      "continuous_delivery": "tools/config/factory_delivery/j100-wide-entities.json",
+      "continuous_deliveries": "tools/config/factory_delivery/continuous-ba-orders.json",
+      "observation": "vision",
+      "perception_config": "tools/config/perception/apriltag-station.example.json",
+      "pretrained_grasp_config": "tools/config/perception/pretrained-grasp.example.json",
+      "prepare_flags": [
+        "--queued-ros-dispatch",
+        "--terminal-stop-heartbeat",
+        "--camera-rgbd"
+      ],
+      "spawn": [
+        -0.9,
+        -1.68
+      ],
+      "spawn_yaw": 0.0,
+      "orders": [
+        "order-b",
+        "order-a"
+      ],
+      "static_route_reference": [
+        [
+          -1.6,
+          -1.68
+        ],
+        [
+          -0.9,
+          -1.68
+        ],
+        [
+          0.0,
+          -1.68
+        ],
+        [
+          1.7,
+          -1.68
+        ]
+      ],
+      "assumptions": [
+        "Rigid upright racks represented by collision boxes",
+        "Added storage bays do not alter original handover geometry",
+        "Reference polyline is a static clearance sample, not a Nav2 command or runtime proof",
+        "Initial car is in a declared empty pickup waiting bay; this does not validate remote unloaded ingress from line A."
+      ],
+      "spawn_basis": "Existing J100 visual-recovery initial pose; avoid line_a unload base at former [0,-2] default."
+    },
+    {
+      "id": "f2-workshop-line",
+      "label": "\u8f66\u95f4\u7ebf\u8fb9",
+      "scene_profile": "tools/config/cooperation_profiles/robot_base_mecanum-lidar3d-transport.json",
+      "arena_xml": "tools/config/factory_delivery/f2-workshop-line-arena.xml",
+      "factory_config": "tools/config/factory_delivery/f2-workshop-line.json",
+      "continuous_delivery": "tools/config/factory_delivery/continuous-ba-entities.json",
+      "continuous_deliveries": "tools/config/factory_delivery/continuous-ba-orders.json",
+      "observation": "ideal",
+      "prepare_flags": [
+        "--queued-ros-dispatch",
+        "--terminal-stop-heartbeat"
+      ],
+      "spawn": [
+        -0.9,
+        -1.64
+      ],
+      "spawn_yaw": 0.0,
+      "orders": [
+        "order-b",
+        "order-a"
+      ],
+      "static_route_reference": [
+        [
+          -1.6,
+          -1.64
+        ],
+        [
+          -0.9,
+          -1.64
+        ],
+        [
+          0.0,
+          -2.0
+        ],
+        [
+          0.7,
+          -2.0
+        ]
+      ],
+      "assumptions": [
+        "Machine cells are static solid collision boxes, not articulated manufacturing equipment",
+        "Mecanum physics is original four-wheel/roller model",
+        "Ideal station input is explicit and is not visual control",
+        "Initial car is in a declared empty pickup waiting bay; this does not validate remote unloaded ingress from line A."
+      ]
+    }
+  ]
+}

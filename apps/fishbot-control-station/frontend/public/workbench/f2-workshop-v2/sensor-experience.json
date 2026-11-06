@@ -1,0 +1,174 @@
+{
+  "schema": "fishbot.sensor-experience.v1",
+  "status": "complete",
+  "new_execution": false,
+  "read_only": true,
+  "rescored": false,
+  "frame_id": "lidar3d_link",
+  "sensor": {
+    "frame_id": "lidar3d_link",
+    "parent_body": "laser_link",
+    "mount_xyz": [
+      0.0,
+      0.0,
+      0.035
+    ],
+    "horizontal_samples": 360,
+    "lines": 16,
+    "vertical_degrees": [
+      -15.0,
+      15.0
+    ],
+    "min_range_m": 0.12,
+    "max_range_m": 8.0,
+    "rate_hz": 10.0,
+    "topic": "/sensors/lidar3d/points",
+    "metadata_topic": "/sensors/lidar3d/frame_metadata",
+    "basis": "native_mj_multiRay_generic_instantaneous_16_line_sensor",
+    "layout_source": "ros-controls/mujoco_ros2_control/0.1.1/mujoco_extensions/mujoco_3d_lidar",
+    "plugin_3_12_loaded": false,
+    "self_filter": {
+      "enabled": true,
+      "type": "compiled_body_convex_containment",
+      "frame_id": "base_footprint",
+      "footprint_xy": [
+        [
+          -0.25,
+          -0.26
+        ],
+        [
+          -0.22,
+          -0.28000000000000025
+        ],
+        [
+          -0.1,
+          -0.28000000000000025
+        ],
+        [
+          0.25,
+          -0.26
+        ],
+        [
+          0.25,
+          0.26
+        ],
+        [
+          -0.25,
+          0.26
+        ]
+      ],
+      "padding_xy_m": 0.0,
+      "z_min_m": -3.469446951953614e-18,
+      "z_max_m": 0.2520665927567458,
+      "basis": "compiled full vehicle footprint and declared rigid loaded height envelope",
+      "decision_inputs": "source-stamped point coordinates only; no task, cargo identity or contact state",
+      "removed_value": "NaN",
+      "reraycast_removed_rays": false
+    },
+    "raw_topic": "/sensors/lidar3d/points_raw"
+  },
+  "frames": [
+    {
+      "url": "frame-0.json",
+      "identity": {
+        "scene_sha256": "a5d66af629d1bca1439cfdb2b524c2a1f5b9c3bf9a4936e9ec64170d5619b62f",
+        "manifest_sha256": "b9008144474c96a010d1536064b4b98556f0460d734cd067e3eb4ec603adb19f",
+        "episode_id": "1fec8b37-dc3e-4735-afc4-be435ae59e4f",
+        "sequence": "104"
+      },
+      "source_s": 2.0999999999999903,
+      "valid_points": 5051
+    },
+    {
+      "url": "frame-1.json",
+      "identity": {
+        "scene_sha256": "a5d66af629d1bca1439cfdb2b524c2a1f5b9c3bf9a4936e9ec64170d5619b62f",
+        "manifest_sha256": "b9008144474c96a010d1536064b4b98556f0460d734cd067e3eb4ec603adb19f",
+        "episode_id": "1fec8b37-dc3e-4735-afc4-be435ae59e4f",
+        "sequence": "209"
+      },
+      "source_s": 4.1999999999997595,
+      "valid_points": 5051
+    },
+    {
+      "url": "frame-2.json",
+      "identity": {
+        "scene_sha256": "a5d66af629d1bca1439cfdb2b524c2a1f5b9c3bf9a4936e9ec64170d5619b62f",
+        "manifest_sha256": "b9008144474c96a010d1536064b4b98556f0460d734cd067e3eb4ec603adb19f",
+        "episode_id": "1fec8b37-dc3e-4735-afc4-be435ae59e4f",
+        "sequence": "314"
+      },
+      "source_s": 6.299999999999528,
+      "valid_points": 5048
+    },
+    {
+      "url": "frame-3.json",
+      "identity": {
+        "scene_sha256": "a5d66af629d1bca1439cfdb2b524c2a1f5b9c3bf9a4936e9ec64170d5619b62f",
+        "manifest_sha256": "b9008144474c96a010d1536064b4b98556f0460d734cd067e3eb4ec603adb19f",
+        "episode_id": "1fec8b37-dc3e-4735-afc4-be435ae59e4f",
+        "sequence": "419"
+      },
+      "source_s": 8.399999999999475,
+      "valid_points": 5045
+    },
+    {
+      "url": "frame-4.json",
+      "identity": {
+        "scene_sha256": "a5d66af629d1bca1439cfdb2b524c2a1f5b9c3bf9a4936e9ec64170d5619b62f",
+        "manifest_sha256": "b9008144474c96a010d1536064b4b98556f0460d734cd067e3eb4ec603adb19f",
+        "episode_id": "1fec8b37-dc3e-4735-afc4-be435ae59e4f",
+        "sequence": "519"
+      },
+      "source_s": 10.400000000000142,
+      "valid_points": 5051
+    },
+    {
+      "url": "frame-5.json",
+      "identity": {
+        "scene_sha256": "a5d66af629d1bca1439cfdb2b524c2a1f5b9c3bf9a4936e9ec64170d5619b62f",
+        "manifest_sha256": "b9008144474c96a010d1536064b4b98556f0460d734cd067e3eb4ec603adb19f",
+        "episode_id": "1fec8b37-dc3e-4735-afc4-be435ae59e4f",
+        "sequence": "619"
+      },
+      "source_s": 12.40000000000081,
+      "valid_points": 5091
+    }
+  ],
+  "warnings": [
+    "Same-source map TF unavailable: Lookup would require extrapolation into the past.  Requested time 2.100000 but the earliest data is at time 2.900000, when looking up transform from frame [lidar3d_link] to frame [map]"
+  ],
+  "actual_subscribers": [
+    {
+      "node": "/local_costmap/local_costmap",
+      "type": "sensor_msgs/msg/PointCloud2"
+    },
+    {
+      "node": "/global_costmap/global_costmap",
+      "type": "sensor_msgs/msg/PointCloud2"
+    },
+    {
+      "node": "/collision_monitor",
+      "type": "sensor_msgs/msg/PointCloud2"
+    }
+  ],
+  "message_counts": {
+    "pointcloud": 104,
+    "metadata": 104,
+    "physics": 527
+  },
+  "tf": {
+    "requested": 6,
+    "matched_source": 5,
+    "failed": 1
+  },
+  "consumer_evidence_scope": "DDS endpoint discovery only; not a per-message consumer ACK",
+  "truth_to_control": false,
+  "coordinate_frame": "sensor_xyz_m",
+  "projection": {
+    "horizontal": "atan2(y,x)",
+    "vertical": "atan2(z,hypot(x,y))",
+    "same_view_for_truth_and_observation": true
+  },
+  "elapsed_wall_s": 23.377463891999923
+}

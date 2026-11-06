@@ -477,3 +477,63 @@ F1首批成果卡、真实回放、录像及阶段图已交付；整体F1仍in_p
 读回后删除本轮重复tar/zip、派生10Hz流/索引、专用QA node_modules及早期重复截图；实移除分配空间111042560字节（105.9MiB），文件系统可用前1698918400、后1809960960字节。其他任务会改变全盘余量，不将全盘差值视为本次回收量。保留轻量公开素材、最后桌面/手机QA、小型receipt/恢复说明；原共享cloud-jobs未删，不停止其他服务。Vite5194/results仍可查看。
 
 当前用户范围已完成：四组已有资料接齐、SpecMesh更新、原件/现存资料Drive存档。停止新仿真、推理及B→A补录；F2/F3未派发，缺失媒体与原失败原样保留。knowledge_status=already_covered，无额外知识或Codex记忆写入。后续owner=根Codex，等用户对工作台的反馈；CY地图候选仍待独立审查，已留改动和原入口。
+
+## 2026-11-06 剩余四项重新实施 / in_progress
+
+用户要求完成视觉证据/模型取证、F2两场景和F3传感器体验，根Agent已明确将执行必需有限仿真。内置子Agent分配：visual_inference_trace负责原30秒取证最小修复；f2_scene_profiles负责新布局与配置；f3_sensor_experience负责真实扫描输入与对比数据。根Codex负责共享文档、云任务唯一派发、前端证据链、独立评分读回、Drive与Git。未把已分派计完成；不放宽原门槛，不增加训练或新平台。
+
+采用知识库原FishBot第19/20节的双时钟、真值隔离、模型/规划/物理评分分层和GL驱动验证经验；状态与原件分别留项目和Drive。knowledge_status=pending，owner=root，待有新的可复用结论再判断回写。
+
+### 剩余四项：首个云验收已提交
+
+Kaggle muqiaoqiao实际私有kernel为fishbot-f2-f3-visual-closure-20261106，version1已读回RUNNING；CLI按title生成slug，与原请求id不一致，已按实际URL记录且未重复提交。请求T4×2档、整job3600墙秒，原每单360+180/路线120/接近30秒不变。两新场景按原Factory顺序独立验收，首仓库使用官方CSV的MID-360式减采样输入，次车间保留麦轮16线ideal；不将提交或RUNNING当通过。
+
+冻结源码包349个Python文件语法通过；包含trace helper、F2真实碰撞布局、官方角度资产及同源只读捕获工具。新官方角度资产基于Livox-SDK/livox_laser_simulation@1cce107（MIT），4000×1/10Hz、40k rays/s、4源秒循环、帧内冻结与8m截断；不是完整硬件仿真。仓库路线外增加(-.25,.55)的12cm低障碍，保留原安装高度/FOV，供实际回波与原costmap取证。来源/版本/完整限制在tools/assets/livox。
+
+本地先行检查31项：29通过、2 native环境项跳过；仅CPU范围，不称原生接口通过。视觉取证和新前端已具备接口，真实数据仍待云任务。原v5已从Drive有界恢复manifest/launch/GL报告，没有grasp-observations成员，无法倒推原30秒根因。
+
+### 首个云回合v1失败与修复边界
+
+v1在约505会话秒结束。真实GL/依赖/模型入口/原生补丁构建及首仓库prepare通过；仓库Factory在约1.8墙秒的独占域预检拒绝：root把只读lidar probe提前启动，占用了域187，未发配送动作。原30秒查询未执行，所以本轮仍不证明其根因。随后第二场景prepare因云源码包未包含已存在的workspaces/mecanum_ws/src/robot_base/robot_base/drive_node.py失败，未发配送动作。两项均为本次root集成问题，不归因Nav2/模型，也不放宽隔离检查。
+
+修复：只读见证在线程中等待本轮原API ready后才加入域，失败/取消可停止且不创建节点；2项针对性回归通过。源码包包含原麦轮workspace依赖，单独检查drive_node存在；复用v1已成功构建的原Nav2 overlay，不重装平台。v1失败材料/选定源码保留，个别旧GL fixture导出项下载失败已单列，原graphics-fixture压缩输入仍在；不称零缺项全量回收。后续v2仅在实际提交读回后更新，不把准备算运行。
+
+只读Kaggle status网络调用108秒未返回时，root核实v2本地metadata尚未创建、子进程仅status读请求，停止本轮自己的该shell和子进程，未终止其他任务，未有v2提交。随后Kaggle操作改用同官方CLI/API的命令级请求超时；不是重发未知任务。source-v8数据已ready，待v2明确提交回执。原件与失败先保留，不清理未归档材料。
+
+v2已收到官方明确回执“Kernel version 2 successfully pushed”，实际kernel同上，源快照source-v8，整job仍3600墙秒。未重复派发；终态/业务/同源观察与Drive待本轮读回。只读见证时序修复未修改原独占检查。v1原生cache用于本轮，仍运行原clock检查，不将cache存在当实际加载证明。
+
+UI-only浏览器测试6组通过：RGB/depth/候选/里程碑的各项缺失、XY/XZ、query耗时、sensor图层与原帧选择/跨±π、64位纳秒精确保留、错身份和404、390px布局；0write/0pageerror，浏览器已关闭。仅page.route内明确fixture，不写public、不计模型/物理成功。首轮lazy图片未进视口的脚本超时与最后重跑收据保留；手机按钮nowrap已修。新前端相关24测试、生产构建和局部lint通过，云端真实数据尚待接入。
+
+### v2原生失败读回与v3候选
+
+v2(source-v8)结束，仓库geometry在spawn[0,-2,0]与unload_line_a__collision_base_1重叠，距离-0.077492714m；0start、未启动世界、未到模型query。车间run f8e8134e-8463-4770-8bdd-a5c6544ea12a，B task1fc93a47-74b7-4922-ab18-5feb18e4d744在进场失败，A未执行；1start/0reset/0cancel，RPP collision ahead/patience，车只转至.884rad。静态完整六点足迹投影诊断在约1.065rad碰卸货台，与前瞻拒绝一致，但不是动态碰撞评分。两失败原件不替换历史成功。
+
+修正新场景空载候车位：仓库[-.9,-1.68,0]复用原视觉入口默认，车间[-.9,-1.64,0]匹配其staging。没有放宽几何/控制/时间/物理评分；本次完整业务仍要求实际B→A装运卸。候车位起步不证明从A站远端空载进场，旧失败边界保留。7项场景/只读见证定向检查通过，source-v9冻结；v3提交状态单独按原回执记录。
+
+F3实际已回收车间6帧uniform16线云+同源BOX；源身份精确相符，TF5/6，首帧2.1源秒查过去失败保留；实收云/metadata/physics为104/104/527。DDS订阅发现不是消费ACK。仓库MID模式未启动，不能用manifest计通过。低fixture已在collision_map静态层，所以后续lethal与回波共存不能声称排他3D因果；保留原图和碰撞不另造消费结果。
+
+v3已收到官方明确提交回执，kernel version3/source-v9，仍3600墙秒；只修新场景候车位，不改控制/评分。当前正在原云任务安装和模型准备，未计业务成功。当前40项定向单元检查38通过/2原生环境缺失跳过。
+
+v1/v2原件及source-v7/v8/v9冻结输入已存weiyuyang147 Drive：`1YqKqoBOeLqX-3WpOhHsawCpbw2ELsn4i`，44,353,920字节；实际下载逐成员读回176项。删除本轮已用source-v7/v8和上传tar重复件，共64,946,176分配字节；当前任务所需v1/v2回收材料、source-v9和读回receipt保留，未动共享原件或其他任务。恢复入口为该Drive包对应路径。
+
+### v3取证：30秒耗在模型准备，非已发生的GPU推理
+
+v3(source-v9)两新场景geometry均通过并原生停靠成功，但首单都在Approach query原30墙秒超时，A未执行。仓库run269fef1c-4e11-44d2-83df-d42c84978db1，taskf7472568-86da-4471-a9e6-531742adc3cc；query5329bb0b-0cb4-4a63-bee1-ad99e0010c07：导入.548→2.513s，worldcompile2.513→8.239s，named view8.241→8.258s，冻结查询root生成后contactcompile14.589→23.688s，再开始rigcompile，30.010s原deadline，30.409s清理。没有RGB观测/候选/实际模型请求，不能用服务器loaded当推理证据。v5无保留阶段证据，不能断言v5与本轮100%同因。
+
+车间runa6966e6a-3677-4393-902a-cda66813ea04，task135b39d3-3299-4662-844c-d3e5df1823dc：原Dock successful，task同样Approach超时；ideal此前无query记录，所以不为其编造编译分项。已补可选arm_query_evidence_directory，ideal与vision共用原trace，不启用虚假模型。
+
+最小修复复用owner已持有的完整common/contact/rig，官方mj_saveModel/from_binary_path在同一次_query原TemporaryDirectory内交接。无跨任务cache，无视觉/碰撞缩减，不启用discardvisual，不改placement，不挪动原30秒或360秒计时。成功/取消/超时/child error/部分保存错误全部清理临时MJB，保存耗尽预算不派发子进程，23项arm/inference单元通过。
+
+本机临时65MiB原生query环境只做无GPU模型交接验证，未下载权重、未启动ROS/推理/mj_step。真实v3快照路径重定位副本只改文件前缀，原件保留。三模型27数组（包括mesh/视觉/collision/joint/inertia）与6运动学字段逐项相同、5个碰撞verdict相同、frozen binding相同；common81个visual geom保留。原初始化7.634s、保存.690s、恢复1.665s是本机静态测量，非云性能/30秒query/配送验收。三MJB共714,721,448B已随原临时目录清理，/tmp对应目录确认空，不归档可再生二进制副本。完整报告mjb-transfer-native.json保留。
+
+F3 v3 MID实际PointCloud2为4000×1，首处理帧1384有效点、66个2cm高度bin；原TF成功、配置/订阅发现及低障碍回波/合成costmap已读回（native-lidar-consumer.status complete）。静态层同样包含低fixture，不能宣称排他3D致障因果或逐消息消费ACK；完整任务仍失败。
+
+当前前端全65文件/719项通过，生产构建通过；root真实失败卡浏览器4组复核与两种扫描草稿JSON导出复核0写/0异常。首次草稿脚本没点工作面“任务”tab而等待隐藏select超时，修正UI操作后通过，非产品bug。首次check-feedback因本地已清理的规划环境缺失导致control8错/失败与checkpoint失败；mission209/autonomy61/frontend465通过。现用临时native环境只重验原失败组，未放宽测试期限；结果待原进程读回。
+
+v4/source-v10已收到实际kernel version4提交回执，仍原独立两场景/3600墙秒，新增无动作MJB等价预检后再原Factory。v4启动后root复查新sensor CLI发现顺序bug：在height_envelope生成前调用configuration，会把derived self_filter=False固化；已改apply仅保留用户raw settings，由原消费者在几何完成后求derived配置，新增无包络→加入真实包络→自过滤True的回归5/5通过。source-v10不含此修复，不能冒称v4已验证新修复。已尝试核官方取消接口，但它需session_id，而SDK读取只提供kernel/version；未拿kernel_id冒作session_id，也未操作其他会话。v4不重复派发，等待原终态作诊断，后续source需包含修复。
+
+完整反馈重验的checkpoint22通过；control暴露16个旧BridgeRace mock不接新增prepared_planner关键字，已仅加可选参数，107项原断言复跑通过。另3个geometry测试硬编码已删除的旧venv路径，已对齐既有FISHBOT_SO101_PYTHON入口，默认路径兼容；正在真实原生重验。其余新model生命周期检查继续通过。
+
+knowledge_status=updated：原Obsidian《Wiki/ROS2 与 FishBot.md》第20节模型接入经验新增`^query-model-preparation`（重复编译与同query原生MJB，静态等价不等于任务成功），既有“换车型与雷达”补派生自过滤计算顺序及静态地图消费混淆；《Wiki/开发知识入口.md》第168行同步触发。两原页实际读回。未写Codex memories、未写capmesh，项目状态/运行原件仍分别在本计划/Drive。owner=root。
+
+反馈最终control组1134项通过、0跳过（原180秒组时限保持）。合并此前有效checkpoint22、mission209、autonomy61、frontend465的原组结果，既有反馈五组均已取得通过证据；首次环境缺失与二次旧mock失败保留。完整前端719项另已通过，不与465子集重复相加。临时native环境待本轮原生/离线检查结束后清理。

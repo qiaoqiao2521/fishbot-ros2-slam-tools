@@ -1,0 +1,59 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "新车间 v2 · 麦轮进场失败",
+  "recorded_at": "2026-11-06",
+  "run_id": "f8e8134e-8463-4770-8bdd-a5c6544ea12a",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "麦克纳姆 robot_base",
+  "sensor": "3D 雷达 · 原16线",
+  "scene_label": "新车间线边 · f2-workshop-line",
+  "observation_mode": "ideal",
+  "model": "SO101（本回合尚未进入装卸）",
+  "description": "本回合原生进场失败，尚未执行装卸或载货运输。六个同源传感器帧与失败录像独立保留，不替代四组历史成果。",
+  "evidence_note": "新车间实际失败记录；ideal工位观测，非视觉抓取或Mid-360验收。点云/真值捕获与原订单共享episode，但采集窗口不自动等于该订单运动窗口。订阅发现不等于逐消息ACK。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 109.82146177599998,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（失败）",
+      "task_id": "1fc93a47-74b7-4922-ab18-5feb18e4d744",
+      "passed": false,
+      "route_seconds": null,
+      "position_error_m": null,
+      "yaw_error_rad": null,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": "进场原Nav2 Goal终态6；B任务与原独立评分均失败，A未派发。未完成装卸或载货路线。"
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/f2-workshop-v2/timing.json",
+    "replay": "/workbench/f2-workshop-v2/replay.json",
+    "video": "/workbench/f2-workshop-v2/overview.mp4",
+    "poster": "/workbench/f2-workshop-v2/overview.jpg",
+    "sensor_experience": "/workbench/f2-workshop-v2/sensor-experience.json",
+    "video_index": "/workbench/f2-workshop-v2/video-frame-index.json"
+  },
+  "video_caption": "本失败会话151个实际全景采样帧，按原2fps独立播放；帧时间索引可下载，不与上方源时间滑杆混为同一时钟。 下载的是实际记录派生的媒体索引，未补帧或插值；完整原录制日志见本回合Drive归档及其状态说明。",
+  "availability_note": "实际原物理记录已导入；静态几何与臂世界FK未提供。",
+  "archive_status": "v2原始记录与冻结输入已存指定Drive，44,353,920字节、176成员实际下载读回；本页派生展示资产将在本轮收尾另归档。",
+  "warnings": [
+    "真实PointCloud2六帧来自同一episode，5051/5051/5048/5045/5051/5091个有限点；TF6次请求、5次匹配、1次失败，缺TF未以真值补齐。",
+    "三订阅端为local/global costmap与collision_monitor，仅证明发现端点。",
+    "原任务original_score_passed=false、task_verdict=failed；owned进程清理与物理评分cleanup分项不混同。",
+    "本轮没有visual_chain：尚未进入实际视觉抓取，不能凭SO101存在展示模型候选或装卸成功。"
+  ],
+  "provenance": {
+    "source_kind": "recovered_original_failed_run_and_sensor_capture",
+    "source_run_id": "f8e8134e-8463-4770-8bdd-a5c6544ea12a",
+    "task_id": "1fc93a47-74b7-4922-ab18-5feb18e4d744",
+    "episode_id": "1fec8b37-dc3e-4735-afc4-be435ae59e4f",
+    "declared_scene_id": "f1-continuous-b-a-entities",
+    "capture_binding": "all six original capture episode IDs equal the original B episode; scene/manifest identities are displayed per frame",
+    "new_execution": false,
+    "rescored": false
+  },
+  "archive_url": "https://drive.google.com/file/d/1YqKqoBOeLqX-3WpOhHsawCpbw2ELsn4i/view?usp=drivesdk"
+}

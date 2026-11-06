@@ -1,0 +1,26 @@
+.sensor-experience-panel { min-width: 0; background: #fff; color: #17324d; border: 1px solid #dbe4ef; border-radius: 14px; padding: 24px; margin-bottom: 24px; overflow-wrap: anywhere; }
+.sensor-experience-panel > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.sensor-experience-panel h2 { font-size: 22px; font-weight: 650; }
+.sensor-experience-panel p { color: #61748b; line-height: 1.75; font-size: 12px; margin-top: 9px; }
+.sensor-experience-panel button, .sensor-experience-panel select, .sensor-experience-panel a { font-size: 12px; }
+.sensor-experience-panel button, .sensor-experience-panel select { border: 1px solid #dbe4ef; border-radius: 6px; padding: 7px 10px; background: #fff; color: #2563eb; }
+.sensor-experience-panel button, .sensor-experience-panel a { display: inline-flex; align-items: center; gap: 6px; }
+.sensor-experience-panel a { color: #2563eb; }
+.sensor-experience-context { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #61748b; margin-top: 14px; }
+.sensor-experience-selection { display: flex; align-items: center; gap: 16px; justify-content: space-between; flex-wrap: wrap; margin: 18px 0; }
+.sensor-experience-selection label { display: flex; min-width: 0; align-items: center; gap: 8px; font-size: 12px; }
+.sensor-experience-selection select { min-width: 0; max-width: 100%; }
+.sensor-experience-identity, .sensor-experience-evidence dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; margin: 16px 0; }
+.sensor-experience-identity > div, .sensor-experience-evidence dl > div { min-width: 0; }
+.sensor-experience-panel dt { color: #61748b; font-size: 11px; margin-bottom: 5px; }
+.sensor-experience-panel dd { font-size: 12px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sensor-layer-controls { display: flex; gap: 18px; flex-wrap: wrap; margin: 16px 0; font-size: 12px; }
+.sensor-layer-controls label { display: inline-flex; align-items: center; gap: 7px; }
+.sensor-layer-controls input { accent-color: #2563eb; }
+.sensor-panorama { width: 100%; max-height: 450px; display: block; }
+.sensor-panorama text { fill: #61748b; font-size: 11px; }
+.sensor-experience-warning { padding: 10px; border-radius: 6px; background: #f5f8fc; }
+.sensor-experience-panel details summary { color: #2563eb; cursor: pointer; font-size: 12px; margin-top: 14px; }
+.sensor-experience-evidence { border-top: 1px solid #dbe4ef; padding-top: 5px; margin-top: 16px; }
+.sensor-experience-panel :is(button,select,a,input):focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+@media(max-width: 650px) { .sensor-experience-panel { padding: 18px; } .sensor-experience-identity, .sensor-experience-evidence dl { grid-template-columns: 1fr; } .sensor-experience-panel > header button { padding: 7px; flex-shrink: 0; } }

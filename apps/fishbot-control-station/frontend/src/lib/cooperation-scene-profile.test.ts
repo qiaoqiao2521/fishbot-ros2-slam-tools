@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  DEFAULT_COOPERATION_SCENE_PROFILE, cooperationLiveProfile,
+  DEFAULT_COOPERATION_SCENE_PROFILE, cooperationLiveProfile, cooperationPrepareCommand, cooperationScanConfigHref,
   cooperationSceneProfileDocument, cooperationSceneProfileHref, parseCooperationSceneProfile,
 } from './cooperation-scene-profile'
 
@@ -50,4 +50,14 @@ describe('cooperation scene profile contract', () => {
     expect(cooperationLiveProfile(null).note).toContain('等待协同服务')
     expect(cooperationLiveProfile({ vehicle_profile: { id: 'future-robot' } }).vehicleName).toBe('未识别车型')
   })
+  it('reads real scan mode only from lidar runtime and exports the selected original config', () => {
+    const profile = { ...DEFAULT_COOPERATION_SCENE_PROFILE, sensors: 'lidar3d' } as const
+    expect(cooperationLiveProfile({ scene_profile: profile }).sensorsLabel).toContain('未上报')
+    expect(cooperationLiveProfile({ scene_profile: profile, lidar3d: { scan_pattern: 'livox_mid360_csv_stride5' } }).sensorsLabel).toContain('MID-360')
+    const config = JSON.parse(decodeURIComponent(cooperationScanConfigHref('livox_mid360_csv_stride5').split(',').slice(1).join(',')))
+    expect(config.horizontal_samples).toBe(4000); expect(config.lines).toBe(1)
+    expect(cooperationPrepareCommand(profile)).toContain('lidar3d-config.json ' + String.fromCharCode(92, 10))
+    expect(cooperationPrepareCommand(DEFAULT_COOPERATION_SCENE_PROFILE)).not.toContain('--lidar3d-config')
+  })
+
 })

@@ -5,6 +5,8 @@ import { parseDeliveryTiming, type TimingReport } from '@/lib/delivery-timing'
 import { parseVisionResult, readVisionResult, type VisionResult } from '@/lib/vision-delivery'
 import { DeliveryTimingPanel } from './delivery-timing-panel'
 import { ReplayViewport } from './regression-page'
+import { VisualEvidencePanel } from './visual-evidence-panel'
+import { SensorExperiencePanel } from './sensor-experience-panel'
 import './vision-delivery-result.css'
 
 const metric = (v: number | null, unit: string, scale = 1) => v === null ? '未提供' : `${(v * scale).toFixed(unit === 'rad' ? 4 : 2)} ${unit}`
@@ -90,7 +92,7 @@ export function VisionDeliveryResult({ initialResult, initialUrl = '/workbench/j
                 <output>{elapsed.toFixed(1)} / {duration.toFixed(1)} s</output><label>速度<select aria-label="视觉回放速度" value={speed} onChange={event => setSpeed(Number(event.target.value))}>{[1, 8, 32].map(value => <option key={value} value={value}>{value}×</option>)}</select></label></div>
               <p className="vision-result-caption">{replay.warnings.length ? '当前为已导入的展示采样，来源边界见下方告警。' : '车辆、货物与关节来自保存的实际采样。'}空档保持空白，播放不启动仿真。</p>{replay.warnings.length > 0 && <div className="vision-result-notice" role="status">{replay.warnings.map((warning, i) => <p key={i}>{warning}</p>)}</div>}
             </> : <div className="vision-result-unavailable"><h3>位置回放尚未载入</h3><p>{result.availabilityNote || '原记录恢复并导出轻量回放后，在这里查看实际轨迹。'}</p><p>已验收的结果继续展示；不以其他回合或插值轨迹代替本回合。</p></div>}
-            {result.videoUrl && <><video controls preload="metadata" poster={result.posterUrl ?? undefined} src={result.videoUrl} aria-label="视觉配送场景采样录像" onError={() => setVideoError(true)} /><p className="vision-result-caption">{result.videoCaption || '场景采样录像独立播放；阶段跳转定位上方数据回放，不定位录像。'}</p></>}{videoError && <p className="vision-result-notice" role="status">录像加载失败；成果摘要与可用的数据回放继续保留。</p>}
+            {result.videoUrl && <><video controls preload="metadata" poster={result.posterUrl ?? undefined} src={result.videoUrl} aria-label="视觉配送场景采样录像" onError={() => setVideoError(true)} /><p className="vision-result-caption">{result.videoCaption || '场景采样录像独立播放；阶段跳转定位上方数据回放，不定位录像。'}</p>{result.videoIndexUrl && <a href={result.videoIndexUrl} download>下载录像帧时间索引</a>}</>}{videoError && <p className="vision-result-notice" role="status">录像加载失败；成果摘要与可用的数据回放继续保留。</p>}
           </div>
           <aside className="vision-result-ledger" aria-label="视觉配送订单成果">
             <h3>{result.orders.length > 1 ? result.resets === 0 ? '两件货物，同一世界' : '两单配送，分轮验收' : '实际派发的订单'}</h3><p>原任务与独立物理评分，分别对应每件货物。</p>
@@ -104,9 +106,11 @@ export function VisionDeliveryResult({ initialResult, initialUrl = '/workbench/j
           </aside>
         </div>
         <details className="vision-result-evidence"><summary>来源、归档与适用范围</summary><p>运行 {result.runId}；{result.archiveStatus}。</p><p>{result.evidenceNote}</p>
-          {result.archiveUrl && <p><a href={result.archiveUrl} target="_blank" rel="noopener noreferrer">打开 Drive 恢复包</a></p>}{result.warnings.map((message, i) => <p key={i}>{message}</p>)}<a href={result.evidenceUrl} target="_blank" rel="noopener noreferrer">配置与验收说明</a></details>
+          {result.lidarReceiptUrl && <p><a href={result.lidarReceiptUrl} download>下载原生雷达链路回执</a></p>}{result.archiveUrl && <p><a href={result.archiveUrl} target="_blank" rel="noopener noreferrer">打开 Drive 恢复包</a></p>}{result.warnings.map((message, i) => <p key={i}>{message}</p>)}<a href={result.evidenceUrl} target="_blank" rel="noopener noreferrer">配置与验收说明</a></details>
       </>}
     </section>
+    {result?.visualChainUrl && <VisualEvidencePanel key={`${result.runId}:${result.visualChainUrl}`} sourceUrl={result.visualChainUrl} expectedRunId={result.runId} taskId={order?.taskId || undefined} />}
+    {result?.sensorExperienceUrl && <SensorExperiencePanel key={`${result.runId}:${result.sensorExperienceUrl}`} sourceUrl={result.sensorExperienceUrl} expectedRunId={result.runId} />}
     {result?.timingUrl ? <DeliveryTimingPanel boundSource key={timing?.source_run_id ?? 'pending-vision'} initialSource="j100vision" sourceUrl={result?.timingUrl ?? undefined} initialReport={timing?.source}
       caseTaskId={order?.taskId} onCaseChange={chooseTask} onReplayRequest={chooseTask} replayTaskIds={replay?.runs.map(item => item.taskId)} /> : result && <p className="vision-result-notice" role="status">该回合阶段时间原件缺失，未拼接其他场景的时间轴。已有摘要可下载。</p>}
   </>

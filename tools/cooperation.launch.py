@@ -85,9 +85,12 @@ def start(context):
             launch_arguments={'params_file':manifest['nav2_yaml'],'use_sim_time':'True',
                               'use_composition':'False','autostart':'True'}.items())])])]
     if grasp_enabled:
+        grasp_command = [grasp_config['python'], '-B', str(root/'cooperation_grasp_inference.py'),
+                         '--serve-port', grasp_port, '--models', grasp_config['models']]
+        if grasp_config.get('output_directory'):
+            grasp_command += ['--trace-directory', str(Path(grasp_config['output_directory'])/'server-receipts')]
         actions.insert(4, ExecuteProcess(
-            cmd=[grasp_config['python'], '-B', str(root/'cooperation_grasp_inference.py'),
-                 '--serve-port', grasp_port, '--models', grasp_config['models']],
+            cmd=grasp_command,
             additional_env={'PYTHONPATH':'', 'OPENBLAS_NUM_THREADS':'1', 'OMP_NUM_THREADS':'1'},
             output='screen', on_exit=Shutdown()))
     if manifest.get('localization', {}).get('enabled'):

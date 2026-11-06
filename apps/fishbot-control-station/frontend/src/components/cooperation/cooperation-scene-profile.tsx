@@ -1,16 +1,16 @@
 import { useState } from 'react'
 import { Download } from 'lucide-react'
 import {
-  COOPERATION_PREPARE_COMMAND, DEFAULT_COOPERATION_SCENE_PROFILE,
+  DEFAULT_COOPERATION_SCENE_PROFILE, SCENE_SCAN_LABELS, cooperationPrepareCommand, cooperationScanConfigHref,
   SCENE_SENSOR_LABELS, SCENE_TASK_LABELS, SCENE_VEHICLE_LABELS,
   cooperationLiveProfile, cooperationSceneProfileHref,
-  type CooperationProfileState, type CooperationSceneProfile,
+  type CooperationProfileState, type CooperationSceneProfile, type CooperationScanPattern,
 } from '@/lib/cooperation-scene-profile'
 import './cooperation-scene-profile.css'
 
-type Props = { state: CooperationProfileState | null; draft: CooperationSceneProfile; onDraftChange: (value: CooperationSceneProfile) => void }
+type Props = { state: CooperationProfileState | null; draft: CooperationSceneProfile; onDraftChange: (value: CooperationSceneProfile) => void; scanPattern?: CooperationScanPattern; onScanPatternChange?: (value: CooperationScanPattern) => void }
 
-export function CooperationSceneProfileView({ state, draft, onDraftChange }: Props) {
+export function CooperationSceneProfileView({ state, draft, onDraftChange, scanPattern = 'uniform_16_line', onScanPatternChange }: Props) {
   const live = cooperationLiveProfile(state)
   return <section className="cooperation-profile-panel" aria-labelledby="cooperation-profile-heading">
     <div className="cooperation-profile-live" data-scene-profile-kind="live">
@@ -36,12 +36,20 @@ export function CooperationSceneProfileView({ state, draft, onDraftChange }: Pro
           {Object.entries(SCENE_TASK_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select></label>
       </div>
+      {draft.sensors === 'lidar3d' && <div className="cooperation-profile-fields">
+        <label htmlFor="cooperation-draft-scan">3D扫描模式<select id="cooperation-draft-scan" value={scanPattern}
+          onChange={event => onScanPatternChange?.(event.target.value as CooperationScanPattern)}>
+          {Object.entries(SCENE_SCAN_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select></label>
+        <a className="cooperation-button cooperation-quiet cooperation-profile-download" href={cooperationScanConfigHref(scanPattern)} download="lidar3d-config.json"><Download size={15} aria-hidden="true" />下载3D扫描配置 JSON</a>
+        <p>MID-360式为官方角度5倍抽稀、帧内冻结的仿真近似。下载只保存草稿，不会重启当前场景。</p>
+      </div>}
       {draft.task === 'three_batch_transport' && <p className="cooperation-profile-owner-note">三批 A / A / B 由现有 workflow 执行。网页不重复派发每批运输。</p>}
       <a className="cooperation-button cooperation-quiet cooperation-profile-download"
         href={cooperationSceneProfileHref(draft)} download="cooperation-profile.json"><Download size={15} aria-hidden="true" />下载场景配置 JSON</a>
       <details><summary>创建新独立实验的命令</summary>
         <p>在项目目录使用已配置的 FISHBOT_COOP_PYTHON。替换配置路径和 NEW_SCENE，输出目录须为新目录。</p>
-        <pre>{COOPERATION_PREPARE_COMMAND}</pre>
+        <pre>{cooperationPrepareCommand(draft)}</pre>
         <p>此命令只准备场景。启动时选择独立 ROS 域、API 端口和运行目录；不会热替换当前实验。</p>
         <p><a href="https://github.com/qiaoqiao2521/fishbot-ros2-slam-tools/blob/main/docs/COOPERATION_WORKFLOW.md" target="_blank" rel="noreferrer">完整启动与三批任务说明</a>：继续使用现有 workflow 初始化账本、接收就绪事件并运行任务。</p>
       </details>
@@ -51,5 +59,6 @@ export function CooperationSceneProfileView({ state, draft, onDraftChange }: Pro
 
 export function CooperationSceneProfilePanel({ state }: { state: CooperationProfileState | null }) {
   const [draft, setDraft] = useState<CooperationSceneProfile>({ ...DEFAULT_COOPERATION_SCENE_PROFILE })
-  return <CooperationSceneProfileView state={state} draft={draft} onDraftChange={setDraft} />
+  const [scanPattern, setScanPattern] = useState<CooperationScanPattern>('uniform_16_line')
+  return <CooperationSceneProfileView state={state} draft={draft} onDraftChange={setDraft} scanPattern={scanPattern} onScanPatternChange={setScanPattern} />
 }

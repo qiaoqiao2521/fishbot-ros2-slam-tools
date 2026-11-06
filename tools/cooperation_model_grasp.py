@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import time
 
+from cooperation_query_trace import emit
+
 
 def fit_body_pose(model, initial, target):
     """Use mink's native SE3 task; the gripper hinge remains fixed open."""
@@ -53,7 +55,7 @@ def release_sweep(planner, arm_q):
         arm_resolution_rad=.005, jaw_resolution_rad=.002)
 
 
-def prepare_model_approach(planner, q6, proposals):
+def prepare_model_approach(planner, q6, proposals, *, trace=None):
     """Never read grasp_target(): pose inputs originate in RGB-D inference."""
     np = planner.np
     q = planner._q6(q6)
@@ -74,6 +76,19 @@ def prepare_model_approach(planner, q6, proposals):
             except OSError as error:
                 logging.warning('Could not record model candidate progress: %s', error)
     began = time.monotonic()
+    emit(trace, 'candidate_planning_started', candidate_count=len(candidates))
+    def phase(row, name, operation):
+        row['phase'] = name
+        record_attempts()
+        started = time.monotonic()
+        emit(trace, 'candidate_phase_started', candidate_index=row['index'], phase=name)
+        try:
+            return operation()
+        finally:
+            elapsed = time.monotonic()-started
+            row.setdefault('phase_wall_s', {})[name] = elapsed
+            emit(trace, 'candidate_phase_finished', candidate_index=row['index'],
+                 phase=name, elapsed_stage_wall_s=elapsed)
     # The same calibrated virtual frame is used by the descriptor, official
     # diffusion/OBB sampling and discriminator. Invert it only at the IK edge.
     body_from_grasp = np.linalg.inv(np.asarray(proposals.get(
@@ -92,14 +107,16 @@ def prepare_model_approach(planner, q6, proposals):
         attempts.append(row)
         try:
             record_attempts()
-            down, xyz_error, angle_error = fit_body_pose(planner.rig, q, body_goal)
+            down, xyz_error, angle_error = phase(row, 'grasp_ik',
+                lambda: fit_body_pose(planner.rig, q, body_goal))
             row.update(position_error_m=xyz_error, rotation_error_rad=angle_error)
             if down is None:
                 row['reason'] = 'grasp_pose_not_reachable'
                 continue
             row['phase'] = 'pregrasp_ik'
             record_attempts()
-            approach, _, _ = fit_body_pose(planner.rig, np.r_[down, .5], pre_goal)
+            approach, _, _ = phase(row, 'pregrasp_ik',
+                lambda: fit_body_pose(planner.rig, np.r_[down, .5], pre_goal))
             if approach is None:
                 row['reason'] = 'pregrasp_pose_not_reachable'
                 continue
@@ -109,7 +126,8 @@ def prepare_model_approach(planner, q6, proposals):
                 endpoint = transfer_endpoint(planner)
                 target = body_goal.copy()
                 target[:3, 3] = np.asarray(endpoint) - target[:3, :3] @ planner.modules['grasp_episode'].PINCH_POINT
-                terminal, endpoint_error, endpoint_angle = fit_body_pose(planner.rig, np.r_[approach, .5], target)
+                terminal, endpoint_error, endpoint_angle = phase(row, 'transfer_endpoint_ik',
+                    lambda: fit_body_pose(planner.rig, np.r_[approach, .5], target))
                 row['transfer_endpoint'] = {'pinch_station_m': endpoint,
                     'position_error_m': endpoint_error, 'rotation_error_rad': endpoint_angle,
                     'orientation_policy': 'proposed_gripper_rotation',
@@ -118,26 +136,31 @@ def prepare_model_approach(planner, q6, proposals):
                     row['reason'] = 'transfer_endpoint_not_reproduced'
                     continue
                 row['phase'] = 'transfer_release_sweep'
-                row['transfer_release_sweep'] = release_sweep(planner, terminal)
+                row['transfer_release_sweep'] = phase(row, 'transfer_release_sweep',
+                    lambda: release_sweep(planner, terminal))
                 if not row['transfer_release_sweep']['valid']:
                     row['reason'] = 'transfer_release_collision'
                     continue
-            descent = source.validate_joint_path([approach, down], planner.open_checker.is_valid, .005)
-            ascent = source.validate_joint_path([down, approach], planner.closed_checker.is_valid, .005)
+            descent = phase(row, 'descent_validation', lambda: source.validate_joint_path(
+                [approach, down], planner.open_checker.is_valid, .005))
+            ascent = phase(row, 'ascent_validation', lambda: source.validate_joint_path(
+                [down, approach], planner.closed_checker.is_valid, .005))
             if not descent['valid'] or not ascent['valid']:
                 row.update(reason='grasp_leg_collision', descent=descent, ascent=ascent)
                 continue
             from configuration_sweep import validate_configuration_path
-            closure = validate_configuration_path(np.r_[down, .5], np.r_[down, .015],
+            closure = phase(row, 'closure_sweep', lambda: validate_configuration_path(
+                np.r_[down, .5], np.r_[down, .015],
                 lambda value: planner.open_checker.evaluate(value, require_fixed_gripper=False)['valid'],
-                arm_resolution_rad=.005, jaw_resolution_rad=.002)
+                arm_resolution_rad=.005, jaw_resolution_rad=.002))
             if not closure['valid']:
                 row.update(reason='gripper_closure_collision', closure=closure)
                 continue
             row['phase'] = 'direct_approach'
             record_attempts()
             direct_began = time.monotonic()
-            direct = source.validate_joint_path([q[:5], approach], planner.open_checker.is_valid, .005)
+            direct = phase(row, 'direct_approach', lambda: source.validate_joint_path(
+                [q[:5], approach], planner.open_checker.is_valid, .005))
             direct_wall = time.monotonic()-direct_began
             if direct['valid']:
                 planned = {'status': 'solved', 'path': [q[:5].tolist(), approach.tolist()],
@@ -148,8 +171,9 @@ def prepare_model_approach(planner, q6, proposals):
             else:
                 row['phase'] = 'ompl_approach'
                 record_attempts()
-                planned = source.plan_joint_path(q[:5], approach, planner.open_checker.bounds,
-                    planner.open_checker.is_valid, seed=0, timeout_s=5., resolution_rad=.005)
+                planned = phase(row, 'ompl_approach', lambda: source.plan_joint_path(
+                    q[:5], approach, planner.open_checker.bounds,
+                    planner.open_checker.is_valid, seed=0, timeout_s=5., resolution_rad=.005))
             planned['direct_approach'] = dict(direct, elapsed_wall_s=direct_wall)
             if planned['status'] != 'solved':
                 row['reason'] = 'approach_path_not_solved'
@@ -161,6 +185,21 @@ def prepare_model_approach(planner, q6, proposals):
                         planner._segment('close', [down, down], .015, duration_s=0., dwell_s=6.),
                         planner._segment('lift', [down, approach], .015),
                         planner._segment('hold', [approach, approach], .015, duration_s=0., dwell_s=1.5)]
+            emit(trace, 'model_candidate_selected', candidate_index=row['index'],
+                 candidate_score=row['score'], origin=row['origin'])
+            directory = proposals.get('inference', {}).get('source_directory')
+            if directory:
+                import json
+                import logging
+                from pathlib import Path
+                try:
+                    (Path(directory)/'selected-candidate.json').write_text(json.dumps({
+                        'selected': row, 'pose_station': candidate['pose_station'],
+                        'observation': proposals.get('observation'),
+                        'query_id': trace.query_id if trace is not None else None,
+                        'physical_grasp_verified': False}, indent=2)+'\n')
+                except OSError as error:
+                    logging.warning('Could not record selected candidate: %s', error)
             planned['model_grasp'] = {'selected': row, 'attempts': attempts,
                 'observation': proposals.get('observation'), 'inference': proposals.get('inference'),
                 'source': 'visible_rgbd_pretrained_graspgenx', 'ideal_target_fallback': False}
@@ -173,4 +212,5 @@ def prepare_model_approach(planner, q6, proposals):
             row['elapsed_wall_s'] = time.monotonic()-began
             record_attempts()
     record_attempts()
+    emit(trace, 'candidate_planning_failed', attempted_count=len(attempts))
     raise RuntimeError('No executable RGB-D model grasp: '+str(attempts[-6:]))

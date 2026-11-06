@@ -1542,7 +1542,8 @@ def run(args):
             self.event('arm','unload_grasp','卸货臂使用 RGB-D 与预训练模型计算托盘抓取。'
                 if manifest.get('pretrained_grasp', {}).get('enabled') else '卸货臂按当前货物身份从托盘抓取。')
             plan = query_approach(manifest, self.task_material(raw)['q6'], pose,
-                check=self.check, timeout_s=min(30., max(.001,self.wall_deadline-time.monotonic())), **options)
+                check=self.check, timeout_s=min(30., max(.001,self.wall_deadline-time.monotonic())),
+                prepared_planner=planner, **options)
             self.record_visual_grasp(plan)
             for segment in plan['segments']:
                 self.segment(segment, planner)
@@ -1613,7 +1614,8 @@ def run(args):
                 if manifest.get('pretrained_grasp', {}).get('enabled'):
                     self.event('arm','approach','正在从 RGB-D 提取目标，并由 GraspGen-X 生成抓取候选。')
                 plan = query_approach(manifest, self.task_material(raw)['q6'], pose,
-                    check=self.check, timeout_s=min(30., max(.001, self.wall_deadline-time.monotonic())), **options)
+                    check=self.check, timeout_s=min(30., max(.001, self.wall_deadline-time.monotonic())),
+                    prepared_planner=planner, **options)
                 self.record_visual_grasp(plan)
                 self.check()
                 # Retain small planning evidence once per task. Full trajectories
@@ -2204,6 +2206,7 @@ def run(args):
                 result = {'mode':'mujoco','domain':args.domain,'ready':ready,'reason':reason,'task':copy.deepcopy(self.task),
                     'scene_profile':copy.deepcopy(manifest.get('scene_profile')),
                     'vehicle_profile':copy.deepcopy(manifest.get('vehicle_profile')),
+                    'lidar3d':copy.deepcopy(raw.get('lidar3d')) if raw else None,
                     'events':copy.deepcopy(self.events),'physics':physics,'frame':frame,
                     # Instance identity survives a reset/freshness gap. This is
                     # the XML hashed at startup, not a new physical observation.

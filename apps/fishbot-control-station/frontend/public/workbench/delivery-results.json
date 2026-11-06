@@ -1,7 +1,7 @@
 {
   "schema": "fishbot.delivery-results.v1",
   "updated_at": "2026-11-06",
-  "scope": "现有资料整理，零新仿真、零推理、零重评分",
+  "scope": "四组已有成果与新场景实际实验分开索引；本页只读展示，不运行仿真、推理或重新评分",
   "groups": [
     {
       "id": "j100-vision",
@@ -46,6 +46,10 @@
   ],
   "archives": [
     {
+      "label": "F2/F3 v1/v2原始失败与冻结输入（已下载读回）",
+      "url": "https://drive.google.com/file/d/1YqKqoBOeLqX-3WpOhHsawCpbw2ELsn4i/view?usp=drivesdk"
+    },
+    {
       "label": "四组成果工作台 · 源码、现有报告与媒体",
       "url": "https://drive.google.com/file/d/1OvvVnfa1n2xfNtAel3QVJmDnKhuaEc6d/view?usp=drivesdk"
     },
@@ -60,6 +64,28 @@
     {
       "label": "旧J100 ideal 原始记录、场景与网格",
       "url": "https://drive.google.com/file/d/1cu18pi8OWzZYgCRvBpzv6Ovcr0jFRrwK/view?usp=drivesdk"
+    }
+  ],
+  "experiments": [
+    {
+      "id": "f2-workshop-v2",
+      "title": "新车间 v2 · 进场失败",
+      "vehicle": "mecanum",
+      "sensor": "3d",
+      "configuration": "新车间线边 / 麦轮 / 原16线3D / ideal观测",
+      "source": "/workbench/f2-workshop-v2-result.json",
+      "coverage": "B进场失败；A未执行；不计完整配送",
+      "materials": "六帧同源点云/真值、实际录像、失败阶段与位置回放"
+    },
+    {
+      "id": "f2-warehouse-v3",
+      "title": "新仓库 v3 · 编译超时",
+      "vehicle": "j100",
+      "sensor": "3d",
+      "configuration": "新仓库 / J100 / MID-360式扫描 / 查询取证",
+      "source": "/workbench/f2-warehouse-v3-result.json",
+      "coverage": "B接近查询30秒超时；尚未实际推理；A未执行",
+      "materials": "真实MID采样、原生接口回执、空视觉链与实际query、录像/耗时"
     }
   ]
 }

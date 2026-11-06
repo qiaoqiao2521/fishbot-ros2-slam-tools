@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "upstream": "https://github.com/Livox-SDK/livox_laser_simulation",
+  "commit": "1cce1073633a062b92e30243a4c2920e45551bb5",
+  "license": "MIT",
+  "source_file": "scan_mode/mid360.csv",
+  "source_url": "https://raw.githubusercontent.com/Livox-SDK/livox_laser_simulation/1cce1073633a062b92e30243a4c2920e45551bb5/scan_mode/mid360.csv",
+  "source_rows": 800000,
+  "retained_rows": 160000,
+  "stride": 5,
+  "derivation": "preserve every fifth original row and original decimal angle strings; discard ambiguous CSV time column; advance using row order and declared nominal 200000 points/s",
+  "elevation_bounds_deg": [
+    -7.212199999999996,
+    52.162
+  ],
+  "spec_source": "https://www.livoxtech.com/mid-360/specs",
+  "limitations": [
+    "Frame-instantaneous pose; no per-ray motion distortion or deskew",
+    "Fivefold angular sampling reduction, nominal 40000 rays/s at 10Hz",
+    "Range limited by scene configuration; no reflectivity, weather, intensity or hardware noise validation",
+    "CSV loop is repeated after its finite source rows; not an indefinitely non-repeating hardware scan",
+    "No Livox SDK network protocol or physical IMU emulation"
+  ]
+}

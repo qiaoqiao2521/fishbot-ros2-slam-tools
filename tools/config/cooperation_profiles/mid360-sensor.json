@@ -1,0 +1,18 @@
+{
+  "scan_pattern": "livox_mid360_csv_stride5",
+  "min_range_m": 0.1,
+  "max_range_m": 8.0,
+  "rate_hz": 10.0,
+  "scope": "MID-360 official angular CSV only; 5x decimation and frame-instantaneous pose; range clipped to this task",
+  "hardware_fidelity": "No reflectivity, intensity, weather, per-ray motion distortion, physical IMU or Livox UDP protocol emulation",
+  "horizontal_samples": 4000,
+  "lines": 1,
+  "vertical_degrees": [
+    -7.0,
+    52.0
+  ],
+  "nominal_hardware_points_per_s": 200000,
+  "angular_downsample": 5,
+  "basis": "official_mid360_csv_stride5_frame_instantaneous_native_mj_multiRay",
+  "layout_source": "Livox-SDK/livox_laser_simulation@1cce1073633a062b92e30243a4c2920e45551bb5"
+}

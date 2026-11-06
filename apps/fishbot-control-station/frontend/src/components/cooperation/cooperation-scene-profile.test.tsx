@@ -2,7 +2,7 @@ import { isValidElement, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { CooperationSceneProfileView } from './cooperation-scene-profile'
-import { DEFAULT_COOPERATION_SCENE_PROFILE, type CooperationSceneProfile } from '@/lib/cooperation-scene-profile'
+import { DEFAULT_COOPERATION_SCENE_PROFILE, type CooperationSceneProfile, type CooperationScanPattern } from '@/lib/cooperation-scene-profile'
 
 function select(node: ReactNode, id: string): { value: string; onChange: (event: { target: { value: string } }) => void } | null {
   if (Array.isArray(node)) return node.map((item) => select(item, id)).find(Boolean) ?? null
@@ -26,12 +26,12 @@ describe('scene configuration draft panel', () => {
     expect(live).toContain('FishBot')
     expect(live).toContain('2D 平面雷达')
     expect(live).not.toContain('Jackal')
-    expect(html).toContain('2D + 16线 3D 雷达')
+    expect(html).toContain('2D + 3D 雷达')
     expect(html).toContain('download="cooperation-profile.json"')
     expect(html).toContain('现有 workflow 执行')
     expect(html).toContain('不会热替换当前实验')
     expect(html).toContain('--scene-profile /path/to/cooperation-profile.json')
-    const href = html.match(/href="(data:application\/json[^"]+)"/)![1]
+    const href = html.match(/href="(data:application\/json[^"]+)" download="cooperation-profile.json"/)![1]
     expect(JSON.parse(decodeURIComponent(href.split(',').slice(1).join(',')))).toEqual(draft)
     expect(fetcher).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
@@ -60,4 +60,21 @@ describe('scene configuration draft panel', () => {
     expect(live).toContain('FishBot')
     expect(live).not.toContain('robot_base')
   })
+  it('downloads the independent scan draft without changing live scan identity or four-field scene JSON', () => {
+    let scanPattern: CooperationScanPattern = 'uniform_16_line'
+    const draft: CooperationSceneProfile = { ...DEFAULT_COOPERATION_SCENE_PROFILE, sensors: 'lidar3d' }
+    const tree = () => CooperationSceneProfileView({ draft, onDraftChange: () => {}, scanPattern,
+      onScanPatternChange: next => { scanPattern = next },
+      state: { scene_profile: draft, lidar3d: { scan_pattern: 'uniform_16_line' } } })
+    select(tree(), 'cooperation-draft-scan')!.onChange({ target: { value: 'livox_mid360_csv_stride5' } })
+    const html = renderToStaticMarkup(tree())
+    const href = html.match(/href="(data:application\/json[^"]+)" download="lidar3d-config.json"/)![1]
+    const config = JSON.parse(decodeURIComponent(href.split(',').slice(1).join(',')))
+    expect(config.scan_pattern).toBe('livox_mid360_csv_stride5'); expect(config.lines).toBe(1)
+    expect(html).toContain('--lidar3d-config /path/to/lidar3d-config.json')
+    expect(html).toContain('不会重启当前场景')
+    const live = html.split('data-scene-profile-kind="live"')[1].split('data-scene-profile-kind="draft"')[0]
+    expect(live).toContain('均匀16线'); expect(live).not.toContain('MID-360')
+  })
+
 })

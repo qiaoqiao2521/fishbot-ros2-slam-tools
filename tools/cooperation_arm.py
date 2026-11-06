@@ -16,6 +16,7 @@ import time
 import xml.etree.ElementTree as ET
 
 from cooperation_scene import frozen_car_geoms, source_modules
+from cooperation_query_trace import emit, optional_query_trace, trace_from_context
 
 
 class _PayloadQueryBackend:
@@ -34,7 +35,7 @@ class _PayloadQueryBackend:
 
 
 def query_approach(manifest, q6, car_pose, *, check, timeout_s=30.,
-                   arm_id=None, cargo_id=None, snapshot=None, model_grasps=None):
+                   arm_id=None, cargo_id=None, snapshot=None, model_grasps=None, prepared_planner=None):
     """Original bounded approach query; input and its 30s limit stay intact."""
     if not math.isfinite(timeout_s) or not 0 < timeout_s <= 30.:
         raise ValueError('Approach query requires a wall budget up to 30 seconds')
@@ -44,7 +45,7 @@ def query_approach(manifest, q6, car_pose, *, check, timeout_s=30.,
         payload.update(arm_id=arm_id, cargo_id=cargo_id, snapshot=snapshot)
     if model_grasps is not None:
         payload['model_grasps'] = model_grasps
-    return _query('approach', payload, check=check, timeout_s=timeout_s)
+    return _query('approach', payload, check=check, timeout_s=timeout_s, prepared_planner=prepared_planner)
 
 
 def query_placement(manifest, snapshot, centers_local, *, check, timeout_s,
@@ -62,11 +63,12 @@ def query_placement(manifest, snapshot, centers_local, *, check, timeout_s,
     return _query('placement', payload, check=check, timeout_s=timeout_s)
 
 
-def _query(kind, values, *, check, timeout_s):
+def _query(kind, values, *, check, timeout_s, prepared_planner=None):
     """One owned pure child, polled through the existing task owner's check.
 
-    No ROS, live-data writes, retries or new scheduler. Query artifacts and the
-    child are reclaimed on success, original cancellation, timeout or failure.
+    No ROS, live-data writes, retries or new scheduler. Temporary requests, MJB
+    transfers and the child are reclaimed on every exit; optional small receipts
+    survive timeout and failure for diagnosis.
     """
     import os
     import subprocess
@@ -75,29 +77,59 @@ def _query(kind, values, *, check, timeout_s):
     import uuid
     label = kind.capitalize()
     identity = str(uuid.uuid4()); started = time.monotonic(); process = None
+    trace = optional_query_trace(values.get('manifest', {}), identity, started)
     payload = {'query_id': identity, **values}
+    if trace is not None:
+        payload['_query_trace'] = trace.context()
+    emit(trace, 'query_started', kind=kind, wall_budget_s=timeout_s,
+         arm_id=values.get('arm_id'), cargo_id=values.get('cargo_id'),
+         episode_id=(values.get('snapshot') or {}).get('episode_id'),
+         source_sequence=(values.get('snapshot') or {}).get('sequence'))
     encoded = json.dumps(payload, allow_nan=False)
     if len(encoded.encode()) > 1024*1024:
         raise ValueError(label+' query exceeds one MiB')
     with tempfile.TemporaryDirectory(prefix='fishbot-'+kind+'-') as folder:
         request, response = Path(folder)/'request.json', Path(folder)/'response.json'
-        request.write_text(encoded)
+        child_log = (Path(folder)/'child.log').open('wb') if trace is not None else None
+        outcome = 'interrupted_or_failed'
         try:
             check()
+            if prepared_planner is not None:
+                emit(trace, 'prepared_models_save_started')
+                payload['prepared_models'] = prepared_planner.save_query_models(Path(folder))
+                emit(trace, 'prepared_models_save_completed',
+                     model_files=list(payload['prepared_models']['paths']))
+                encoded = json.dumps(payload, allow_nan=False)
+                if len(encoded.encode()) > 1024*1024:
+                    raise ValueError(label+' query exceeds one MiB')
+            request.write_text(encoded)
+            if trace is not None:
+                trace.save('request.json', payload)
+            if time.monotonic()-started >= timeout_s:
+                emit(trace, 'query_deadline_reached', wall_budget_s=timeout_s)
+                raise TimeoutError(label+' planning exceeded its wall budget')
             process = subprocess.Popen([sys.executable, '-B', str(Path(__file__).resolve()),
                 '--query-'+kind, str(request), str(response)], stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                stdout=child_log if child_log is not None else subprocess.DEVNULL,
+                stderr=subprocess.STDOUT if child_log is not None else subprocess.DEVNULL,
+                start_new_session=True)
+            emit(trace, 'child_spawned', child_pid=process.pid)
             while process.poll() is None:
                 check()
                 if time.monotonic()-started >= timeout_s:
+                    emit(trace, 'query_deadline_reached', child_pid=process.pid, wall_budget_s=timeout_s)
                     raise TimeoutError(label+' planning exceeded its wall budget')
                 time.sleep(.02)
+            emit(trace, 'child_exited', returncode=process.returncode)
             check()
             if time.monotonic()-started >= timeout_s:
+                emit(trace, 'query_deadline_reached', child_pid=process.pid, wall_budget_s=timeout_s)
                 raise TimeoutError(label+' planning exceeded its wall budget')
             if not response.is_file() or response.stat().st_size > 1024*1024:
                 raise RuntimeError(label+' query returned no bounded result')
             result = json.loads(response.read_text())
+            if trace is not None:
+                trace.save('response.json', result)
             if result.get('query_id') != identity:
                 raise RuntimeError(label+' query identity mismatch')
             if process.returncode or result.get('error'):
@@ -117,7 +149,7 @@ def _query(kind, values, *, check, timeout_s):
                 raise RuntimeError('Malformed '+kind+' query result')
             execution = {'mode': 'one_owned_query_process', 'query_id': identity,
                 'input_sha256': hashlib.sha256(json.dumps(
-                    {key: value for key, value in payload.items() if key != 'query_id'},
+                    {key: value for key, value in payload.items() if key not in ('query_id', '_query_trace', 'prepared_models')},
                     sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest(),
                 'child_pid': process.pid, 'caller_pid': os.getpid(), 'child_exited': True,
                 'elapsed_wall_s': time.monotonic()-started, 'wall_budget_s': timeout_s,
@@ -125,8 +157,17 @@ def _query(kind, values, *, check, timeout_s):
             if kind == 'placement':
                 execution['wall_remaining_s'] = max(0., timeout_s-execution['elapsed_wall_s'])
                 execution['is_controller_consumption_ack'] = False
+            execution['prepared_model_transfer'] = prepared_planner is not None
+            if trace is not None:
+                execution['evidence_directory'] = str(trace.directory)
             plan[field]['execution'] = execution
+            outcome = 'accepted'
+            emit(trace, 'query_result_accepted', is_physical_success_receipt=False)
             return plan
+        except BaseException as error:
+            outcome = type(error).__name__
+            emit(trace, 'query_failed', error_type=outcome, error=str(error)[:1200])
+            raise
         finally:
             if process is not None:
                 # A visual query owns a model subprocess in this new session.
@@ -152,16 +193,38 @@ def _query(kind, values, *, check, timeout_s):
                     # The direct child may have exited before a stubborn model
                     # worker. This owned group cannot be left behind in either case.
                     stop_query(force=True)
+            if child_log is not None:
+                child_log.close()
+                try:
+                    log_path = Path(folder)/'child.log'
+                    size = log_path.stat().st_size
+                    with log_path.open('rb') as incoming:
+                        incoming.seek(max(0, size-65536))
+                        tail = incoming.read()
+                    (trace.directory/'child-log-tail.txt').write_bytes(tail)
+                    trace.save('cleanup.json', {'query_id': identity, 'outcome': outcome,
+                        'elapsed_wall_s': time.monotonic()-started,
+                        'child_exited': process is None or process.poll() is not None,
+                        'child_returncode': process.returncode if process is not None else None,
+                        'log_original_bytes': size, 'log_retained_bytes': len(tail),
+                        'log_is_tail': size > len(tail), 'is_controller_consumption_ack': False})
+                    emit(trace, 'query_cleanup_completed', outcome=outcome)
+                except OSError as error:
+                    import logging
+                    logging.warning('Could not retain arm query log tail: %s', error)
 
 
 class ArmPlanner:
-    def __init__(self, manifest: dict | Path, car_pose=None, *, arm_id=None, cargo_id=None, snapshot=None):
+    def __init__(self, manifest: dict | Path, car_pose=None, *, arm_id=None, cargo_id=None, snapshot=None, trace=None, prepared_models=None):
+        self.trace = trace
         if not isinstance(manifest, dict):
             manifest = json.loads(Path(manifest).read_text())
         if manifest.get('business_entities') and arm_id is None and cargo_id is None:
             raise ValueError('Multi-entity scene requires explicit arm_id and cargo_id; legacy query would omit other entities')
         self.manifest = manifest
+        emit(trace, 'source_modules_import_started')
         self.modules = source_modules(Path(manifest["so101_project"]))
+        emit(trace, 'source_modules_import_completed')
         import mujoco
         import numpy as np
 
@@ -173,13 +236,20 @@ class ArmPlanner:
         self.payload_placement = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.payload_placement)
         self.payload_placement.mujoco = _PayloadQueryBackend(mujoco)
-        self.common = mujoco.MjModel.from_xml_path(manifest["world_xml"])
+        world_event = 'world_model_binary_load' if prepared_models is not None else 'world_model_compile'
+        emit(trace, world_event+'_started')
+        self.common = (mujoco.MjModel.from_binary_path(prepared_models['paths']['common'])
+                       if prepared_models is not None else
+                       mujoco.MjModel.from_xml_path(manifest["world_xml"]))
+        emit(trace, world_event+'_completed')
         self.entity_view = None
         if arm_id is not None or cargo_id is not None:
             from cooperation_arm_entities import ArmEntityView
             if arm_id is None or cargo_id is None or snapshot is None:
                 raise ValueError('Named arm planning requires arm_id, cargo_id and a measured snapshot')
+            emit(trace, 'named_entity_view_started')
             self.entity_view = ArmEntityView(manifest, self.common, arm_id, cargo_id, snapshot)
+            emit(trace, 'named_entity_view_completed')
         self.station = np.asarray(manifest["station_offset"], dtype=float)
         self.home = np.asarray(manifest["arm_home_qpos6"], dtype=float)
         if self.entity_view is not None:
@@ -193,21 +263,50 @@ class ArmPlanner:
         self._frozen_names = ({geom.get("name") for geom in
                               frozen_car_geoms(self.common, self.car_pose, self.station)}
                               if self.entity_view is None else set())
-        self._refresh_models(self.car_pose)
+        self._refresh_models(self.car_pose, prepared_models=prepared_models)
 
-    def _refresh_models(self, car_pose):
-        root = (copy.deepcopy(self._base_root) if self.entity_view is None else
-                self.entity_view.query_root(self._base_root, car_pose))
-        world = root.find("worldbody")
-        if self.entity_view is None:
-            for child in list(world):
-                if child.get("name") in self._frozen_names:
-                    world.remove(child)
-            for geom in frozen_car_geoms(self.common, car_pose, self.station):
-                world.append(geom)
-        self.contact = self.mujoco.MjModel.from_xml_string(ET.tostring(root, encoding="unicode"))
-        world.remove(world.find("body[@name='grasp_target']"))
-        self.rig = self.mujoco.MjModel.from_xml_string(ET.tostring(root, encoding="unicode"))
+    def save_query_models(self, directory):
+        """Serialize this owner's exact compiled models for one temporary query.
+
+        This is not a cross-task cache: all files live in the existing owned
+        TemporaryDirectory and are deleted after the original query cleanup.
+        """
+        paths = {}
+        for name in ('common', 'contact', 'rig'):
+            path = Path(directory)/(name+'.mjb')
+            self.mujoco.mj_saveModel(getattr(self, name), str(path))
+            paths[name] = str(path)
+        return {'paths': paths,
+                'frozen_geoms': copy.deepcopy(self.entity_view.frozen_geoms) if self.entity_view is not None else [],
+                'scope': 'same_owner_same_query_compiled_model_transfer',
+                'full_visual_and_collision_models_retained': True}
+
+    def _refresh_models(self, car_pose, *, prepared_models=None):
+        if prepared_models is not None:
+            emit(getattr(self, 'trace', None), 'prepared_collision_models_load_started')
+            self.contact = self.mujoco.MjModel.from_binary_path(prepared_models['paths']['contact'])
+            self.rig = self.mujoco.MjModel.from_binary_path(prepared_models['paths']['rig'])
+            if self.entity_view is not None:
+                self.entity_view.frozen_geoms = copy.deepcopy(prepared_models['frozen_geoms'])
+            emit(getattr(self, 'trace', None), 'prepared_collision_models_load_completed')
+        else:
+            root = (copy.deepcopy(self._base_root) if self.entity_view is None else
+                    self.entity_view.query_root(self._base_root, car_pose))
+            world = root.find("worldbody")
+            if self.entity_view is None:
+                for child in list(world):
+                    if child.get("name") in self._frozen_names:
+                        world.remove(child)
+                for geom in frozen_car_geoms(self.common, car_pose, self.station):
+                    world.append(geom)
+            emit(getattr(self, 'trace', None), 'contact_model_compile_started')
+            self.contact = self.mujoco.MjModel.from_xml_string(ET.tostring(root, encoding="unicode"))
+            emit(getattr(self, 'trace', None), 'contact_model_compile_completed')
+            world.remove(world.find("body[@name='grasp_target']"))
+            emit(getattr(self, 'trace', None), 'rig_model_compile_started')
+            self.rig = self.mujoco.MjModel.from_xml_string(ET.tostring(root, encoding="unicode"))
+            emit(getattr(self, 'trace', None), 'rig_model_compile_completed')
+        emit(getattr(self, 'trace', None), 'collision_checkers_init_started')
         self.open_checker = self.modules["collision_scene"].CollisionChecker(
             self.rig, gripper=.5, margin_m=.001)
         self.closed_checker = self.modules["collision_scene"].CollisionChecker(
@@ -233,6 +332,7 @@ class ArmPlanner:
         if self.entity_view is not None:
             self.query_clearance['entity_pad_obstacle_pairs'] = len(self.open_checker.pairs)
         self.car_pose = self.np.asarray(car_pose, dtype=float).tolist()
+        emit(getattr(self, 'trace', None), 'collision_checkers_init_completed')
 
     def entity_contract(self):
         if self.entity_view is None:
@@ -507,22 +607,27 @@ def _query_main():
     request, response = map(Path, sys.argv[2:])
     payload = json.loads(request.read_text())
     result = {'query_id': payload['query_id']}
+    trace = trace_from_context(payload.get('_query_trace'))
+    emit(trace, 'child_started')
     try:
         began = time.monotonic()
+        emit(trace, 'planner_init_started')
         planner = ArmPlanner(payload['manifest'], car_pose=payload['car_pose'],
-            arm_id=payload.get('arm_id'), cargo_id=payload.get('cargo_id'), snapshot=payload.get('snapshot'))
+            arm_id=payload.get('arm_id'), cargo_id=payload.get('cargo_id'), snapshot=payload.get('snapshot'), trace=trace,
+            prepared_models=payload.get('prepared_models'))
+        emit(trace, 'planner_init_completed')
         timing = {'planner_init_wall_s': time.monotonic()-began}
         if sys.argv[1] == '--query-approach':
             if payload.get('model_grasps') is None and payload['manifest'].get('pretrained_grasp', {}).get('enabled'):
                 from cooperation_visual_grasp import model_proposals
                 observed = time.monotonic()
                 payload['model_grasps'] = model_proposals(payload['manifest'], payload['snapshot'],
-                    payload['arm_id'], payload['cargo_id'], model=planner.common)
+                    payload['arm_id'], payload['cargo_id'], model=planner.common, trace=trace)
                 timing['rgbd_and_inference_wall_s'] = time.monotonic()-observed
             if payload.get('model_grasps') is not None:
                 from cooperation_model_grasp import prepare_model_approach
                 planned = time.monotonic()
-                result['plan'] = prepare_model_approach(planner, payload['q6'], payload['model_grasps'])
+                result['plan'] = prepare_model_approach(planner, payload['q6'], payload['model_grasps'], trace=trace)
                 timing['candidate_planning_wall_s'] = time.monotonic()-planned
                 result['plan']['planning']['visual_query_timing'] = timing
             else:
@@ -531,6 +636,8 @@ def _query_main():
             result['plan'] = planner.prepare_placement(payload['snapshot'], payload['centers_local'])
     except Exception as error:
         result['error'] = str(error)[:2000]
+        emit(trace, 'child_failed', error_type=type(error).__name__, error=str(error)[:1200])
+    emit(trace, 'child_response_writing', has_error='error' in result)
     response.write_text(json.dumps(result, allow_nan=False))
     raise SystemExit(1 if 'error' in result else 0)
 

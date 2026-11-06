@@ -279,6 +279,27 @@ def composition_navigation(params, manifest, output):
             'height_envelope':manifest['transport_height_envelope']}
 
 
+def apply_lidar3d_config(manifest, path=None):
+    """Optional sensor settings for a new scene; never change a planar scene."""
+    if path is None:
+        return False
+    import warnings
+    if manifest.get('scene_profile', {}).get('sensors', 'planar') != 'lidar3d':
+        warnings.warn('--lidar3d-config ignored for planar scene; select lidar3d in scene profile', RuntimeWarning)
+        return False
+    try:
+        settings = json.loads(Path(path).read_text())
+        if not isinstance(settings, dict):
+            raise ValueError('sensor configuration must be a JSON object')
+        # Keep only the user's inputs here. The compiled height envelope is
+        # created later; configuration() must derive its self-filter then.
+        manifest['lidar3d'] = settings
+        return True
+    except (OSError, ValueError, TypeError) as error:
+        warnings.warn(f'Optional lidar3d config skipped; existing sensor retained: {error}', RuntimeWarning)
+        return False
+
+
 def prepare(args):
     perception_path = getattr(args, 'perception_config', None)
     perception_input = json.loads(Path(perception_path).read_text()) if perception_path else None
@@ -310,6 +331,7 @@ def prepare(args):
                          omit_unused_native_rangefinders=getattr(args,'omit_unused_native_rangefinders',False),
                          continuous_delivery=business,
                          arena_xml=getattr(args, 'arena_xml', None))
+    apply_lidar3d_config(manifest, getattr(args, 'lidar3d_config', None))
     if getattr(args,'camera_rgbd',False):
         manifest['station_camera']['rgbd_enabled']=True
     if getattr(args,'queued_ros_dispatch',False):
@@ -525,6 +547,8 @@ def main():
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--scene-profile',type=Path,
                         help='Editable vehicle/sensors/task JSON; creates a new independent scene')
+    parser.add_argument('--lidar3d-config',type=Path,
+                        help='Optional 3D scan JSON for the selected lidar3d scene; no scene-profile schema change')
     parser.add_argument('--continuous-delivery',type=Path,
                         help='Finite cargo slots and physical unload stations JSON')
     parser.add_argument('--arena-xml',type=Path,

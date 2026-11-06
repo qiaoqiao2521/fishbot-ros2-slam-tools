@@ -78,6 +78,12 @@ def summarize_points(points, *, frame: str, width: int, height: int) -> dict:
     }
 
 
+def cloud_has_3d_returns(summary, *, allow_unorganized=False):
+    """Non-repeating scanners have height=1; spatial extent still must be real."""
+    return bool(summary and summary['valid_points'] > 0 and summary['height_bins_2cm'] > 1
+                and (summary['height'] > 1 or (allow_unorganized and summary['width'] > 1)))
+
+
 def costmap_region(message, target: tuple[float, float], half_size: float) -> dict:
     """Read grid cells whose centres fall in the requested world-frame region."""
     info = message.info
@@ -149,7 +155,7 @@ def observe(*, timeout: float = 15.0, topic: str = '/sensors/lidar3d/points',
             costmap_topic: str = '/global_costmap/costmap',
             target: tuple[float, float] = (-0.25, 0.55),
             half_size: float = 0.12, low_obstacle_required: bool = True,
-            not_applicable_reason: str = '') -> dict:
+            not_applicable_reason: str = '', allow_unorganized: bool = False) -> dict:
     import rclpy
     from rclpy.node import Node
     from rclpy.executors import SingleThreadedExecutor
@@ -165,6 +171,7 @@ def observe(*, timeout: float = 15.0, topic: str = '/sensors/lidar3d/points',
     result = {
         'status': 'incomplete', 'reasons': [], 'warnings': [],
         'topic': topic, 'costmap_topic': costmap_topic,
+        'point_layout': 'unorganized' if allow_unorganized else 'organized_multiline',
         'target': list(target), 'region_half_size': half_size,
         'pointcloud': None, 'subscription_endpoints': [],
         'global_parameters': {}, 'costmap': None, 'target_cloud': None,
@@ -295,10 +302,8 @@ def observe(*, timeout: float = 15.0, topic: str = '/sensors/lidar3d/points',
                     break
             params = result['global_parameters']
             evidence = {
-                'actual_multiline_pointcloud': bool(result['pointcloud']
-                    and result['pointcloud']['height'] > 1
-                    and result['pointcloud']['valid_points'] > 0
-                    and result['pointcloud']['height_bins_2cm'] > 1),
+                ('actual_spatial_unorganized_pointcloud' if allow_unorganized else 'actual_multiline_pointcloud'):
+                    cloud_has_3d_returns(result['pointcloud'], allow_unorganized=allow_unorganized),
                 'global_costmap_subscription_found': any(
                     endpoint['node'] == '/global_costmap/global_costmap'
                     and endpoint['type'] == 'sensor_msgs/msg/PointCloud2'
@@ -349,13 +354,15 @@ def main() -> None:
     parser.add_argument('--output', type=Path)
     parser.add_argument('--no-low-obstacle', action='store_true', help='Interface-only probe for a scene without this fixture')
     parser.add_argument('--not-applicable-reason', default='')
+    parser.add_argument('--allow-unorganized', action='store_true', help='MID-360-style height=1 cloud; require actual vertical returns, not fake ring rows')
     args = parser.parse_args()
     try:
         result = observe(timeout=args.timeout, topic=args.topic,
                          costmap_topic=args.costmap_topic,
                          target=(args.target_x, args.target_y), half_size=args.half_size,
                          low_obstacle_required=not args.no_low_obstacle,
-                         not_applicable_reason=args.not_applicable_reason)
+                         not_applicable_reason=args.not_applicable_reason,
+                         allow_unorganized=args.allow_unorganized)
     except Exception as error:
         result = {'status': 'incomplete', 'reasons': [f'{type(error).__name__}: {error}']}
     text = json.dumps(result, indent=2, allow_nan=False) + '\n'

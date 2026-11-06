@@ -1,0 +1,90 @@
+{
+  "schema": "fishbot.visual-chain.v1",
+  "run_id": "269fef1c-4e11-44d2-83df-d42c84978db1",
+  "scene_id": "f2-wide-warehouse",
+  "new_execution": false,
+  "rescored": false,
+  "entries": [],
+  "queries": [
+    {
+      "id": "5329bb0b-0cb4-4a63-bee1-ad99e0010c07",
+      "stages": [
+        {
+          "stage": "query_started",
+          "elapsed_wall_s": 0.020756866000056107
+        },
+        {
+          "stage": "child_spawned",
+          "elapsed_wall_s": 0.27027533099999346
+        },
+        {
+          "stage": "child_started",
+          "elapsed_wall_s": 0.547917525999992
+        },
+        {
+          "stage": "planner_init_started",
+          "elapsed_wall_s": 0.5480703030000313
+        },
+        {
+          "stage": "source_modules_import_started",
+          "elapsed_wall_s": 0.5481788680000363
+        },
+        {
+          "stage": "source_modules_import_completed",
+          "elapsed_wall_s": 2.5125208810000004
+        },
+        {
+          "stage": "world_model_compile_started",
+          "elapsed_wall_s": 2.5130075829999896
+        },
+        {
+          "stage": "world_model_compile_completed",
+          "elapsed_wall_s": 8.23948196799995
+        },
+        {
+          "stage": "named_entity_view_started",
+          "elapsed_wall_s": 8.240761699000018
+        },
+        {
+          "stage": "named_entity_view_completed",
+          "elapsed_wall_s": 8.258291385999996
+        },
+        {
+          "stage": "contact_model_compile_started",
+          "elapsed_wall_s": 14.58910150099996
+        },
+        {
+          "stage": "contact_model_compile_completed",
+          "elapsed_wall_s": 23.687623532999964
+        },
+        {
+          "stage": "rig_model_compile_started",
+          "elapsed_wall_s": 23.687855455999966
+        },
+        {
+          "stage": "query_deadline_reached",
+          "elapsed_wall_s": 30.01019828699998
+        },
+        {
+          "stage": "query_failed",
+          "elapsed_wall_s": 30.010416329999998,
+          "error_type": "TimeoutError"
+        },
+        {
+          "stage": "query_cleanup_completed",
+          "elapsed_wall_s": 30.409389532999967
+        }
+      ],
+      "outcome": "TimeoutError",
+      "timeout_s": 30.0,
+      "arm_id": "load",
+      "cargo_id": "cargo_1",
+      "episode_id": "e2677d31-a2e4-4bfe-9a19-4a802cffa1ff",
+      "source_sequence": 1461
+    }
+  ],
+  "warnings": [
+    "No recorded RGB-D observation directories found; visual chain is empty, not passed"
+  ],
+  "scope": "actual recorded observations; model scores are not success probabilities; milestones use independent original scores"
+}

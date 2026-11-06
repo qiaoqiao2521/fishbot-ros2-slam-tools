@@ -1,13 +1,15 @@
 """Native 3-D ray sensor for the existing Python MuJoCo common world.
 
 The installed 3.12 C++ extension cannot load into this 3.3.7 world. This thin
-adapter uses its documented spherical beam layout and the same native
-mj_multiRay API, without a second executing world or a hand-written ROS codec.
-This generic ideal sensor is not a calibrated commercial lidar.
+adapter reuses the uniform layout or official decimated MID-360 angles with
+the same mj_multiRay API, without a second executing world or custom ROS codec.
+Neither profile is a calibrated commercial lidar.
 """
 from __future__ import annotations
 
 import math
+from functools import lru_cache
+from pathlib import Path
 import threading
 import time
 from typing import Any
@@ -34,7 +36,16 @@ def configuration(manifest: dict[str, Any]) -> dict[str, Any] | None:
          'basis': 'native_mj_multiRay_generic_instantaneous_16_line_sensor',
          'layout_source': 'ros-controls/mujoco_ros2_control/0.1.1/mujoco_extensions/mujoco_3d_lidar',
          'plugin_3_12_loaded': False}
-    c.update(manifest.get('lidar3d', {}))
+    declared_sensor = manifest.get('lidar3d', {})
+    if declared_sensor.get('scan_pattern') == 'livox_mid360_csv_stride5':
+        c.update(horizontal_samples=4000, lines=1, vertical_degrees=[-7., 52.],
+                 min_range_m=.1, rate_hz=10.,
+                 scan_pattern='livox_mid360_csv_stride5',
+                 nominal_hardware_points_per_s=200000, angular_downsample=5,
+                 basis='official_mid360_csv_stride5_frame_instantaneous_native_mj_multiRay',
+                 layout_source='Livox-SDK/livox_laser_simulation@1cce1073633a062b92e30243a4c2920e45551bb5',
+                 hardware_fidelity='angular_pattern_only; frame-frozen pose; no intensity/weather/range-noise validation')
+    c.update(declared_sensor)
     envelope = manifest.get('transport_height_envelope', {})
     footprint = manifest.get('car_footprint_xy')
     declared = bool(footprint and envelope.get('compiled_collision_components'))
@@ -56,8 +67,29 @@ def configuration(manifest: dict[str, Any]) -> dict[str, Any] | None:
     return c
 
 
-def beam_directions(c: dict[str, Any]):
+@lru_cache(maxsize=1)
+def mid360_pattern():
+    """Official MIT CSV, preserving row order; only every fifth row is stored."""
     import numpy as np
+    asset = Path(__file__).resolve().parent/'assets/livox/mid360-stride5.csv.gz'
+    values = np.loadtxt(asset, delimiter=',', skiprows=1)
+    # The upstream Gazebo plugin uses pitch=(zenith - 90deg), rotating +X.
+    # Its resulting Z is sin(90deg-zenith), rather than sin(zenith).
+    azimuth = np.radians(values[:, 1]); elevation = np.radians(90.-values[:, 2])
+    directions = np.column_stack((np.cos(azimuth)*np.cos(elevation),
+        np.sin(azimuth)*np.cos(elevation), np.sin(elevation)))
+    return directions
+
+
+def beam_directions(c: dict[str, Any], source_time=0.):
+    import numpy as np
+    if c.get('scan_pattern') == 'livox_mid360_csv_stride5':
+        pattern = mid360_pattern()
+        # Source-time indexing survives dropped worker frames without slowing
+        # the scanner. The retained CSV wraps explicitly at its finite period.
+        start = int(math.floor(source_time*c['nominal_hardware_points_per_s']/c['angular_downsample']))
+        count = c['horizontal_samples']*c['lines']
+        return pattern[(start+np.arange(count)) % len(pattern)]
     azimuth = np.arange(c['horizontal_samples']) * (2 * math.pi / c['horizontal_samples']) - math.pi
     elevation = np.linspace(*np.radians(c['vertical_degrees']), c['lines'])
     a, e = np.meshgrid(azimuth, elevation)
@@ -122,6 +154,8 @@ class NativeCloudQuery:
         self.data.qvel[:] = snapshot['qvel']
         self.data.time = snapshot['stamp']
         self.mj.mj_kinematics(self.model, self.data)
+        if c.get('scan_pattern') == 'livox_mid360_csv_stride5':
+            self.directions = beam_directions(c, snapshot['stamp'])
         rotation = self.data.xmat[self.laser].reshape(3, 3)
         origin = self.data.xpos[self.laser] + rotation @ np.asarray(c['mount_xyz'])
         rays = (self.directions @ rotation.T).reshape(-1)
@@ -171,14 +205,20 @@ def raw_frame_message(frame, c):
 def frame_messages(frame, c):
     from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
     snapshot = frame['snapshot']
-    # Standard serializer accepts a flat float32 XYZ array. Our storage is
-    # elevation-major, hence its bytes are valid 16 rows of 360 column points.
+    # Standard serializer accepts flat XYZ: organized elevation-major rings,
+    # or one explicitly unorganized row for the advancing MID-360 CSV window.
     cloud = pointcloud_message(frame['points'], snapshot, c)
-    status = DiagnosticStatus(name='cooperation_lidar3d_frame', hardware_id='native_generic_16_line',
+    status = DiagnosticStatus(name='cooperation_lidar3d_frame', hardware_id=(
+        'native_mid360_csv_stride5' if c.get('scan_pattern') == 'livox_mid360_csv_stride5'
+        else 'native_generic_16_line'),
                               level=DiagnosticStatus.OK, message='captured_native_rays')
     evidence = {k: snapshot[k] for k in ('scene_sha256', 'manifest_sha256', 'episode_id', 'sequence')}
     evidence.update({k: frame[k] for k in ('compute_duration_s', 'valid_points', 'rows_with_returns', 'native_version')})
-    evidence.update(instantaneous_scan=True, plugin_3_12_loaded=False,
+    evidence.update(scan_pattern=c.get('scan_pattern', 'uniform_16_line'),
+                    angular_downsample=c.get('angular_downsample', 1),
+                    nominal_hardware_points_per_s=c.get('nominal_hardware_points_per_s'),
+                    sensor_basis=c['basis'],
+                    instantaneous_scan=True, plugin_3_12_loaded=False,
                     self_filter_enabled=c.get('self_filter', {}).get('enabled', False),
                     self_filter_removed_points=frame.get('self_filter_removed_points', 0),
                     raw_valid_points=frame.get('raw_valid_points', frame['valid_points']),
@@ -248,6 +288,7 @@ class CloudWorker:
 
     def summary(self):
         return {'enabled': True, 'ready': self.ready, 'error': self.error,
+                'scan_pattern': self.config.get('scan_pattern', 'uniform_16_line'),
                 'published_frames': self.frames, 'overwritten_pending_snapshots': self.slot.overwritten,
                 'raw_published_frames': self.raw_frames,
                 'self_filter_removed_points_total': self.removed_points,

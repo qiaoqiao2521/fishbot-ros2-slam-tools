@@ -1,12 +1,14 @@
 """Actual compiled geometry: clear approach and an occupied spawn, no ROS."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 
 PROJECT = Path(__file__).resolve().parents[2]
-PYTHON = Path.home()/'.cache/so101-colab/planning-venv/bin/python'
+PYTHON = Path(os.environ.get('FISHBOT_SO101_PYTHON',
+                             str(Path.home()/'.cache/so101-colab/planning-venv/bin/python')))
 
 
 class GeometryTests(unittest.TestCase):

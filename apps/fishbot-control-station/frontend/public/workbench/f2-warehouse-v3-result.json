@@ -1,0 +1,60 @@
+{
+  "schema": "fishbot.vision-delivery-result.v1",
+  "title": "新仓库 v3 · 机械臂模型编译超时",
+  "recorded_at": "2026-11-06",
+  "run_id": "269fef1c-4e11-44d2-83df-d42c84978db1",
+  "evidence_kind": "recorded_simulation",
+  "vehicle": "Jackal J100",
+  "sensor": "MID-360式扫描 · 4000×1槽位",
+  "scene_label": "新宽通道仓库 · f2-wide-warehouse",
+  "observation_mode": "vision",
+  "model": "GraspGen-X服务已加载，本轮未实际调用",
+  "description": "真实接近查询在原30秒到期：最后启动的是机械臂模型编译，尚未进入RGB-D渲染或实际推理。MID-360式采样与本轮失败回执分开显示。",
+  "evidence_note": "新仓库实际失败回合，B派发一次、A未执行。MID-360式扫描为官方角度表五倍抽稀和帧内冻结查询，不代表完整硬件复现。低fixture同时在collision_map静态层；原生雷达探针不证明3D排他因果或逐消息ACK。",
+  "evidence_path": "plans/continuous-twin-regression-20261024/progress.md",
+  "reset_count": 0,
+  "elapsed_wall_s": 167.890039043,
+  "orders": [
+    {
+      "id": "order-b",
+      "label": "订单 B（失败）",
+      "task_id": "f7472568-86da-4471-a9e6-531742adc3cc",
+      "passed": false,
+      "route_seconds": null,
+      "position_error_m": null,
+      "yaw_error_rad": null,
+      "visible_points": [],
+      "selected_candidates": [],
+      "failure_reason": "原接近查询在30.010墙秒到期；rig_model_compile_started发生于23.688秒后未取得完成事件。未进入RGB-D/实际模型推理，B原评分失败、A未派发。",
+      "component_summary": "MID-360式实际消息4000×1槽位、40000采样方向/秒；六帧有限点1439/1395/1404/1442/1416/1442，capture TF4/6。原生接口探针另记录11条云、低障碍回波1点(map Z约0.0379m)、TF1/1、实际VoxelLayer配置及订阅端。低fixture已在静态collision_map中，不能把57个lethal cells归因为3D独有贡献。"
+    }
+  ],
+  "assets": {
+    "timing": "/workbench/f2-warehouse-v3/timing.json",
+    "replay": "/workbench/f2-warehouse-v3/replay.json",
+    "video": "/workbench/f2-warehouse-v3/overview.mp4",
+    "video_index": "/workbench/f2-warehouse-v3/video-frame-index.json",
+    "poster": "/workbench/f2-warehouse-v3/overview.jpg",
+    "sensor_experience": "/workbench/f2-warehouse-v3/sensor-experience.json",
+    "visual_chain": "/workbench/f2-warehouse-v3/visual-chain.json",
+    "lidar_receipt": "/workbench/f2-warehouse-v3/native-lidar-consumer.json"
+  },
+  "video_caption": "本回合260个真实全景采样帧，按原2fps独立播放；帧时间索引可下载，不能当作完整配送成功录像。 下载的是实际记录派生的媒体索引，未补帧或插值；完整原录制日志见本回合Drive归档及其状态说明。",
+  "availability_note": "真实失败位置记录已只读导入；静态场景和臂世界FK未导出。",
+  "archive_status": "原件已真实回收，新Drive归档待根owner确认；旧归档不冒充包含本轮。",
+  "warnings": [
+    "visual-chain.entries为空；仅有原查询阶段取证，不能展示未发生的模型输入、候选、抬升或放货成功。",
+    "原30秒期限保持；模型服务加载与实际推理请求严格区分。",
+    "capture TF4/6与另一次native探针TF1/1属于不同窗口，不混加。",
+    "原生探针证明实际4000×1非组织云、低回波、TF与配置/端点；静态层存在同一低fixture，不做3D排他归因或逐消息ACK声明。"
+  ],
+  "provenance": {
+    "source_kind": "recovered_original_failed_run_mid360_capture_and_query_trace",
+    "source_run_id": "269fef1c-4e11-44d2-83df-d42c84978db1",
+    "task_id": "f7472568-86da-4471-a9e6-531742adc3cc",
+    "episode_id": "e2677d31-a2e4-4bfe-9a19-4a802cffa1ff",
+    "query_id": "5329bb0b-0cb4-4a63-bee1-ad99e0010c07",
+    "new_execution": false,
+    "rescored": false
+  }
+}

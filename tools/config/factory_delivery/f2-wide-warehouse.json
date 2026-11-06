@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "id": "f2-wide-warehouse",
+  "description": "Wide warehouse storage bays with a south transfer aisle; proven J100 handover geometry retained.",
+  "frame": "map",
+  "units": {
+    "position": "m",
+    "angle": "rad",
+    "size": "full edge lengths"
+  },
+  "destinations": [
+    {
+      "id": "line_a",
+      "name": "Line A delivery stop",
+      "pose": {
+        "x": 0.0,
+        "y": -1.68,
+        "yaw": 0.0
+      }
+    },
+    {
+      "id": "line_b",
+      "name": "Line B delivery stop",
+      "pose": {
+        "x": 1.7,
+        "y": -1.68,
+        "yaw": 0.0
+      }
+    }
+  ],
+  "orders": [
+    {
+      "id": "order-a",
+      "destination_id": "line_a"
+    },
+    {
+      "id": "order-b",
+      "destination_id": "line_b"
+    }
+  ],
+  "channel": {
+    "id": "f2-wide-warehouse-transfer-aisle",
+    "centerline_m": [
+      [
+        -0.9,
+        -1.68
+      ],
+      [
+        0.0,
+        -1.68
+      ],
+      [
+        1.7,
+        -1.68
+      ]
+    ],
+    "occupied": false
+  },
+  "reference": {
+    "source": "https://pages.nist.gov/ARIAC_docs/en/main/pages/scenario.html",
+    "scope": "Order-driven pickup, placement onto AGV, transport to a named station, separate evaluation.",
+    "boundary": "Task semantics only; no ARIAC assets, AGV locks, kit inspection, assembly or scoring are copied."
+  },
+  "layout": {
+    "arena_xml": "f2-wide-warehouse-arena.xml",
+    "new_scene": true,
+    "source_assets": "repository MJCF primitives only; no external models",
+    "preserved": "vehicle, pickup station, unloading fixtures and original physical scoring",
+    "boundary": "New static layout needs native geometry and complete delivery acceptance; not a new benchmark win."
+  }
+}

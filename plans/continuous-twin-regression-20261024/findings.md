@@ -436,3 +436,21 @@ Drive目标已由用户选定，沿现有ROS2文档账号。持久恢复资料�
 原J100 74项材料525,199,609字节（run41、scene18、网格15）已打包并上传指定Drive，实际下载逐文件读取76项（含索引/恢复说明）通过，压缩67,365,047字节。原XML/manifest的旧绝对路径未篡改；恢复说明要求在独立副本重定向。保留共享cloud-jobs原件，不清理未知使用者。本轮只清理自己的派生/重复包。
 
 Drive文件搜索一次因本Agent误写q语法返回400，修正后本次受连接器MIME限制的检索返回空，不证明Drive没有其他历史压缩包。已知归档以具体file ID及下载读回为准，不把空搜索当原件全盘不存在。
+
+## 剩余四项的实现与待验边界
+
+原v5没有持久query子进程日志，且ArmPlanner初始化早于model_proposals图像目录，因此“没有图像”不能证明卡在模型内。补cooperation_query_trace，在原owner和子进程原生命周期旁记录初始化/模型编译/RGB-D/请求-响应/候选/IK-OMPL/退出；不改30秒、候选排序或原物理评分。Trace字段是取证，不是新调度或执行锁，日志失败只警告。
+
+F2复用原prepare/factory/实体与订单；新增真实静态arena，地图/射线/碰撞共源。J100新仓库保留已验交接坐标，麦轮新车间不套J100控制器候选。新增box几何的保守走廊检查不替代完整模型编译与原生运动验收。
+
+F3官方MID-360 Gazebo9/ROS1插件不能直接部署到当前MuJoCo/Jazzy，复用MIT角度CSV并用现有mj_multiRay/PointCloud2薄适配。源和限度见tools/assets/livox/mid360-source.json及README；扫描按源时间推进，非16线。展示读取实际接收点与精确同scene/manifest/episode/sequence/stamp的physics，在独立mj_kinematics算BOX线框；真值不发控制。订阅发现/接收/TF/costmap/完整任务分层，不能用端点列表当逐消息ACK。JS纳秒须保留十进制文本，不把约1.79e18源整数直接转Number。
+
+前端新组件只消费真实目录assets.visual_chain和assets.sensor_experience；模型分数不当成功概率，整单与分项判定分开，错run/错task与缺媒体逐项降级。未向public写合成运行样例。已接入真实v2车间失败及v3仓库失败卡：原录像、位置采样、阶段、generic16线/MID同源六帧分别绑定实际run/episode。v3视觉目录entries为空、只有编译超时query，明确没有真实模型请求或候选，不补造输入。
+
+### 原生取证后的实现选择
+
+v2先暴露错误出生点与卸货台旁旋转；新场景改用明确空载候车位，不把它解释成远端空载进场修复。v3完整几何与原Dock通过，J100真实trace确定30秒发生在重复world/contact/rig编译前后，尚未到RGB-D或GPU请求；ideal也走相同Approach query，不能把视觉输入存在与否当唯一原因。阶段精确值与实际UUID见progress，v5因旧日志缺失保留未知，不反推旧因果。
+
+选择官方MJB交接而非另建worker平台或跨任务缓存。已有SO101 deferred_video.py使用mj_saveModel/from_binary_path；[MuJoCo3.3.7官方Python](https://mujoco.readthedocs.io/en/3.3.7/python.html)及[二进制保存API](https://mujoco.readthedocs.io/en/3.3.7/APIreference/APIfunctions.html#mj-savemodel)可直接复用。discardvisual候选不采用：common负责真实RGB-D，且[官方XML文档](https://mujoco.readthedocs.io/en/3.3.7/XMLreference.html#compiler-discardvisual)明确射线会改变。当前handoff保存owner同次snapshot的完整三模型到原临时目录，30秒包含保存/加载；不减少任何mesh、视觉或碰撞，不改placement。真实快照本机读回逐项等价与生命周期测试通过，不能替代云端实际查询及完整运输。
+
+MID原生回执的target lethal来自合成costmap，低fixture也在静态层；页面将它与真实回波、TF和订阅配置同时展示，但不写排他消费结论。配置应先保留raw字段，在几何高度包络齐备后计算self_filter，避免提前默认False覆盖后续正确派生值。此顺序回归已覆盖，source-v10实际运行仍保留旧实现，不能倒签修复。

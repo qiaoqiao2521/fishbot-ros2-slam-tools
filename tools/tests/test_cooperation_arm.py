@@ -23,6 +23,7 @@ class ApproachProcessTests(unittest.TestCase):
 from pathlib import Path
 request,response=map(Path,sys.argv[-2:]); payload=json.loads(request.read_text())
 mode='''+repr(mode)+'''
+print('owned child diagnostic marker',file=sys.stderr,flush=True)
 placement=mode.startswith('placement_')
 if placement: mode=mode[len('placement_'):]
 if mode=='timeout': time.sleep(5)
@@ -31,6 +32,10 @@ if placement: result['plan']={'retreat':{'status':'solved'},'report':{},'segment
 if mode=='selection': result['plan'].update({k:payload[k] for k in ('arm_id','cargo_id','snapshot')})
 if placement and mode=='selection': result['plan']['centers_local']=payload['centers_local']
 if mode=='unsolved': result['plan']['retreat']['status']='timeout'
+if mode=='prepared':
+ result['plan']['transfer_inputs']={'paths':payload['prepared_models']['paths'],
+  'exists':all(Path(p).is_file() for p in payload['prepared_models']['paths'].values()),
+  'frozen_geoms':payload['prepared_models']['frozen_geoms']}
 if mode=='identity': result['query_id']='other-query'
 if mode=='error': result['error']='original collision query failed'
 if mode=='malformed': result['plan']['segments']=[]
@@ -76,6 +81,106 @@ if mode=='error': sys.exit(1)
     def test_deadline_terminates_owned_child_without_accepting_late_result(self):
         with self.worker('timeout'), self.assertRaises(TimeoutError): self.query(timeout_s=.08)
         self.assertIsNotNone(self.children[0].poll())
+
+    def test_prepared_models_use_owned_temporary_transfer_and_are_removed_after_child(self):
+        class Prepared:
+            def save_query_models(self, directory):
+                paths = {}
+                for name in ('common', 'contact', 'rig'):
+                    path = directory/(name+'.mjb'); path.write_bytes(b'protocol fixture only')
+                    paths[name] = str(path)
+                return {'paths': paths, 'frozen_geoms': [{'source': 'kept', 'query': 'kept'}]}
+        with self.worker('prepared'):
+            result = self.query(prepared_planner=Prepared())
+        transfer = result['transfer_inputs']
+        self.assertTrue(transfer['exists'])
+        self.assertEqual(transfer['frozen_geoms'], [{'source': 'kept', 'query': 'kept'}])
+        self.assertTrue(result['planning']['execution']['prepared_model_transfer'])
+        self.assertTrue(all(not Path(path).exists() for path in transfer['paths'].values()))
+        self.assertEqual(self.children[0].poll(), 0)
+
+    def test_prepared_transfer_files_are_removed_after_timeout_cancel_and_child_failure(self):
+        class Prepared:
+            def save_query_models(self, directory):
+                self.paths = {}
+                for name in ('common', 'contact', 'rig'):
+                    path = directory/(name+'.mjb'); path.write_bytes(b'protocol fixture only')
+                    self.paths[name] = str(path)
+                return {'paths': self.paths, 'frozen_geoms': []}
+        for failure in ('timeout', 'cancel', 'error'):
+            with self.subTest(failure=failure):
+                prepared = Prepared()
+                checks = 0
+                def checked():
+                    nonlocal checks
+                    checks += 1
+                    if failure == 'cancel' and checks >= 3:
+                        raise RuntimeError('original owner canceled')
+                mode = 'error' if failure == 'error' else 'timeout'
+                with self.worker(mode), self.assertRaises((RuntimeError, TimeoutError)):
+                    self.query(prepared_planner=prepared, timeout_s=.2, check=checked)
+                self.assertTrue(all(not Path(path).exists() for path in prepared.paths.values()))
+                self.assertIsNotNone(self.children[-1].poll())
+
+    def test_failed_prepared_model_save_reclaims_partial_models_without_spawning(self):
+        class BrokenPrepared:
+            def save_query_models(self, directory):
+                self.directory = directory
+                (directory/'common.mjb').write_bytes(b'incomplete protocol fixture')
+                raise OSError('fixture serialization failed')
+        prepared = BrokenPrepared()
+        with self.worker(), self.assertRaisesRegex(OSError, 'serialization failed'):
+            self.query(prepared_planner=prepared)
+        self.assertFalse(prepared.directory.exists())
+        self.assertEqual(self.children, [])
+
+    def test_prepared_model_serialization_consumes_the_original_query_wall_budget(self):
+        import time
+        class SlowPrepared:
+            def save_query_models(self, directory):
+                time.sleep(.12)
+                return {'paths': {}, 'frozen_geoms': []}
+        with self.worker(), self.assertRaises(TimeoutError):
+            self.query(prepared_planner=SlowPrepared(), timeout_s=.05)
+        self.assertEqual(self.children, [])
+
+    def test_visual_query_timeout_keeps_real_child_diagnostics_after_temp_cleanup(self):
+        import json
+        directory = Path(self.folder.name)/'evidence'
+        manifest = {'pretrained_grasp': {'enabled': True, 'output_directory': str(directory)}}
+        with self.worker('timeout'), self.assertRaises(TimeoutError):
+            query_approach(manifest, [0.]*6, [0.]*7, check=lambda: None, timeout_s=.2)
+        receipts = list((directory/'query-receipts').iterdir())
+        self.assertEqual(len(receipts), 1)
+        receipt = receipts[0]
+        stages = [json.loads(line) for line in (receipt/'stages.jsonl').read_text().splitlines()]
+        self.assertIn('query_deadline_reached', [row['stage'] for row in stages])
+        self.assertIn('query_cleanup_completed', [row['stage'] for row in stages])
+        cleanup = json.loads((receipt/'cleanup.json').read_text())
+        self.assertTrue(cleanup['child_exited'])
+        self.assertEqual(cleanup['outcome'], 'TimeoutError')
+        self.assertIn('owned child diagnostic marker', (receipt/'child-log-tail.txt').read_text())
+        self.assertTrue((receipt/'request.json').is_file())
+        self.assertFalse((receipt/'response.json').exists())
+        self.assertIsNotNone(self.children[0].poll())
+
+    def test_ideal_query_can_record_evidence_without_enabling_a_model(self):
+        from cooperation_query_trace import optional_query_trace
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            trace = optional_query_trace({'arm_query_evidence_directory':directory}, 'ideal-query', 0.)
+            self.assertIsNotNone(trace)
+            trace.emit('ideal_test', inference_called=False)
+            self.assertTrue((Path(directory)/'query-receipts/ideal-query/stages.jsonl').is_file())
+
+    def test_unwritable_optional_trace_does_not_reject_valid_original_query(self):
+        directory = Path(self.folder.name)/'not-a-directory'
+        directory.write_text('keep original')
+        manifest = {'pretrained_grasp': {'enabled': True, 'output_directory': str(directory)}}
+        with self.worker(), self.assertLogs(level='WARNING'):
+            result = query_approach(manifest, [0.]*6, [0.]*7, check=lambda: None)
+        self.assertEqual(result['planning']['status'], 'solved')
+        self.assertEqual(directory.read_text(), 'keep original')
 
     def test_no_child_is_launched_after_precheck_or_invalid_budget(self):
         with self.worker(), self.assertRaisesRegex(RuntimeError, 'stale episode'):

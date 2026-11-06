@@ -37,6 +37,7 @@ export type CooperationState = {
   episode_id?: string
   scene_profile?: unknown
   vehicle_profile?: unknown
+  lidar3d?: unknown
   reset?: { available: boolean; reason: string; pending: boolean;
     last: { request_id: string; status: CooperationResetStatus; from_episode: string; to_episode: string | null; message: string } | null }
   history?: CooperationHistory[]

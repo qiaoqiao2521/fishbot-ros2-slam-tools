@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mujoco model="f2_workshop_line">
+  <visual><global azimuth="120" elevation="-35"/><rgba rangefinder="1 1 .1 0"/></visual>
+  <asset>
+    <texture name="floor_grid" type="2d" builtin="checker" width="256" height="256" rgb1=".66 .70 .69" rgb2=".76 .79 .77"/>
+    <material name="floor_material" texture="floor_grid" texrepeat="8 8" texuniform="true"/>
+  </asset>
+  <worldbody>
+    <light name="arena_light" pos="0 0 5" dir="0 0 -1" diffuse=".85 .85 .85"/>
+    <light name="workshop_fill" pos="-3 0 3" dir=".4 0 -1" diffuse=".30 .33 .36"/>
+    <geom name="floor" type="plane" size="5 5 .1" material="floor_material"/>
+    <geom name="wall_north" type="box" pos="0 3.8 .6" size="4.10 .10 .6" rgba=".72 .76 .75 1"/>
+    <geom name="wall_south" type="box" pos="0 -4 .6" size="4.10 .10 .6" rgba=".72 .76 .75 1"/>
+    <geom name="wall_east" type="box" pos="4 -.1 .6" size=".10 4 .6" rgba=".72 .76 .75 1"/>
+    <geom name="wall_west" type="box" pos="-4 -.1 .6" size=".10 4 .6" rgba=".72 .76 .75 1"/>
+    <geom name="workshop_machine_cell" type="box" pos="0 1 .50" size=".60 .50 .50" rgba=".24 .45 .39 1"/>
+    <geom name="workshop_inspection_bench" type="box" pos="-3 .7 .45" size=".40 .70 .45" rgba=".42 .48 .59 1"/>
+    <geom name="workshop_east_line" type="box" pos="2.5 .3 .45" size=".45 .95 .45" rgba=".24 .45 .39 1"/>
+    <geom name="workshop_tool_store" type="box" pos="-.6 2.9 .4" size=".95 .25 .4" rgba=".65 .52 .32 1"/>
+    <geom name="workshop_west_pallet" type="box" pos="-3.1 -3.3 .12" size=".35 .30 .12" rgba=".64 .48 .29 1"/>
+    <camera name="arena_overview" pos="0 -6.4 6.5" xyaxes="1 0 0 0 .711 .703"/>
+  </worldbody>
+</mujoco>

@@ -54,8 +54,8 @@ def declared_ros_python_dependencies(prefix):
 
 def package(output, root, so101, native_install=None):
     output.mkdir(parents=True, exist_ok=False)
-    files = subprocess.check_output(['git', 'ls-files', 'tools', 'fishbot.sh',
-        'experiments/kaggle', 'workspaces/fishbot_mujoco_ws/src'], cwd=root,
+    files = subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--exclude-standard', 'tools', 'fishbot.sh',
+        'experiments/kaggle', 'workspaces/fishbot_mujoco_ws/src', 'workspaces/mecanum_ws/src'], cwd=root,
         text=True).splitlines()
     # This new adapter may not have been committed yet.
     files = sorted(set(files + ['experiments/kaggle/f1_visual_recovery.py']))
@@ -145,6 +145,33 @@ class OverviewRecorder:
         self.thread.join(timeout=35)
 
 
+def readonly_witnesses_after_ready(commands, *, cwd, env, port, output):
+    """Join an owned API only after Factory's empty-domain preflight passed."""
+    import urllib.request
+    stop = threading.Event()
+    witnesses = []
+    def wait_and_start():
+        began = time.monotonic()
+        while not stop.is_set() and time.monotonic()-began < 180:
+            try:
+                with urllib.request.urlopen(f'http://127.0.0.1:{port}/coop-api/state', timeout=1.) as response:
+                    ready = response.status == 200
+            except (OSError, ValueError):
+                ready = False
+            if ready:
+                for number, command in enumerate(commands):
+                    if stop.is_set(): break
+                    log = (output/f'capture-{number}.log').open('w')
+                    process = subprocess.Popen(command, cwd=cwd, env=env,
+                        stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                    witnesses.append((process, log))
+                return
+            stop.wait(.25)
+    thread = threading.Thread(target=wait_and_start, daemon=True)
+    thread.start()
+    return witnesses, stop, thread
+
+
 def cloud():
     candidates = list(Path('/kaggle/input').rglob('f1-visual-source.tar.gz.bin'))
     if len(candidates) != 1:
@@ -161,6 +188,10 @@ def cloud():
     base = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(base)
     original_run = base.run
+    recipe_ids = [item for item in os.environ.get('FISHBOT_CLOSURE_SCENES', '').split(',') if item]
+    recipes = json.loads((bootstrap/'fishbot/tools/config/factory_delivery/f2-scenes.json').read_text())['scenes'] if recipe_ids else []
+    recipe_map = {item['id']: item for item in recipes}
+    current_recipe = recipe_map[recipe_ids[0]] if recipe_ids else None
     os.environ.update(FISHBOT_TRANSPORT_CONTROLLER='graceful', MUJOCO_GL='egl',
                       FISHBOT_REUSE_NATIVE_INSTALL='1',
                       FISHBOT_MUJOCO_DOMAIN_ID='187')
@@ -287,41 +318,101 @@ def cloud():
                 cwd=base.WORK/'fishbot', env=planning_env, timeout=90)
             return result
         if name == 'factory-b-a':
-            start = args.index('tools/cooperation_factory.py')
-            args = list(args[:start+1])+['run', '--manifest',
-                str(base.ARTIFACTS/'scene/scene-manifest.json'), '--planning-python',
-                str(base.WORK/'planning-venv/bin/python'), '--output',
-                str(base.ARTIFACTS/'full-run'), '--candidate', 'f1-visual-recovery',
-                '--publication-mode', 'asynchronous', '--continuous-deliveries',
-                'tools/config/factory_delivery/continuous-ba-orders.json',
-                '--order', 'order-b', '--order', 'order-a', '--scope', 'transport',
-                '--domain', '187', '--port', '9157', '--isolated-runtime']
-            recorder = OverviewRecorder(base.ARTIFACTS/'full-run/runtime', base.ARTIFACTS)
-            try:
-                return original_run(name, args, **kwargs)
-            finally:
-                recorder.close()
-                archived = []
-                for source in base.ARTIFACTS.rglob('observer.jsonl'):
-                    destination = Path(str(source)+'.gz')
-                    try:
-                        raw_bytes = source.stat().st_size
-                        with source.open('rb') as incoming, gzip.open(destination, 'wb') as outgoing:
-                            shutil.copyfileobj(incoming, outgoing)
-                        with gzip.open(destination, 'rb') as verification:
-                            while verification.read(1024*1024):
-                                pass
-                        source.unlink()
-                        archived.append({'file': str(destination.relative_to(base.ARTIFACTS)),
-                            'raw_bytes': raw_bytes, 'gzip_bytes': destination.stat().st_size,
-                            'verification': 'full gzip decode and CRC before removing original'})
-                    except Exception as error:
-                        print('WARNING: retain original observer; archive failed:',
-                              source, type(error).__name__, flush=True)
-                        archived.append({'file': str(source.relative_to(base.ARTIFACTS)),
-                                         'original_retained': source.exists(),
-                                         'error_type': type(error).__name__})
-                (base.ARTIFACTS/'observer-archives.json').write_text(json.dumps(archived, indent=2)+'\n')
+            nonlocal current_recipe
+            root_artifacts = base.ARTIFACTS
+            outcomes = []
+            selected = recipe_ids or [None]
+            for index, recipe_id in enumerate(selected):
+                if index:
+                    current_recipe = recipe_map[recipe_id]
+                    base.ARTIFACTS = root_artifacts/recipe_id
+                    base.ARTIFACTS.mkdir(parents=True, exist_ok=True)
+                    data = next(Path('/kaggle/input').rglob('bundle.json')).parent
+                    prepare(base.WORK/'fishbot', base.WORK/'so101',
+                            str(base.WORK/'planning-venv/bin/python'), data, kwargs['env'])
+                start = args.index('tools/cooperation_factory.py')
+                domain, port = 187+index, 9157+index
+                factory_args = list(args[:start+1])+['run', '--manifest',
+                    str(base.ARTIFACTS/'scene/scene-manifest.json'), '--planning-python',
+                    str(base.WORK/'planning-venv/bin/python'), '--output',
+                    str(base.ARTIFACTS/'full-run'), '--candidate', recipe_id or 'f1-visual-recovery',
+                    '--publication-mode', 'asynchronous', '--continuous-deliveries',
+                    'tools/config/factory_delivery/continuous-ba-orders.json',
+                    '--order', 'order-b', '--order', 'order-a', '--scope', 'transport',
+                    '--domain', str(domain), '--port', str(port), '--isolated-runtime']
+                environment = dict(kwargs['env'], ROS_DOMAIN_ID=str(domain), FISHBOT_MUJOCO_DOMAIN_ID=str(domain))
+                if index == 0:
+                    original_run('native-query-model-transfer', ['bash', '-ec',
+                        'source tools/fishbot_mujoco_env.sh; exec "$@"', 'query-model-transfer',
+                        str(base.WORK/'planning-venv/bin/python'), '-B',
+                        'tools/tests/native_cooperation_query_transfer.py', '--manifest',
+                        str(base.ARTIFACTS/'scene/scene-manifest.json'), '--output',
+                        str(base.ARTIFACTS/'query-model-transfer-preflight.json')],
+                        cwd=base.WORK/'fishbot', env=environment, timeout=150)
+                recorder = OverviewRecorder(base.ARTIFACTS/'full-run/runtime', base.ARTIFACTS)
+                witnesses, witness_stop, witness_thread = [], None, None
+                if recipe_id:
+                    setup = 'source tools/fishbot_mujoco_env.sh; source "$FISHBOT_NAV2_QUERY_OVERLAY/local_setup.bash"; exec "$@"'
+                    common = ['bash', '-ec', setup, 'closure-observer', str(base.WORK/'planning-venv/bin/python'), '-B']
+                    commands = [common+['tools/cooperation_sensor_experience.py', '--manifest',
+                        str(base.ARTIFACTS/'scene/scene-manifest.json'), '--output',
+                        str(base.ARTIFACTS/'sensor-experience'), '--timeout', '150', '--frames', '6', '--separation-source-s', '2']]
+                    if index == 0:
+                        commands.append(common+['tools/fishbot_lidar3d_probe.py', '--allow-unorganized',
+                            '--target-x', '-0.25', '--target-y', '0.55', '--half-size', '.12',
+                            '--timeout', '150', '--output', str(base.ARTIFACTS/'native-lidar-consumer.json')])
+                    witnesses, witness_stop, witness_thread = readonly_witnesses_after_ready(
+                        commands, cwd=base.WORK/'fishbot', env=environment,
+                        port=port, output=base.ARTIFACTS)
+                try:
+                    original_run((recipe_id or name)+'-factory', factory_args,
+                        **dict(kwargs, env=environment, required=False))
+                finally:
+                    recorder.close()
+                    if witness_stop is not None:
+                        witness_stop.set(); witness_thread.join(timeout=3)
+                    import signal
+                    for process, log in witnesses:
+                        if process.poll() is None:
+                            os.killpg(process.pid, signal.SIGINT)
+                            try: process.wait(timeout=5)
+                            except subprocess.TimeoutExpired:
+                                os.killpg(process.pid, signal.SIGTERM); process.wait(timeout=5)
+                        log.close()
+                    archived = []
+                    for source in base.ARTIFACTS.rglob('observer.jsonl'):
+                        destination = Path(str(source)+'.gz')
+                        try:
+                            raw_bytes = source.stat().st_size
+                            with source.open('rb') as incoming, gzip.open(destination, 'wb') as outgoing:
+                                shutil.copyfileobj(incoming, outgoing)
+                            with gzip.open(destination, 'rb') as verification:
+                                while verification.read(1024*1024): pass
+                            source.unlink()
+                            archived.append({'file': str(destination.relative_to(base.ARTIFACTS)),
+                                'raw_bytes': raw_bytes, 'gzip_bytes': destination.stat().st_size,
+                                'verification': 'full gzip decode and CRC before removing original'})
+                        except Exception as error:
+                            print('WARNING: retain original observer; archive failed:', source, type(error).__name__, flush=True)
+                    (base.ARTIFACTS/'observer-archives.json').write_text(json.dumps(archived, indent=2)+'\n')
+                source = base.WORK/'fishbot/tools/cooperation_visual_evidence_export.py'
+                manifest = json.loads((base.ARTIFACTS/'scene/scene-manifest.json').read_text())
+                if source.exists() and manifest.get('pretrained_grasp', {}).get('enabled'):
+                    original_run((recipe_id or name)+'-visual-export', [str(base.WORK/'planning-venv/bin/python'),
+                        str(source), '--run', str(base.ARTIFACTS/'full-run'), '--observations',
+                        manifest['pretrained_grasp']['output_directory'], '--overview', str(base.ARTIFACTS/'overview.mp4'),
+                        '--frame-index', str(base.ARTIFACTS/'overview-frames.jsonl'), '--output',
+                        str(base.ARTIFACTS/'visual-evidence'), '--public-prefix', '/workbench/'+(recipe_id or 'visual-next')+'/'],
+                        cwd=base.WORK/'fishbot', env=environment, required=False, timeout=120)
+                result_path = base.ARTIFACTS/'full-run/result.json'
+                result = json.loads(result_path.read_text()) if result_path.exists() else None
+                outcomes.append({'scene': recipe_id, 'artifact_directory': str(base.ARTIFACTS),
+                    'original_result': result, 'passed': bool(result and result.get('passed') is True)})
+            base.ARTIFACTS = root_artifacts
+            (root_artifacts/'closure-result.json').write_text(json.dumps({
+                'scope': 'two independent new scene Factory runs; original scores unchanged',
+                'runs': outcomes, 'passed': all(item['passed'] for item in outcomes)}, indent=2)+'\n')
+            return {'stage': 'factory-b-a', 'runs': len(outcomes)}
         return original_run(name, args, **kwargs)
 
     def prepare(fishbot, so101, python, data, env):
@@ -332,29 +423,39 @@ def cloud():
             descriptor=str(fishbot/'tools/config/perception/so101-graspgenx-tip-region.json'))
         grasp = base.ARTIFACTS/'pretrained-grasp.json'
         grasp.write_text(json.dumps(config, indent=2)+'\n')
+        recipe = current_recipe or {}
         prepare_args = [str(fishbot/'tools/fishbot_cooperation.sh'), 'prepare',
             '--so101-project', str(so101), '--output', str(scene),
-            '--arena-xml', 'tools/config/factory_delivery/j100-wide-arena.xml',
-            '--scene-profile', 'tools/config/factory_delivery/j100-wide-profile.json',
-            '--factory-config', 'tools/config/factory_delivery/j100-wide.json',
-            '--continuous-delivery', 'tools/config/factory_delivery/j100-wide-entities.json',
-            '--spawn', '-.9', '-1.68', '--navigation-planner', 'smac-lattice',
+            '--arena-xml', recipe.get('arena_xml', 'tools/config/factory_delivery/j100-wide-arena.xml'),
+            '--scene-profile', recipe.get('scene_profile', 'tools/config/factory_delivery/j100-wide-profile.json'),
+            '--factory-config', recipe.get('factory_config', 'tools/config/factory_delivery/j100-wide.json'),
+            '--continuous-delivery', recipe.get('continuous_delivery', 'tools/config/factory_delivery/j100-wide-entities.json'),
+            '--spawn', *[str(value) for value in recipe.get('spawn', [-.9, -1.68])], '--navigation-planner', 'smac-lattice',
             '--lattice-filepath', 'tools/config/navigation_lattices/diff-r060-2cm.json',
             '--lattice-allow-reversing', '--lattice-rotation-shim', '--staging-reversing',
             '--amcl-motion-model', 'omni', '--omit-unused-native-rangefinders',
             '--queued-ros-dispatch', '--terminal-stop-heartbeat',
             '--perception-config', 'tools/config/perception/apriltag-station.example.json',
             '--pretrained-grasp-config', str(grasp)]
+        if recipe and recipe.get('observation') == 'ideal':
+            for option, count in [('--perception-config', 2), ('--pretrained-grasp-config', 2), ('--lattice-filepath', 2), ('--navigation-planner', 2), ('--lattice-allow-reversing', 1), ('--lattice-rotation-shim', 1), ('--staging-reversing', 1)]:
+                if option in prepare_args:
+                    offset = prepare_args.index(option); del prepare_args[offset:offset+count]
+            prepare_args.append('--camera-rgbd')
+        if recipe and recipe['id'] == 'f2-wide-warehouse':
+            prepare_args += ['--lidar3d-config', 'tools/config/cooperation_profiles/mid360-sensor.json']
         run('scene-prepare', ['bash', '-ec',
             'source /opt/ros/jazzy/setup.bash; exec "$@"', 'visual-prepare',
             *prepare_args], cwd=fishbot, env=env, timeout=180)
-        run('candidate-configuration', [python, str(fishbot/'experiments/kaggle/f1_candidate.py'),
-            str(scene/'scene-manifest.json'), '--transport-controller-yaml',
-            str(fishbot/'experiments/kaggle/graceful-j100.yaml'), '--lattice-smooth-path'],
-            cwd=fishbot, env=env)
+        if not recipe or recipe.get('observation') == 'vision':
+            run('candidate-configuration', [python, str(fishbot/'experiments/kaggle/f1_candidate.py'),
+                str(scene/'scene-manifest.json'), '--transport-controller-yaml',
+                str(fishbot/'experiments/kaggle/graceful-j100.yaml'), '--lattice-smooth-path'],
+                cwd=fishbot, env=env)
         manifest_file = scene/'scene-manifest.json'
         manifest = json.loads(manifest_file.read_text())
         manifest['render_overview'] = True
+        manifest['arm_query_evidence_directory'] = str(scene/'grasp-observations')
         manifest_file.write_text(json.dumps(manifest, indent=2)+'\n')
         render_code = '''import json,sys,os
 from pathlib import Path
