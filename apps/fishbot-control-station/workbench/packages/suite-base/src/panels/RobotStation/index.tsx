@@ -146,6 +146,17 @@ const useStyles = makeStyles()((theme) => ({
     gap: theme.spacing(0.5),
     padding: "6px 0",
   },
+  stickyBar: {
+    position: "sticky",
+    top: 0,
+    zIndex: 2,
+    background: theme.palette.background.paper,
+    paddingBottom: theme.spacing(1),
+    borderBottom: `1px solid ${theme.palette.divider}`,
+    display: "flex",
+    flexDirection: "column",
+    gap: theme.spacing(0.75),
+  },
 }));
 
 function ScenePreview({
@@ -256,7 +267,7 @@ function ScenePreview({
         );
       })}
       <text x="12" y="274" fill="#b9c9d7" fontSize="10">
-        X → Y ↑ 高度请看属性；未做碰撞或运动学计算
+        X → Y ↑ 俯视工作空间（点击节点选中）
       </text>
     </svg>
   );
@@ -270,6 +281,7 @@ function RobotStation({
   saveConfig: SaveConfig<Config>;
 }): React.JSX.Element {
   const { classes } = useStyles();
+  const [activeSection, setActiveSection] = useState<"all" | "scene" | "program" | "run">("all");
   const station = useMemo(
     () => config.station ?? defaultStation(),
     [config.station],
@@ -1066,289 +1078,132 @@ function RobotStation({
     <>
       <PanelToolbar />
       <div className={classes.content} style={{ containerType: "inline-size" }}>
-        <div className={classes.row}>
-          <Typography variant="h6">场景与程序</Typography>
-          <Button
-            size="small"
-            disabled={past.length === 0}
-            onClick={() => {
-              const previous = past.at(-1);
-              if (previous) {
-                setNotice("");
-                setPast(past.slice(0, -1));
-                setFuture([...future, station]);
-                saveConfig({ station: previous });
-              }
-            }}
-          >
-            撤销
-          </Button>
-          <Button
-            size="small"
-            disabled={future.length === 0}
-            onClick={() => {
-              const next = future.at(-1);
-              if (next) {
-                setPast([...past, station]);
-                setNotice("");
-                setFuture(future.slice(0, -1));
-                saveConfig({ station: next });
-              }
-            }}
-          >
-            重做
-          </Button>
-        </div>
-        <div className={classes.row}>
-          <Button
-            size="small"
-            variant="outlined"
-            disabled={
-              checkingTask || submitting || cancelling || taskIsActive(task)
-            }
-            onClick={copyTask}
-          >
-            复制为新任务
-          </Button>
-          <Typography variant="caption" color="text.secondary">
-            {taskIsActive(task) || submitting || cancelling
-              ? "运行结束或取消后可复制；当前任务仍可取消。"
-              : task?.station
-                ? "复制来源：当前任务的提交快照"
-                : "复制来源：当前编辑草稿"}
-          </Typography>
-        </div>
-        <Typography variant="body2" color="text.secondary">
-          编辑草稿随工作台布局保存。三维画面可切换编辑预览或当前任务。
-        </Typography>
-        <div role="region" aria-label="三维画面来源">
+        <div className={classes.stickyBar}>
           <div className={classes.row}>
+            <Typography variant="h6">
+              {drone ? "无人机规划工作站" : "SO101 机械臂工作站"}
+            </Typography>
             <Button
               size="small"
-              variant={sceneSource?.mode === "draft" ? "contained" : "outlined"}
-              aria-pressed={sceneSource?.mode === "draft"}
-              disabled={switchingScene}
+              disabled={past.length === 0}
               onClick={() => {
-                void changeScene("draft");
+                const previous = past.at(-1);
+                if (previous) {
+                  setNotice("");
+                  setPast(past.slice(0, -1));
+                  setFuture([...future, station]);
+                  saveConfig({ station: previous });
+                }
               }}
             >
-              编辑预览
+              撤销
             </Button>
             <Button
               size="small"
-              variant={sceneSource?.mode === "task" ? "contained" : "outlined"}
-              aria-pressed={sceneSource?.mode === "task"}
-              disabled={!taskId || switchingScene || submitting}
+              disabled={future.length === 0}
               onClick={() => {
-                void changeScene("task");
+                const next = future.at(-1);
+                if (next) {
+                  setPast([...past, station]);
+                  setNotice("");
+                  setFuture(future.slice(0, -1));
+                  saveConfig({ station: next });
+                }
               }}
             >
-              当前任务
+              重做
             </Button>
-            {!drone && (
+            <Button
+              size="small"
+              variant="outlined"
+              disabled={
+                checkingTask || submitting || cancelling || taskIsActive(task)
+              }
+              onClick={copyTask}
+            >
+              复制为新任务
+            </Button>
+          </div>
+          <div role="region" aria-label="三维画面来源">
+            <div className={classes.row}>
               <Button
                 size="small"
-                component="a"
-                href="/so101"
-                target="_blank"
-                rel="noreferrer"
+                variant={sceneSource?.mode === "draft" ? "contained" : "outlined"}
+                aria-pressed={sceneSource?.mode === "draft"}
+                disabled={switchingScene}
+                onClick={() => {
+                  void changeScene("draft");
+                }}
               >
-                历史回放 ↗
+                编辑预览
               </Button>
-            )}
-          </div>
-          <Typography
-            variant="body2"
-            style={{ overflowWrap: "anywhere", marginTop: 8 }}
-          >
-            {sceneModeLabel(sceneSource)}
-          </Typography>
-          {sceneSource?.mode === "task" && (
-            <Typography variant="caption" color="text.secondary">
-              {sceneSource.status
-                ? taskStatusLabel(sceneSource.status)
-                : "等待任务状态"}
-              {sceneSource.phase ? ` · ${sceneSource.phase}` : ""}
-              {sceneSource.simulation_s != undefined
-                ? ` · ${sceneSource.simulation_s.toFixed(2)} s`
-                : ""}
-              {" · 编辑只保存草稿；取消或结束后保留最后实际姿态。"}
-            </Typography>
-          )}
-          {sceneStatusError && (
-            <Alert severity="warning" style={{ marginTop: 8 }}>
-              {sceneStatusError}
-            </Alert>
-          )}
-          {sceneError && (
-            <Alert severity="warning" style={{ marginTop: 8 }}>
-              {sceneError}
-            </Alert>
-          )}
-        </div>
-        <TextField
-          label="工作站名称"
-          size="small"
-          value={station.name}
-          onChange={(event) => {
-            commit({ ...station, name: event.target.value });
-          }}
-        />
-        {!drone && (
-          <div role="region" aria-label="SO101 场景选择">
-            <Typography variant="subtitle2">选择场景</Typography>
-            <Typography
-              variant="body2"
-              aria-live="polite"
-              data-testid="so101-current-scene"
-              data-scene-id={sceneId ?? "custom"}
-            >
-              当前草稿场景：
-              {SO101_WORKSPACE_SCENES.find((scene) => scene.id === sceneId)
-                ?.name ?? "自定义草稿"}
-            </Typography>
-            <div className={classes.row}>
-              {SO101_WORKSPACE_SCENES.map((scene) => (
-                <div key={scene.id}>
-                  <Button
-                    size="small"
-                    variant={sceneId === scene.id ? "contained" : "outlined"}
-                    aria-pressed={sceneId === scene.id}
-                    data-testid={`so101-scene-${scene.id}`}
-                    disabled={
-                      checkingTask ||
-                      submitting ||
-                      cancelling ||
-                      taskIsActive(task)
-                    }
-                    onClick={() => {
-                      loadWorkspaceSample(scene.id);
-                    }}
-                  >
-                    {scene.name}
-                  </Button>
-                  <Typography
-                    variant="caption"
-                    component="p"
-                    color="text.secondary"
-                  >
-                    {scene.description}
-                  </Typography>
-                </div>
-              ))}
+              <Button
+                size="small"
+                variant={sceneSource?.mode === "task" ? "contained" : "outlined"}
+                aria-pressed={sceneSource?.mode === "task"}
+                disabled={!taskId || switchingScene || submitting}
+                onClick={() => {
+                  void changeScene("task");
+                }}
+              >
+                当前任务
+              </Button>
+              {!drone && (
+                <Button
+                  size="small"
+                  component="a"
+                  href="/so101"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  历史回放 ↗
+                </Button>
+              )}
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                style={{ overflowWrap: "anywhere" }}
+              >
+                {sceneModeLabel(sceneSource)}
+                {sceneSource?.mode === "task"
+                  ? ` · ${sceneSource.status ? taskStatusLabel(sceneSource.status) : "等待任务状态"}${sceneSource.phase ? ` · ${sceneSource.phase}` : ""}${sceneSource.simulation_s != undefined ? ` · ${sceneSource.simulation_s.toFixed(2)} s` : ""}`
+                  : ""}
+              </Typography>
             </div>
-            <Typography variant="caption" color="text.secondary">
-              选择只载入可编辑草稿，不自动运行。改动后显示自定义草稿；每次运行都生成自己的结果与回放。
-            </Typography>
-            {station.execution !== undefined && (
-              <Alert severity="info" style={{ marginTop: 8 }}>
-                开发工位：红盘与取料高位随 JSON 保存。声明区域是定位先验，尚未证明整个区域都能抓放。
+            {sceneStatusError && (
+              <Alert severity="warning" style={{ marginTop: 6 }}>
+                {sceneStatusError}
               </Alert>
             )}
-            {station.recipeDocument && (
-              <Alert severity="info" style={{ marginTop: 8 }}>
-                已载入可编辑工位配方。历史验收仅作来源引用；当前草稿须重新运行。
+            {sceneError && (
+              <Alert severity="warning" style={{ marginTop: 6 }}>
+                {sceneError}
               </Alert>
             )}
           </div>
-        )}
-        <div className={classes.row}>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={async () => {
-              if (!layoutId) {
-                setNotice("请先创建工作台布局，或导出 JSON 保存草稿。");
-                return;
-              }
-              try {
-                setNotice("正在保存草稿…");
-                const current = getCurrentLayoutState().selectedLayout;
-                await layoutManager.updateLayout({
-                  id: layoutId,
-                  name: current?.name,
-                  data: current?.data,
-                });
-                await layoutManager.overwriteLayout({ id: layoutId });
-                const url = new URL(window.location.href);
-                url.searchParams.delete("layoutUrl");
-                window.history.replaceState(window.history.state, "", url);
-                setNotice(
-                  "草稿与当前布局已保存，刷新页面可继续编辑。也可导出 JSON 备份。",
-                );
-              } catch (error) {
-                setNotice(
-                  `布局保存失败，草稿仍可导出：${error instanceof Error ? error.message : String(error)}`,
-                );
-              }
-            }}
-          >
-            保存草稿
-          </Button>
-          <Button
-            size="small"
-            onClick={() => {
-              downloadDocument(false);
-            }}
-          >
-            导出 JSON
-          </Button>
-          {!drone && (
-            <Button size="small" onClick={() => { downloadDocument(true); }}>
-              导出工位配方
-            </Button>
-          )}
-          <Button size="small"
-            disabled={checkingTask || submitting || cancelling || taskIsActive(task)}
-            onClick={() => fileInput.current?.click()}>
-            导入 JSON
-          </Button>
-          <input
-            hidden
-            ref={fileInput}
-            type="file"
-            accept=".json,application/json"
-            onChange={async (event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (!file) {
-                return;
-              }
-              if (checkingTask || submitting || cancelling || taskIsActive(task)) {
-                setNotice("任务运行中，请结束或停止后再导入；原任务与取消入口保留。");
-                return;
-              }
-              try {
-                const text = await file.text();
-                const latest = latestTaskForImport.current;
-                if (latest.taskId !== taskId || latest.checkingTask || latest.submitting
-                    || latest.cancelling || taskIsActive(latest.task)
-                    || submissionController.current || cancellationController.current) {
-                  setNotice("读取期间任务状态已变化，请结束任务后重新导入；原任务与取消入口保留。");
-                  return;
-                }
-                const imported = importStation(JSON.parse(text));
-                if (stationPlatform(imported.station) !== platform) {
-                  throw new Error(
-                    "文件与当前机器人类型不同，请在对应工作台入口导入；当前草稿未改变。",
-                  );
-                }
-                commit(imported.station, true);
-                setSelected(imported.station.nodes[0]?.id ?? "");
-                setNotice(
-                  imported.warnings.length > 0
-                    ? `导入完成，注意：${imported.warnings.join(" ")}`
-                    : "工作站已导入，可以继续编辑。",
-                );
-              } catch (error) {
-                setNotice(
-                  error instanceof Error
-                    ? error.message
-                    : "无法读取 JSON，当前草稿未改变。",
-                );
-              }
-            }}
-          />
+          <div className={classes.row} role="tablist" aria-label="工作站视图分区">
+            {(
+              [
+                ["all", "全部视图"],
+                ["scene", "1. 场景与障碍"],
+                ["program", "2. 程序与规划"],
+                ["run", "3. 执行与回放"],
+              ] as const
+            ).map(([key, label]) => (
+              <Button
+                key={key}
+                size="small"
+                role="tab"
+                aria-selected={activeSection === key}
+                variant={activeSection === key ? "contained" : "text"}
+                onClick={() => {
+                  setActiveSection(key);
+                }}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
         </div>
         {notice && (
           <Alert
@@ -1360,242 +1215,575 @@ function RobotStation({
             {notice}
           </Alert>
         )}
-        <div className={classes.workspace}>
-          <div className={classes.tree} aria-label="工作站对象树">
-            <Typography variant="caption">世界坐标系</Typography>
-            {renderTree("world", 0)}
-          </div>
-          <ScenePreview
-            station={station}
-            selected={selected}
-            select={setSelected}
-          />
-        </div>
-        {drone && (
-          <div role="region" aria-label="三维障碍编辑">
+        {(activeSection === "all" || activeSection === "scene") && (
+          <>
+            <TextField
+              label="工作站名称"
+              size="small"
+              value={station.name}
+              onChange={(event) => {
+                commit({ ...station, name: event.target.value });
+              }}
+            />
+            {!drone && (
+              <div role="region" aria-label="SO101 场景选择">
+                <div className={classes.row}>
+                  <Typography variant="subtitle2">预设场景：</Typography>
+                  <Typography
+                    variant="body2"
+                    aria-live="polite"
+                    data-testid="so101-current-scene"
+                    data-scene-id={sceneId ?? "custom"}
+                  >
+                    当前草稿场景：
+                    {SO101_WORKSPACE_SCENES.find((scene) => scene.id === sceneId)
+                      ?.name ?? "自定义草稿"}
+                  </Typography>
+                </div>
+                <div className={classes.row} style={{ marginTop: 4 }}>
+                  {SO101_WORKSPACE_SCENES.map((scene) => (
+                    <Button
+                      key={scene.id}
+                      size="small"
+                      title={scene.description}
+                      variant={sceneId === scene.id ? "contained" : "outlined"}
+                      aria-pressed={sceneId === scene.id}
+                      data-testid={`so101-scene-${scene.id}`}
+                      disabled={
+                        checkingTask ||
+                        submitting ||
+                        cancelling ||
+                        taskIsActive(task)
+                      }
+                      onClick={() => {
+                        loadWorkspaceSample(scene.id);
+                      }}
+                    >
+                      {scene.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className={classes.row}>
               <Button
                 size="small"
-                variant={boxEditMode === "translate" ? "contained" : "outlined"}
-                aria-pressed={boxEditMode === "translate"}
-                disabled={taskIsActive(task) || submitting}
-                onClick={() => {
-                  setBoxEditMode("translate");
-                  if (sceneSource?.mode !== "draft") {
-                    void changeScene("draft");
+                variant="outlined"
+                onClick={async () => {
+                  if (!layoutId) {
+                    setNotice("请先创建工作台布局，或导出 JSON 保存草稿。");
+                    return;
+                  }
+                  try {
+                    setNotice("正在保存草稿…");
+                    const current = getCurrentLayoutState().selectedLayout;
+                    await layoutManager.updateLayout({
+                      id: layoutId,
+                      name: current?.name,
+                      data: current?.data,
+                    });
+                    await layoutManager.overwriteLayout({ id: layoutId });
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("layoutUrl");
+                    window.history.replaceState(window.history.state, "", url);
+                    setNotice(
+                      "草稿与当前布局已保存，刷新页面可继续编辑。也可导出 JSON 备份。",
+                    );
+                  } catch (error) {
+                    setNotice(
+                      `布局保存失败，草稿仍可导出：${error instanceof Error ? error.message : String(error)}`,
+                    );
                   }
                 }}
               >
-                三维移动障碍
+                保存草稿
               </Button>
               <Button
                 size="small"
-                variant={boxEditMode === "scale" ? "contained" : "outlined"}
-                aria-pressed={boxEditMode === "scale"}
-                disabled={taskIsActive(task) || submitting}
                 onClick={() => {
-                  setBoxEditMode("scale");
-                  if (sceneSource?.mode !== "draft") {
-                    void changeScene("draft");
+                  downloadDocument(false);
+                }}
+              >
+                导出 JSON
+              </Button>
+              {!drone && (
+                <Button size="small" onClick={() => { downloadDocument(true); }}>
+                  导出工位配方
+                </Button>
+              )}
+              <Button size="small"
+                disabled={checkingTask || submitting || cancelling || taskIsActive(task)}
+                onClick={() => fileInput.current?.click()}>
+                导入 JSON
+              </Button>
+              <input
+                hidden
+                ref={fileInput}
+                type="file"
+                accept=".json,application/json"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) {
+                    return;
                   }
-                }}
-              >
-                三维缩放障碍
-              </Button>
-            </div>
-            <Typography variant="caption" color="text.secondary">
-              在三维场景点选障碍，拖动彩色轴调整位置或宽深高；松手写入草稿。
-            </Typography>
-          </div>
-        )}
-        <div className={classes.row}>
-          {(["target", "frame", "object", "obstacle"] as const)
-            .filter((kind) => !drone || kind !== "object")
-            .map((kind) => (
-              <Button
-                size="small"
-                key={kind}
-                onClick={() => {
-                  addNode(kind);
-                }}
-              >
-                添加{stationKindLabel(kind, platform)}
-              </Button>
-            ))}
-        </div>
-        {node && (
-          <>
-            <TextField
-              size="small"
-              label="对象名称"
-              value={node.name}
-              onChange={(event) => {
-                changeNode({ name: event.target.value });
-              }}
-            />
-            {node.kind !== "tool" && (
-              <TextField
-                select
-                size="small"
-                label="所属坐标系（切换保持世界位置）"
-                value={node.parent}
-                onChange={(event) => {
-                  commit(reparent(station, node.id, event.target.value));
-                }}
-              >
-                <MenuItem value="world">世界坐标系</MenuItem>
-                {station.nodes
-                  .filter(
-                    (item) => item.kind === "frame" && !blocked.has(item.id),
-                  )
-                  .map((frame) => (
-                    <MenuItem key={frame.id} value={frame.id}>
-                      {frame.name}
-                    </MenuItem>
-                  ))}
-                {node.parent !== "world" &&
-                  !station.nodes.some(
-                    (item) => item.id === node.parent && item.kind === "frame",
-                  ) && <MenuItem value={node.parent}>{node.parent}</MenuItem>}
-              </TextField>
-            )}
-            {node.kind !== "tool" && (
-              <div className={classes.fields}>
-                {([0, 1, 2] as const).map((axis) => (
-                  <TextField
-                    key={axis}
-                    size="small"
-                    type="number"
-                    label={`${["X", "Y", "Z"][axis]}（m）`}
-                    value={node.position[axis]}
-                    disabled={
-                      axis === 2 &&
-                      ((!drone && node.id === "place") ||
-                        (drone && node.kind === "robot"))
+                  if (checkingTask || submitting || cancelling || taskIsActive(task)) {
+                    setNotice("任务运行中，请结束或停止后再导入；原任务与取消入口保留。");
+                    return;
+                  }
+                  try {
+                    const text = await file.text();
+                    const latest = latestTaskForImport.current;
+                    if (latest.taskId !== taskId || latest.checkingTask || latest.submitting
+                        || latest.cancelling || taskIsActive(latest.task)
+                        || submissionController.current || cancellationController.current) {
+                      setNotice("读取期间任务状态已变化，请结束任务后重新导入；原任务与取消入口保留。");
+                      return;
                     }
-                    slotProps={{ htmlInput: { step: drone ? 0.1 : 0.005 } }}
-                    onChange={(event) => {
-                      if (event.target.value === "") {
-                        return;
+                    const imported = importStation(JSON.parse(text));
+                    if (stationPlatform(imported.station) !== platform) {
+                      throw new Error(
+                        "文件与当前机器人类型不同，请在对应工作台入口导入；当前草稿未改变。",
+                      );
+                    }
+                    commit(imported.station, true);
+                    setSelected(imported.station.nodes[0]?.id ?? "");
+                    setNotice(
+                      imported.warnings.length > 0
+                        ? `导入完成，注意：${imported.warnings.join(" ")}`
+                        : "工作站已导入，可以继续编辑。",
+                    );
+                  } catch (error) {
+                    setNotice(
+                      error instanceof Error
+                        ? error.message
+                        : "无法读取 JSON，当前草稿未改变。",
+                    );
+                  }
+                }}
+              />
+            </div>
+            <div className={classes.workspace}>
+              <div className={classes.tree} aria-label="工作站对象树">
+                <Typography variant="caption">世界坐标系</Typography>
+                {renderTree("world", 0)}
+              </div>
+              <ScenePreview
+                station={station}
+                selected={selected}
+                select={setSelected}
+              />
+            </div>
+            {drone && (
+              <div role="region" aria-label="三维障碍编辑">
+                <div className={classes.row}>
+                  <Button
+                    size="small"
+                    variant={boxEditMode === "translate" ? "contained" : "outlined"}
+                    aria-pressed={boxEditMode === "translate"}
+                    disabled={taskIsActive(task) || submitting}
+                    onClick={() => {
+                      setBoxEditMode("translate");
+                      if (sceneSource?.mode !== "draft") {
+                        void changeScene("draft");
                       }
-                      const value = Number(event.target.value);
-                      if (!Number.isFinite(value)) {
-                        return;
-                      }
-                      const position: Vec3 = [...node.position];
-                      position[axis] = value;
-                      changeNode({ position });
                     }}
-                  />
-                ))}
+                  >
+                    三维移动障碍
+                  </Button>
+                  <Button
+                    size="small"
+                    variant={boxEditMode === "scale" ? "contained" : "outlined"}
+                    aria-pressed={boxEditMode === "scale"}
+                    disabled={taskIsActive(task) || submitting}
+                    onClick={() => {
+                      setBoxEditMode("scale");
+                      if (sceneSource?.mode !== "draft") {
+                        void changeScene("draft");
+                      }
+                    }}
+                  >
+                    三维缩放障碍
+                  </Button>
+                </div>
               </div>
             )}
-            {drone && node.kind === "obstacle" && (
+            <div className={classes.row}>
+              {(["target", "frame", "object", "obstacle"] as const)
+                .filter((kind) => !drone || kind !== "object")
+                .map((kind) => (
+                  <Button
+                    size="small"
+                    key={kind}
+                    onClick={() => {
+                      addNode(kind);
+                    }}
+                  >
+                    添加{stationKindLabel(kind, platform)}
+                  </Button>
+                ))}
+            </div>
+            {node && (
               <>
                 <TextField
-                  select
                   size="small"
-                  label="障碍启用状态"
-                  value={node.enabled === false ? "disabled" : "enabled"}
+                  label="对象名称"
+                  value={node.name}
                   onChange={(event) => {
-                    changeNode({ enabled: event.target.value === "enabled" });
+                    changeNode({ name: event.target.value });
                   }}
-                >
-                  <MenuItem value="enabled">启用，参与预演和碰撞检查</MenuItem>
-                  <MenuItem value="disabled">停用，保留草稿配置</MenuItem>
-                </TextField>
-                <div className={classes.fields}>
-                  {([0, 1, 2] as const).map((axis) => (
-                    <TextField
-                      key={axis}
-                      size="small"
-                      type="number"
-                      label={`${["宽", "深", "高"][axis]}（m）`}
-                      value={(node.size ?? [1, 1, 2])[axis]}
-                      slotProps={{ htmlInput: { step: 0.1, min: 0.1 } }}
-                      onChange={(event) => {
-                        const value = Number(event.target.value);
-                        if (!Number.isFinite(value) || value <= 0) {
-                          return;
+                />
+                {node.kind !== "tool" && (
+                  <TextField
+                    select
+                    size="small"
+                    label="所属坐标系（切换保持世界位置）"
+                    value={node.parent}
+                    onChange={(event) => {
+                      commit(reparent(station, node.id, event.target.value));
+                    }}
+                  >
+                    <MenuItem value="world">世界坐标系</MenuItem>
+                    {station.nodes
+                      .filter(
+                        (item) => item.kind === "frame" && !blocked.has(item.id),
+                      )
+                      .map((frame) => (
+                        <MenuItem key={frame.id} value={frame.id}>
+                          {frame.name}
+                        </MenuItem>
+                      ))}
+                    {node.parent !== "world" &&
+                      !station.nodes.some(
+                        (item) => item.id === node.parent && item.kind === "frame",
+                      ) && <MenuItem value={node.parent}>{node.parent}</MenuItem>}
+                  </TextField>
+                )}
+                {node.kind !== "tool" && (
+                  <div className={classes.fields}>
+                    {([0, 1, 2] as const).map((axis) => (
+                      <TextField
+                        key={axis}
+                        size="small"
+                        type="number"
+                        label={`${["X", "Y", "Z"][axis]}（m）`}
+                        value={node.position[axis]}
+                        disabled={
+                          axis === 2 &&
+                          ((!drone && node.id === "place") ||
+                            (drone && node.kind === "robot"))
                         }
-                        const size: Vec3 = [...(node.size ?? [1, 1, 2])];
-                        size[axis] = value;
-                        changeNode({ size });
-                      }}
-                    />
-                  ))}
-                </div>
-                <TextField
-                  select
-                  size="small"
-                  label="障碍运动"
-                  value={node.motion ? "linear_ping_pong" : "static"}
-                  onChange={(event) => {
-                    changeNode({
-                      motion:
-                        event.target.value === "linear_ping_pong"
-                          ? {
-                              type: "linear_ping_pong",
-                              axis: [0, 1, 0],
-                              distance_m: 2,
-                              speed_m_s: 0.3,
-                            }
-                          : undefined,
-                    });
-                  }}
-                >
-                  <MenuItem value="static">静态 Box</MenuItem>
-                  <MenuItem value="linear_ping_pong">往返移动立柱</MenuItem>
-                </TextField>
-                {node.motion && (
+                        slotProps={{ htmlInput: { step: drone ? 0.1 : 0.005 } }}
+                        onChange={(event) => {
+                          if (event.target.value === "") {
+                            return;
+                          }
+                          const value = Number(event.target.value);
+                          if (!Number.isFinite(value)) {
+                            return;
+                          }
+                          const position: Vec3 = [...node.position];
+                          position[axis] = value;
+                          changeNode({ position });
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+                {drone && node.kind === "obstacle" && (
                   <>
+                    <TextField
+                      select
+                      size="small"
+                      label="障碍启用状态"
+                      value={node.enabled === false ? "disabled" : "enabled"}
+                      onChange={(event) => {
+                        changeNode({ enabled: event.target.value === "enabled" });
+                      }}
+                    >
+                      <MenuItem value="enabled">启用，参与预演和碰撞检查</MenuItem>
+                      <MenuItem value="disabled">停用，保留草稿配置</MenuItem>
+                    </TextField>
                     <div className={classes.fields}>
                       {([0, 1, 2] as const).map((axis) => (
                         <TextField
                           key={axis}
                           size="small"
                           type="number"
-                          label={`运动方向 ${["X", "Y", "Z"][axis]}`}
-                          value={node.motion!.axis[axis]}
-                          slotProps={{ htmlInput: { step: 1 } }}
+                          label={`${["宽", "深", "高"][axis]}（m）`}
+                          value={(node.size ?? [1, 1, 2])[axis]}
+                          slotProps={{ htmlInput: { step: 0.1, min: 0.1 } }}
                           onChange={(event) => {
                             const value = Number(event.target.value);
-                            if (!Number.isFinite(value) || !node.motion) {
+                            if (!Number.isFinite(value) || value <= 0) {
                               return;
                             }
-                            const direction: Vec3 = [...node.motion.axis];
-                            direction[axis] = value;
-                            changeNode({
-                              motion: { ...node.motion, axis: direction },
+                            const size: Vec3 = [...(node.size ?? [1, 1, 2])];
+                            size[axis] = value;
+                            changeNode({ size });
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <TextField
+                      select
+                      size="small"
+                      label="障碍运动"
+                      value={node.motion ? "linear_ping_pong" : "static"}
+                      onChange={(event) => {
+                        changeNode({
+                          motion:
+                            event.target.value === "linear_ping_pong"
+                              ? {
+                                  type: "linear_ping_pong",
+                                  axis: [0, 1, 0],
+                                  distance_m: 2,
+                                  speed_m_s: 0.3,
+                                }
+                              : undefined,
+                        });
+                      }}
+                    >
+                      <MenuItem value="static">静态 Box</MenuItem>
+                      <MenuItem value="linear_ping_pong">往返移动立柱</MenuItem>
+                    </TextField>
+                    {node.motion && (
+                      <>
+                        <div className={classes.fields}>
+                          {([0, 1, 2] as const).map((axis) => (
+                            <TextField
+                              key={axis}
+                              size="small"
+                              type="number"
+                              label={`运动方向 ${["X", "Y", "Z"][axis]}`}
+                              value={node.motion!.axis[axis]}
+                              slotProps={{ htmlInput: { step: 1 } }}
+                              onChange={(event) => {
+                                const value = Number(event.target.value);
+                                if (!Number.isFinite(value) || !node.motion) {
+                                  return;
+                                }
+                                const direction: Vec3 = [...node.motion.axis];
+                                direction[axis] = value;
+                                changeNode({
+                                  motion: { ...node.motion, axis: direction },
+                                });
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <div className={classes.row}>
+                          {(["distance_m", "speed_m_s"] as const).map((key) => (
+                            <TextField
+                              key={key}
+                              size="small"
+                              type="number"
+                              label={
+                                key === "distance_m"
+                                  ? "往返行程（m）"
+                                  : "立柱速度（m/s）"
+                              }
+                              value={node.motion![key]}
+                              slotProps={{ htmlInput: { min: 0.05, step: 0.1 } }}
+                              onChange={(event) => {
+                                const value = Number(event.target.value);
+                                if (
+                                  Number.isFinite(value) &&
+                                  value > 0 &&
+                                  node.motion
+                                ) {
+                                  changeNode({
+                                    motion: { ...node.motion, [key]: value },
+                                  });
+                                }
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+                <Typography variant="caption">
+                  {node.kind === "tool"
+                    ? "末端夹爪附件"
+                    : `世界位置：${worldPosition(node, station.nodes)
+                        .map((x) => x.toFixed(3))
+                        .join(", ")} m`}
+                </Typography>
+                {node.kind !== "robot" && node.kind !== "tool" && (
+                  <Button
+                    size="small"
+                    color="error"
+                    onClick={() => {
+                      commit(removeNode(station, node.id));
+                      setSelected("base");
+                      setNotice(
+                        "对象及其子节点已移除；引用它的步骤保留，需重新选择目标。可撤销。",
+                      );
+                    }}
+                  >
+                    删除对象及子节点
+                  </Button>
+                )}
+              </>
+            )}
+          </>
+        )}
+        {(activeSection === "all" || activeSection === "program") && (
+          <>
+            <Divider />
+            <Typography variant="subtitle1">
+              {drone ? "飞行程序与规划参数" : "抓放程序"}
+            </Typography>
+            {drone && (
+              <>
+                <div className={classes.row}>
+                  <TextField
+                    size="small"
+                    type="number"
+                    label={station.flight?.planner === "cerlab" ? "作者速度配置（m/s）" : "速度上限（m/s）"}
+                    disabled={station.flight?.planner === "cerlab"}
+                    value={station.flight?.speed_m_s ?? 1}
+                    slotProps={{ htmlInput: { min: 1, max: 5, step: 0.1 } }}
+                    onChange={(event) => {
+                      const speed = Number(event.target.value);
+                      if (Number.isFinite(speed) && speed >= 1 && speed <= 5) {
+                        commit({
+                          ...station,
+                          flight: {
+                            ...station.flight,
+                            planner: station.flight?.planner ?? "waypoint",
+                            speed_m_s: speed,
+                          },
+                        });
+                      }
+                    }}
+                  />
+                  <TextField
+                    select
+                    size="small"
+                    label="路径方式"
+                    value={station.flight?.planner ?? "waypoint"}
+                    onChange={(event) => {
+                      commit({
+                        ...station,
+                        flight: {
+                          ...station.flight,
+                          speed_m_s: station.flight?.speed_m_s ?? 1,
+                          planner:
+                            event.target.value === "cerlab" ? "cerlab" : event.target.value === "ego" ? "ego" : "waypoint",
+                        },
+                      });
+                    }}
+                  >
+                    <MenuItem value="waypoint">按航点巡航</MenuItem>
+                    <MenuItem value="cerlab" disabled={runtime?.executor?.planners?.includes("cerlab") !== true}>
+                      CERLAB 作者栈（固定场景 / 1m）
+                    </MenuItem>
+                    <MenuItem
+                      value="ego"
+                      disabled={
+                        runtime?.executor?.planners?.includes("ego") !== true
+                      }
+                    >
+                      {runtime?.executor?.planners?.includes("ego") === true
+                        ? "EGO-Swarm 自动绕障"
+                        : "EGO-Swarm（执行器未就绪）"}
+                    </MenuItem>
+                  </TextField>
+                </div>
+                {station.flight?.planner !== "cerlab" && (
+                  <>
+                    <Typography variant="subtitle2">飞行验收参数</Typography>
+                    <div className={classes.fields}>
+                      {(
+                        [
+                          ["max_altitude_m", "高度上限（m）"],
+                          ["position_tolerance_m", "到点误差上限（m）"],
+                          ["min_clearance_m", "最小机体净空（m）"],
+                          ["min_cruise_speed_m_s", "最低巡航速度（m/s）"],
+                          ["min_cruise_duration_s", "最低巡航持续时长（s）"],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <TextField
+                          key={key}
+                          size="small"
+                          type="number"
+                          label={label}
+                          value={station.flight?.acceptance?.[key] ?? ""}
+                          slotProps={{ htmlInput: { min: 0, step: 0.05 } }}
+                          onChange={(event) => {
+                            const value =
+                              event.target.value === ""
+                                ? undefined
+                                : Number(event.target.value);
+                            if (
+                              value != undefined &&
+                              (!Number.isFinite(value) || value < 0)
+                            ) {
+                              return;
+                            }
+                            const acceptance = { ...station.flight?.acceptance };
+                            if (value == undefined) {
+                              delete acceptance[key];
+                            } else {
+                              acceptance[key] = value;
+                            }
+                            commit({
+                              ...station,
+                              flight: {
+                                speed_m_s: station.flight?.speed_m_s ?? 1,
+                                planner: station.flight?.planner ?? "waypoint",
+                                ...station.flight,
+                                acceptance,
+                              },
                             });
                           }}
                         />
                       ))}
                     </div>
-                    <div className={classes.row}>
-                      {(["distance_m", "speed_m_s"] as const).map((key) => (
+                    <Typography variant="subtitle2">深度感知故障注入</Typography>
+                    <div className={classes.fields}>
+                      {(
+                        [
+                          ["depth_drop_probability", "深度丢帧比例（0–1）", 0],
+                          ["depth_delay_ms", "深度延迟（ms）", 0],
+                          ["seed", "随机种子", 1],
+                        ] as const
+                      ).map(([key, label, fallback]) => (
                         <TextField
                           key={key}
                           size="small"
                           type="number"
-                          label={
-                            key === "distance_m"
-                              ? "往返行程（m）"
-                              : "立柱速度（m/s）"
-                          }
-                          value={node.motion![key]}
-                          slotProps={{ htmlInput: { min: 0.05, step: 0.1 } }}
+                          label={label}
+                          value={station.flight?.sensors?.[key] ?? fallback}
+                          slotProps={{
+                            htmlInput: {
+                              min: 0,
+                              step: key === "depth_drop_probability" ? 0.01 : 1,
+                            },
+                          }}
                           onChange={(event) => {
                             const value = Number(event.target.value);
                             if (
-                              Number.isFinite(value) &&
-                              value > 0 &&
-                              node.motion
+                              !Number.isFinite(value) ||
+                              value < 0 ||
+                              (key === "depth_drop_probability" && value > 1) ||
+                              (key === "seed" &&
+                                (!Number.isInteger(value) || value > 4294967295))
                             ) {
-                              changeNode({
-                                motion: { ...node.motion, [key]: value },
-                              });
+                              return;
                             }
+                            commit({
+                              ...station,
+                              flight: {
+                                speed_m_s: station.flight?.speed_m_s ?? 1,
+                                planner: station.flight?.planner ?? "waypoint",
+                                ...station.flight,
+                                sensors: { ...station.flight?.sensors, [key]: value },
+                              },
+                            });
                           }}
                         />
                       ))}
@@ -1604,687 +1792,482 @@ function RobotStation({
                 )}
               </>
             )}
-            {!drone && node.id === "place" && (
-              <Typography variant="caption" color="text.secondary">
-                修改 X/Y
-                会同步移动蓝盘、释放点和脱离点。本轮保持盘高、盘尺寸和八步程序，执行范围由下方执行器说明。
-              </Typography>
-            )}
-            {drone && node.kind === "robot" && (
-              <Typography variant="caption" color="text.secondary">
-                起点位于地面。X/Y 设置起飞位置，飞行高度在航点中设置。
-              </Typography>
-            )}
-            <Typography variant="caption">
-              {node.kind === "tool"
-                ? "夹爪是机械臂附件，此草稿尚未定义 TCP。"
-                : `世界位置：${worldPosition(node, station.nodes)
-                    .map((x) => x.toFixed(3))
-                    .join(", ")} m · 坐标轴与世界平行`}
-            </Typography>
-            {node.kind !== "robot" && node.kind !== "tool" && (
-              <Button
-                size="small"
-                color="error"
-                onClick={() => {
-                  commit(removeNode(station, node.id));
-                  setSelected("base");
-                  setNotice(
-                    "对象及其子节点已移除；引用它的步骤保留，需重新选择目标。可撤销。",
-                  );
-                }}
-              >
-                删除对象及子节点
-              </Button>
-            )}
-          </>
-        )}
-        <Divider />
-        <Typography variant="subtitle1">
-          {drone ? "飞行程序" : "抓放程序"}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          动作引用目标点。改名不会丢失引用；虚线不表示规划成功。
-        </Typography>
-        {drone && (
-          <>
-            <Typography variant="caption" color="text.secondary">
-              X 向东、Y 向北、Z 向上，单位米。起飞高度来自起飞步骤引用的航点 Z。
-            </Typography>
-            <div className={classes.row}>
-              <TextField
-                size="small"
-                type="number"
-                label={station.flight?.planner === "cerlab" ? "作者速度配置（m/s）" : "速度上限（m/s）"}
-                disabled={station.flight?.planner === "cerlab"}
-                value={station.flight?.speed_m_s ?? 1}
-                slotProps={{ htmlInput: { min: 1, max: 5, step: 0.1 } }}
-                onChange={(event) => {
-                  const speed = Number(event.target.value);
-                  if (Number.isFinite(speed) && speed >= 1 && speed <= 5) {
-                    commit({
-                      ...station,
-                      flight: {
-                        ...station.flight,
-                        planner: station.flight?.planner ?? "waypoint",
-                        speed_m_s: speed,
-                      },
+            {station.program.map((step, index) => (
+              <div className={classes.step} key={step.id}>
+                <Typography variant="body2">{index + 1}.</Typography>
+                <TextField
+                  select
+                  size="small"
+                  aria-label={`步骤 ${index + 1} 动作`}
+                  value={step.action}
+                  onChange={(event) => {
+                    const action = event.target.value as Instruction["action"];
+                    changeStep(step.id, {
+                      action,
+                      ...(drone
+                        ? {
+                            target:
+                              action === "return_home"
+                                ? "home"
+                                : actionNeedsTarget(action)
+                                  ? step.target
+                                  : "",
+                          }
+                        : {}),
                     });
-                  }
-                }}
-              />
-              <TextField
-                select
-                size="small"
-                label="路径方式"
-                value={station.flight?.planner ?? "waypoint"}
-                onChange={(event) => {
-                  commit({
-                    ...station,
-                    flight: {
-                      ...station.flight,
-                      speed_m_s: station.flight?.speed_m_s ?? 1,
-                      planner:
-                        event.target.value === "cerlab" ? "cerlab" : event.target.value === "ego" ? "ego" : "waypoint",
-                    },
-                  });
-                }}
-              >
-                <MenuItem value="waypoint">按航点巡航</MenuItem>
-                <MenuItem value="cerlab" disabled={runtime?.executor?.planners?.includes("cerlab") !== true}>
-                  CERLAB 作者栈（固定场景 / 1m）
-                </MenuItem>
-                <MenuItem
-                  value="ego"
-                  disabled={
-                    runtime?.executor?.planners?.includes("ego") !== true
-                  }
+                  }}
                 >
-                  {runtime?.executor?.planners?.includes("ego") === true
-                    ? "EGO-Swarm 自动绕障"
-                    : "EGO-Swarm（执行器未就绪）"}
-                </MenuItem>
-              </TextField>
-            </div>
-            <Typography variant="subtitle2">飞行验收参数</Typography>
-            <Typography variant="caption" color="text.secondary">
-              {station.flight?.planner === "cerlab" ? "CERLAB 本阶段仅验证航点和落地。以下验收参数尚未接入，请保持空白。" : "留空沿用执行器默认值。最低巡航速度只适用于有足够距离的巡航段；持续时长仅在填写最低巡航速度时参与验收。"}
-            </Typography>
-            <div className={classes.fields}>
-              {(
-                [
-                  ["max_altitude_m", "高度上限（m）"],
-                  ["position_tolerance_m", "到点误差上限（m）"],
-                  ["min_clearance_m", "最小机体净空（m）"],
-                  ["min_cruise_speed_m_s", "最低巡航速度（m/s）"],
-                  ["min_cruise_duration_s", "最低巡航持续时长（s）"],
-                ] as const
-              ).map(([key, label]) => (
-                <TextField
-                  key={key}
-                  size="small"
-                  type="number"
-                  label={label}
-                  disabled={station.flight?.planner === "cerlab"}
-                  value={station.flight?.acceptance?.[key] ?? ""}
-                  slotProps={{ htmlInput: { min: 0, step: 0.05 } }}
-                  onChange={(event) => {
-                    const value =
-                      event.target.value === ""
-                        ? undefined
-                        : Number(event.target.value);
-                    if (
-                      value != undefined &&
-                      (!Number.isFinite(value) || value < 0)
-                    ) {
-                      return;
+                  {stationActions(platform).map((value) => (
+                    <MenuItem key={value} value={value}>
+                      {ACTION_LABELS[value]}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                {actionNeedsTarget(step.action) && (
+                  <TextField
+                    select
+                    size="small"
+                    label={`步骤 ${index + 1} 目标`}
+                    value={
+                      targets.some((target) => target.id === step.target)
+                        ? step.target
+                        : ""
                     }
-                    const acceptance = { ...station.flight?.acceptance };
-                    if (value == undefined) {
-                      delete acceptance[key];
-                    } else {
-                      acceptance[key] = value;
-                    }
-                    commit({
-                      ...station,
-                      flight: {
-                        speed_m_s: station.flight?.speed_m_s ?? 1,
-                        planner: station.flight?.planner ?? "waypoint",
-                        ...station.flight,
-                        acceptance,
-                      },
-                    });
-                  }}
-                />
-              ))}
-            </div>
-            <Typography variant="subtitle2">深度感知故障注入</Typography>
-            <Typography variant="caption" color="text.secondary">
-              {station.flight?.planner === "cerlab" ? "CERLAB 当前使用真值动态障碍输入，尚未接入网页深度故障注入。" : "仅作用于仿真深度通道。丢帧 0.1 表示 10%；延迟保留原采集时间。"}
-            </Typography>
-            <div className={classes.fields}>
-              {(
-                [
-                  ["depth_drop_probability", "深度丢帧比例（0–1）", 0],
-                  ["depth_delay_ms", "深度延迟（ms）", 0],
-                  ["seed", "随机种子", 1],
-                ] as const
-              ).map(([key, label, fallback]) => (
-                <TextField
-                  key={key}
-                  size="small"
-                  type="number"
-                  label={label}
-                  disabled={station.flight?.planner === "cerlab"}
-                  value={station.flight?.sensors?.[key] ?? fallback}
-                  slotProps={{
-                    htmlInput: {
-                      min: 0,
-                      step: key === "depth_drop_probability" ? 0.01 : 1,
-                    },
-                  }}
-                  onChange={(event) => {
-                    const value = Number(event.target.value);
-                    if (
-                      !Number.isFinite(value) ||
-                      value < 0 ||
-                      (key === "depth_drop_probability" && value > 1) ||
-                      (key === "seed" &&
-                        (!Number.isInteger(value) || value > 4294967295))
-                    ) {
-                      return;
-                    }
-                    commit({
-                      ...station,
-                      flight: {
-                        speed_m_s: station.flight?.speed_m_s ?? 1,
-                        planner: station.flight?.planner ?? "waypoint",
-                        ...station.flight,
-                        sensors: { ...station.flight?.sensors, [key]: value },
-                      },
-                    });
-                  }}
-                />
-              ))}
-            </div>
-            <Typography variant="caption" color="text.secondary">
-              {station.flight?.planner === "cerlab"
-                ? "CERLAB 固定场景和原点，航点 Z 必须为 1m；当前仅显示 IRIS 位姿标记，可靠动态避障和全程净空尚未验收。"
-                : station.flight?.planner === "ego"
-                ? "EGO-Swarm 使用 Gazebo 理想定位和深度图，结果以本次仿真报告为准。"
-                : "航点模式不自动绕障；请使用空旷仿真场景。"}
-            </Typography>
-          </>
-        )}
-        {station.program.map((step, index) => (
-          <div className={classes.step} key={step.id}>
-            <Typography variant="body2">{index + 1}.</Typography>
-            <TextField
-              select
-              size="small"
-              aria-label={`步骤 ${index + 1} 动作`}
-              value={step.action}
-              onChange={(event) => {
-                const action = event.target.value as Instruction["action"];
-                changeStep(step.id, {
-                  action,
-                  ...(drone
-                    ? {
-                        target:
-                          action === "return_home"
-                            ? "home"
-                            : actionNeedsTarget(action)
-                              ? step.target
-                              : "",
+                    onChange={(event) => {
+                      changeStep(step.id, { target: event.target.value });
+                    }}
+                    style={{ minWidth: 120, flex: 1 }}
+                  >
+                    <MenuItem value="">选择目标</MenuItem>
+                    {targets.map((target) => (
+                      <MenuItem key={target.id} value={target.id}>
+                        {target.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                )}
+                {step.action === "wait" && (
+                  <TextField
+                    size="small"
+                    type="number"
+                    label={`步骤 ${index + 1} 等待秒数`}
+                    value={step.seconds}
+                    style={{ width: 100 }}
+                    onChange={(event) => {
+                      const seconds = Number(event.target.value);
+                      if (Number.isFinite(seconds) && seconds >= 0) {
+                        changeStep(step.id, { seconds });
                       }
-                    : {}),
-                });
-              }}
-            >
-              {stationActions(platform).map((value) => (
-                <MenuItem key={value} value={value}>
-                  {ACTION_LABELS[value]}
-                </MenuItem>
-              ))}
-            </TextField>
-            {actionNeedsTarget(step.action) && (
-              <TextField
-                select
-                size="small"
-                label={`步骤 ${index + 1} 目标`}
-                value={
-                  targets.some((target) => target.id === step.target)
-                    ? step.target
-                    : ""
-                }
-                onChange={(event) => {
-                  changeStep(step.id, { target: event.target.value });
-                }}
-                style={{ minWidth: 120, flex: 1 }}
-              >
-                <MenuItem value="">选择目标</MenuItem>
-                {targets.map((target) => (
-                  <MenuItem key={target.id} value={target.id}>
-                    {target.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-            )}
-            {step.action === "wait" && (
-              <TextField
-                size="small"
-                type="number"
-                label={`步骤 ${index + 1} 等待秒数`}
-                value={step.seconds}
-                style={{ width: 100 }}
-                onChange={(event) => {
-                  const seconds = Number(event.target.value);
-                  if (Number.isFinite(seconds) && seconds >= 0) {
-                    changeStep(step.id, { seconds });
-                  }
-                }}
-              />
-            )}
+                    }}
+                  />
+                )}
+                <Button
+                  size="small"
+                  aria-label={`上移步骤 ${index + 1}`}
+                  disabled={index === 0}
+                  onClick={() => {
+                    shift(index, -1);
+                  }}
+                >
+                  ↑
+                </Button>
+                <Button
+                  size="small"
+                  aria-label={`下移步骤 ${index + 1}`}
+                  disabled={index === station.program.length - 1}
+                  onClick={() => {
+                    shift(index, 1);
+                  }}
+                >
+                  ↓
+                </Button>
+                <Button
+                  size="small"
+                  aria-label={`删除步骤 ${index + 1}`}
+                  onClick={() => {
+                    commit({
+                      ...station,
+                      program: station.program.filter(
+                        (item) => item.id !== step.id,
+                      ),
+                    });
+                  }}
+                >
+                  删除
+                </Button>
+              </div>
+            ))}
             <Button
-              size="small"
-              aria-label={`上移步骤 ${index + 1}`}
-              disabled={index === 0}
-              onClick={() => {
-                shift(index, -1);
-              }}
-            >
-              ↑
-            </Button>
-            <Button
-              size="small"
-              aria-label={`下移步骤 ${index + 1}`}
-              disabled={index === station.program.length - 1}
-              onClick={() => {
-                shift(index, 1);
-              }}
-            >
-              ↓
-            </Button>
-            <Button
-              size="small"
-              aria-label={`删除步骤 ${index + 1}`}
+              variant="outlined"
               onClick={() => {
                 commit({
                   ...station,
-                  program: station.program.filter(
-                    (item) => item.id !== step.id,
-                  ),
+                  program: [
+                    ...station.program,
+                    {
+                      id: crypto.randomUUID(),
+                      action: drone ? "waypoint" : "move",
+                      target: targets[0]?.id ?? "",
+                      seconds: 1,
+                    },
+                  ],
                 });
               }}
             >
-              删除
+              添加步骤
             </Button>
-          </div>
-        ))}
-        <Button
-          variant="outlined"
-          onClick={() => {
-            commit({
-              ...station,
-              program: [
-                ...station.program,
-                {
-                  id: crypto.randomUUID(),
-                  action: drone ? "waypoint" : "move",
-                  target: targets[0]?.id ?? "",
-                  seconds: 1,
-                },
-              ],
-            });
-          }}
-        >
-          添加步骤
-        </Button>
-        {warnings.map((warning) => (
-          <Alert severity="warning" key={warning}>
-            {warning}
-          </Alert>
-        ))}
-        <TextField
-          label="工作站备注"
-          multiline
-          minRows={2}
-          value={station.notes}
-          onChange={(event) => {
-            commit({ ...station, notes: event.target.value });
-          }}
-        />
-        <Divider />
-        <Typography variant="subtitle1">规划与仿真</Typography>
-        {egoNeedsPreview && (
-          <div role="region" aria-label="EGO 起飞前预演">
-            <Button
-              variant="outlined"
-              disabled={
-                planSubmitting ||
-                taskIsActive(planTask) ||
-                taskIsActive(task) ||
-                runtime?.executor?.planners?.includes("ego") !== true
-              }
-              onClick={() => {
-                void startPlan();
+            {warnings.map((warning) => (
+              <Alert severity="warning" key={warning}>
+                {warning}
+              </Alert>
+            ))}
+            <TextField
+              label="工作站备注"
+              multiline
+              minRows={2}
+              value={station.notes}
+              onChange={(event) => {
+                commit({ ...station, notes: event.target.value });
               }}
-            >
-              {planSubmitting || taskIsActive(planTask)
-                ? "EGO 正在计算预演…"
-                : "EGO 起飞前预演"}
-            </Button>
-            {config.previewPlanId && (
+            />
+          </>
+        )}
+        {(activeSection === "all" || activeSection === "run") && (
+          <>
+            <Divider />
+            <Typography variant="subtitle1">规划与仿真</Typography>
+            {egoNeedsPreview && (
+              <div role="region" aria-label="EGO 起飞前预演">
+                <div className={classes.row}>
+                  <Button
+                    variant="outlined"
+                    disabled={
+                      planSubmitting ||
+                      taskIsActive(planTask) ||
+                      taskIsActive(task) ||
+                      runtime?.executor?.planners?.includes("ego") !== true
+                    }
+                    onClick={() => {
+                      void startPlan();
+                    }}
+                  >
+                    {planSubmitting || taskIsActive(planTask)
+                      ? "EGO 正在计算预演…"
+                      : "EGO 起飞前预演"}
+                  </Button>
+                  {config.previewPlanId && (
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setRefresh((value) => value + 1);
+                      }}
+                    >
+                      查询预演
+                    </Button>
+                  )}
+                </div>
+                {config.previewPlanId && (
+                  <Typography
+                    variant="caption"
+                    style={{ overflowWrap: "anywhere" }}
+                  >
+                    预演 ID：{config.previewPlanId}
+                  </Typography>
+                )}
+                {config.previewPlanId && !planCurrent && (
+                  <Alert severity="warning">草稿已修改，旧预演已过期。</Alert>
+                )}
+                {planCurrent && planTask && (
+                  <Alert
+                    severity={
+                      planValid
+                        ? "success"
+                        : planTask.status === "failed"
+                          ? "warning"
+                          : "info"
+                    }
+                  >
+                    {planValid
+                      ? "当前草稿预演有效，可以起飞。"
+                      : (planTask.report?.reason ??
+                        planTask.message ??
+                        taskStatusLabel(planTask.status))}
+                    {planTask.report?.min_clearance_m != undefined
+                      ? ` 最小净空：${planTask.report.min_clearance_m.toFixed(3)} m。`
+                      : ""}
+                  </Alert>
+                )}
+                {planError && <Alert severity="warning">{planError}</Alert>}
+              </div>
+            )}
+            <Alert severity={runtime?.ready === true ? "info" : "warning"}>
+              {runtimeError
+                ? `执行器暂不可用：${runtimeError}`
+                : (runtime?.message ?? "正在检查已有规划执行器…")}
+            </Alert>
+            {drone && runtime?.executor?.planners?.includes("cerlab") === true && (
+              <Button size="small" variant="outlined" disabled={submitting || taskIsActive(task)}
+                onClick={() => { commit(defaultCerlabStation()); setNotice("已载入 CERLAB 固定场景往返草稿，尚未运行。"); }}>
+                载入 CERLAB 往返示例
+              </Button>
+            )}
+            {runtime?.capabilities && runtime.capabilities.length > 0 && (
+              <Typography variant="caption" color="text.secondary">
+                执行器支持：{runtime.capabilities.join("；")}
+              </Typography>
+            )}
+            {!drone && (
+              <FormControlLabel
+                control={<Checkbox checked={stationRequestsCarryGate(station)} onChange={(_event, checked) => {
+                  const next = { ...station };
+                  if (checked) { next.skillControl = { mode: "hold-before-carry" }; }
+                  else { delete next.skillControl; }
+                  commit(next);
+                  setNotice("已修改下一份草稿；当前任务使用提交时的配置。");
+                }} />}
+                label="夹起后等待接续"
+              />
+            )}
+            <div className={classes.row}>
+              <Button
+                variant="contained"
+                disabled={
+                  runtime?.ready !== true ||
+                  checkingTask ||
+                  submitting ||
+                  taskIsActive(task) ||
+                  (egoNeedsPreview && !planValid)
+                }
+                onClick={() => {
+                  void startSimulation();
+                }}
+              >
+                {drone ? "起飞并执行仿真" : "规划并运行仿真"}
+              </Button>
               <Button
                 size="small"
+                disabled={
+                  submitting || cancelling || !taskId || !taskIsActive(task)
+                }
                 onClick={() => {
+                  void cancelSimulation();
+                }}
+              >
+                {cancelling
+                  ? "正在发送请求…"
+                  : drone
+                    ? station.flight?.planner === "cerlab" ? "取消并请求返航降落" : "停止并安全返回降落"
+                    : "取消任务"}
+              </Button>
+              {!drone && carryGateWaiting(task) && (
+                <Button size="small" disabled={submitting || cancelling || resumingCarry
+                  || task?.carryResumeRequested === true || runtime?.resume_carry !== true}
+                  onClick={() => { void resumeCarry(); }}>
+                  {resumingCarry ? "正在发送接续…" : task?.carryResumeRequested ? "接续已请求" : "接续搬运"}
+                </Button>
+              )}
+              {drone && (
+                <Button
+                  size="small"
+                  disabled={
+                    submitting || cancelling || !taskId || !taskIsActive(task)
+                  }
+                  onClick={() => {
+                    void cancelSimulation("return-home");
+                  }}
+                >
+                  返航降落
+                </Button>
+              )}
+              <Button
+                size="small"
+                disabled={submitting}
+                onClick={() => {
+                  rejectedTaskId.current = "";
                   setRefresh((value) => value + 1);
                 }}
               >
-                查询预演
+                {taskId ? "查询原任务" : "刷新执行器"}
               </Button>
-            )}
-            <Typography variant="body2" color="text.secondary">
-              预演使用当前场景模型计算 EGO
-              空间曲线，黄色为规划轨迹，红色为净空不足段。
-              预演不派发飞行，也不代表真实深度已感知；编辑后需重新预演。
-            </Typography>
-            {config.previewPlanId && (
-              <Typography
-                variant="caption"
-                style={{ overflowWrap: "anywhere" }}
-              >
-                预演 ID：{config.previewPlanId}
+            </div>
+            {!drone && carryGateWaiting(task) && (
+              <Typography variant="body2" data-testid="carry-gate-status">
+                等待接续搬运。原超时继续计时，逾时任务失败。
+                {runtime?.resume_carry !== true ? "接续服务能力尚未确认，请查询原任务。" : ""}
               </Typography>
             )}
-            {config.previewPlanId && !planCurrent && (
-              <Alert severity="warning">草稿已修改，旧预演已过期。</Alert>
+            {drone && (
+              <Typography variant="body2">
+                <a
+                  href={`${task && !taskIsActive(task) ? `/drone-diagnostics?taskId=${encodeURIComponent(task.id)}` : "/drone-diagnostics?"}${window.innerWidth < 600 ? "&mobile=1" : ""}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  打开历史飞行诊断
+                </a>
+              </Typography>
             )}
-            {planCurrent && planTask && (
-              <Alert
-                severity={
-                  planValid
-                    ? "success"
-                    : planTask.status === "failed"
-                      ? "warning"
-                      : "info"
-                }
-              >
-                {planValid
-                  ? "当前草稿预演有效，可以起飞。"
-                  : (planTask.report?.reason ??
-                    planTask.message ??
-                    taskStatusLabel(planTask.status))}
-                {planTask.report?.min_clearance_m != undefined
-                  ? ` 最小净空：${planTask.report.min_clearance_m.toFixed(3)} m。`
-                  : ""}
-              </Alert>
-            )}
-            {planError && <Alert severity="warning">{planError}</Alert>}
-          </div>
-        )}
-        <Alert severity={runtime?.ready === true ? "info" : "warning"}>
-          {runtimeError
-            ? `执行器暂不可用：${runtimeError}`
-            : (runtime?.message ?? "正在检查已有规划执行器…")}
-        </Alert>
-        {drone && runtime?.executor?.planners?.includes("cerlab") === true && (
-          <Button size="small" variant="outlined" disabled={submitting || taskIsActive(task)}
-            onClick={() => { commit(defaultCerlabStation()); setNotice("已载入 CERLAB 固定场景往返草稿，尚未运行。"); }}>
-            载入 CERLAB 往返示例
-          </Button>
-        )}
-        {runtime?.capabilities && runtime.capabilities.length > 0 && (
-          <Typography variant="caption" color="text.secondary">
-            执行器支持：{runtime.capabilities.join("；")}
-          </Typography>
-        )}
-        <Typography variant="body2" color="text.secondary">
-          运行使用提交时的草稿快照，并自动显示该任务的实时三维。后续编辑不会改变已提交任务；取消或结束后保留最后实际姿态。
-        </Typography>
-        {!drone && (
-          <>
-            <FormControlLabel
-              control={<Checkbox checked={stationRequestsCarryGate(station)} onChange={(_event, checked) => {
-                const next = { ...station };
-                if (checked) { next.skillControl = { mode: "hold-before-carry" }; }
-                else { delete next.skillControl; }
-                commit(next);
-                setNotice("已修改下一份草稿；当前任务使用提交时的配置。");
-              }} />}
-              label="夹起后等待接续"
-            />
-            <Typography variant="caption" color="text.secondary">
-              仅改下一稿。原超时继续计时，逾时任务失败。
-            </Typography>
-          </>
-        )}
-        <div className={classes.row}>
-          <Button
-            variant="contained"
-            disabled={
-              runtime?.ready !== true ||
-              checkingTask ||
-              submitting ||
-              taskIsActive(task) ||
-              (egoNeedsPreview && !planValid)
-            }
-            onClick={() => {
-              void startSimulation();
-            }}
-          >
-            {drone ? "起飞并执行仿真" : "规划并运行仿真"}
-          </Button>
-          <Button
-            size="small"
-            disabled={
-              submitting || cancelling || !taskId || !taskIsActive(task)
-            }
-            onClick={() => {
-              void cancelSimulation();
-            }}
-          >
-            {cancelling
-              ? "正在发送请求…"
-              : drone
-                ? station.flight?.planner === "cerlab" ? "取消并请求返航降落" : "停止并安全返回降落"
-                : "取消任务"}
-          </Button>
-          {!drone && carryGateWaiting(task) && (
-            <Button size="small" disabled={submitting || cancelling || resumingCarry
-              || task?.carryResumeRequested === true || runtime?.resume_carry !== true}
-              onClick={() => { void resumeCarry(); }}>
-              {resumingCarry ? "正在发送接续…" : task?.carryResumeRequested ? "接续已请求" : "接续搬运"}
-            </Button>
-          )}
-          {drone && (
-            <Button
+            <TextField
+              select
               size="small"
-              disabled={
-                submitting || cancelling || !taskId || !taskIsActive(task)
+              label="历史任务"
+              value={
+                taskHistory.some((item) => item.id === taskId) ? taskId : ""
               }
-              onClick={() => {
-                void cancelSimulation("return-home");
+              disabled={submitting || cancelling || taskIsActive(task)}
+              onChange={(event) => {
+                const selectedTask = taskHistory.find(
+                  (item) => item.id === event.target.value,
+                );
+                if (!selectedTask) {
+                  return;
+                }
+                setTaskId(selectedTask.id);
+                setTask(selectedTask);
+                setExecutionError("");
+                rejectedTaskId.current = "";
+                saveConfig({ executionTaskId: selectedTask.id });
+                preserveWorkspaceLayout();
+                void changeScene("task", station, selectedTask.id);
               }}
             >
-              返航降落
-            </Button>
-          )}
-          <Button
-            size="small"
-            disabled={submitting}
-            onClick={() => {
-              rejectedTaskId.current = "";
-              setRefresh((value) => value + 1);
-            }}
-          >
-            {taskId ? "查询原任务" : "刷新执行器"}
-          </Button>
-        </div>
-        {!drone && carryGateWaiting(task) && (
-          <Typography variant="body2" data-testid="carry-gate-status">
-            等待接续搬运。原超时继续计时，逾时任务失败。
-            {runtime?.resume_carry !== true ? "接续服务能力尚未确认，请查询原任务。" : ""}
-          </Typography>
-        )}
-        {drone && (
-          <Typography variant="body2">
-            <a
-              href={`${task && !taskIsActive(task) ? `/drone-diagnostics?taskId=${encodeURIComponent(task.id)}` : "/drone-diagnostics?"}${window.innerWidth < 600 ? "&mobile=1" : ""}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              打开历史飞行诊断
-            </a>
-          </Typography>
-        )}
-        <TextField
-          select
-          size="small"
-          label="历史任务"
-          value={
-            taskHistory.some((item) => item.id === taskId) ? taskId : ""
-          }
-          disabled={submitting || cancelling || taskIsActive(task)}
-          onChange={(event) => {
-            const selectedTask = taskHistory.find(
-              (item) => item.id === event.target.value,
-            );
-            if (!selectedTask) {
-              return;
-            }
-            setTaskId(selectedTask.id);
-            setTask(selectedTask);
-            setExecutionError("");
-            rejectedTaskId.current = "";
-            saveConfig({ executionTaskId: selectedTask.id });
-            // Restore the saved task selection, rather than reimporting the template.
-            preserveWorkspaceLayout();
-            void changeScene("task", station, selectedTask.id);
-          }}
-        >
-          <MenuItem value="">选择一次已保存任务</MenuItem>
-          {taskHistory.map((item) => (
-            <MenuItem key={item.id} value={item.id}>
-              {item.submittedAt ?? item.id} · {taskStatusLabel(item.status)}{" "}
-              · {item.station?.name ?? item.id}
-            </MenuItem>
-          ))}
-        </TextField>
-        {historyError && <Alert severity="warning">{historyError}</Alert>}
-        {executionError && <Alert severity="warning">{executionError}</Alert>}
-        {taskId && (
-          <Typography variant="caption" style={{ overflowWrap: "anywhere" }}>
-            原任务 ID：{taskId}
-          </Typography>
-        )}
-        {task && (
-          <div role="region" aria-live="polite" aria-label="当前仿真任务">
-            <Typography variant="subtitle2">
-              {taskStatusLabel(task.status)}
-              {task.phase ? ` · ${task.phase}` : ""}
-            </Typography>
-            {task.station && (
-              <Typography variant="body2">
-                提交的工作站：{task.station.name}
+              <MenuItem value="">选择一次已保存任务</MenuItem>
+              {taskHistory.map((item) => (
+                <MenuItem key={item.id} value={item.id}>
+                  {item.submittedAt ?? item.id} · {taskStatusLabel(item.status)}{" "}
+                  · {item.station?.name ?? item.id}
+                </MenuItem>
+              ))}
+            </TextField>
+            {historyError && <Alert severity="warning">{historyError}</Alert>}
+            {executionError && <Alert severity="warning">{executionError}</Alert>}
+            {taskId && (
+              <Typography variant="caption" style={{ overflowWrap: "anywhere" }}>
+                原任务 ID：{taskId}
               </Typography>
             )}
-            {task.submittedAt && (
-              <Typography variant="caption">
-                提交时间：{task.submittedAt}
-              </Typography>
-            )}
-            {task.simulation_s != undefined && (
-              <Typography variant="body2">
-                仿真时间：{task.simulation_s.toFixed(2)} s
-              </Typography>
-            )}
-            {task.message && (
-              <Typography variant="body2">{task.message}</Typography>
-            )}
-            {task.error && (
-              <Typography variant="body2" color="error">
-                {task.error}
-              </Typography>
-            )}
-            {videoUrl && (
-              <>
-                <Typography variant="subtitle2" style={{ marginTop: 8 }}>
-                  本次任务录像
+            {task && (
+              <div role="region" aria-live="polite" aria-label="当前仿真任务">
+                <Typography variant="subtitle2">
+                  {taskStatusLabel(task.status)}
+                  {task.phase ? ` · ${task.phase}` : ""}
                 </Typography>
-                <video
-                  src={videoUrl}
-                  controls
-                  preload="metadata"
-                  style={{ width: "100%", maxHeight: 340 }}
-                >
-                  浏览器不支持内嵌录像，请使用下面的链接。
-                </video>
-                <Typography variant="body2">
-                  <a href={videoUrl} target="_blank" rel="noreferrer">
-                    打开本次录像
-                  </a>
-                </Typography>
-              </>
+                {task.station && (
+                  <Typography variant="body2">
+                    提交的工作站：{task.station.name}
+                  </Typography>
+                )}
+                {task.submittedAt && (
+                  <Typography variant="caption">
+                    提交时间：{task.submittedAt}
+                  </Typography>
+                )}
+                {task.simulation_s != undefined && (
+                  <Typography variant="body2">
+                    仿真时间：{task.simulation_s.toFixed(2)} s
+                  </Typography>
+                )}
+                {task.message && (
+                  <Typography variant="body2">{task.message}</Typography>
+                )}
+                {task.error && (
+                  <Typography variant="body2" color="error">
+                    {task.error}
+                  </Typography>
+                )}
+                {videoUrl && (
+                  <>
+                    <Typography variant="subtitle2" style={{ marginTop: 8 }}>
+                      本次任务录像
+                    </Typography>
+                    <video
+                      src={videoUrl}
+                      controls
+                      preload="metadata"
+                      style={{ width: "100%", maxHeight: 340 }}
+                    >
+                      浏览器不支持内嵌录像，请使用下面的链接。
+                    </video>
+                    <div className={classes.row}>
+                      <Typography variant="body2">
+                        <a href={videoUrl} target="_blank" rel="noreferrer">
+                          打开本次录像
+                        </a>
+                      </Typography>
+                      {reportUrl && (
+                        <Typography variant="body2">
+                          <a href={reportUrl} target="_blank" rel="noreferrer">
+                            打开本次原始报告
+                          </a>
+                        </Typography>
+                      )}
+                      {replayUrl && (
+                        <Typography variant="body2">
+                          <a href={replayUrl} target="_blank" rel="noreferrer">
+                            回看本次三维轨迹 ↗
+                          </a>
+                        </Typography>
+                      )}
+                    </div>
+                  </>
+                )}
+                {!videoUrl && (
+                  <div className={classes.row}>
+                    {reportUrl && (
+                      <Typography variant="body2">
+                        <a href={reportUrl} target="_blank" rel="noreferrer">
+                          打开本次原始报告
+                        </a>
+                      </Typography>
+                    )}
+                    {replayUrl && (
+                      <Typography variant="body2">
+                        <a href={replayUrl} target="_blank" rel="noreferrer">
+                          回看本次三维轨迹 ↗
+                        </a>
+                      </Typography>
+                    )}
+                  </div>
+                )}
+                {drone && task.report && (
+                  <Typography variant="body2">
+                    {task.report.backend === "cerlab"
+                      ? `任务功能：${task.status === "cancelled" ? "已取消" : task.report.passed === true ? "完成" : "未完成"}；落地解除电机：${task.report.landed_disarmed === true ? "已确认" : "未确认"}`
+                      : `飞行验收：${task.report.passed === true ? "通过" : "未通过"}`}
+                  </Typography>
+                )}
+                {!drone && task.report && (
+                  <Typography variant="body2">
+                    物理验收：{task.report.passed === true ? "通过" : "未通过"}；
+                    真实夹起：
+                    {task.report.grasp_success === true ? "是" : "否"}； 放置落定：
+                    {task.report.place_success === true ? "是" : "否"}； 安全停止：
+                    {task.report.safety_stop === true ? "是" : "否"}
+                  </Typography>
+                )}
+                {!drone && graspEvidenceLabel(task) && (
+                  <Typography variant="body2" data-testid="physical-grasp-evidence">
+                    {graspEvidenceLabel(task)}
+                  </Typography>
+                )}
+                {task.report && (
+                  <details>
+                    <summary>本次任务原始物理报告</summary>
+                    <pre
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        overflowWrap: "anywhere",
+                        fontSize: 11,
+                      }}
+                    >
+                      {JSON.stringify(task.report, undefined, 2)}
+                    </pre>
+                  </details>
+                )}
+              </div>
             )}
-            {reportUrl && (
-              <Typography variant="body2">
-                <a href={reportUrl} target="_blank" rel="noreferrer">
-                  打开本次原始报告
-                </a>
-              </Typography>
-            )}
-            {replayUrl && (
-              <Typography variant="body2">
-                <a href={replayUrl} target="_blank" rel="noreferrer">
-                  回看本次三维轨迹 ↗
-                </a>
-              </Typography>
-            )}
-            {drone && task.report && (
-              <Typography variant="body2">
-                {task.report.backend === "cerlab"
-                  ? `任务功能：${task.status === "cancelled" ? "已取消" : task.report.passed === true ? "完成" : "未完成"}；落地解除电机：${task.report.landed_disarmed === true ? "已确认" : "未确认"}；动态安全与全程净空未验收。`
-                  : `飞行验收：${task.report.passed === true ? "通过" : "未通过"}`}
-              </Typography>
-            )}
-            {!drone && task.report && (
-              <Typography variant="body2">
-                物理验收：{task.report.passed === true ? "通过" : "未通过"}；
-                真实夹起：
-                {task.report.grasp_success === true ? "是" : "否"}； 放置落定：
-                {task.report.place_success === true ? "是" : "否"}； 安全停止：
-                {task.report.safety_stop === true ? "是" : "否"}
-              </Typography>
-            )}
-            {!drone && graspEvidenceLabel(task) && (
-              <Typography variant="body2" data-testid="physical-grasp-evidence">
-                {graspEvidenceLabel(task)}
-              </Typography>
-            )}
-            {task.report && (
-              <details>
-                <summary>本次任务原始物理报告</summary>
-                <pre
-                  style={{
-                    whiteSpace: "pre-wrap",
-                    overflowWrap: "anywhere",
-                    fontSize: 11,
-                  }}
-                >
-                  {JSON.stringify(task.report, undefined, 2)}
-                </pre>
-              </details>
-            )}
-          </div>
+          </>
         )}
-        <details>
-          <summary>借用的产品能力</summary>
-          <Typography variant="body2">
-            RoboDK：场景树、坐标系归属、目标引用和指令列表。Lichtblick：原生三维、WebSocket
-            数据源、布局保存、录像与曲线。草稿采用普通 JSON，可手工修改。
-          </Typography>
-        </details>
       </div>
     </>
   );
