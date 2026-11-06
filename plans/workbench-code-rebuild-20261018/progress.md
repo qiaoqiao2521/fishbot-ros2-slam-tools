@@ -692,3 +692,7 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 使用／复跑见[SO101_TASK_REPLAY](../../docs/SO101_TASK_REPLAY.md)。原始任务保留apps/fishbot-control-station/workbench-tools/output/station-tasks/UUID；最终浏览器证据位于workbench-review-tests/output/so101-task-replay-a2-5186-v6-20261106/。原报告通过与独立验收／来源认证分别显示，不伪造后者；视频独立播放，不声明逐帧同步。完整50Hz、20＋20与Carry接续原边界不变。
 
 收尾：临时5187与QA Chrome已释放，常用5186保留且SO101 ready=true。验证重复夹具来源后回收14,263,487字节，旧QA证据9,430,546字节归档7,527,528字节，净释放16,166,505字节。旧失败证据可在workbench-review-tests/output执行tar -xJf a2-intermediate-qa-20261106.tar.xz恢复；新正常／取消任务和最终证据保留。当前无人机6f02430已有成果保留，不重跑飞行或修改其状态；Carry QA验收边界见前节。Knowledge=already_covered，Wiki《ROS2 与 FishBot》§20；后续owner=根Codex。
+
+A2最终Git读回：工作台代码21cfe14已推既有codex/workbench-code-rebuild-20261018，ls-remote与GitHub API曾独立返回同SHA；SO101源码／验收00d17bb已正常快进推master及两个既有codex分支，三ref与API回读一致。首次SO101 HTTP2 push停滞时先读回旧ref，再终止自有连接，命令级HTTP/1.1重试成功，未改全局代理／凭据／历史。
+
+收尾再次发现apps/fishbot-control-station/drone-showcase/index.html有新的4增4删在途改动，内容是无人机R4 depth/oracle对照入口与说明，晚于已发布6f02430；保留不覆盖、不纳入A2提交。其新任务视频／运行来源未由A2核验，owner=原无人机根，最短接续为git diff该文件并对照workbench-review-tests/drone-cerlab-browser.cjs及该轮感知产物。A2没有向其他聊天发送消息，也未用本次机械臂结果替代无人机验收。
