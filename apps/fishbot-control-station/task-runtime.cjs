@@ -159,7 +159,9 @@ function createTaskRuntime(options) {
       if (route==='/runtime' && request.method==='GET') {send(response,200,runtime());return true;}
       if (route===collectionRoute && request.method==='GET') {
         const tasks=listTasks();
-        for(const value of tasks) if(TERMINAL.has(value.status)) await options.ensureArtifacts?.(value.id,taskDir(value.id));
+        if(options.ensureArtifactsOnList!==false) {
+          for(const value of tasks) if(TERMINAL.has(value.status)) await options.ensureArtifacts?.(value.id,taskDir(value.id));
+        }
         send(response,200,{tasks:options.ensureArtifacts?listTasks():tasks});return true;
       }
       if (route===collectionRoute && request.method==='POST') {

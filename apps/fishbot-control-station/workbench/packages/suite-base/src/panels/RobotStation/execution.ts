@@ -164,6 +164,7 @@ export function simulationArtifactUrl(
 export function simulationReplayUrl(
   artifact: string | undefined,
   origin: string,
+  platform: Platform = "px4",
 ): string | undefined {
   const local = simulationArtifactUrl(artifact);
   if (!local) {
@@ -176,7 +177,27 @@ export function simulationReplayUrl(
   const query = new URLSearchParams({
     ds: "remote-file",
     "ds.url": recording.href,
-    layoutUrl: new URL("/layouts/drone-review.json", origin).href,
+    layoutUrl: new URL(
+      platform === "px4" ? "/layouts/drone-review.json" : "/layouts/so101-review.json",
+      origin,
+    ).href,
   });
   return `/?${query}`;
+}
+
+/** A task result may only open that same task's finished recording. */
+export function simulationTaskReplayUrl(
+  task: SimulationTask | undefined,
+  origin: string,
+  platform: Platform,
+): string | undefined {
+  if (!task || taskIsActive(task)) {
+    return undefined;
+  }
+  const artifact = simulationArtifactUrl(task.artifacts?.mcap);
+  const route = `/api/${platform === "px4" ? "drone" : "so101"}/tasks/${encodeURIComponent(task.id)}/artifacts/mcap`;
+  if (!artifact || (artifact !== route && !artifact.startsWith(`${route}/`))) {
+    return undefined;
+  }
+  return simulationReplayUrl(artifact, origin, platform);
 }

@@ -34,7 +34,7 @@ import {
   latestSimulationTask,
   requestSimulation,
   simulationArtifactUrl,
-  simulationReplayUrl,
+  simulationTaskReplayUrl,
   taskIsActive,
   TaskRequestError,
   taskStatusLabel,
@@ -915,9 +915,7 @@ function RobotStation({
   const warnings = programWarnings(station);
   const videoUrl = simulationArtifactUrl(task?.artifacts?.video);
   const reportUrl = simulationArtifactUrl(task?.artifacts?.report);
-  const replayUrl = drone
-    ? simulationReplayUrl(task?.artifacts?.mcap, window.location.origin)
-    : undefined;
+  const replayUrl = simulationTaskReplayUrl(task, window.location.origin, drone ? "px4" : "so101");
   const commit = (next: Station, detachTask = false) => {
     setNotice("");
     setPast((history) => [...history, station]);

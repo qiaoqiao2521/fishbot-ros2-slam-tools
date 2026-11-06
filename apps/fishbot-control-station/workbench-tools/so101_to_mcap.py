@@ -278,13 +278,177 @@ def convert(episode: Path, source_root: Path, output: Path, include_rgb: bool = 
         return manifest
 
 
+def convert_task(task_dir: Path, source_root: Path, task_id: str | None = None) -> dict:
+    """Project a terminal Station task into MCAP; never integrate physics.
+
+    Saved JSON is authoritative. Source digests below are display metadata only,
+    not locks or a claim that an independent acceptance was performed.
+    """
+    import os
+    import sys
+    import warnings
+
+    task_dir, source_root = task_dir.resolve(), source_root.resolve()
+    request = json.loads((task_dir / "request.json").read_text())
+    status = json.loads((task_dir / "status.json").read_text())
+    ident = request.get("id")
+    if not ident or (task_id is not None and task_id != ident):
+        raise ValueError("Recording request does not belong to the selected task")
+    report_path, trace_path = task_dir / "episode/report.json", task_dir / "episode/trajectory.json"
+    report = json.loads(report_path.read_text())
+    rows = json.loads(trace_path.read_text())
+    if not isinstance(rows, list) or not rows:
+        return {"status": "no_trajectory", "task_id": ident, "samples": 0}
+    if not isinstance(report.get("passed"), bool):
+        raise ValueError("Original task report has no explicit physical result")
+    times = [float(row.get("elapsed_s", row.get("time_s"))) for row in rows]
+    if any(not np.isfinite(t) or t < 0 for t in times) or any(b <= a for a, b in zip(times, times[1:])):
+        raise ValueError("Saved task times must be finite and strictly increasing")
+    duration = max(times[-1], float(report.get("simulation_s", times[-1])))
+    if duration <= 0:
+        raise ValueError("No positive simulation duration was recorded")
+    limitations = ["本任务保存的仿真记录，非实体／新物理执行", "报告和抓取证据沿用原值，未重新评分"]
+    has_rotation = all("object_rotation" in row for row in rows)
+    if not has_rotation:
+        limitations.append("旧轨迹缺少物体朝向：仅显示位置标记，不补造方块旋转")
+    projector = model = data = target = None
+    try:
+        sys.path.insert(0, str(source_root / "experiments/colab-twin"))
+        import mujoco
+        from station_scene import StationScene
+        scene_file = task_dir / "episode/scene/contact-workcell.xml"
+        model = mujoco.MjModel.from_xml_path(str(scene_file))
+        data = mujoco.MjData(model)
+        target = model.body("grasp_target").id
+        projector = StationScene(model, source=source_root / "workspaces/so101_ws/src/so101_mujoco/models/so101.xml")
+        if not has_rotation:
+            projector.visible = [i for i in projector.visible if model.geom_bodyid[i] != target]
+    except (ImportError, OSError, ValueError, KeyError) as error:
+        warnings.warn("WARNING: recorded geometry unavailable: " + str(error))
+        limitations.append("模型几何不可用：此记录仅提供原关节／物体位置与报告")
+        projector = None
+
+    events = [{"stage": str(row.get("stage", "unknown")), "sim_time_s": t}
+              for i, (row, t) in enumerate(zip(rows, times))
+              if i == 0 or row.get("stage") != rows[i - 1].get("stage")]
+    metrics = {"wall_s": float(report.get("wall_s", 0)),
+               "physical_lift_passed": report.get("grasp_success") is True,
+               "place_verified": report.get("place_success") is True,
+               "controller_done": report.get("controller_done") is True}
+    for key in ("hold_duration_s", "settled_duration_s", "max_lift_m"):
+        if isinstance(report.get(key), (int, float)) and np.isfinite(report[key]):
+            metrics[key] = report[key]
+    review = {"schema_version": 1, "run_id": ident, "task": "SO101 本次抓放任务",
+              "source_kind": "simulation_recording", "clock": "simulation_seconds_not_unix",
+              "sim_duration_s": duration, "success": report["passed"],
+              "stage_events": events, "independent": {"available": False}, "metrics": metrics,
+              "provenance": {"trace_sha256": digest(trace_path), "report_sha256": digest(report_path),
+                             "source_bound": False}, "limitations": limitations}
+    evidence = status.get("skill_evidence", report.get("skill_evidence"))
+    task_record = {"task_id": ident, "status": status.get("status"), "report": report,
+                   "skill_evidence": evidence, "request": request,
+                   "limitations": limitations, "clock": "simulation_seconds_not_unix"}
+    schemas = {"scene": json.loads((HERE / "schemas/SceneUpdate.json").read_text()),
+               "episode": json.loads((HERE / "schemas/EpisodeReview.json").read_text()),
+               "joints": {"title": "so101.JointSample", "type": "object"},
+               "contact": {"title": "so101.ContactSample", "type": "object"},
+               "task": {"title": "so101.TaskEvidence", "type": "object"}}
+    topics = {**TOPICS, "task": "/so101/task"}
+    output = task_dir / "episode.mcap"
+    temporary = task_dir / f"episode.mcap.{os.getpid()}.partial"
+    count = 0
+    try:
+        with temporary.open("wb") as file:
+            writer = Writer(file, enable_data_crcs=True)
+            writer.start(library="SO101 Station task recording; no physics steps")
+            channels = {}
+            for kind, definition in schemas.items():
+                sid = writer.register_schema(definition["title"], "jsonschema", packed(definition))
+                channels[kind] = writer.register_channel(topics[kind], "json", sid,
+                                                        {"task_id": ident, "clock": review["clock"]})
+            def emit(kind, value, tick, sequence):
+                writer.add_message(channels[kind], tick, packed(value), tick, sequence=sequence)
+            # The report/reset state belongs to this task; it establishes time zero
+            # without inventing unsampled contact forces or commands.
+            emit("task", task_record, 0, 0)
+            emit("episode", {**review, "timestamp": timestamp(0), "stage": "initial"}, 0, 0)
+            samples = [(row, t) for row, t in zip(rows, times)]
+            initial = report.get("initial_qpos")
+            if projector is not None and isinstance(initial, list) and len(initial) == model.nq and times[0] > 0:
+                data.qpos[:] = initial
+                mujoco.mj_forward(model, data)
+                scene = projector.update(data, elapsed_s=0, phase="initial")
+                for entity in scene["entities"]:
+                    entity["timestamp"] = timestamp(0)
+                emit("scene", scene, 0, 0)
+            for i, (row, t) in enumerate(samples, 1):
+                tick = int(round(t * 1e9)); stamp = timestamp(tick)
+                q = np.asarray(row.get("q6"), dtype=float)
+                xyz = np.asarray(row.get("object_xyz_m"), dtype=float)
+                if q.shape != (6,) or xyz.shape != (3,) or not np.isfinite(q).all() or not np.isfinite(xyz).all():
+                    raise ValueError("Saved task contains an invalid pose")
+                joints = {"timestamp": stamp, "position": dict(zip(JOINTS, q.tolist()))}
+                if isinstance(row.get("command"), list) and len(row["command"]) == 6:
+                    joints["command"] = dict(zip(JOINTS, row["command"]))
+                emit("joints", joints, tick, i)
+                forces = row.get("tip_forces_n")
+                if isinstance(forces, list) and len(forces) == 2:
+                    emit("contact", {"timestamp": stamp, "fixed_finger_n": forces[0], "moving_finger_n": forces[1],
+                                     **{key: row[key] for key in ("floor_contact", "arm_valid", "obstacle_contact") if key in row}}, tick, i)
+                if projector is not None:
+                    data.qpos[:6] = q
+                    data.qpos[6:9] = xyz
+                    if has_rotation:
+                        rotation = np.asarray(row["object_rotation"], dtype=float)
+                        if rotation.shape != (3, 3) or not np.isfinite(rotation).all():
+                            raise ValueError("Invalid recorded object orientation")
+                        mujoco.mju_mat2Quat(data.qpos[9:13], rotation.reshape(9))
+                    data.time = t
+                    mujoco.mj_forward(model, data)
+                    scene = projector.update(data, elapsed_s=t, phase=str(row.get("stage", "unknown")),
+                                             markers=() if has_rotation else (xyz,))
+                    for entity in scene["entities"]:
+                        entity["timestamp"] = stamp
+                        entity["metadata"].append({"key": "task_id", "value": ident})
+                    emit("scene", scene, tick, i)
+                emit("episode", {**review, "timestamp": stamp, "stage": str(row.get("stage", "unknown"))}, tick, i)
+                count += 1
+            # A terminal status may arrive after the final sampled pose. No pose
+            # is invented for that interval; only the task outcome is emitted.
+            end = int(round(duration * 1e9))
+            emit("task", task_record, end, count + 1)
+            if duration > times[-1]:
+                emit("episode", {**review, "timestamp": timestamp(end), "stage": str(rows[-1].get("stage", "unknown"))}, end, count + 1)
+            writer.finish()
+        temporary.replace(output)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+    result = {"status": "converted", "task_id": ident, "samples": count,
+              "output": str(output), "geometry": projector is not None,
+              "object_orientation": has_rotation, "limitations": limitations}
+    # Task identity is a display/artifact association, never a content hash lock.
+    receipt = task_dir / "episode.recording.json"
+    receipt_tmp = task_dir / f"episode.recording.json.{os.getpid()}.partial"
+    receipt_tmp.write_bytes(packed(result) + b"\n")
+    receipt_tmp.replace(receipt)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--episode-dir", type=Path, required=True)
+    parser.add_argument("--episode-dir", type=Path)
+    parser.add_argument("--task-dir", type=Path)
+    parser.add_argument("--task-id")
     parser.add_argument("--source-root", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--include-rgb", action="store_true")
     args = parser.parse_args()
+    if args.task_dir is not None:
+        print(json.dumps(convert_task(args.task_dir, args.source_root, args.task_id), ensure_ascii=False))
+        return
+    if args.episode_dir is None or args.output is None:
+        parser.error("historical conversion requires --episode-dir and --output")
     result = convert(args.episode_dir, args.source_root, args.output, args.include_rgb)
     print(json.dumps({"status": result["status"], "samples": result["samples"],
                       "image_samples": result["image_samples"], "output": str(args.output)}))

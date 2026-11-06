@@ -11,6 +11,7 @@ import {
   requestSimulation,
   simulationArtifactUrl,
   simulationReplayUrl,
+  simulationTaskReplayUrl,
   taskIsActive,
   TaskRequestError,
 } from "./execution";
@@ -163,6 +164,53 @@ describe("SO101 simulation task transport", () => {
     ]) {
       expect(simulationReplayUrl(invalid, origin)).toBeUndefined();
     }
+  });
+
+  it("opens this SO101 task's MCAP with its episode review layout without control requests", () => {
+    const origin = "http://127.0.0.1:5186";
+    const task = { id: "arm-123", status: "succeeded",
+      artifacts: { mcap: "/api/so101/tasks/arm-123/artifacts/mcap/episode.mcap" } };
+    const replay = new URL(simulationTaskReplayUrl(task, origin, "so101")!, origin);
+    expect(replay.searchParams.get("ds")).toBe("remote-file");
+    expect(replay.searchParams.get("ds.url")).toBe(origin + task.artifacts.mcap);
+    expect(replay.searchParams.get("layoutUrl")).toBe(origin + "/layouts/so101-review.json");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not reuse a prior task's recording after the selected task changes", () => {
+    const origin = "http://127.0.0.1:5186";
+    const recording = "/api/so101/tasks/previous-task/artifacts/mcap/episode.mcap";
+    expect(simulationTaskReplayUrl({ id: "current-task", status: "succeeded",
+      artifacts: { mcap: recording } }, origin, "so101")).toBeUndefined();
+    expect(simulationTaskReplayUrl({ id: "previous-task", status: "succeeded",
+      artifacts: { mcap: recording } }, origin, "so101")).toBeDefined();
+  });
+
+  it("keeps incomplete tasks and absent recordings out of replay links", () => {
+    const origin = "http://127.0.0.1:5186";
+    const artifacts = { mcap: "/api/so101/tasks/arm-123/artifacts/mcap/episode.mcap" };
+    expect(simulationTaskReplayUrl(undefined, origin, "so101")).toBeUndefined();
+    expect(simulationTaskReplayUrl({ id: "arm-123", status: "failed" }, origin, "so101"))
+      .toBeUndefined();
+    for (const status of ["pending", "running", "unknown"]) {
+      expect(simulationTaskReplayUrl({ id: "arm-123", status, artifacts }, origin, "so101"))
+        .toBeUndefined();
+    }
+    for (const status of ["succeeded", "failed", "cancelled"]) {
+      expect(simulationTaskReplayUrl({ id: "arm-123", status, artifacts }, origin, "so101"))
+        .toBeDefined();
+    }
+  });
+
+  it("retains the drone task player and rejects cross-platform or historical recordings", () => {
+    const origin = "http://127.0.0.1:5186";
+    const task = { id: "flight-123", status: "cancelled",
+      artifacts: { mcap: "/api/drone/tasks/flight-123/artifacts/mcap/flight.mcap" } };
+    const replay = new URL(simulationTaskReplayUrl(task, origin, "px4")!, origin);
+    expect(replay.searchParams.get("layoutUrl")).toBe(origin + "/layouts/drone-review.json");
+    expect(simulationTaskReplayUrl(task, origin, "so101")).toBeUndefined();
+    expect(simulationTaskReplayUrl({ ...task, artifacts: { mcap: "/records/so101.mcap" } },
+      origin, "so101")).toBeUndefined();
   });
 
   it("preserves a real rejection reason and never retries POST", async () => {
