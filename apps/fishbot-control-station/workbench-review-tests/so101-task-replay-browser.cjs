@@ -170,7 +170,9 @@ const observe = page => page.on('pageerror', error => { result.pageErrors.push({
       const link = panel.getByRole('link', { name: '回看本次三维轨迹 ↗', exact: true });
       const popup = page.waitForEvent('popup'); await link.click(); const replay = await popup;
       replayPages.add(replay);
-      await replay.waitForLoadState('domcontentloaded');
+      // The popup event can precede its first navigation; the initial page may have no URL.
+      await replay.waitForURL(url => url.origin === new URL(base).origin,
+        { waitUntil: 'domcontentloaded', timeout: 90000 });
       const url = new URL(replay.url()); entry.replayUrl = url.href; save();
       assert.equal(url.searchParams.get('ds'), 'remote-file');
       assert.equal(url.searchParams.get('ds.url'), new URL(task.artifacts.mcap, base).href);

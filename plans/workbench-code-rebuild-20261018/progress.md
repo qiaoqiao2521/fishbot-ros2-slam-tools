@@ -696,3 +696,17 @@ Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析�
 A2最终Git读回：工作台代码21cfe14已推既有codex/workbench-code-rebuild-20261018，ls-remote与GitHub API曾独立返回同SHA；SO101源码／验收00d17bb已正常快进推master及两个既有codex分支，三ref与API回读一致。首次SO101默认协议push停滞时先读回旧ref，再终止自有连接，命令级HTTP/1.1重试成功，未改全局代理／凭据／历史。
 
 收尾再次发现apps/fishbot-control-station/drone-showcase/index.html有新的4增4删在途改动，内容是无人机R4 depth/oracle对照入口与说明，晚于已发布6f02430；保留不覆盖、不纳入A2提交。其新任务视频／运行来源未由A2核验，owner=原无人机根，最短接续为git diff该文件并对照workbench-review-tests/drone-cerlab-browser.cjs及该轮感知产物。A2没有向其他聊天发送消息，也未用本次机械臂结果替代无人机验收。
+
+## 2026-11-06 — SO101 A3.1两可选工位交付
+
+已复用workspaceStationSample两原样工位；新增用户名称／差异、当前草稿识别、编辑后自定义、执行中禁切。加载／提交／历史选择复用同一原生URL布局固定helper，选择可刷新，不另建状态库／执行器。原样输入、原八步、碰撞扫掠和物理标准未改。70项定点测试（Station52＋execution18）、原构建、语法／diff通过。旧workspace-samples/recipe-workflow QA只同步新选择器，未冒称重跑其全部物理。
+
+新网页A=42460e66-aab5-4c60-bda9-39ddf5d80245，78.02sim/52.8662report-wall；B=4ddaf8b6-3f72-42ec-a943-51419a036cba，77.76sim/45.1246report-wall。每次导出与原workspace-station JSON、POST输入全等；选择刷新0派发，执行中禁切，仅各1个新任务POST。两次原抓放／释放／脱离／回位均pass，安全停机及障碍接触0，free=true/weld0/mocap0。A/B场景不同，不作提速比较。
+
+独立回读3901／3888逐帧关节、命令、力和目标位姿、UUID、原报告、skill_evidence一致，位置误差0、旋转最高4.61e-15，索引seek通过；488／486视频帧全解码。同context两真实任务的历史选择、刷新、native3D首中末／倒退／播放／阶段定位、回放刷新、关闭回放后工位再刷新全过，控制POST0／回放write0／pageError0，16张截图保留。初次QA popup事件早于URL就绪，修只读等待后复用同两任务v2通过，未追加物理。
+
+[使用说明](../../docs/SO101_TASK_REPLAY.md)；详细物理报告见SO101仓plans/workcell-productization-20261024/a3-selectable-scenes-results.md。根证据位于apps/fishbot-control-station/workbench-review-tests/output/a3-{near-run1,far-run1,independent-readback,scenes-replay-v2}-20261106；原任务在station-tasks/UUID。全部运行产物本地忽略，不推公开库。
+
+收尾：本轮不新建服务，常用5186继续可用；等待共享无人机评测释放后逐个启动，未终止他人任务，自有QA Chrome／执行进程已退出。两原任务38,030,279字节、最终回看证据7,000,292字节保留。首轮只读失败证据1,768,826字节归档1,716,000字节并核可读，净回收52,826字节；在workbench-review-tests/output执行tar -xJf a3-popup-race-20261106.tar.xz可恢复。没有重复上传包／临时渲染帧，运行环境和原始数据保持。
+
+保留共享无人机c85d5b6，不将其成绩作为本次机械臂验收。原视频独立播放／无逐帧同步／无新独立来源认证，完整50Hz、20＋20、连续域与实机边界不变。A3.1完成，后续感知场景尚未启动；Knowledge=already_covered，Wiki《ROS2 与 FishBot》§20；owner=根Codex。
