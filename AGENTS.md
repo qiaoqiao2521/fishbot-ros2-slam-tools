@@ -9,3 +9,4 @@
 实车已售，本次建图与导航阶段已由用户确认完成。当前任务限于项目代码、文档和虚拟环境；旧实车待验收项是历史边界，不是恢复实体操作的授权。
 地图、固件备份、标定和网络配置默认本地保留，不自动推送。固件刷写与实车验收分别判断，当前边界见 FISHBOT_STATUS.md。
 当前迁移证据：../../plans/hardware-consolidation-20260915/。
+具身智能云端与 Drive 闭环约定：本项目采用云端环境配合 Google Drive（https://drive.google.com/drive/folders/1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L）完成大体积仿真原件、相机/点云流与多轮实验归档。本机仅保留可运行源码、SpecMesh、查询/恢复索引（见 `docs/VISUAL_DELIVERY_ARCHIVE.md`）及当前工作台 `/results` 所需最小展示材料；大体积中间产物、临时构建缓存与已核验上传包在 Drive 读回验证后立即清理，不在本机或各 worktree 堆积。

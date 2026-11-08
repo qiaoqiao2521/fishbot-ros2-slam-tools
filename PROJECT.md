@@ -115,6 +115,7 @@ Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。
 2026-10-07 用户确认先在虚拟环境实现三点视觉巡检，现已完成：MuJoCo车载RGB→三点导航拍摄→绿灯/红灯/空位像素识别→图文报告→返航。最终整轮73.703秒，九帧带拍摄位姿证据，返航误差12.29cm且停稳；独立超时取消通过。入口tools/fishbot_inspection.sh，仅domain97；见docs/VISUAL_INSPECTION.md。识别限定合成工位，实车相机与巡检尚未验收。
 2026-10-06 用户确认直接采用FishBot开源模型，不以现场测量作为前置步骤；连续本地控制、分级限速/停车、触发记录与回放已实现。新入口 tools/fishbot_passage.launch.py 在隔离MuJoCo domain 96完成整段过门、硬停车及取消测试，74项聚焦测试通过；见docs/PASSAGE_CONTROL.md。当前小车充电，本次未操作实车。原domain 93仿真与旧实车脚本保留。接续使用新入口验收实际过门和建图；实车源时间戳、转角反馈、板端断流停车和旧命令拒绝仍需实际反馈验证。
 ## Knowledge Map
+[视觉配送原件与 Drive 恢复指南](docs/VISUAL_DELIVERY_ARCHIVE.md)（[Drive 归档目录](https://drive.google.com/drive/folders/1VFpP8qsDs_4dIVigPUWHp3RMd3ikaV_L)，本机仅留可运行代码、SpecMesh、查询索引与当前工作台最小展示资源）。
 [连续业务世界、混沌与可视化回归计划](plans/continuous-twin-regression-20261024/task_plan.md)；[快照/时间/索引技术修正](plans/continuous-twin-regression-20261024/findings.md)；[当前进度](plans/continuous-twin-regression-20261024/progress.md)。
 [真实地图、新底盘与负压实验入口](docs/HARDWARE_LAB.md)；[计划](plans/scene-hardware-lab-20261020/task_plan.md)；[验收进度](plans/scene-hardware-lab-20261020/progress.md)。
 [场景、三维雷达与路线验证](docs/SCENE_VALIDATION.md)；[实施计划](plans/scene-business-validation-20261020/task_plan.md)；[当前进度](plans/scene-business-validation-20261020/progress.md)。
