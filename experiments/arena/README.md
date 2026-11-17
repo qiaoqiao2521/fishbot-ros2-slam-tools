@@ -95,3 +95,24 @@ python3 experiments/arena/colab_run.py \
 新有界入口已完成原生smoke和evaluate，退出均0；未出现SIGSEGV、notebook错误关闭或测试force-exit。基线为Rubik方块→碗，替换组为芥末瓶→木碗；同seed42、同1.5秒预算，两者各23步，任务success=false。原生progress约1/3，只完成objects_settled条件，未完成抓取/放置；它不能当完整成功或候选增益。上游未记录终止原因，保留null；False/23步与超时一致。
 
 原生HTML、完整JSONL/timings、最终校验回执与日志存本机私有cache，不入Git。详细证据、来源、失败与资源回收见[progress](../../plans/fishbot-arena-evaluation-20261014/progress.md)。后续真实策略、更多留出任务和SO101/FishBot适配需各自验收，本轮不自动训练或分配新GPU。
+
+## 可移植的云端入口预检（2026-11-17）
+
+在任何云端分配前先检查本地依赖、输入和结果回收空间：
+
+```bash
+python3 experiments/arena/colab_run.py --preflight --output /path/to/new-result \
+  --safe-cli /path/to/existing/colab_safe_cli.py \
+  --colab-python /path/to/existing/colab-cli/python
+```
+
+也可设置 `FISHBOT_COLAB_SAFE_CLI` 和 `FISHBOT_COLAB_PYTHON`，显式命令行参数优先。
+不再必须把 SO101 checkout 放在相邻目录；未配置时仍保留旧路径兼容。
+预检不创建目录、不读取凭据、不调用 Colab、不接受 EULA、不安装依赖。
+`ready` 只表示本地必要文件和磁盘检查通过，不代表账号、GPU 或仿真已可用。
+执行入口也复用同一预检，缺输入或回收空间不足时，在创建会话状态和分配运行时前阻断。
+结果所在文件系统至少预留 1 GiB（覆盖三次有界回收包和余量）；这只是启动时检查，
+不能保证并发写入后仍有空间，也不会自动删除任何原件或缓存。
+
+离线回归：`python3 -m unittest discover -s tools/tests -p 'test_arena*.py'`。
+这些测试不启动 Isaac Sim / ROS / Colab，不证明策略成功或真实物理运行。

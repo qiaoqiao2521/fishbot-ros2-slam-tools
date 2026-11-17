@@ -153,6 +153,76 @@ class ColabLifecycle(unittest.TestCase):
         self.completed = dict(self.failed, status='completed', arena_smoke_completed=True,
                               pipeline_completed=True, policy_success=False)
 
+    def test_local_preflight_is_read_only(self):
+        with patch.object(colab.subprocess, 'run') as run:
+            result = colab.local_preflight(self.args, root=self.root, environ={})
+        self.assertTrue(result['ready'])
+        self.assertFalse(result['cloud_connection_checked'])
+        self.assertFalse(self.args.output.exists())
+        run.assert_not_called()
+
+    def test_low_disk_blocks_before_private_state_or_cloud_call(self):
+        from types import SimpleNamespace
+        with patch.object(colab.shutil, 'disk_usage', return_value=SimpleNamespace(free=0)), \
+                patch.object(colab.subprocess, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'insufficient local disk'):
+                colab.ColabRun(self.args, root=self.root)
+        self.assertFalse(self.args.output.exists())
+        run.assert_not_called()
+
+    def test_recovery_capacity_exact_boundary(self):
+        from types import SimpleNamespace
+        for free, ready in ((colab.MIN_LOCAL_FREE_BYTES - 1, False),
+                            (colab.MIN_LOCAL_FREE_BYTES, True)):
+            with self.subTest(free=free), patch.object(
+                    colab.shutil, 'disk_usage', return_value=SimpleNamespace(free=free)):
+                result = colab.local_preflight(self.args, root=self.root, environ={})
+            self.assertEqual(result['ready'], ready)
+            self.assertEqual(result['free_bytes'], free)
+            self.assertEqual(result['required_free_bytes'], colab.MIN_LOCAL_FREE_BYTES)
+            self.assertEqual('insufficient local disk for bounded artifact recovery'
+                             in result['errors'], not ready)
+            self.assertFalse(self.args.output.exists())
+
+    def test_disk_inspection_error_is_reported_without_side_effects(self):
+        with patch.object(colab.shutil, 'disk_usage', side_effect=OSError('unavailable')), \
+                patch.object(colab.subprocess, 'run') as run:
+            result = colab.local_preflight(self.args, root=self.root, environ={})
+        self.assertFalse(result['ready'])
+        self.assertIsNone(result['free_bytes'])
+        self.assertEqual(result['errors'], ['cannot inspect output filesystem'])
+        self.assertFalse(self.args.output.exists())
+        run.assert_not_called()
+
+    def test_missing_source_blocks_before_output_creation(self):
+        (self.root/colab.INPUT_FILES[0]).unlink()
+        with self.assertRaisesRegex(ValueError, 'missing source inputs'):
+            colab.ColabRun(self.args, root=self.root)
+        self.assertFalse(self.args.output.exists())
+
+    def test_environment_adapter_paths_and_explicit_precedence(self):
+        env = {'FISHBOT_COLAB_SAFE_CLI': str(self.adapter),
+               'FISHBOT_COLAB_PYTHON': str(self.python)}
+        self.args.safe_cli = self.args.colab_python = None
+        result = colab.local_preflight(self.args, root=self.root, environ=env)
+        self.assertTrue(result['ready'])
+        self.args.safe_cli = self.path/'explicit-missing.py'
+        result = colab.local_preflight(self.args, root=self.root, environ=env)
+        self.assertFalse(result['ready'])
+        self.assertEqual(result['safe_cli'], str(self.args.safe_cli))
+
+    def test_nested_output_uses_existing_filesystem_without_creating_parents(self):
+        self.args.output = self.path/'not-created'/'nested'/'output'
+        result = colab.local_preflight(self.args, root=self.root, environ={})
+        self.assertTrue(result['ready'])
+        self.assertFalse(self.args.output.parent.exists())
+
+    def test_invalid_output_ancestor_returns_diagnostic(self):
+        self.args.output = self.adapter/'output'
+        result = colab.local_preflight(self.args, root=self.root, environ={})
+        self.assertFalse(result['ready'])
+        self.assertIn('cannot inspect output filesystem', result['errors'])
+
     def job(self, report=None):
         report = dict(report or self.failed)
         hashes = {name: colab.sha(self.root/name) for name in colab.INPUT_FILES}

@@ -9,6 +9,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import signal
+import shutil
 import stat
 import subprocess
 import time
@@ -120,6 +121,47 @@ def safe_result(value):
     return result
 
 
+# Three bounded recovery attempts plus room for source and small receipts.
+MIN_LOCAL_FREE_BYTES = 4 * MAX_ARCHIVE_BYTES
+
+
+def local_preflight(args, *, root=ROOT, environ=None):
+    """Inspect local prerequisites only: no CLI call, allocation or directory creation."""
+    env = os.environ if environ is None else environ
+    adapter = Path(args.safe_cli or env.get('FISHBOT_COLAB_SAFE_CLI')
+                   or root.parent/'so101/experiments/gr00t-libero/colab_safe_cli.py').expanduser().absolute()
+    python = Path(args.colab_python or env.get('FISHBOT_COLAB_PYTHON')
+                  or Path.home()/'.local/share/uv/tools/google-colab-cli/bin/python').expanduser().absolute()
+    output = args.output.expanduser().absolute()
+    ancestor = output.parent
+    while not ancestor.exists() and ancestor != ancestor.parent:
+        ancestor = ancestor.parent
+    errors = []
+    if output.exists() or output.is_symlink():
+        errors.append('output must be a new private directory')
+    if not adapter.is_file():
+        errors.append('existing safe adapter is missing; set --safe-cli or FISHBOT_COLAB_SAFE_CLI')
+    if not python.is_file():
+        errors.append('existing Colab CLI Python is missing; set --colab-python or FISHBOT_COLAB_PYTHON')
+    missing = [name for name in INPUT_FILES if not (root/name).is_file()]
+    if missing:
+        errors.append('missing source inputs: ' + ', '.join(missing))
+    free = None
+    try:
+        if not ancestor.is_dir():
+            raise NotADirectoryError('output ancestor is not a directory')
+        free = shutil.disk_usage(ancestor).free
+        if free < MIN_LOCAL_FREE_BYTES:
+            errors.append('insufficient local disk for bounded artifact recovery')
+    except OSError:
+        errors.append('cannot inspect output filesystem')
+    return {'ready': not errors, 'scope': 'local_prerequisites_only',
+            'cloud_connection_checked': False, 'errors': errors,
+            'safe_cli': str(adapter), 'colab_python': str(python),
+            'output': str(output), 'free_bytes': free,
+            'required_free_bytes': MIN_LOCAL_FREE_BYTES}
+
+
 class ColabRun:
     def __init__(self, args, *, root=ROOT, clock=None, sleep=None):
         if not args.accept_eula:
@@ -131,13 +173,11 @@ class ColabRun:
         self.started = self.clock()
         self.deadline = self.started + args.budget_seconds
         self.work_deadline = self.deadline - WORK_RESERVE
-        self.output = args.output.expanduser().absolute()
-        if self.output.exists() or self.output.is_symlink():
-            raise ValueError('output must be a new private directory')
-        safe_cli = args.safe_cli or root.parent/'so101/experiments/gr00t-libero/colab_safe_cli.py'
-        python = args.colab_python or Path.home()/'.local/share/uv/tools/google-colab-cli/bin/python'
-        if not Path(safe_cli).is_file() or not Path(python).is_file():
-            raise ValueError('existing safe adapter and Colab CLI Python are required')
+        preflight = local_preflight(args, root=root)
+        if not preflight['ready']:
+            raise ValueError('; '.join(preflight['errors']))
+        self.output = Path(preflight['output'])
+        safe_cli, python = preflight['safe_cli'], preflight['colab_python']
         self.output.mkdir(parents=True, mode=0o700, exist_ok=False)
         self.output.chmod(0o700)
         state = self.output/'private-session'; state.mkdir(mode=0o700)
@@ -462,11 +502,16 @@ class ColabRun:
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--preflight', action='store_true', help='read-only local checks; never allocate a runtime')
     parser.add_argument('--budget-seconds', type=int, default=2700)
     parser.add_argument('--accept-eula', action='store_true')
     parser.add_argument('--safe-cli', type=Path)
     parser.add_argument('--colab-python', type=Path)
     args = parser.parse_args(argv)
+    if args.preflight:
+        result = local_preflight(args)
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result['ready'] else 1
     os.umask(0o077)
     try:
         job = ColabRun(args)
