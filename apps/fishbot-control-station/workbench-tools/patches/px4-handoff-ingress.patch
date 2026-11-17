@@ -1,0 +1,239 @@
+diff --git a/src/modules/mavlink/CMakeLists.txt b/src/modules/mavlink/CMakeLists.txt
+--- a/src/modules/mavlink/CMakeLists.txt
++++ b/src/modules/mavlink/CMakeLists.txt
+@@ -96,6 +96,8 @@
+ 		${MAVLINK_LIBRARY_DIR}/${MAVLINK_DIALECT_UAVIONIX}
+ )
+ 
++option(DRONE_HANDOFF_INGRESS_OBSERVATION "Publish decoded local-setpoint reception observations" OFF)
++
+ px4_add_module(
+ 	MODULE modules__mavlink
+ 	MAIN mavlink
+@@ -158,3 +160,7 @@
+ if(CONFIG_NET AND "${PX4_PLATFORM}" MATCHES "nuttx")
+ 	target_link_libraries(modules__mavlink PRIVATE nuttx_apps) # netlib_get_ipv4netmask
+ endif()
++
++if(DRONE_HANDOFF_INGRESS_OBSERVATION)
++    target_compile_definitions(modules__mavlink PRIVATE DRONE_HANDOFF_INGRESS_OBSERVATION=1)
++endif()
+diff --git a/src/modules/mavlink/mavlink_receiver.h b/src/modules/mavlink/mavlink_receiver.h
+--- a/src/modules/mavlink/mavlink_receiver.h
++++ b/src/modules/mavlink/mavlink_receiver.h
+@@ -83,6 +83,9 @@
+ #include <uORB/topics/log_message.h>
+ #include <uORB/topics/manual_control_setpoint.h>
+ #include <uORB/topics/mavlink_tunnel.h>
++#ifdef DRONE_HANDOFF_INGRESS_OBSERVATION
++#include <uORB/topics/mavlink_setpoint_ingress.h>
++#endif
+ #include <uORB/topics/obstacle_distance.h>
+ #include <uORB/topics/offboard_control_mode.h>
+ #include <uORB/topics/onboard_computer_status.h>
+@@ -325,6 +328,10 @@
+ 	uORB::Publication<vehicle_global_position_s>		_global_pos_pub{ORB_ID(vehicle_global_position)};
+ 	uORB::Publication<vehicle_local_position_s>		_local_pos_pub{ORB_ID(vehicle_local_position)};
+ 	uORB::Publication<trajectory_setpoint_s>		_trajectory_setpoint_pub{ORB_ID(trajectory_setpoint)};
++#ifdef DRONE_HANDOFF_INGRESS_OBSERVATION
++    uORB::Publication<mavlink_setpoint_ingress_s> _handoff_ingress_pub{ORB_ID(mavlink_setpoint_ingress)};
++    uint64_t _handoff_ingress_sequence{0}; // receiver-local order, never a candidate ACK
++#endif
+ 	uORB::Publication<vehicle_odometry_s>			_mocap_odometry_pub{ORB_ID(vehicle_mocap_odometry)};
+ 	uORB::Publication<vehicle_odometry_s>			_visual_odometry_pub{ORB_ID(vehicle_visual_odometry)};
+ 	uORB::Publication<vehicle_rates_setpoint_s>		_rates_sp_pub{ORB_ID(vehicle_rates_setpoint)};
+diff --git a/src/modules/mavlink/mavlink_receiver.cpp b/src/modules/mavlink/mavlink_receiver.cpp
+--- a/src/modules/mavlink/mavlink_receiver.cpp
++++ b/src/modules/mavlink/mavlink_receiver.cpp
+@@ -1035,6 +1035,39 @@
+ {
+ 	mavlink_set_position_target_local_ned_t target_local_ned;
+ 	mavlink_msg_set_position_target_local_ned_decode(msg, &target_local_ned);
++#ifdef DRONE_HANDOFF_INGRESS_OBSERVATION
++    mavlink_setpoint_ingress_s ingress{};
++    ingress.receive_timestamp = hrt_absolute_time();
++    ingress.receiver_sequence = ++_handoff_ingress_sequence;
++    ingress.receiver_channel = _mavlink.get_channel();
++    ingress.nav_state = 255; // status not read on early rejection
++    ingress.decision = mavlink_setpoint_ingress_s::TARGET_REJECTED;
++    ingress.sender_system = msg->sysid;
++    ingress.sender_component = msg->compid;
++    ingress.message_sequence = msg->seq;
++    ingress.type_mask = target_local_ned.type_mask;
++    ingress.coordinate_frame = target_local_ned.coordinate_frame;
++    ingress.target_system = target_local_ned.target_system;
++    ingress.target_component = target_local_ned.target_component;
++    ingress.wire_time_boot_ms = target_local_ned.time_boot_ms;
++    ingress.wire_yaw = target_local_ned.yaw;
++    ingress.wire_yaw_rate = target_local_ned.yaw_rate;
++    ingress.wire_position[0] = target_local_ned.x;
++    ingress.wire_position[1] = target_local_ned.y;
++    ingress.wire_position[2] = target_local_ned.z;
++    ingress.wire_velocity[0] = target_local_ned.vx;
++    ingress.wire_velocity[1] = target_local_ned.vy;
++    ingress.wire_velocity[2] = target_local_ned.vz;
++    ingress.wire_acceleration[0] = target_local_ned.afx;
++    ingress.wire_acceleration[1] = target_local_ned.afy;
++    ingress.wire_acceleration[2] = target_local_ned.afz;
++    struct PublishIngressOnExit {
++        uORB::Publication<mavlink_setpoint_ingress_s> &publisher;
++        mavlink_setpoint_ingress_s &data;
++        ~PublishIngressOnExit() { data.timestamp = hrt_absolute_time(); publisher.publish(data); }
++    } publish_ingress_on_exit{_handoff_ingress_pub, ingress};
++#endif
++
+ 
+ 	/* Only accept messages which are intended for this system */
+ 	if (_mavlink.get_forward_externalsp() &&
+@@ -1105,6 +1138,9 @@
+ 			matrix::Vector3f(NAN, NAN, NAN).copyTo(setpoint.position);
+ 
+ 		} else {
++#ifdef DRONE_HANDOFF_INGRESS_OBSERVATION
++            ingress.decision = mavlink_setpoint_ingress_s::UNSUPPORTED_FRAME;
++#endif
+ 			mavlink_log_critical(&_mavlink_log_pub, "SET_POSITION_TARGET_LOCAL_NED coordinate frame %" PRIu8 " unsupported\t",
+ 					     target_local_ned.coordinate_frame);
+ 			events::send<uint8_t>(events::ID("mavlink_rcv_sp_target_unsup_coord"), events::Log::Error,
+@@ -1122,6 +1158,9 @@
+ 		ocm.acceleration = !matrix::Vector3f(setpoint.acceleration).isAllNan();
+ 
+ 		if (ocm.acceleration && (type_mask & POSITION_TARGET_TYPEMASK_FORCE_SET)) {
++#ifdef DRONE_HANDOFF_INGRESS_OBSERVATION
++            ingress.decision = mavlink_setpoint_ingress_s::UNSUPPORTED_FORCE;
++#endif
+ 			mavlink_log_critical(&_mavlink_log_pub, "SET_POSITION_TARGET_LOCAL_NED force not supported\t");
+ 			events::send(events::ID("mavlink_rcv_sp_target_unsup_force"), events::Log::Error,
+ 				     "SET_POSITION_TARGET_LOCAL_NED: FORCE is not supported");
+@@ -1135,14 +1174,31 @@
+ 
+ 			vehicle_status_s vehicle_status{};
+ 			_vehicle_status_sub.copy(&vehicle_status);
++#ifdef DRONE_HANDOFF_INGRESS_OBSERVATION
++            ingress.nav_state = vehicle_status.nav_state;
++            ingress.offboard_mode_timestamp = ocm.timestamp;
++            ingress.decision = mavlink_setpoint_ingress_s::MODE_NOT_OFFBOARD;
++            for (int i = 0; i < 3; ++i) {
++                ingress.decoded_position[i] = setpoint.position[i];
++                ingress.decoded_velocity[i] = setpoint.velocity[i];
++                ingress.decoded_acceleration[i] = setpoint.acceleration[i];
++            }
++#endif
+ 
+ 			if (vehicle_status.nav_state == vehicle_status_s::NAVIGATION_STATE_OFFBOARD) {
+ 				// only publish setpoint once in OFFBOARD
+ 				setpoint.timestamp = hrt_absolute_time();
+ 				_trajectory_setpoint_pub.publish(setpoint);
++#ifdef DRONE_HANDOFF_INGRESS_OBSERVATION
++                ingress.setpoint_timestamp = setpoint.timestamp;
++                ingress.decision = mavlink_setpoint_ingress_s::PUBLISH_CALLED;
++#endif
+ 			}
+ 
+ 		} else {
++#ifdef DRONE_HANDOFF_INGRESS_OBSERVATION
++            ingress.decision = mavlink_setpoint_ingress_s::INVALID_TARGET;
++#endif
+ 			mavlink_log_critical(&_mavlink_log_pub, "SET_POSITION_TARGET_LOCAL_NED invalid\t");
+ 			events::send(events::ID("mavlink_rcv_sp_target_invalid"), events::Log::Error,
+ 				     "SET_POSITION_TARGET_LOCAL_NED: invalid, missing position, velocity or acceleration");
+diff --git a/msg/CMakeLists.txt b/msg/CMakeLists.txt
+--- a/msg/CMakeLists.txt
++++ b/msg/CMakeLists.txt
+@@ -61,6 +61,7 @@
+ 	DatamanResponse.msg
+ 	DebugArray.msg
+ 	PositionControlHandoff.msg
++	MavlinkSetpointIngress.msg
+ 	DebugKeyValue.msg
+ 	DebugValue.msg
+ 	DebugVect.msg
+diff --git a/msg/MavlinkSetpointIngress.msg b/msg/MavlinkSetpointIngress.msg
+new file mode 100644
+--- /dev/null
++++ b/msg/MavlinkSetpointIngress.msg
+@@ -0,0 +1,32 @@
++# Decoded local-setpoint handler entry/decision, not a candidate ACK.
++# Native stamps use HRT us; wire_time_boot_ms remains sender-owned.
++uint64 timestamp
++uint64 receive_timestamp
++uint64 receiver_sequence
++uint64 setpoint_timestamp
++uint64 offboard_mode_timestamp
++uint32 wire_time_boot_ms
++float32[3] wire_position
++float32[3] wire_velocity
++float32[3] wire_acceleration
++float32[3] decoded_position
++float32[3] decoded_velocity
++float32[3] decoded_acceleration
++float32 wire_yaw
++float32 wire_yaw_rate
++uint16 type_mask
++uint8 coordinate_frame
++uint8 sender_system
++uint8 sender_component
++uint8 target_system
++uint8 target_component
++uint8 message_sequence
++uint8 receiver_channel
++uint8 nav_state
++uint8 decision
++uint8 TARGET_REJECTED = 0
++uint8 UNSUPPORTED_FRAME = 1
++uint8 UNSUPPORTED_FORCE = 2
++uint8 INVALID_TARGET = 3
++uint8 MODE_NOT_OFFBOARD = 4
++uint8 PUBLISH_CALLED = 5
+diff --git a/src/modules/logger/logged_topics.cpp b/src/modules/logger/logged_topics.cpp
+--- a/src/modules/logger/logged_topics.cpp
++++ b/src/modules/logger/logged_topics.cpp
+@@ -130,6 +130,7 @@
+ 	add_optional_topic("tiltrotor_extra_controls", 100);
+ 	add_topic("trajectory_setpoint", 200);
+ 	add_optional_topic("position_control_handoff");
++	add_topic("mavlink_setpoint_ingress");
+ 	add_topic("transponder_report");
+ 	add_topic("vehicle_acceleration", 50);
+ 	add_topic("vehicle_air_data", 200);
+diff --git a/msg/PositionControlHandoff.msg b/msg/PositionControlHandoff.msg
+--- a/msg/PositionControlHandoff.msg
++++ b/msg/PositionControlHandoff.msg
+@@ -17,6 +17,11 @@
+ float32[3] output_acceleration
+ float32 raw_yaw
+ float32 used_yaw
++bool ground_state_evaluated
++bool not_taken_off
++bool flying_ground_contact
++bool ground_override
++bool rampup_acceleration_cleared
+ bool input_updated
+ bool raw_input_available
+ bool pre_control_failsafe # generated in this cycle
+diff --git a/src/modules/mc_pos_control/MulticopterPositionControl.cpp b/src/modules/mc_pos_control/MulticopterPositionControl.cpp
+--- a/src/modules/mc_pos_control/MulticopterPositionControl.cpp
++++ b/src/modules/mc_pos_control/MulticopterPositionControl.cpp
+@@ -515,6 +515,12 @@
+ 			const bool not_taken_off             = (_takeoff.getTakeoffState() < TakeoffState::rampup);
+ 			const bool flying                    = (_takeoff.getTakeoffState() >= TakeoffState::flight);
+ 			const bool flying_but_ground_contact = (flying && _vehicle_land_detected.ground_contact);
++#ifdef DRONE_HANDOFF_OBSERVATION
++            handoff_observation.ground_state_evaluated = true;
++            handoff_observation.not_taken_off = not_taken_off;
++            handoff_observation.flying_ground_contact = flying_but_ground_contact;
++            handoff_observation.ground_override = not_taken_off || flying_but_ground_contact;
++#endif
+ 
+ 			if (!flying) {
+ 				_control.setHoverThrust(_param_mpc_thr_hover.get());
+@@ -523,6 +529,9 @@
+ 			// make sure takeoff ramp is not amended by acceleration feed-forward
+ 			if (_takeoff.getTakeoffState() == TakeoffState::rampup && PX4_ISFINITE(_setpoint.velocity[2])) {
+ 				_setpoint.acceleration[2] = NAN;
++#ifdef DRONE_HANDOFF_OBSERVATION
++                handoff_observation.rampup_acceleration_cleared = true;
++#endif
+ 			}
+ 
+ 			if (not_taken_off || flying_but_ground_contact) {

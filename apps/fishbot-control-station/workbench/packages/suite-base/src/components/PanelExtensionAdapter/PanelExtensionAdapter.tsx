@@ -1,0 +1,889 @@
+// SPDX-FileCopyrightText: Copyright (C) 2023-2026 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)<lichtblick@bmwgroup.com>
+// SPDX-License-Identifier: MPL-2.0
+
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/
+
+import { useTheme } from "@mui/material";
+import { produce } from "immer";
+import { CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLatest } from "react-use";
+import { v4 as uuid } from "uuid";
+
+import { useSynchronousMountedState, useValueChangedDebugLog } from "@lichtblick/hooks";
+import Logger from "@lichtblick/log";
+import { fromSec, toSec } from "@lichtblick/rostime";
+import {
+  AppSettingValue,
+  ExtensionPanelRegistration,
+  Immutable,
+  PanelExtensionContext,
+  ParameterValue,
+  RenderState,
+  SettingsTree,
+  SettingsTreeAction,
+  Subscription,
+  Time,
+  VariableValue,
+} from "@lichtblick/suite";
+import {
+  MessagePipelineContext,
+  useMessagePipeline,
+  useMessagePipelineGetter,
+} from "@lichtblick/suite-base/components/MessagePipeline";
+import { getTopicToSchemaNameMap } from "@lichtblick/suite-base/components/MessagePipeline/selectors";
+import { usePanelContext } from "@lichtblick/suite-base/components/PanelContext";
+import {
+  collateTopicSchemaConversions,
+  ConverterKey,
+} from "@lichtblick/suite-base/components/PanelExtensionAdapter/messageProcessing";
+import PanelToolbar from "@lichtblick/suite-base/components/PanelToolbar";
+import { useAlertsActions } from "@lichtblick/suite-base/context/AlertsContext";
+import { useAppConfiguration } from "@lichtblick/suite-base/context/AppConfigurationContext";
+import {
+  ExtensionCatalog,
+  getExtensionPanelSettings,
+  useExtensionCatalog,
+} from "@lichtblick/suite-base/context/ExtensionCatalogContext";
+import {
+  useClearHoverValue,
+  useHoverValue,
+  useSetHoverValue,
+} from "@lichtblick/suite-base/context/TimelineInteractionStateContext";
+import useGlobalVariables from "@lichtblick/suite-base/hooks/useGlobalVariables";
+import { PLAYER_CAPABILITIES } from "@lichtblick/suite-base/players/constants";
+import {
+  AdvertiseOptions,
+  InternalSubscribePayload,
+  PlayerAlert,
+  PlayerPresence,
+} from "@lichtblick/suite-base/players/types";
+import {
+  useDefaultPanelTitle,
+  usePanelSettingsTreeUpdate,
+} from "@lichtblick/suite-base/providers/PanelStateContextProvider";
+import { PanelConfig, SaveConfig } from "@lichtblick/suite-base/types/panels";
+import { assertNever } from "@lichtblick/suite-base/util/assertNever";
+import { maybeCast } from "@lichtblick/suite-base/util/maybeCast";
+
+import { PanelConfigVersionError } from "./PanelConfigVersionError";
+import { RenderStateConfig, initRenderStateBuilder } from "./renderState";
+import { BuiltinPanelExtensionContext, MessageConverterAlertHandler } from "./types";
+import { useSharedPanelState } from "./useSharedPanelState";
+import { useSubscribeMessageRange } from "./useSubscribeMessageRange";
+
+const log = Logger.getLogger(__filename);
+
+/**
+ * Find the converter (if any) that would be used for a given convertTo subscription.
+ * Extracted to module level to avoid deeply nested function declarations (SonarCloud S2004).
+ */
+function getConverterForSubscription(
+  sub: Subscription,
+  topicToSchemaNameMap: Map<string, string | undefined>,
+  topicSchemaConverters: Map<ConverterKey, { toSchemaName: string }[]>,
+): { toSchemaName: string; supportsLatestPerRenderTick?: boolean } | undefined {
+  if (!sub.convertTo) {
+    return undefined;
+  }
+
+  const topicSchemaName = topicToSchemaNameMap.get(sub.topic);
+  if (topicSchemaName && topicSchemaName === sub.convertTo) {
+    return undefined;
+  }
+
+  const key = `${sub.topic}\n${String(topicSchemaName ?? "<no-schema>")}` as ConverterKey;
+  const convertersForTopic = topicSchemaConverters.get(key) ?? [];
+  return convertersForTopic.find((conv) => conv.toSchemaName === sub.convertTo);
+}
+
+type VersionedPanelConfig = Record<string, unknown> & { [VERSION_CONFIG_KEY]: number };
+
+export const VERSION_CONFIG_KEY = "foxgloveConfigVersion";
+
+function isVersionedPanelConfig(config: unknown): config is VersionedPanelConfig {
+  return (
+    config != undefined &&
+    typeof config === "object" &&
+    VERSION_CONFIG_KEY in config &&
+    typeof config[VERSION_CONFIG_KEY] === "number"
+  );
+}
+
+type PanelExtensionAdapterProps = {
+  /** function that initializes the panel extension */
+  initPanel:
+    | ExtensionPanelRegistration["initPanel"]
+    | ((context: BuiltinPanelExtensionContext) => void);
+  /**
+   * If defined, the highest supported version of config the panel supports.
+   * Used to prevent older implementations of a panel from trying to access
+   * newer, incompatible versions of the panel's config. Panels should include a
+   * numbered foxgloveConfigVersion property in their config to control this.
+   */
+  highestSupportedConfigVersion?: number;
+  config: unknown;
+  saveConfig: SaveConfig<unknown>;
+};
+
+function selectContext(ctx: MessagePipelineContext) {
+  return ctx;
+}
+
+function selectInstalledMessageConverters(state: ExtensionCatalog) {
+  return state.installedMessageConverters;
+}
+
+type RenderFn = NonNullable<PanelExtensionContext["onRender"]>;
+/**
+ * PanelExtensionAdapter renders a panel extension via initPanel
+ *
+ * The adapter creates a PanelExtensionContext and invokes initPanel using the context.
+ */
+function PanelExtensionAdapter(
+  props: React.PropsWithChildren<PanelExtensionAdapterProps>,
+): React.JSX.Element {
+  const { initPanel, config, saveConfig, highestSupportedConfigVersion } = props;
+
+  // Unlike the react data flow, the config is only provided to the panel once on setup.
+  // The panel is meant to manage the config and call saveConfig on its own.
+  //
+  // We store the config in a ref to avoid re-initializing the panel when the react config
+  // changes.
+  const initialState = useLatest(maybeCast<RenderStateConfig>(config));
+
+  const messagePipelineContext = useMessagePipeline(selectContext);
+
+  const {
+    playerState,
+    pauseFrame,
+    setSubscriptions,
+    seekPlayback,
+    getMetadata,
+    sortedTopics,
+    sortedServices,
+  } = messagePipelineContext;
+
+  const { capabilities, profile: dataSourceProfile, presence: playerPresence } = playerState;
+
+  const { openSiblingPanel, setMessagePathDropConfig, type: panelName } = usePanelContext();
+
+  const [panelId] = useState(() => uuid());
+  const isMounted = useSynchronousMountedState();
+  const [error, setError] = useState<Error | undefined>();
+  const [forceConversion, setForceConversion] = useState(new Set<string>());
+  const [watchedFields, setWatchedFields] = useState(new Set<keyof RenderState>());
+  const messageConverters = useExtensionCatalog(selectInstalledMessageConverters);
+
+  const [localSubscriptions, setLocalSubscriptions] = useState<Subscription[]>([]);
+
+  const [appSettings, setAppSettings] = useState(new Map<string, AppSettingValue>());
+  const [subscribedAppSettings, setSubscribedAppSettings] = useState<string[]>([]);
+
+  const [renderFn, setRenderFn] = useState<RenderFn | undefined>();
+  const isPanelInitializedRef = useRef(false);
+
+  const [slowRender, setSlowRender] = useState(false);
+  const [, setDefaultPanelTitle] = useDefaultPanelTitle();
+  const { setAlert, clearSessionAlert: clearAlert } = useAlertsActions();
+
+  // Tracks the ids of alerts this panel has set (via unstable_setAlert) so they can be cleared
+  // when the panel unmounts. Alerts are namespaced by panelId to avoid collisions across panels.
+  const panelAlertIdsRef = useRef(new Set<string>());
+
+  const { globalVariables, setGlobalVariables } = useGlobalVariables();
+
+  const hoverValue = useHoverValue({
+    componentId: `PanelExtensionAdapter:${panelId}`,
+    isPlaybackSeconds: true,
+  });
+  const setHoverValue = useSetHoverValue();
+  const clearHoverValue = useClearHoverValue();
+
+  // track the advertisements requested by the panel context
+  // topic -> advertisement
+  const advertisementsRef = useRef(new Map<string, AdvertiseOptions>());
+
+  const {
+    palette: { mode: colorScheme },
+  } = useTheme();
+
+  const appConfiguration = useAppConfiguration();
+
+  // The panel extension context exposes methods on the message pipeline. We don't want
+  // the extension context to be re-created when the message pipeline changes since it only
+  // needs to act on the latest version of the message pipeline.
+  //
+  // This getter allows the extension context to remain stable through pipeline changes
+  const getMessagePipelineContext = useMessagePipelineGetter();
+
+  // initRenderStateBuilder render produces a function which computes the latest render state from a set of inputs
+  // Spiritually its like a reducer
+  const [buildRenderState, setBuildRenderState] = useState(() => initRenderStateBuilder());
+
+  const [sharedPanelState, setSharedPanelState] = useSharedPanelState();
+  const emitMessageConverterAlert = useMemo<MessageConverterAlertHandler>(
+    () => (converter, alert, alertId) => {
+      const converterTag = `message-converter:${converter.extensionId ?? "unknown"}:${
+        converter.fromSchemaName
+      }->${converter.toSchemaName}`;
+      const tag = alertId ? `${converterTag}:${alertId}` : converterTag;
+      setAlert(tag, alert);
+    },
+    [setAlert],
+  );
+
+  const subscribeMessageRange = useSubscribeMessageRange(emitMessageConverterAlert);
+
+  // Register handlers to update the app settings we subscribe to
+  useEffect(() => {
+    const handlers = new Map<string, (newValue: AppSettingValue) => void>();
+
+    for (const key of subscribedAppSettings) {
+      const handler = (newValue: AppSettingValue) => {
+        setAppSettings((old) => {
+          old.set(key, newValue);
+          return new Map(old);
+        });
+      };
+      handlers.set(key, handler);
+      appConfiguration.addChangeListener(key, handler);
+    }
+
+    const newAppSettings = new Map<string, AppSettingValue>();
+    for (const key of subscribedAppSettings) {
+      newAppSettings.set(key, appConfiguration.get(key));
+    }
+
+    setAppSettings(newAppSettings);
+
+    return () => {
+      for (const [key, handler] of handlers.entries()) {
+        appConfiguration.removeChangeListener(key, handler);
+      }
+    };
+  }, [appConfiguration, subscribedAppSettings]);
+
+  const messageEvents = useMemo(
+    () => messagePipelineContext.messageEventsBySubscriberId.get(panelId),
+    [messagePipelineContext.messageEventsBySubscriberId, panelId],
+  );
+
+  // The rendering ref is set when we've begin rendering the frame (calling the panel's render
+  // function)
+  //
+  // If another update arrives before the panel finishes rendering, we will update the
+  // slowRenderState to indicate that the panel could not keep up with rendering relative to
+  // updates.
+  const renderingRef = useRef<boolean>(false);
+  useLayoutEffect(() => {
+    /**
+     * We need to check that the panel has been initialized because the renderFn function is being
+     * called between the initPanel's useLayoutEffect cleanup and initPanel being called
+     * again even if setRenderFn(undefined) is called in the cleanup function. This causes
+     * the old renderFn to be called in this effect and pauseFrame to happen, but it is never
+     * resumed, thus causing a 5 second delay in all panels in the layout to be loaded.
+     */
+    if (!renderFn || !isPanelInitializedRef.current) {
+      return;
+    }
+
+    const renderState = buildRenderState({
+      appSettings,
+      colorScheme,
+      currentFrame: messageEvents,
+      emitAlert: emitMessageConverterAlert,
+      globalVariables,
+      hoverValue,
+      messageConverters,
+      playerState,
+      sharedPanelState,
+      sortedTopics,
+      sortedServices,
+      subscriptions: localSubscriptions,
+      watchedFields,
+      forceConversion,
+      config: initialState.current,
+    });
+
+    if (!renderState) {
+      return;
+    }
+
+    if (renderingRef.current) {
+      setSlowRender(true);
+      return;
+    }
+
+    // Clear any conversions that were forced.
+    forceConversion.clear();
+
+    setSlowRender(false);
+    const resumeFrame = pauseFrame(panelId);
+
+    // tell the panel to render and lockout future renders until rendering is complete
+    renderingRef.current = true;
+    try {
+      setError(undefined);
+      let doneCalled = false;
+      renderFn(renderState, () => {
+        // ignore any additional done calls from the panel
+        if (doneCalled) {
+          log.warn(`${panelId} called render done function twice`);
+          return;
+        }
+        doneCalled = true;
+        resumeFrame();
+        renderingRef.current = false;
+      });
+    } catch (e: unknown) {
+      const err = e as Error;
+      setError(err);
+    }
+  }, [
+    appSettings,
+    buildRenderState,
+    colorScheme,
+    emitMessageConverterAlert,
+    globalVariables,
+    hoverValue,
+    localSubscriptions,
+    messageConverters,
+    messageEvents,
+    panelId,
+    pauseFrame,
+    playerState,
+    renderFn,
+    sharedPanelState,
+    sortedTopics,
+    sortedServices,
+    watchedFields,
+    initialState,
+    forceConversion,
+  ]);
+
+  const updatePanelSettingsTree = usePanelSettingsTreeUpdate();
+
+  const extensionsSettings = useExtensionCatalog(getExtensionPanelSettings);
+
+  type PartialPanelExtensionContext = Omit<BuiltinPanelExtensionContext, "panelElement">;
+
+  const messagePipelineState = useMessagePipelineGetter();
+
+  const partialExtensionContext = useMemo<PartialPanelExtensionContext>(() => {
+    const layout: PanelExtensionContext["layout"] = {
+      addPanel: ({ position, type, updateIfExists, getState }) => {
+        if (!isMounted()) {
+          return;
+        }
+
+        // Check if it is not sibling. Currently it is impossible, but in the future it might be possible.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (position !== "sibling") {
+          assertNever(position, `Unsupported position for addPanel: ${position}`);
+        }
+
+        openSiblingPanel({
+          panelType: type,
+          updateIfExists,
+          siblingConfigCreator: (existingConfig) => getState(existingConfig) as PanelConfig,
+        });
+      },
+    };
+
+    const extensionSettingsActionHandler = (action: SettingsTreeAction) => {
+      if (action.action === "reorder-node") {
+        return; // Extensions don't support reordering
+      }
+      const {
+        payload: { path },
+      } = action;
+
+      saveConfig(
+        produce<{ topics: Record<string, unknown> }>((draft) => {
+          const [category, topicName] = path;
+
+          if (category === "topics" && topicName != undefined) {
+            const topicToSchemaNameMap = getTopicToSchemaNameMap(messagePipelineState());
+            const schemaName = topicToSchemaNameMap[topicName];
+
+            if (schemaName == undefined) {
+              return;
+            }
+
+            extensionsSettings[panelName]?.[schemaName]?.handler(action, draft.topics[topicName]);
+            setForceConversion((_old) => {
+              return new Set([topicName]);
+            });
+          }
+        }),
+      );
+    };
+
+    return {
+      initialState: initialState.current,
+
+      saveState: (state) => {
+        if (!isMounted()) {
+          return;
+        }
+        saveConfig(state);
+      },
+
+      layout,
+
+      metadata: getMetadata(),
+
+      seekPlayback: seekPlayback
+        ? (stamp: number | Time) => {
+            if (!isMounted()) {
+              return;
+            }
+            const seekTarget = typeof stamp === "object" ? stamp : fromSec(stamp);
+            seekPlayback(seekTarget);
+          }
+        : undefined,
+
+      dataSourceProfile,
+
+      setParameter: (name: string, value: ParameterValue) => {
+        if (!isMounted()) {
+          return;
+        }
+        getMessagePipelineContext().setParameter(name, value);
+      },
+
+      setVariable: (name: string, value: VariableValue) => {
+        if (!isMounted()) {
+          return;
+        }
+        setGlobalVariables({ [name]: value });
+      },
+
+      setPreviewTime: (stamp: number | undefined) => {
+        if (!isMounted()) {
+          return;
+        }
+        if (stamp == undefined) {
+          clearHoverValue("PanelExtensionAdatper");
+        } else {
+          const ctx = getMessagePipelineContext();
+          const startTime = ctx.playerState.activeData?.startTime;
+          // if we don't have a start time we cannot correctly set the playback seconds hover value
+          // this hover value needs seconds from start
+          if (!startTime) {
+            return;
+          }
+          const secondsFromStart = stamp - toSec(startTime);
+          setHoverValue({
+            type: "PLAYBACK_SECONDS",
+            componentId: "PanelExtensionAdatper",
+            value: secondsFromStart,
+          });
+        }
+      },
+
+      setSharedPanelState,
+
+      watch: (field: keyof RenderState) => {
+        if (!isMounted()) {
+          return;
+        }
+        setWatchedFields((old) => {
+          if (old.has(field)) {
+            // In React 18 we noticed that this setter function would be called in an infinite loop
+            // even though watch() was not called repeatedly. Adding this early return of the old
+            // value fixed the issue.
+            return old;
+          }
+          const newWatchedFields = new Set(old);
+          newWatchedFields.add(field);
+          return newWatchedFields;
+        });
+      },
+
+      subscribe: (topics: ReadonlyArray<string | Subscription>) => {
+        if (!isMounted()) {
+          return;
+        }
+        // ExtensionPanel-Facing subscription type
+        const localSubs = topics.map((item): Subscription => {
+          if (typeof item === "string") {
+            return { topic: item, preload: true };
+          }
+
+          return item;
+        });
+
+        // Resolve topic -> schemaName for converter lookup. If we don't know the schema yet,
+        // we default to no sampling (safe "needs all" behavior).
+        const topicToSchemaNameMap = new Map(
+          sortedTopics.map((topic) => [topic.name, topic.schemaName]),
+        );
+
+        // Use the same conversion resolution as renderState to identify converters that apply.
+        const { topicSchemaConverters } = collateTopicSchemaConversions(
+          localSubs,
+          sortedTopics,
+          messageConverters,
+        );
+
+        const subscribePayloads = localSubs.map((item): InternalSubscribePayload => {
+          const preloadType = item.preload === true ? "full" : "partial";
+
+          // Preload requires full message history, so sampling is never allowed here.
+          // Also, if the panel didn't request sampling, default to "needs all".
+          if (item.preload === true || item.sampling?.mode !== "latest-per-render-tick") {
+            return { topic: item.topic, preloadType };
+          }
+
+          // Sampling is only allowed if the converter explicitly declares it supports
+          // latest-per-render-tick sampling.
+          // Native/direct paths are denied by default.
+          // If allowed, we set both the sampling request and the internal authorization bit.
+          // MessagePipeline merge logic strips sampling requests unless authorization is present.
+          const converter = getConverterForSubscription(
+            item,
+            topicToSchemaNameMap,
+            topicSchemaConverters,
+          );
+          const topicSchemaName = topicToSchemaNameMap.get(item.topic);
+          const isNativePath =
+            item.convertTo == undefined ||
+            (topicSchemaName != undefined && topicSchemaName === item.convertTo);
+          const samplingAllowed = isNativePath
+            ? false
+            : converter?.supportsLatestPerRenderTick === true;
+
+          return {
+            topic: item.topic,
+            preloadType,
+            samplingRequest: samplingAllowed ? item.sampling : undefined,
+            samplingAuthorized: samplingAllowed ? true : undefined,
+          };
+        });
+
+        setLocalSubscriptions(localSubs);
+        setSubscriptions(panelId, subscribePayloads);
+      },
+
+      advertise: capabilities.includes(PLAYER_CAPABILITIES.advertise)
+        ? (topic: string, datatype: string, options) => {
+            if (!isMounted()) {
+              return;
+            }
+            const payload: AdvertiseOptions = {
+              topic,
+              schemaName: datatype,
+              options,
+            };
+            advertisementsRef.current.set(topic, payload);
+
+            getMessagePipelineContext().setPublishers(
+              panelId,
+              Array.from(advertisementsRef.current.values()),
+            );
+          }
+        : undefined,
+
+      unadvertise: capabilities.includes(PLAYER_CAPABILITIES.advertise)
+        ? (topic: string) => {
+            if (!isMounted()) {
+              return;
+            }
+            advertisementsRef.current.delete(topic);
+            getMessagePipelineContext().setPublishers(
+              panelId,
+              Array.from(advertisementsRef.current.values()),
+            );
+          }
+        : undefined,
+
+      publish: capabilities.includes(PLAYER_CAPABILITIES.advertise)
+        ? (topic, message) => {
+            if (!isMounted()) {
+              return;
+            }
+            getMessagePipelineContext().publish({
+              topic,
+              msg: message as Record<string, unknown>,
+            });
+          }
+        : undefined,
+
+      callService: capabilities.includes(PLAYER_CAPABILITIES.callServices)
+        ? async (service, request): Promise<unknown> => {
+            if (!isMounted()) {
+              throw new Error("Service call after panel was unmounted");
+            }
+            return await getMessagePipelineContext().callService(service, request);
+          }
+        : undefined,
+
+      unstable_fetchAsset: async (uri, options) => {
+        if (!isMounted()) {
+          throw new Error("Asset fetch after panel was unmounted");
+        }
+        return await getMessagePipelineContext().fetchAsset(uri, options);
+      },
+
+      unsubscribeAll: () => {
+        if (!isMounted()) {
+          return;
+        }
+        setLocalSubscriptions([]);
+        setSubscriptions(panelId, []);
+      },
+
+      subscribeAppSettings: (settings: string[]) => {
+        if (!isMounted()) {
+          return;
+        }
+        setSubscribedAppSettings(settings);
+      },
+
+      updatePanelSettingsEditor: (settings: SettingsTree) => {
+        if (!isMounted()) {
+          return;
+        }
+        const actionHandler: typeof settings.actionHandler = (action) => {
+          settings.actionHandler(action);
+          extensionSettingsActionHandler(action);
+        };
+        updatePanelSettingsTree({ ...settings, actionHandler });
+      },
+
+      setDefaultPanelTitle: (title: string) => {
+        if (!isMounted()) {
+          return;
+        }
+        setDefaultPanelTitle(title);
+      },
+
+      unstable_setAlert: (alertId: string, alert: Immutable<PlayerAlert> | undefined) => {
+        if (!isMounted()) {
+          return;
+        }
+        const tag = `panel-alert:${panelId}:${alertId}`;
+        if (alert == undefined) {
+          panelAlertIdsRef.current.delete(alertId);
+          clearAlert(tag);
+        } else {
+          panelAlertIdsRef.current.add(alertId);
+          setAlert(tag, alert);
+        }
+      },
+
+      /**
+       * EXPERIMENTAL: Subscribe to message ranges for efficient batch processing.
+       *
+       * This API is marked as "unstable" because it's still experimental and not fully functional.
+       * We're gradually testing and refining this feature to see how it performs in real-world scenarios.
+       *
+       * The API may change without notice as we gather feedback and improve the implementation.
+       * Use with caution in production environments.
+       *
+       * Current limitations:
+       * - Performance characteristics may vary
+       * - Error handling is still being refined
+       * - API surface may change based on testing feedback
+       */
+      unstable_subscribeMessageRange(args) {
+        if (!isMounted()) {
+          return () => {};
+        }
+        return subscribeMessageRange(args);
+      },
+
+      async getMessageAtTime(topic: string, time: Time) {
+        if (!isMounted()) {
+          return undefined;
+        }
+        return await getMessagePipelineContext().getMessageAtTime(topic, time);
+      },
+
+      unstable_setMessagePathDropConfig(dropConfig) {
+        setMessagePathDropConfig(dropConfig);
+      },
+
+      getTopicSchema(topic: string) {
+        if (!isMounted()) {
+          return;
+        }
+
+        const ctx = getMessagePipelineContext();
+        const datatypes = ctx.playerState.activeData?.datatypes;
+        if (datatypes == undefined) {
+          return;
+        }
+        const schemaMap = getTopicToSchemaNameMap(ctx);
+        const schemaName = schemaMap[topic];
+        if (schemaName == undefined) {
+          return;
+        }
+        return datatypes.get(schemaName);
+      },
+
+      getSchema(schemaName: string) {
+        if (!isMounted()) {
+          return;
+        }
+        const ctx = getMessagePipelineContext();
+        const datatypes = ctx.playerState.activeData?.datatypes;
+        if (datatypes == undefined) {
+          return;
+        }
+        return datatypes.get(schemaName);
+      },
+    };
+    // Disable this rule because the metadata function. If used, it will break.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    initialState,
+    seekPlayback,
+    dataSourceProfile,
+    setSharedPanelState,
+    capabilities,
+    isMounted,
+    openSiblingPanel,
+    saveConfig,
+    extensionsSettings,
+    panelName,
+    getMessagePipelineContext,
+    setGlobalVariables,
+    clearHoverValue,
+    setHoverValue,
+    setSubscriptions,
+    panelId,
+    updatePanelSettingsTree,
+    setDefaultPanelTitle,
+    setMessagePathDropConfig,
+    subscribeMessageRange,
+    setAlert,
+    clearAlert,
+  ]);
+
+  const panelContainerRef = useRef<HTMLDivElement>(ReactNull);
+
+  useValueChangedDebugLog(initPanel, "initPanel");
+  useValueChangedDebugLog(panelId, "panelId");
+  useValueChangedDebugLog(partialExtensionContext, "partialExtensionContext");
+
+  const configTooNew = useMemo(() => {
+    const latestConfig = initialState.current;
+    return (
+      isVersionedPanelConfig(latestConfig) &&
+      highestSupportedConfigVersion != undefined &&
+      latestConfig[VERSION_CONFIG_KEY] > highestSupportedConfigVersion
+    );
+  }, [initialState, highestSupportedConfigVersion]);
+
+  const playerIsInitializing = playerPresence === PlayerPresence.INITIALIZING;
+
+  // Manage extension lifecycle by calling initPanel() when the panel context changes.
+  //
+  // If we useEffect here instead of useLayoutEffect, the prevRenderState can get polluted with data
+  // from a previous panel instance.
+  useLayoutEffect(() => {
+    if (!panelContainerRef.current) {
+      throw new Error("Expected panel container to be mounted");
+    }
+
+    // Also don't show panel when the player is initializing. The initializing state is temporary for
+    // players to go through to load their sources. Once a player has completed initialization `initPanel` is called again (or even a few times),
+    // because parts of the player context have changed. This cleans up the old panel that was present
+    // during initialization. So there can be no state held between extension panels between initialization and
+    // whatever follows it. To prevent this unnecessary render, we do not render the panel during initialization.
+    if (configTooNew || playerIsInitializing) {
+      return;
+    }
+
+    // Reset local state when the panel element is mounted or changes
+    setRenderFn(undefined);
+    renderingRef.current = false;
+    setSlowRender(false);
+
+    setBuildRenderState(() => initRenderStateBuilder());
+
+    const panelElement = document.createElement("div");
+    panelElement.style.width = "100%";
+    panelElement.style.height = "100%";
+    panelElement.style.overflow = "hidden";
+    panelContainerRef.current.appendChild(panelElement);
+
+    log.info(`Init panel ${panelId}`);
+    const onUnmount = initPanel({
+      panelElement,
+      ...partialExtensionContext,
+
+      // eslint-disable-next-line no-restricted-syntax
+      set onRender(renderFunction: RenderFn | undefined) {
+        setRenderFn(() => renderFunction);
+      },
+    });
+    isPanelInitializedRef.current = true;
+
+    return () => {
+      if (onUnmount) {
+        onUnmount();
+      }
+      isPanelInitializedRef.current = false;
+      panelElement.remove();
+      getMessagePipelineContext().setSubscriptions(panelId, []);
+      getMessagePipelineContext().setPublishers(panelId, []);
+    };
+  }, [
+    initPanel,
+    panelId,
+    partialExtensionContext,
+    getMessagePipelineContext,
+    configTooNew,
+    playerIsInitializing,
+    clearAlert,
+  ]);
+
+  // Clear this panel's alerts on unmount.
+  useEffect(() => {
+    const panelAlertIds = panelAlertIdsRef.current;
+    return () => {
+      for (const alertId of panelAlertIds) {
+        clearAlert(`panel-alert:${panelId}:${alertId}`);
+      }
+      panelAlertIds.clear();
+    };
+  }, [panelId, clearAlert]);
+
+  const style: CSSProperties = {};
+  if (slowRender) {
+    // Use an inset box-shadow rather than a border so the indicator doesn't shrink the content box.
+    // A border would change this element's content size, triggering a panel ResizeObserver/relayout
+    style.boxShadow = "inset 0 0 0 1px orange";
+  }
+
+  if (error) {
+    throw error;
+  }
+
+  return (
+    <div
+      style={{
+        alignItems: "stretch",
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        overflow: "hidden",
+        width: "100%",
+        zIndex: 0,
+        ...style,
+      }}
+    >
+      <PanelToolbar />
+      {configTooNew && <PanelConfigVersionError />}
+      {props.children}
+      <div style={{ flex: 1, overflow: "hidden" }} ref={panelContainerRef} />
+    </div>
+  );
+}
+
+export default PanelExtensionAdapter;

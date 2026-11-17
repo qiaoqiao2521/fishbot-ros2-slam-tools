@@ -1,0 +1,227 @@
+{
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "configById": {
+    "3D!dronetruth": {
+      "lichtblickPanelTitle": "真值 · 完整几何 / 实际轨迹",
+      "followTf": "world",
+      "followMode": "follow-pose",
+      "cameraState": {
+        "distance": 17,
+        "perspective": true,
+        "phi": 60,
+        "thetaOffset": 20,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          3,
+          0,
+          1
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 200
+      },
+      "scene": {
+        "backgroundColor": "#182126",
+        "transforms": {
+          "axisScale": 0.5,
+          "showLabel": false
+        }
+      },
+      "topics": {
+        "/drone/live/scene": {
+          "visible": true
+        }
+      },
+      "layers": {
+        "drone-grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "1 m 网格",
+          "instanceId": "drone-grid",
+          "layerId": "foxglove.Grid",
+          "size": 12,
+          "divisions": 12,
+          "lineWidth": 1,
+          "color": "#516371",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "order": 1
+        }
+      }
+    },
+    "3D!dronedepth": {
+      "lichtblickPanelTitle": "深度 · 可见表面 / 检测框",
+      "followTf": "world",
+      "followMode": "follow-pose",
+      "cameraState": {
+        "distance": 17,
+        "perspective": true,
+        "phi": 60,
+        "thetaOffset": 20,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          3,
+          0,
+          1
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 200
+      },
+      "scene": {
+        "backgroundColor": "#182126",
+        "transforms": {
+          "axisScale": 0.5,
+          "showLabel": false
+        }
+      },
+      "topics": {
+        "/drone/perception/scene": {
+          "visible": true
+        },
+        "/drone/perception/points": {
+          "visible": true,
+          "pointSize": 3,
+          "colorMode": "flat",
+          "flatColor": "#58d7e6",
+          "colorField": "x"
+        }
+      },
+      "layers": {
+        "drone-grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "1 m 网格",
+          "instanceId": "drone-grid",
+          "layerId": "foxglove.Grid",
+          "size": 12,
+          "divisions": 12,
+          "lineWidth": 1,
+          "color": "#516371",
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "order": 1
+        }
+      }
+    },
+    "Plot!depthage": {
+      "lichtblickPanelTitle": "观测时间 · s",
+      "paths": [
+        {
+          "value": "/drone/perception/status.depth_age_s",
+          "label": "深度采集→当前",
+          "color": "#56b4e9",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/drone/perception/status.cloud_receive_age_s",
+          "label": "点云接收→当前",
+          "color": "#c3df8f",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "top",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 180,
+      "yAxisLabel": ""
+    },
+    "Plot!depthcount": {
+      "lichtblickPanelTitle": "感知输出 · 点数 / 框数",
+      "paths": [
+        {
+          "value": "/drone/perception/status.display_points",
+          "label": "显示点数",
+          "color": "#56b4e9",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/drone/perception/status.tracked_boxes",
+          "label": "跟踪框",
+          "color": "#ffd65c",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/drone/perception/status.dynamic_boxes",
+          "label": "动态框",
+          "color": "#ff6882",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "top",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 180,
+      "yAxisLabel": ""
+    }
+  },
+  "layout": {
+    "direction": "column",
+    "splitPercentage": 82,
+    "first": {
+      "direction": "row",
+      "splitPercentage": 50,
+      "first": "3D!dronetruth",
+      "second": "3D!dronedepth"
+    },
+    "second": {
+      "direction": "row",
+      "splitPercentage": 50,
+      "first": "Plot!depthage",
+      "second": "Plot!depthcount"
+    }
+  }
+}

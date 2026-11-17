@@ -1,0 +1,107 @@
+diff --git a/flight.py b/flight.py
+--- a/flight.py
++++ b/flight.py
+@@ -16,2 +16,3 @@
+ from preflight import inspect as preflight_inspect, process_alive
++from handoff_observation import HandoffObservation
+ 
+@@ -204,2 +205,3 @@
+         self.output = Path(output)
++        self.handoff_observation = HandoffObservation.from_environment(output, request["id"])
+         self.cancel_file = Path(cancel_file)
+@@ -517,3 +519,3 @@
+ 
+-    async def setpoint(self, position, yaw=0., velocity=None, acceleration=None):
++    async def setpoint(self, position, yaw=0., velocity=None, acceleration=None, observation_context=None):
+         from mavsdk_grpc.offboard import PositionNedYaw, VelocityNedYaw, AccelerationNed
+@@ -526,8 +528,27 @@
+                      "mode": "position" if velocity is None else "position_velocity_acceleration"}
+-        if velocity is None:
+-            await self.drone.offboard.set_position_ned(PositionNedYaw(*p, y))
+-        else:
+-            await self.drone.offboard.set_position_velocity_acceleration_ned(
+-                PositionNedYaw(*p, y), VelocityNedYaw(*enu_to_ned(velocity), y),
+-                AccelerationNed(*enu_to_ned(acceleration or [0,0,0])))
++        trace = self.handoff_observation
++        if observation_context is None and velocity is not None:
++            observation_context = getattr(self, "handoff_candidate_context", None)
++        sequence = trace.next_sequence() if trace is not None else None
++        if trace is not None:
++            trace.emit("rpc_start", sequence, self.observer.simulation_s,
++                       identity=observation_context, reference_enu=reference,
++                       origin_enu=list(self.origin), sdk_payload_ned={
++                           "position": p, "yaw_deg": y,
++                           "velocity": enu_to_ned(velocity) if velocity is not None else None,
++                           "acceleration": enu_to_ned(acceleration or [0,0,0]) if velocity is not None else None})
++        try:
++            if velocity is None:
++                await self.drone.offboard.set_position_ned(PositionNedYaw(*p, y))
++            else:
++                await self.drone.offboard.set_position_velocity_acceleration_ned(
++                    PositionNedYaw(*p, y), VelocityNedYaw(*enu_to_ned(velocity), y),
++                    AccelerationNed(*enu_to_ned(acceleration or [0,0,0])))
++        except BaseException as error:
++            if trace is not None:
++                trace.emit("rpc_error", sequence, self.observer.simulation_s,
++                           exception_type=type(error).__name__)
++            raise
++        if trace is not None:
++            trace.emit("rpc_return", sequence, self.observer.simulation_s)
+         self.command_position = list(position)
+@@ -633,2 +654,5 @@
+                 command = state.get("setpoint")
++                self.handoff_candidate_context = ({"goal_id": goal_id,
++                    "trajectory_id": command.get("trajectory_id"),
++                    "command_stamp_sim_s": command.get("stamp_sim_s")} if command else None)
+                 matched = (command and command.get("task_id") == self.request["id"]
+diff --git a/handoff_observation.py b/handoff_observation.py
+new file mode 100644
+--- /dev/null
++++ b/handoff_observation.py
+@@ -0,0 +1,46 @@
++"""Optional sender observations. RPC return is not a PX4 consumption ACK."""
++import json
++import os
++import sys
++import time
++import uuid
++from pathlib import Path
++
++
++class HandoffObservation:
++    def __init__(self, path, task_id):
++        self.path = Path(path)
++        self.task_id = task_id
++        self.session = str(uuid.uuid4())
++        self.sequence = 0
++        self.warning_reported = False
++
++    @classmethod
++    def from_environment(cls, output, task_id):
++        if os.environ.get("DRONE_TRACE_HANDOFF") != "1":
++            return None
++        return cls(Path(output)/"handoff-sender.jsonl", task_id)
++
++    def emit(self, stage, sequence, simulation_s, **fields):
++        # Diagnostic failures never replace an SDK failure or cancellation.
++        try:
++            row = dict(fields, stage=stage, rpc_call_seq=sequence,
++                       task_id=self.task_id, trace_session_id=self.session,
++                       host_monotonic_ns=time.monotonic_ns(),
++                       source_simulation_s=simulation_s,
++                       source_clock="gazebo_sim_time", source_epoch=None,
++                       actual_execution_admission="unqualified_observation")
++            line = json.dumps(row, ensure_ascii=False, allow_nan=False)
++            with self.path.open("a", encoding="utf-8") as stream:
++                stream.write(line+"\n")
++        except Exception as error:
++            if not self.warning_reported:
++                self.warning_reported = True
++                try:
++                    print("WARNING: handoff observation unavailable: "+type(error).__name__, file=sys.stderr)
++                except Exception:
++                    pass
++
++    def next_sequence(self):
++        self.sequence += 1
++        return self.sequence

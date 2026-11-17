@@ -39,6 +39,7 @@ export function SimulationProperties({ selection, map, zones, points, routes, po
   catch (error) { editError = error instanceof Error ? error.message : '规则几何无效，请重新读取。' }
   return <section className="simulation-properties" aria-label="所选对象属性">
     <div className="simulation-task-heading"><h2>{title}</h2><span>{editable && onApply && (zone || point) ? '本地草稿' : '只读'}</span></div>
+    <p className="simulation-panel-note">属性查看不会发送运动命令。</p>
     {missing && <p className="simulation-panel-note" role="status">选中对象已随草稿或地图变化，请重新选择。</p>}
     <dl className="simulation-properties-list">
       <div><dt>地图</dt><dd>{map?.map_id || '等待地图身份'}</dd></div>
@@ -100,9 +101,10 @@ function ObjectPoseForm({ selection, zone, point, initial, editable, editScope, 
       <label>{zone ? '中心 Y（米）' : 'Y（米）'}<input aria-label={zone ? '中心 Y（米）' : 'Y（米）'} type="number" step="any" required value={y} disabled={!editable} onChange={(event) => { setY(event.target.value); setMessage('') }} /></label>
       {!translateOnly && <label>朝向（度）<input aria-label="朝向（度）" type="number" step="any" required value={yaw} disabled={!editable} onChange={(event) => { setYaw(event.target.value); setMessage('') }} /></label>}
     </div>
-    {translateOnly && <p className="simulation-panel-note">禁区保持世界轴对齐（仅平移中心）。</p>}
+    {translateOnly && <p className="simulation-panel-note">禁区保持世界轴对齐，只修改中心位置。</p>}
     <div className="simulation-object-edit-actions"><button className="simulation-button simulation-primary" type="submit" disabled={!editable}>应用到草稿</button>
       {onLocate && <button className="simulation-button simulation-quiet" type="button" onClick={onLocate}>在地图查看</button>}</div>
+    {!editable && <p className="simulation-panel-note">当前任务、保存或连接状态不允许修改。</p>}
     {message && <p className={failed ? 'simulation-object-edit-error' : 'simulation-panel-note'} role={failed ? 'alert' : 'status'}>{message}</p>}
   </form>
 }

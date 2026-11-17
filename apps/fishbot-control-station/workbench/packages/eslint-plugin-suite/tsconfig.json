@@ -1,0 +1,12 @@
+{
+  "extends": "@lichtblick/tsconfig/base",
+  "include": ["./**/*.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "lib": ["es2022"],
+    "types": ["node"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext"
+  }
+}

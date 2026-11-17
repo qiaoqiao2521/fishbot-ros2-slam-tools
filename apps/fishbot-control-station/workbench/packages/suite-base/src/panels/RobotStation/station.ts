@@ -1,0 +1,843 @@
+/* eslint-disable @lichtblick/license-header -- Project-owned MPL adaptation. */
+// SPDX-FileCopyrightText: Copyright (C) 2026 SO101/FishBot contributors
+// SPDX-License-Identifier: MPL-2.0
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v2.0. https://mozilla.org/MPL/2.0/
+
+import { isEqual } from "lodash-es";
+
+import { parseRecipeEnvelope, wrapRecipeEnvelope } from "./stationRecipe";
+
+export type Vec3 = [number, number, number];
+export type Platform = "so101" | "px4";
+export type Kind =
+  | "frame"
+  | "robot"
+  | "tool"
+  | "object"
+  | "target"
+  | "obstacle";
+export type StationNode = {
+  id: string;
+  name: string;
+  kind: Kind;
+  parent: string;
+  position: Vec3;
+  size?: Vec3;
+  enabled?: boolean;
+  motion?: {
+    type: "linear_ping_pong";
+    axis: Vec3;
+    distance_m: number;
+    speed_m_s: number;
+  };
+};
+export type FlightAcceptance = {
+  max_altitude_m?: number;
+  position_tolerance_m?: number;
+  min_clearance_m?: number;
+  min_cruise_speed_m_s?: number;
+  min_cruise_duration_s?: number;
+};
+export type Instruction = {
+  id: string;
+  action:
+    | "move"
+    | "open"
+    | "close"
+    | "wait"
+    | "takeoff"
+    | "waypoint"
+    | "return_home"
+    | "land";
+  target: string;
+  seconds: number;
+};
+export type Station = {
+  platform?: Platform;
+  // Document context only; the original executor still owns all motion parameters.
+  recipeDocument?: Record<string, unknown>;
+  // Preserve editable execution intent, including unsupported values, for backend validation.
+  execution?: unknown;
+  // Keep unknown declarations editable; the original executor validates their semantics.
+  skillControl?: unknown;
+  flight?: {
+    speed_m_s: number;
+    planner: "waypoint" | "ego" | "cerlab";
+    acceptance?: FlightAcceptance;
+    sensors?: {
+      depth_drop_probability?: number;
+      depth_delay_ms?: number;
+      seed?: number;
+    };
+  };
+  name: string;
+  nodes: StationNode[];
+  program: Instruction[];
+  notes: string;
+};
+export const KIND_LABELS: Record<Kind, string> = {
+  frame: "坐标系",
+  robot: "机械臂",
+  tool: "夹爪",
+  object: "物体",
+  target: "目标点",
+  obstacle: "障碍",
+};
+export const ACTION_LABELS: Record<Instruction["action"], string> = {
+  move: "移动到目标",
+  open: "张开夹爪",
+  close: "闭合夹爪",
+  wait: "等待",
+  takeoff: "起飞",
+  waypoint: "飞到航点",
+  return_home: "返航",
+  land: "降落",
+};
+
+export function stationPlatform(station: Station): Platform {
+  return station.platform ?? "so101";
+}
+
+export function stationRequestsCarryGate(station: Station): boolean {
+  return record(station.skillControl)?.mode === "hold-before-carry";
+}
+
+export function stationActions(platform: Platform): Instruction["action"][] {
+  return platform === "px4"
+    ? ["takeoff", "waypoint", "wait", "return_home", "land"]
+    : ["move", "open", "close", "wait"];
+}
+
+export function actionNeedsTarget(action: Instruction["action"]): boolean {
+  return ["move", "takeoff", "waypoint"].includes(action);
+}
+
+export function stationKindLabel(kind: Kind, platform: Platform): string {
+  if (platform === "px4") {
+    if (kind === "robot") {
+      return "无人机";
+    }
+    if (kind === "target") {
+      return "航点";
+    }
+  }
+  return KIND_LABELS[kind];
+}
+
+export function defaultCerlabStation(): Station {
+  const station = defaultDroneStation();
+  return {
+    ...station,
+    name: "CERLAB 作者栈往返",
+    flight: { speed_m_s: 1.5, planner: "cerlab" },
+    nodes: station.nodes
+      .filter((node) => ["base", "home", "takeoff", "wp1"].includes(node.id))
+      .map((node): StationNode => ({
+        ...node,
+        name: node.id === "base" ? "IRIS 四旋翼" : node.name,
+        position:
+          node.id === "wp1"
+            ? [8, 0, 1]
+            : node.kind === "target"
+              ? [0, 0, 1]
+              : node.position,
+      })),
+    program: station.program.filter((step) => !["s3", "s4"].includes(step.id)),
+    notes:
+      "CERLAB 固定作者场景，目标高度 1m，速度配置 1.5m/s。真值动态障碍输入；全程净空与真实感知未验收。结束/取消请求原生返航后降落，不包含历史轨迹安全回退。",
+  };
+}
+
+export function defaultDroneStation(): Station {
+  return {
+    platform: "px4",
+    flight: {
+      speed_m_s: 2,
+      planner: "ego",
+      acceptance: {
+        max_altitude_m: 2.2,
+        position_tolerance_m: 0.3,
+        min_clearance_m: 0.25,
+      },
+    },
+    name: "PX4 四旋翼巡航",
+    nodes: [
+      {
+        id: "base",
+        name: "X500 四旋翼",
+        kind: "robot",
+        parent: "world",
+        position: [0, 0, 0],
+      },
+      {
+        id: "home",
+        name: "起降坐标系",
+        kind: "frame",
+        parent: "world",
+        position: [0, 0, 0],
+      },
+      {
+        id: "takeoff",
+        name: "起飞高度",
+        kind: "target",
+        parent: "home",
+        position: [0, 0, 2],
+      },
+      {
+        id: "wp1",
+        name: "航点 1",
+        kind: "target",
+        parent: "home",
+        position: [3, 0, 2],
+      },
+      {
+        id: "wp2",
+        name: "航点 2",
+        kind: "target",
+        parent: "home",
+        position: [3, 3, 2],
+      },
+      {
+        id: "wp3",
+        name: "航点 3",
+        kind: "target",
+        parent: "home",
+        position: [0, 3, 2],
+      },
+    ],
+    program: [
+      { id: "s1", action: "takeoff", target: "takeoff", seconds: 1 },
+      { id: "s2", action: "waypoint", target: "wp1", seconds: 1 },
+      { id: "s3", action: "waypoint", target: "wp2", seconds: 1 },
+      { id: "s4", action: "waypoint", target: "wp3", seconds: 1 },
+      { id: "s5", action: "return_home", target: "home", seconds: 1 },
+      { id: "s6", action: "land", target: "", seconds: 1 },
+    ],
+    notes:
+      "本地 PX4 + Gazebo 四旋翼仿真。X 向东、Y 向北、Z 向上，单位米。先做 EGO 场景模型预演；正式飞行使用 Gazebo 理想定位和深度图。",
+  };
+}
+
+// Workcell XY from SO101 grasp_workcell.py. The place frame's Z raises the tray base
+// and its child targets; the executor validates each edited task's complete path.
+// Frame axes are parallel to world in this editor.
+export function defaultStation(): Station {
+  return {
+    name: "SO101 抓放工作站",
+    nodes: [
+      {
+        id: "base",
+        name: "SO101",
+        kind: "robot",
+        parent: "world",
+        position: [0, 0, 0],
+      },
+      {
+        id: "jaw",
+        name: "双指夹爪",
+        kind: "tool",
+        parent: "base",
+        position: [0, 0, 0],
+      },
+      {
+        id: "pick",
+        name: "取料坐标系",
+        kind: "frame",
+        parent: "world",
+        position: [0.24, -0.13, 0],
+      },
+      {
+        id: "cube",
+        name: "待抓方块",
+        kind: "object",
+        parent: "pick",
+        position: [0, 0, 0.01],
+      },
+      {
+        id: "approach",
+        name: "接近点",
+        kind: "target",
+        parent: "pick",
+        position: [0, 0, 0.08],
+      },
+      {
+        id: "grasp",
+        name: "抓取点",
+        kind: "target",
+        parent: "pick",
+        position: [0, 0, 0.02],
+      },
+      {
+        id: "place",
+        name: "放料坐标系",
+        kind: "frame",
+        parent: "world",
+        position: [0.24, 0.14, 0],
+      },
+      {
+        id: "release",
+        name: "释放点",
+        kind: "target",
+        parent: "place",
+        position: [0, 0, 0.03],
+      },
+      {
+        id: "clear",
+        name: "脱离点",
+        kind: "target",
+        parent: "place",
+        position: [0, 0, 0.1],
+      },
+    ],
+    program: [
+      { id: "s1", action: "open", target: "", seconds: 1 },
+      { id: "s2", action: "move", target: "approach", seconds: 1 },
+      { id: "s3", action: "move", target: "grasp", seconds: 1 },
+      { id: "s4", action: "close", target: "", seconds: 1 },
+      { id: "s5", action: "move", target: "approach", seconds: 1 },
+      { id: "s6", action: "move", target: "release", seconds: 1 },
+      { id: "s7", action: "open", target: "", seconds: 1 },
+      { id: "s8", action: "move", target: "clear", seconds: 1 },
+    ],
+    notes:
+      "程序草稿。放料坐标系 Z 为蓝盘底座高度，释放点和脱离点随其平移。接近、绕障、释放和回位需由执行器逐任务验证。坐标系仅支持平移，尚未定义工具 TCP。",
+  };
+}
+
+export const SO101_WORKSPACE_SCENES = [
+  {
+    id: "x-minus20",
+    name: "工位 A · 近侧取料／斜向放盘",
+    description: "目标 X 220mm → 蓝盘 X 200 / Y 200mm；接近高度 60mm。",
+  },
+  {
+    id: "x-plus20",
+    name: "工位 B · 远侧取料／正向放盘",
+    description: "目标 X 260mm → 蓝盘 X 240 / Y 140mm；接近高度 54mm。",
+  },
+] as const;
+
+export type WorkspaceSceneId = (typeof SO101_WORKSPACE_SCENES)[number]["id"];
+
+/** Development layouts remain editable task inputs, never inherited pass certificates. */
+export function workspaceStationSample(id: WorkspaceSceneId): Station {
+  const station = defaultStation();
+  const plus = id === "x-plus20";
+  const pick: Vec3 = plus ? [0.26, -0.13, 0] : [0.235, -0.13, 0];
+  const offset = plus ? 0 : -0.015;
+  station.name = plus ? "SO101 X+20mm 布局开发样例" : "SO101 X−20mm 布局开发样例";
+  for (const node of station.nodes) {
+    if (node.id === "pick") {
+      node.position = pick;
+    } else if (["cube", "approach", "grasp"].includes(node.id)) {
+      node.position[0] = offset;
+      if (node.id === "approach" && plus) {
+        node.position[2] = 0.074;
+      }
+    } else if (node.id === "place" && !plus) {
+      node.position = [0.2, 0.2, 0];
+    }
+  }
+  station.execution = {
+    mode: "workspace-development-v1",
+    pick_xy_m: pick.slice(0, 2),
+    pickup_hover_z_m: plus ? 0.054 : 0.06,
+    target_region_xy_m: [
+      [0.21, 0.27],
+      [-0.16, -0.1],
+    ],
+  };
+  station.notes = `来源：workspace-x-m1a / ${plus ? "outside_x_plus20_layout" : "outside_x_minus20_layout_secondary"}。仅为布局开发样例，不代表连续工作区已验证；编辑后须重新运行原物理裁判。`;
+  return station;
+}
+
+/** Match editable scene contents, excluding only import bookkeeping. */
+export function workspaceSceneId(
+  station: Station,
+): WorkspaceSceneId | undefined {
+  if (stationPlatform(station) !== "so101") {
+    return undefined;
+  }
+  const contents = (value: Station) => ({
+    ...value,
+    platform: stationPlatform(value),
+    recipeDocument: undefined,
+    program: value.program.map((step) => ({
+      action: step.action,
+      target: step.target,
+      seconds: step.seconds,
+    })),
+  });
+  return SO101_WORKSPACE_SCENES.find((scene) =>
+    isEqual(contents(station), contents(workspaceStationSample(scene.id))),
+  )?.id;
+}
+
+function copyExecution(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(copyExecution);
+  }
+  const object = record(value);
+  return object
+    ? Object.fromEntries(Object.entries(object).map(([key, item]) => [key, copyExecution(item)]))
+    : value;
+}
+
+/** Keep references inside the document, but share no editable data with its source. */
+export function copyStation(station: Station): Station {
+  return {
+    ...station,
+    name: `${station.name} 副本`,
+    nodes: station.nodes.map(
+      (node): StationNode => ({
+        ...node,
+        position: [...node.position],
+        ...(node.size ? { size: [...node.size] as Vec3 } : {}),
+        ...(node.motion
+          ? { motion: { ...node.motion, axis: [...node.motion.axis] as Vec3 } }
+          : {}),
+      }),
+    ),
+    program: station.program.map((step) => ({ ...step })),
+    ...(Object.hasOwn(station, "execution")
+      ? { execution: copyExecution(station.execution) }
+      : {}),
+    ...(Object.hasOwn(station, "skillControl")
+      ? { skillControl: copyExecution(station.skillControl) }
+      : {}),
+    ...(station.recipeDocument
+      ? { recipeDocument: copyExecution(station.recipeDocument) as Record<string, unknown> }
+      : {}),
+    ...(station.flight
+      ? {
+          flight: {
+            ...station.flight,
+            ...(station.flight.acceptance
+              ? { acceptance: { ...station.flight.acceptance } }
+              : {}),
+            ...(station.flight.sensors
+              ? { sensors: { ...station.flight.sensors } }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+export function worldPosition(
+  node: StationNode,
+  nodes: readonly StationNode[],
+): Vec3 {
+  const result: Vec3 = [...node.position];
+  const visited = new Set([node.id]);
+  let parent = node.parent;
+  while (parent !== "world" && !visited.has(parent)) {
+    visited.add(parent);
+    const currentParent = parent;
+    const ancestor = nodes.find((item) => item.id === currentParent);
+    if (!ancestor) {
+      break;
+    }
+    for (const i of [0, 1, 2] as const) {
+      result[i] += ancestor.position[i];
+    }
+    parent = ancestor.parent;
+  }
+  return result;
+}
+
+export function descendants(
+  id: string,
+  nodes: readonly StationNode[],
+): Set<string> {
+  const result = new Set([id]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const node of nodes) {
+      if (result.has(node.parent) && !result.has(node.id)) {
+        result.add(node.id);
+        changed = true;
+      }
+    }
+  }
+  return result;
+}
+
+/** Commit a native world-space handle without moving the obstacle's parent. */
+export function transformObstacle(
+  station: Station,
+  id: string,
+  position: Vec3,
+  size: Vec3,
+): Station {
+  const node = station.nodes.find((item) => item.id === id);
+  if (
+    stationPlatform(station) !== "px4" ||
+    node?.kind !== "obstacle" ||
+    node.enabled === false
+  ) {
+    return station;
+  }
+  const parent = station.nodes.find((item) => item.id === node.parent);
+  const offset: Vec3 = parent
+    ? worldPosition(parent, station.nodes)
+    : [0, 0, 0];
+  return {
+    ...station,
+    nodes: station.nodes.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            position: position.map((value, axis) =>
+              Number((value - offset[axis]!).toFixed(3)),
+            ) as Vec3,
+            size: size.map((value) => Number(value.toFixed(3))) as Vec3,
+          }
+        : item,
+    ),
+  };
+}
+
+export function reparent(
+  station: Station,
+  id: string,
+  parent: string,
+): Station {
+  const node = station.nodes.find((item) => item.id === id);
+  const frame = station.nodes.find(
+    (item) => item.id === parent && item.kind === "frame",
+  );
+  if (
+    !node ||
+    descendants(id, station.nodes).has(parent) ||
+    (parent !== "world" && !frame)
+  ) {
+    return station;
+  }
+  const world = worldPosition(node, station.nodes);
+  const origin: Vec3 = frame ? worldPosition(frame, station.nodes) : [0, 0, 0];
+  return {
+    ...station,
+    nodes: station.nodes.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            parent,
+            position: world.map((value, i) => value - origin[i]!) as Vec3,
+          }
+        : item,
+    ),
+  };
+}
+
+export function removeNode(station: Station, id: string): Station {
+  const removed = descendants(id, station.nodes);
+  return {
+    ...station,
+    nodes: station.nodes.filter((node) => !removed.has(node.id)),
+    program: station.program.map((step) =>
+      removed.has(step.target) ? { ...step, target: "" } : step,
+    ),
+  };
+}
+
+export function programWarnings(station: Station): string[] {
+  return station.program.flatMap((step, i) =>
+    actionNeedsTarget(step.action) &&
+    !station.nodes.some(
+      (node) => node.id === step.target && node.kind === "target",
+    )
+      ? [`第 ${i + 1} 步缺少目标点，请重新选择。`]
+      : [],
+  );
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value != undefined &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/** Tolerant document import: skip malformed items, report every repair, retain usable content. */
+export function importStation(value: unknown): {
+  station: Station;
+  warnings: string[];
+} {
+  const root = record(value);
+  const recipe = root?.format === "station-recipe" ? parseRecipeEnvelope(root) : undefined;
+  const source = record(recipe?.stationSource) ?? record(root?.station) ?? root;
+  if (!source || !Array.isArray(source.nodes)) {
+    throw new Error("请选择含 nodes 数组的工作站 JSON；当前草稿未改变。");
+  }
+  const warnings: string[] = [...(recipe?.warnings ?? [])];
+  if (Object.hasOwn(source, "skillControl")) {
+    const control = record(source.skillControl);
+    if (control?.mode !== "hold-before-carry" || Object.keys(control).some((key) => key !== "mode")) {
+      warnings.push("技能接续参数未知或无效，已原样保留；运行时由执行器校验。");
+    }
+  }
+  if (Object.hasOwn(source, "execution")) {
+    const execution = record(source.execution);
+    const pair = (value: unknown): value is [number, number] =>
+      Array.isArray(value) &&
+      value.length === 2 &&
+      value.every((item) => typeof item === "number" && Number.isFinite(item));
+    const region = execution?.target_region_xy_m;
+    const hover = execution?.pickup_hover_z_m;
+    if (
+      execution?.mode !== "workspace-development-v1" ||
+      !pair(execution.pick_xy_m) ||
+      typeof hover !== "number" ||
+      !Number.isFinite(hover) ||
+      hover < 0.054 ||
+      hover > 0.06 ||
+      !Array.isArray(region) ||
+      region.length !== 2 ||
+      !region.every((bounds) => pair(bounds) && bounds[0] < bounds[1])
+    ) {
+      warnings.push("执行参数未知或无效，已原样保留；运行时由执行器校验，不回退默认场景。");
+    }
+  }
+  const platform: Platform = source.platform === "px4" ? "px4" : "so101";
+  if (
+    source.platform != undefined &&
+    source.platform !== "so101" &&
+    source.platform !== "px4"
+  ) {
+    warnings.push("无法识别的平台，按 SO101 草稿导入。");
+  }
+  const nodes: StationNode[] = [];
+  for (const [i, raw] of source.nodes.entries()) {
+    const item = record(raw);
+    const kind = item?.kind;
+    if (
+      !item ||
+      typeof kind !== "string" ||
+      !Object.hasOwn(KIND_LABELS, kind) ||
+      typeof item.id !== "string" ||
+      !item.id ||
+      item.id === "world" ||
+      nodes.some((node) => node.id === item.id)
+    ) {
+      warnings.push(`对象 ${i + 1} 无效或 ID 重复，已跳过。`);
+      continue;
+    }
+    const position = item.position;
+    const validPosition =
+      Array.isArray(position) &&
+      position.length === 3 &&
+      position.every((x) => typeof x === "number" && Number.isFinite(x));
+    if (!validPosition) {
+      warnings.push(`对象 ${i + 1} 坐标无效，使用原点。`);
+    }
+    const size = item.size;
+    const validSize =
+      Array.isArray(size) &&
+      size.length === 3 &&
+      size.every((x) => typeof x === "number" && Number.isFinite(x) && x > 0);
+    const motion = record(item.motion);
+    const axis = motion?.axis;
+    const distance = motion?.distance_m;
+    const motionSpeed = motion?.speed_m_s;
+    const validMotion =
+      motion?.type === "linear_ping_pong" &&
+      Array.isArray(axis) &&
+      axis.length === 3 &&
+      axis.every((x) => typeof x === "number" && Number.isFinite(x)) &&
+      axis.some((x) => x !== 0) &&
+      typeof distance === "number" &&
+      Number.isFinite(distance) &&
+      distance > 0 &&
+      typeof motionSpeed === "number" &&
+      Number.isFinite(motionSpeed) &&
+      motionSpeed > 0;
+    if (item.motion != undefined && !validMotion) {
+      warnings.push(`对象 ${i + 1} 往返运动参数无效，按静态障碍导入。`);
+    }
+    if (
+      platform === "px4" &&
+      kind === "obstacle" &&
+      size != undefined &&
+      !validSize
+    ) {
+      warnings.push(`对象 ${i + 1} 障碍尺寸无效，使用 1 × 1 × 2 m。`);
+    }
+    nodes.push({
+      id: item.id,
+      name: typeof item.name === "string" ? item.name : item.id,
+      kind: kind as Kind,
+      parent: typeof item.parent === "string" ? item.parent : "world",
+      position: validPosition ? (position as Vec3) : [0, 0, 0],
+      ...(platform === "px4" && kind === "obstacle"
+        ? { size: validSize ? ([...size] as Vec3) : ([1, 1, 2] as Vec3) }
+        : {}),
+      ...(platform === "px4" &&
+      kind === "obstacle" &&
+      typeof item.enabled === "boolean"
+        ? { enabled: item.enabled }
+        : {}),
+      ...(platform === "px4" && kind === "obstacle" && validMotion
+        ? {
+            motion: {
+              type: "linear_ping_pong" as const,
+              axis: [...axis] as Vec3,
+              distance_m: distance,
+              speed_m_s: motionSpeed,
+            },
+          }
+        : {}),
+    });
+  }
+  for (const node of nodes) {
+    if (
+      node.parent !== "world" &&
+      (!nodes.some((item) => item.id === node.parent) ||
+        descendants(node.id, nodes).has(node.parent))
+    ) {
+      node.parent = "world";
+      warnings.push(`${node.name} 的父节点无效，已挂到世界坐标系。`);
+    }
+  }
+  const program: Instruction[] = [];
+  for (const [i, raw] of (Array.isArray(source.program)
+    ? source.program
+    : []
+  ).entries()) {
+    const step = record(raw);
+    if (
+      !step ||
+      typeof step.action !== "string" ||
+      !stationActions(platform).includes(step.action as Instruction["action"])
+    ) {
+      warnings.push(`步骤 ${i + 1} 无法识别，已跳过。`);
+      continue;
+    }
+    let stepId = recipe && typeof step.id === "string" && step.id.length > 0
+      ? step.id : `import-step-${i}`;
+    while (program.some((existing) => existing.id === stepId)) {
+      stepId += "-copy";
+    }
+    program.push({
+      id: stepId,
+      action: step.action as Instruction["action"],
+      target: typeof step.target === "string" ? step.target : "",
+      seconds:
+        typeof step.seconds === "number" &&
+        Number.isFinite(step.seconds) &&
+        step.seconds >= 0
+          ? step.seconds
+          : 1,
+    });
+  }
+  const flight = record(source.flight);
+  const sensorsSource = record(flight?.sensors);
+  const sensors: NonNullable<NonNullable<Station["flight"]>["sensors"]> = {};
+  for (const key of [
+    "depth_drop_probability",
+    "depth_delay_ms",
+    "seed",
+  ] as const) {
+    const parameter = sensorsSource?.[key];
+    if (parameter == undefined) {
+      continue;
+    }
+    const valid =
+      typeof parameter === "number" &&
+      Number.isFinite(parameter) &&
+      parameter >= 0 &&
+      (key !== "depth_drop_probability" || parameter <= 1) &&
+      (key !== "seed" ||
+        (Number.isInteger(parameter) && parameter <= 4294967295));
+    if (valid) {
+      sensors[key] = parameter;
+    } else {
+      warnings.push(`深度感知参数 ${key} 无效，沿用执行器默认值。`);
+    }
+  }
+  const acceptanceSource = record(flight?.acceptance);
+  const acceptance: FlightAcceptance = {};
+  for (const key of [
+    "max_altitude_m",
+    "position_tolerance_m",
+    "min_clearance_m",
+    "min_cruise_speed_m_s",
+    "min_cruise_duration_s",
+  ] as const) {
+    const limit = acceptanceSource?.[key];
+    if (limit == undefined) {
+      continue;
+    }
+    if (typeof limit === "number" && Number.isFinite(limit) && limit >= 0) {
+      acceptance[key] = limit;
+    } else {
+      warnings.push(`飞行验收 ${key} 无效，未启用该项。`);
+    }
+  }
+  const speed = flight?.speed_m_s;
+  const validSpeed =
+    typeof speed === "number" &&
+    Number.isFinite(speed) &&
+    speed >= 1 &&
+    speed <= 5;
+  if (platform === "px4" && flight?.speed_m_s != undefined && !validSpeed) {
+    warnings.push("速度上限需在 1–5 m/s，使用 1 m/s。");
+  }
+  const station: Station = {
+    ...(recipe ? { recipeDocument: recipe.metadata } : {}),
+    ...(source.platform != undefined ? { platform } : {}),
+    ...(Object.hasOwn(source, "execution")
+      ? { execution: copyExecution(source.execution) }
+      : {}),
+    ...(Object.hasOwn(source, "skillControl")
+      ? { skillControl: copyExecution(source.skillControl) }
+      : {}),
+    ...(platform === "px4"
+      ? {
+          flight: {
+            speed_m_s: validSpeed ? speed : 1,
+            planner:
+              flight?.planner === "cerlab"
+                ? ("cerlab" as const)
+                : flight?.planner === "ego"
+                ? ("ego" as const)
+                : ("waypoint" as const),
+            ...(acceptanceSource ? { acceptance } : {}),
+            ...(sensorsSource ? { sensors } : {}),
+          },
+        }
+      : {}),
+    name: typeof source.name === "string" ? source.name : "导入工作站",
+    nodes,
+    program,
+    notes: typeof source.notes === "string" ? source.notes : "",
+  };
+  return { station, warnings: [...warnings, ...programWarnings(station)] };
+}
+
+export function exportStation(station: Station): string {
+  if (station.recipeDocument) {
+    return exportStationRecipe(station);
+  }
+  return (
+    JSON.stringify(
+      {
+        format: "robot-station",
+        version: 1,
+        units: "m",
+        frameConvention: "translation-only",
+        station,
+      },
+      undefined,
+      2,
+    ) ?? "{}"
+  );
+}
+
+export function exportStationRecipe(station: Station): string {
+  const { recipeDocument, ...payload } = station;
+  return JSON.stringify(wrapRecipeEnvelope(payload, recipeDocument), undefined, 2) ?? "{}";
+}

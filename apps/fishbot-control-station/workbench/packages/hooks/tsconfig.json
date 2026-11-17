@@ -1,0 +1,11 @@
+{
+  "extends": "@lichtblick/tsconfig/base",
+  "include": ["./src/**/*"],
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "jsx": "react-jsx",
+    "types": ["node", "jest"],
+    "lib": ["dom", "es2022"]
+  }
+}

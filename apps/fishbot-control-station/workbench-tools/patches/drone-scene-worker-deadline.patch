@@ -1,0 +1,116 @@
+diff --git a/scene.py b/scene.py
+--- a/scene.py
++++ b/scene.py
+@@ -3,4 +3,6 @@
+ import json
+ import math
++import os
++import select
+ from pathlib import Path
+ import subprocess
+@@ -169,6 +171,9 @@
+         self.worker = None
+         self.request_lock = threading.Lock()
++        self.request_deadline_enabled = os.environ.get("DRONE_REVALIDATE_COMMAND") == "1"
+ 
+     def request(self, service, request, request_type, response_type, timeout):
++        if self.request_deadline_enabled:
++            return self._request_with_deadline(service, request, request_type, response_type, timeout)
+         # gz-transport's synchronous Python call can wait while subscriber
+         # callbacks in the same interpreter need the GIL. Keep the official
+@@ -194,5 +199,95 @@
+             return result["ok"], response
+ 
++    def _close_request_worker(self, abort=False):
++        worker = self.worker
++        if worker is None:
++            return
++        worker.stdin.close()
++        steps = (("terminate", .2), ("kill", 1.)) if abort else ((None, 2.), ("terminate", .2), ("kill", 1.))
++        for action, grace in steps:
++            if action and worker.poll() is None:
++                try:
++                    getattr(worker, action)()
++                except ProcessLookupError:
++                    pass
++            try:
++                worker.wait(timeout=grace)
++                break
++            except subprocess.TimeoutExpired:
++                continue
++        else:
++            raise RuntimeError("Gazebo 请求worker退出未确认: "+str(worker.pid))
++        worker.stdout.close()
++        self.worker = None
++
++    def _request_with_deadline(self, service, request, request_type, response_type, timeout):
++        try:
++            seconds = float(timeout)/1000.
++            if not math.isfinite(seconds):
++                raise ValueError("invalid timeout")
++            budget = max(0., seconds) + .5
++        except (TypeError, ValueError, OverflowError):
++            budget = 1.5
++            print("WARNING: invalid Gazebo request timeout; parent wait uses 1.5s", file=sys.stderr)
++        deadline = time.monotonic()+budget
++        if not self.request_lock.acquire(timeout=budget):
++            raise TimeoutError("Gazebo 请求队列等待超时")
++        try:
++            if self.worker is None:
++                self.worker = subprocess.Popen(
++                    [sys.executable, str(Path(__file__).resolve()), "--request-worker"],
++                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
++            incoming, outgoing = self.worker.stdout.fileno(), self.worker.stdin.fileno()
++            os.set_blocking(incoming, False)
++            os.set_blocking(outgoing, False)
++            data = (json.dumps({"service": service,
++                "request": request.SerializeToString().hex(),
++                "request_type": request_type.DESCRIPTOR.full_name,
++                "response_type": response_type.DESCRIPTOR.full_name, "timeout": timeout})+"\n").encode()
++            sent = 0
++            while sent < len(data):
++                remaining = deadline-time.monotonic()
++                if remaining <= 0 or not select.select([], [outgoing], [], remaining)[1]:
++                    raise TimeoutError("Gazebo 请求worker写入超时")
++                try:
++                    sent += os.write(outgoing, data[sent:])
++                except BlockingIOError:
++                    continue
++            line = b""
++            while b"\n" not in line:
++                remaining = deadline-time.monotonic()
++                if remaining <= 0 or not select.select([incoming], [], [], remaining)[0]:
++                    raise TimeoutError("Gazebo 请求worker响应超时")
++                try:
++                    chunk = os.read(incoming, 65536)
++                except BlockingIOError:
++                    continue
++                if not chunk:
++                    raise RuntimeError("Gazebo 请求进程已退出或响应不完整")
++                line += chunk
++            result = json.loads(line)
++            if "error" in result:
++                raise RuntimeError(result["error"])
++            response = response_type()
++            response.ParseFromString(bytes.fromhex(result["response"]))
++            return result["ok"], response
++        except Exception as error:
++            try:
++                self._close_request_worker(abort=True)
++            except Exception as cleanup_error:
++                raise RuntimeError(str(error)+"; Gazebo worker cleanup: "+str(cleanup_error)) from error
++            raise
++        finally:
++            self.request_lock.release()
++
+     def close(self):
++        if self.request_deadline_enabled:
++            if not self.request_lock.acquire(timeout=5.):
++                raise TimeoutError("Gazebo 请求worker回收锁等待超时")
++            try:
++                self._close_request_worker()
++            finally:
++                self.request_lock.release()
++            return
+         with self.request_lock:
+             if self.worker:

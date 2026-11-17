@@ -1,0 +1,182 @@
+{
+  "configById": {
+    "Image!so101camera": {
+      "lichtblickPanelTitle": "SO101 · 原始录像",
+      "imageMode": {
+        "imageTopic": "/so101/camera/overview"
+      }
+    },
+    "3D!so101object": {
+      "lichtblickPanelTitle": "物体姿态 · 原始记录",
+      "followTf": "world",
+      "followMode": "follow-pose",
+      "cameraState": {
+        "distance": 0.8,
+        "perspective": true,
+        "phi": 40,
+        "thetaOffset": 45,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0.21,
+          0,
+          0.02
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "fovy": 45,
+        "near": 0.002,
+        "far": 5
+      },
+      "scene": {
+        "backgroundColor": "#182126",
+        "transforms": {
+          "axisScale": 0.03,
+          "showLabel": false
+        }
+      },
+      "topics": {
+        "/so101/scene": {
+          "visible": true
+        }
+      },
+      "layers": {
+        "so101-grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "0.05m 网格",
+          "instanceId": "so101-grid",
+          "layerId": "foxglove.Grid",
+          "size": 0.6,
+          "divisions": 12,
+          "lineWidth": 1,
+          "color": "#516371",
+          "position": [
+            0.21,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "order": 1
+        }
+      }
+    },
+    "Plot!so101contact": {
+      "lichtblickPanelTitle": "双指接触力",
+      "paths": [
+        {
+          "value": "/so101/contact.fixed_finger_n",
+          "label": "固定指",
+          "color": "#efb366",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/so101/contact.moving_finger_n",
+          "label": "活动指",
+          "color": "#4ccdc4",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "top",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 180,
+      "yAxisLabel": "N"
+    },
+    "Plot!so101joints": {
+      "lichtblickPanelTitle": "关节角度",
+      "paths": [
+        {
+          "value": "/so101/joints.position.shoulder_pan",
+          "label": "肩平转",
+          "color": "#56b4e9",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/so101/joints.position.shoulder_lift",
+          "label": "肩俯仰",
+          "color": "#e69f00",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/so101/joints.position.elbow_flex",
+          "label": "肘",
+          "color": "#009e73",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/so101/joints.position.wrist_flex",
+          "label": "腕俯仰",
+          "color": "#cc79a7",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        },
+        {
+          "value": "/so101/joints.position.wrist_roll",
+          "label": "腕旋转",
+          "color": "#f0e442",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "top",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 180,
+      "yAxisLabel": "rad"
+    },
+    "EpisodeReview!so101episode": {
+      "lichtblickPanelTitle": "回合结果与阶段"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "splitPercentage": 68,
+    "first": {
+      "direction": "column",
+      "splitPercentage": 66,
+      "first": {
+        "direction": "row",
+        "splitPercentage": 64,
+        "first": "Image!so101camera",
+        "second": "3D!so101object"
+      },
+      "second": {
+        "direction": "row",
+        "splitPercentage": 50,
+        "first": "Plot!so101contact",
+        "second": "Plot!so101joints"
+      }
+    },
+    "second": "EpisodeReview!so101episode"
+  }
+}

@@ -1,0 +1,236 @@
+diff --git a/src/modules/mc_pos_control/CMakeLists.txt b/src/modules/mc_pos_control/CMakeLists.txt
+--- a/src/modules/mc_pos_control/CMakeLists.txt
++++ b/src/modules/mc_pos_control/CMakeLists.txt
+@@ -50,3 +50,9 @@
+ 		geo
+ 		SlewRate
+ 	)
++
++# Diagnostic-only build option. Default builds retain the original controller path.
++option(DRONE_HANDOFF_OBSERVATION "Publish position-control consumption observations" OFF)
++if(DRONE_HANDOFF_OBSERVATION)
++    target_compile_definitions(modules__mc_pos_control PRIVATE DRONE_HANDOFF_OBSERVATION=1)
++endif()
+diff --git a/msg/CMakeLists.txt b/msg/CMakeLists.txt
+--- a/msg/CMakeLists.txt
++++ b/msg/CMakeLists.txt
+@@ -60,6 +60,7 @@
+ 	DatamanRequest.msg
+ 	DatamanResponse.msg
+ 	DebugArray.msg
++	PositionControlHandoff.msg
+ 	DebugKeyValue.msg
+ 	DebugValue.msg
+ 	DebugVect.msg
+diff --git a/msg/PositionControlHandoff.msg b/msg/PositionControlHandoff.msg
+new file mode 100644
+--- /dev/null
++++ b/msg/PositionControlHandoff.msg
+@@ -0,0 +1,29 @@
++# Diagnostic observation of one mc_pos_control cycle, not a sender identity ACK.
++# NED position [m], velocity [m/s], acceleration [m/s^2], yaw [rad].
++# uint64 stamps are native PX4 HRT microseconds; no sim-clock conversion implied.
++uint64 timestamp
++uint64 state_sample_timestamp
++uint64 raw_input_timestamp
++uint64 used_input_timestamp
++uint64 output_timestamp
++float32[3] raw_position
++float32[3] raw_velocity
++float32[3] raw_acceleration
++float32[3] used_position
++float32[3] used_velocity
++float32[3] used_acceleration
++float32[3] output_position
++float32[3] output_velocity
++float32[3] output_acceleration
++float32 raw_yaw
++float32 used_yaw
++bool input_updated
++bool raw_input_available
++bool pre_control_failsafe # generated in this cycle
++bool used_local_failsafe # provenance, including retained/old locally generated input
++uint8 update_attempts
++uint8 update_success_mask # bit n: update attempt n+1 succeeded
++uint8 used_branch
++uint8 PRIMARY = 0 # primary path; external source is unknown, post-EKF/takeoff adjustments
++uint8 OLD_INPUT = 1
++uint8 FAILSAFE = 2
+diff --git a/src/modules/mc_pos_control/MulticopterPositionControl.hpp b/src/modules/mc_pos_control/MulticopterPositionControl.hpp
+--- a/src/modules/mc_pos_control/MulticopterPositionControl.hpp
++++ b/src/modules/mc_pos_control/MulticopterPositionControl.hpp
+@@ -61,6 +61,9 @@
+ #include <uORB/topics/hover_thrust_estimate.h>
+ #include <uORB/topics/parameter_update.h>
+ #include <uORB/topics/trajectory_setpoint.h>
++#ifdef DRONE_HANDOFF_OBSERVATION
++#include <uORB/topics/position_control_handoff.h>
++#endif
+ #include <uORB/topics/vehicle_attitude_setpoint.h>
+ #include <uORB/topics/vehicle_constraints.h>
+ #include <uORB/topics/vehicle_control_mode.h>
+@@ -98,6 +101,14 @@
+ 	uORB::PublicationData<takeoff_status_s>              _takeoff_status_pub{ORB_ID(takeoff_status)};
+ 	uORB::Publication<vehicle_attitude_setpoint_s>	     _vehicle_attitude_setpoint_pub{ORB_ID(vehicle_attitude_setpoint)};
+ 	uORB::Publication<vehicle_local_position_setpoint_s> _local_pos_sp_pub{ORB_ID(vehicle_local_position_setpoint)};	/**< vehicle local position setpoint publication */
++
++#ifdef DRONE_HANDOFF_OBSERVATION
++    uORB::Publication<position_control_handoff_s> _handoff_observation_pub{ORB_ID(position_control_handoff)};
++    trajectory_setpoint_s _handoff_raw_input{};
++    bool _handoff_raw_input_seen{false};
++    bool _handoff_setpoint_is_failsafe{false};
++    bool _handoff_last_valid_is_failsafe{false};
++#endif
+ 
+ 	uORB::SubscriptionCallbackWorkItem _local_pos_sub{this, ORB_ID(vehicle_local_position)};	/**< vehicle local position */
+ 
+diff --git a/src/modules/mc_pos_control/MulticopterPositionControl.cpp b/src/modules/mc_pos_control/MulticopterPositionControl.cpp
+--- a/src/modules/mc_pos_control/MulticopterPositionControl.cpp
++++ b/src/modules/mc_pos_control/MulticopterPositionControl.cpp
+@@ -435,7 +435,19 @@
+ 			_goto_control.update(dt, states.position, states.yaw);
+ 		}
+ 
++#ifdef DRONE_HANDOFF_OBSERVATION
++        position_control_handoff_s handoff_observation{};
++        handoff_observation.input_updated = _trajectory_setpoint_sub.update(&_setpoint);
++        if (handoff_observation.input_updated) {
++            _handoff_raw_input = _setpoint;
++            _handoff_raw_input_seen = true;
++            _handoff_setpoint_is_failsafe = false;
++        }
++        handoff_observation.raw_input_available = _handoff_raw_input_seen;
++        const trajectory_setpoint_s handoff_raw_input = _handoff_raw_input;
++#else
+ 		_trajectory_setpoint_sub.update(&_setpoint);
++#endif
+ 
+ 		adjustSetpointForEKFResets(vehicle_local_position, _setpoint);
+ 
+@@ -446,6 +458,10 @@
+ 			    && (vehicle_local_position.timestamp_sample > _time_position_control_enabled)) {
+ 
+ 				_setpoint = generateFailsafeSetpoint(vehicle_local_position.timestamp_sample, states, false);
++#ifdef DRONE_HANDOFF_OBSERVATION
++                handoff_observation.pre_control_failsafe = true;
++                _handoff_setpoint_is_failsafe = true;
++#endif
+ 			}
+ 		}
+ 
+@@ -570,11 +586,28 @@
+ 
+ 			const hrt_abstime now = hrt_absolute_time();
+ 
++#ifdef DRONE_HANDOFF_OBSERVATION
++            trajectory_setpoint_s handoff_used_input = _setpoint;
++            handoff_observation.used_local_failsafe = _handoff_setpoint_is_failsafe;
++            if (_handoff_setpoint_is_failsafe) {
++                handoff_observation.used_branch = position_control_handoff_s::FAILSAFE;
++            }
++            handoff_observation.update_attempts = 1;
++            const bool handoff_first_ok = _control.update(dt);
++            handoff_observation.update_success_mask = handoff_first_ok ? 1 : 0;
++#endif
+ 			// Run position control
++#ifdef DRONE_HANDOFF_OBSERVATION
++            if (handoff_first_ok) {
++#else
+ 			if (_control.update(dt)) {
++#endif
+ 
+ 				// Valid control update - store for fallback
+ 				_last_valid_setpoint = _setpoint;
++#ifdef DRONE_HANDOFF_OBSERVATION
++                _handoff_last_valid_is_failsafe = _handoff_setpoint_is_failsafe;
++#endif
+ 
+ 			} else {
+ 
+@@ -583,17 +616,41 @@
+ 					// Use last valid setpoint
+ 					adjustSetpointForEKFResets(vehicle_local_position, _last_valid_setpoint);
+ 					_control.setInputSetpoint(_last_valid_setpoint);
++#ifdef DRONE_HANDOFF_OBSERVATION
++                    handoff_used_input = _last_valid_setpoint;
++                    handoff_observation.used_branch = position_control_handoff_s::OLD_INPUT;
++                    handoff_observation.used_local_failsafe = _handoff_last_valid_is_failsafe;
++#endif
+ 				}
+ 
+ 				// Still failing / not within timeout - Go to failsafe
++#ifdef DRONE_HANDOFF_OBSERVATION
++                handoff_observation.update_attempts = 2;
++                const bool handoff_retry_ok = _control.update(dt);
++                handoff_observation.update_success_mask |= handoff_retry_ok ? 2 : 0;
++                if (!handoff_retry_ok) {
++#else
+ 				if (!_control.update(dt)) {
++#endif
+ 
+ 					_vehicle_constraints = {0, NAN, NAN, false, {}}; // reset constraints
+ 
++#ifdef DRONE_HANDOFF_OBSERVATION
++                    handoff_used_input = generateFailsafeSetpoint(vehicle_local_position.timestamp_sample, states, true);
++                    handoff_observation.used_branch = position_control_handoff_s::FAILSAFE;
++                    handoff_observation.used_local_failsafe = true;
++                    _control.setInputSetpoint(handoff_used_input);
++#else
+ 					_control.setInputSetpoint(generateFailsafeSetpoint(vehicle_local_position.timestamp_sample, states, true));
++#endif
+ 					_control.setVelocityLimits(_param_mpc_xy_vel_max.get(), _param_mpc_z_vel_max_up.get(), _param_mpc_z_vel_max_dn.get());
+ 
++#ifdef DRONE_HANDOFF_OBSERVATION
++                    handoff_observation.update_attempts = 3;
++                    handoff_observation.update_success_mask |= _control.update(dt) ? 4 : 0;
++#else
+ 					_control.update(dt);
++#endif
+ 				}
+ 			}
+ 
+@@ -604,6 +661,33 @@
+ 			_control.getLocalPositionSetpoint(local_pos_sp);
+ 			local_pos_sp.timestamp = hrt_absolute_time();
+ 			_local_pos_sp_pub.publish(local_pos_sp);
++#ifdef DRONE_HANDOFF_OBSERVATION
++            handoff_observation.timestamp = hrt_absolute_time();
++            handoff_observation.state_sample_timestamp = vehicle_local_position.timestamp_sample;
++            handoff_observation.raw_input_timestamp = handoff_raw_input.timestamp;
++            handoff_observation.used_input_timestamp = handoff_used_input.timestamp;
++            handoff_observation.output_timestamp = local_pos_sp.timestamp;
++            handoff_observation.raw_yaw = handoff_raw_input.yaw;
++            handoff_observation.used_yaw = handoff_used_input.yaw;
++            for (int i = 0; i < 3; ++i) {
++                handoff_observation.raw_position[i] = handoff_raw_input.position[i];
++                handoff_observation.raw_velocity[i] = handoff_raw_input.velocity[i];
++                handoff_observation.raw_acceleration[i] = handoff_raw_input.acceleration[i];
++                handoff_observation.used_position[i] = handoff_used_input.position[i];
++                handoff_observation.used_velocity[i] = handoff_used_input.velocity[i];
++                handoff_observation.used_acceleration[i] = handoff_used_input.acceleration[i];
++            }
++            handoff_observation.output_position[0] = local_pos_sp.x;
++            handoff_observation.output_position[1] = local_pos_sp.y;
++            handoff_observation.output_position[2] = local_pos_sp.z;
++            handoff_observation.output_velocity[0] = local_pos_sp.vx;
++            handoff_observation.output_velocity[1] = local_pos_sp.vy;
++            handoff_observation.output_velocity[2] = local_pos_sp.vz;
++            handoff_observation.output_acceleration[0] = local_pos_sp.acceleration[0];
++            handoff_observation.output_acceleration[1] = local_pos_sp.acceleration[1];
++            handoff_observation.output_acceleration[2] = local_pos_sp.acceleration[2];
++            _handoff_observation_pub.publish(handoff_observation);
++#endif
+ 
+ 			// Publish attitude setpoint output
+ 			vehicle_attitude_setpoint_s attitude_setpoint{};
+diff --git a/src/modules/logger/logged_topics.cpp b/src/modules/logger/logged_topics.cpp
+--- a/src/modules/logger/logged_topics.cpp
++++ b/src/modules/logger/logged_topics.cpp
+@@ -129,6 +129,7 @@
+ 	add_optional_topic("tecs_status", 200);
+ 	add_optional_topic("tiltrotor_extra_controls", 100);
+ 	add_topic("trajectory_setpoint", 200);
++	add_optional_topic("position_control_handoff");
+ 	add_topic("transponder_report");
+ 	add_topic("vehicle_acceleration", 50);
+ 	add_topic("vehicle_air_data", 200);

@@ -1,5 +1,53 @@
 # 重构进度
 
+## 2026-10-24 — 固定X文档导入不再继承旧任务成功
+
+Current：SO101固定盘四样例的实际无运动浏览器检查复现缺口：普通robot-station导入后数据更新，但旧成功任务仍挂在“当前仿真任务”；四例首测失败证据保留，不借配方导入旧成绩代替。
+
+Done：仅将成功导入的commit调用统一使用detachTask=true，沿原方法清本面板taskId/task/error及executionTaskId关联；不删除历史、不停止原任务、不改执行API。原recipe-workflow新增普通Station导入回归。四样例20项实际浏览器通过：盘(.24,-.13)固定、cube独立，.35开度／补证参数、保存刷新和往返相同，旧结果关联已清。原导入QA19项、Jest56项和生产构建通过；两项原包体告警保持。
+
+Evidence：workbench-review-tests/output/fixed-x-import/的before-fix-result.json、result.json、recipe-regression/result.json及root-readback.json。两组浏览器真实控制写请求和pageerror均0；预览POST/scene WS使用明确fixture，任务GET读真实13条历史，原成功ID保留。根另直接比字段、核服务新main.216128d5dc9572125bab.js和真实历史。PID3776050未重启；不将无运动导入当作新HTTP抓放成功。
+
+Remaining/owner：根继续新固定盘文档的真实HTTP→原物理链和Carry活动任务接续；完整50Hz、同世界恢复、20＋20仍未过。Drone极值工具与其测试保持原owner在途，本轮不混入提交；最短入口为对应drone-extrema计划和当前工具测试。Knowledge=already_covered，沿用Wiki§20的观测／动作／交接分列。
+
+## 2026-10-24 — 无人机首次梯度分歧与显式A合同
+
+Current：前7查询同，首个SQP候选分叉；只读trace的两方终态与原报告逐字一致。891查询的同系数A/XYZ范围差≤2.85e-13。中心差分单对仍拒绝；新增显式可选A不等式后，最紧#7四画像×三对共24搜索，两方各12/12过原门。默认仍原Python/无新增约束，不晋级实际采用。
+
+Done：observer深拷贝、缓存未命中/major callback/solver_exit分列，错误仅warning；复用原RootFinder/SLSQP/最终门，不改物理限值。实际首stencil的A梯度差4.47e-8、marginJac差1.19e-7；首Tx位移与负Tx梯度逐值吻合，只定位首次分歧，不推断唯一全程根因。74相关检查、926追踪及337候选/时效读回过，后者含44理想时效情景16条件接纳28预期拒绝。方法/CLI在[接续记录](../../docs/DRONE_RECORDED_STATE.md#首次梯度分歧与显式加速度合同2026-10-24)。
+
+Remaining/Next：Root外向Ay的A峰.999999999998801，仅约1.20e-12余量，不能当跟踪误差预算。根先覆盖原六cut×四画像的24个独立重锚输入，保原门/来源和失败；不增eps或margin网格。实际AJ/地图/终端/跟踪/按时采用仍缺，drone c866441冻结、M2部分完成、M3不启动。无无人机Web/服务、训练、ROS节点、仿真或新落地。knowledge_status=already_covered，数值兼容事实留项目，沿用Wiki§20/CapMesh PIT-004。
+
+## 2026-10-24 — 无人机极值后端完整搜索对照
+
+Current：新增显式metrics_backend回调及--compare-search离线入口，默认None保持Python。最紧#7的四画像×三成对共24次完整搜索，Python12/12过原门，RootFinder9/12过；外向Ay三次均A1.038609981拒绝，即使optimizer.success=true。新后端不晋级默认。
+
+Done：两方同归档seed、同binary、同域/60iter，交替顺序，完整wall含进程创建/关闭。按画像及数学通过/拒绝/未评分分耗时，不将Root拒绝混入成功收益。原最终regen、Python/Bernstein门和axis_knots保留；51项相关检查、310项根独立读回过。原始24行与重新分组报告分别保留，未重跑以改写成绩。详情和CLI见[完整搜索对照](../../docs/DRONE_RECORDED_STATE.md#极值后端完整搜索对照2026-10-24)。
+
+Issues/Next：最终同系数差≤8.88e-16不能证明所有中途探针相同。失败点25个坐标小扰动中有保持规划盒的下降方向，尚未过A门；下一项核外向Ay首次数值梯度/活跃峰分歧与SLSQP停止条件，不扫参数、不选掉失败画像。实际A/J、地图、终端、跟踪与按时采用仍缺，drone c866441冻结，M2部分完成、M3不启动。
+
+保留：期间SO101普通Station导入补片已独立3bce2c7提交，根只读其当前diff/接续记录，未混无人机验收或重验物理。无无人机Web/服务、训练、ROS节点、仿真、控制或新落地。knowledge_status=already_covered，沿用Wiki§20/CapMesh PIT-004，兼容性事实留项目。
+
+## 2026-10-24 — 无人机极值接口同系数核对
+
+Current：M2部分完成，M3不启动。官方GCOPTER便利getter在两个解析反例中分别漏峰/超时；外部S4 shim新增只读诊断模式，不修改默认生成、geometry.search或冻结drone源码。
+
+Done：复用官方RootFinder隔离法，导数副本统一缩放、有限32次外扩端点、独立0/1评价，保物理单位与有符号minVy。24条归档尾轨迹全部对照通过，最大差2.11e-15，原硬审计和axis_knots逐字未变。新binary另存cache，不覆盖默认binary。52项相关检查、465项独立读回通过；范围与CLI见[核对记录](../../docs/DRONE_RECORDED_STATE.md#官方连续极值接口同系数核对2026-10-24)。
+
+Issues：RootFinder仍为浮点诊断，内部求解由owned进程deadline约束，不作为连续安全证明。审查发现的探针异常跨项阻断及finite-large系数范数溢出已修，正反例过。固定曲线72次诊断的中位Python4.918ms、native往返.410ms，二者含V峰；不代表完整搜索提速或实时通过。
+
+Next/owner：根Codex在最紧#7增加显式可选诊断后端，比较完整搜索候选/拒绝与含生命周期耗时；不预设数值扰动后优化路径相同，每条最终候选仍过原硬门。实际A/J、时间有效地图、终端区域、跟踪及按时采用未获资格。无Web/服务、训练、ROS节点、仿真、控制或新落地。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20及CapMesh PIT-004，数值事实留本项目。
+
+## 2026-10-24 — SO101 Carry接续入口收口
+
+Current：复核并接续原八个Carry在途文件，未改Drone离线工具或Mint。根读当前diff，原runtime五项测试新跑通过；既有56项Jest、生产构建和13项无运动浏览器QA所涉前端源码未变（a433d1e至59e5578无workbench源码改动），复用原证据，不与后台Blender抢渲染。
+
+Done：原5186服务已退出、无监听，原持久化SO10113／Drone25任务均终态；按原环境与入口新启node服务，没有kill旧PID。实际SO101 runtime ready=true/resume_carry=true，Drone ready=true/resume_carry=false；原全部任务ID保留，主页与main／Carry chunk按原构建实际服务。向原SO101终态任务接续返回409、Drone不支持返回405，均无新marker或任务。原件在apps/fishbot-control-station/workbench-review-tests/output/carry-handoff/live-api-readback.json。
+
+Evidence：SO101独立仓已固定d93d60f完成原物理resume pass、waiting取消与原timeout两fail保留；源码后续仅P0定位诊断改动，未改Carry／物理函数。这里的实际API检查只验就绪与拒绝，没有触发新抓放或证明浏览器按钮到物理的完整接续回合；不把fixture UI与云端输入标记拼成一次真实网页验收。
+
+Remaining：根接实际原任务的HTTP继续／取消与物理全过程，保留原90sim120wall／244／1mm及全部回退；六技能halt、同世界恢复、20＋20仍未完成。Drone三旧文件及native-session两新文件保持其原owner在途，不混入Carry提交。Knowledge=already_covered，沿用Wiki§20的交接／动作／晋级分列。
+
 ## Current
 
 P0–P6完成本轮交付。源码完成真实导航、返航、运动取消、原任务恢复及同一实例两轮完整抓放运输。P4硬件生产面板已通过100ms交互及真实30分钟长测；P5人工控制八项、文字语音四项通过。最终1552项反馈与641项完整前端检查通过；G生产短测及实验清理完成。实现提交fe06cb47baf04822edb131d6f199bcc5c48d2cbe已推origin/main，远端独立读回与本地相同。

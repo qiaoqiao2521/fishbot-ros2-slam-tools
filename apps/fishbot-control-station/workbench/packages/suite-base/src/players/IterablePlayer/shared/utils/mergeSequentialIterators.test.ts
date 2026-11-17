@@ -1,0 +1,728 @@
+// SPDX-FileCopyrightText: Copyright (C) 2023-2026 Bayerische Motoren Werke Aktiengesellschaft (BMW AG)<lichtblick@bmwgroup.com>
+// SPDX-License-Identifier: MPL-2.0
+
+import { Time } from "@lichtblick/rostime";
+import {
+  IIterableSource,
+  IteratorResult,
+  MessageIteratorArgs,
+} from "@lichtblick/suite-base/players/IterablePlayer/IIterableSource";
+import RosTimeBuilder from "@lichtblick/suite-base/testing/builders/RosTimeBuilder";
+import { BasicBuilder } from "@lichtblick/test-builders";
+
+import { mergeSequentialIterators } from "./mergeSequentialIterators";
+
+function makeMessageEvent(topic: string, sec: number): IteratorResult<Uint8Array> {
+  return {
+    type: "message-event",
+    msgEvent: {
+      topic,
+      receiveTime: { sec, nsec: 0 },
+      publishTime: { sec, nsec: 0 },
+      message: new Uint8Array(),
+      sizeInBytes: 0,
+      schemaName: "",
+    },
+  };
+}
+
+function makeMockSource(
+  start: Time,
+  end: Time,
+  messages: IteratorResult<Uint8Array>[],
+): IIterableSource<Uint8Array> {
+  return {
+    sourceType: "serialized",
+    initialize: jest.fn(),
+    getBackfillMessages: jest.fn(),
+    getStart: () => start,
+    getEnd: () => end,
+    messageIterator: jest.fn().mockImplementation(async function* () {
+      yield* messages;
+    }),
+  } as IIterableSource<Uint8Array>;
+}
+
+// start/end may be omitted to create a "source without time info" (activated eagerly). An
+// error may be passed to make the iterator reject on next() instead of yielding messages,
+// simulating a network, range-read, decompression, or malformed-index error during activation.
+function makeMockSourceWithReturn(
+  start: Time | undefined,
+  end: Time | undefined,
+  messages: IteratorResult<Uint8Array>[],
+  returnFn: jest.Mock,
+  error?: Error,
+): IIterableSource<Uint8Array> {
+  return {
+    sourceType: "serialized",
+    initialize: jest.fn(),
+    getBackfillMessages: jest.fn(),
+    ...(start && end ? { getStart: () => start, getEnd: () => end } : {}),
+    messageIterator: jest.fn().mockImplementation(() => {
+      let index = 0;
+      return {
+        next: async () => {
+          if (error) {
+            throw error;
+          }
+          if (index < messages.length) {
+            return { value: messages[index++], done: false };
+          }
+          return { value: undefined, done: true };
+        },
+        return: returnFn.mockResolvedValue({ value: undefined, done: true }),
+        [Symbol.asyncIterator]() {
+          return this;
+        },
+      };
+    }),
+  } as IIterableSource<Uint8Array>;
+}
+
+describe("mergeSequentialIterators", () => {
+  const defaultArgs: MessageIteratorArgs = {
+    topics: new Map([["topic", { topic: "topic" }]]),
+  };
+
+  it("yields messages from a single source in order", async () => {
+    const source = makeMockSource({ sec: 0, nsec: 0 }, { sec: 10, nsec: 0 }, [
+      makeMessageEvent("topic", 1),
+      makeMessageEvent("topic", 5),
+      makeMessageEvent("topic", 9),
+    ]);
+
+    const results: IteratorResult[] = [];
+    for await (const msg of mergeSequentialIterators([source], defaultArgs)) {
+      results.push(msg);
+    }
+
+    expect(results).toHaveLength(3);
+    expect(results[0]!.type).toBe("message-event");
+  });
+
+  it("yields messages from sequential sources in time order", async () => {
+    const source1 = makeMockSource({ sec: 0, nsec: 0 }, { sec: 10, nsec: 0 }, [
+      makeMessageEvent("topic", 2),
+      makeMessageEvent("topic", 8),
+    ]);
+    const source2 = makeMockSource({ sec: 10, nsec: 0 }, { sec: 20, nsec: 0 }, [
+      makeMessageEvent("topic", 12),
+      makeMessageEvent("topic", 18),
+    ]);
+
+    const results: IteratorResult[] = [];
+    for await (const msg of mergeSequentialIterators([source1, source2], defaultArgs)) {
+      results.push(msg);
+    }
+
+    expect(results).toHaveLength(4);
+    // Verify time ordering — all results are message-events in this test
+    for (let i = 1; i < results.length; i++) {
+      const prev = results[i - 1]!;
+      const curr = results[i]!;
+      expect(prev.type).toBe("message-event");
+      expect(curr.type).toBe("message-event");
+      expect(
+        (prev as IteratorResult<Uint8Array> & { type: "message-event" }).msgEvent.receiveTime.sec,
+      ).toBeLessThanOrEqual(
+        (curr as IteratorResult<Uint8Array> & { type: "message-event" }).msgEvent.receiveTime.sec,
+      );
+    }
+  });
+
+  it("does NOT start second source iterator until its start time is reached", async () => {
+    const source1 = makeMockSource({ sec: 0, nsec: 0 }, { sec: 10, nsec: 0 }, [
+      makeMessageEvent("topic", 2),
+      makeMessageEvent("topic", 8),
+    ]);
+    const source2 = makeMockSource({ sec: 20, nsec: 0 }, { sec: 30, nsec: 0 }, [
+      makeMessageEvent("topic", 22),
+      makeMessageEvent("topic", 28),
+    ]);
+
+    // Collect results, checking that source2.messageIterator is NOT called
+    // until after source1 messages have been consumed
+    const results: IteratorResult[] = [];
+    let source2IteratorCalledBeforeSource1Done = false;
+    let source1Done = false;
+
+    const originalIterator = source2.messageIterator.bind(source2);
+    source2.messageIterator = jest.fn().mockImplementation((...args: unknown[]) => {
+      if (!source1Done) {
+        source2IteratorCalledBeforeSource1Done = true;
+      }
+      return originalIterator(...(args as Parameters<typeof originalIterator>));
+    });
+
+    for await (const msg of mergeSequentialIterators([source1, source2], defaultArgs)) {
+      results.push(msg);
+      if (msg.type === "message-event" && msg.msgEvent.receiveTime.sec === 8) {
+        source1Done = true;
+      }
+    }
+
+    expect(results).toHaveLength(4);
+    expect(source2IteratorCalledBeforeSource1Done).toBe(false);
+  });
+
+  it("handles sources with start time provided in args", async () => {
+    const source1 = makeMockSource({ sec: 0, nsec: 0 }, { sec: 10, nsec: 0 }, [
+      makeMessageEvent("topic", 5),
+    ]);
+    const source2 = makeMockSource({ sec: 10, nsec: 0 }, { sec: 20, nsec: 0 }, [
+      makeMessageEvent("topic", 15),
+    ]);
+
+    const argsWithStart: MessageIteratorArgs = {
+      ...defaultArgs,
+      start: { sec: 5, nsec: 0 },
+    };
+
+    const results: IteratorResult[] = [];
+    for await (const msg of mergeSequentialIterators([source1, source2], argsWithStart)) {
+      results.push(msg);
+    }
+
+    expect(results).toHaveLength(2);
+  });
+
+  it("handles empty sources gracefully", async () => {
+    const source1 = makeMockSource({ sec: 0, nsec: 0 }, { sec: 10, nsec: 0 }, []);
+    const source2 = makeMockSource({ sec: 10, nsec: 0 }, { sec: 20, nsec: 0 }, [
+      makeMessageEvent("topic", 15),
+    ]);
+
+    const results: IteratorResult[] = [];
+    for await (const msg of mergeSequentialIterators([source1, source2], defaultArgs)) {
+      results.push(msg);
+    }
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.type).toBe("message-event");
+    expect(
+      (results[0] as IteratorResult<Uint8Array> & { type: "message-event" }).msgEvent.receiveTime
+        .sec,
+    ).toBe(15);
+  });
+
+  it("handles sources without time info (starts them immediately)", async () => {
+    const sourceNoTime = {
+      sourceType: "serialized",
+      initialize: jest.fn(),
+      getBackfillMessages: jest.fn(),
+      // No getStart or getEnd
+      messageIterator: jest.fn().mockImplementation(async function* () {
+        yield makeMessageEvent("topic", 5);
+      }),
+    } as IIterableSource<Uint8Array>;
+
+    const sourceWithTime = makeMockSource({ sec: 10, nsec: 0 }, { sec: 20, nsec: 0 }, [
+      makeMessageEvent("topic", 15),
+    ]);
+
+    const results: IteratorResult[] = [];
+    for await (const msg of mergeSequentialIterators([sourceNoTime, sourceWithTime], defaultArgs)) {
+      results.push(msg);
+    }
+
+    expect(results).toHaveLength(2);
+  });
+
+  it("activates 3+ sources lazily — third only starts after second is reached", async () => {
+    const source1 = makeMockSource({ sec: 0, nsec: 0 }, { sec: 10, nsec: 0 }, [
+      makeMessageEvent("topic", 3),
+      makeMessageEvent("topic", 7),
+    ]);
+    const source2 = makeMockSource({ sec: 10, nsec: 0 }, { sec: 20, nsec: 0 }, [
+      makeMessageEvent("topic", 12),
+      makeMessageEvent("topic", 18),
+    ]);
+    const source3 = makeMockSource({ sec: 20, nsec: 0 }, { sec: 30, nsec: 0 }, [
+      makeMessageEvent("topic", 22),
+      makeMessageEvent("topic", 28),
+    ]);
+
+    const activationOrder: string[] = [];
+
+    // Spy on messageIterator for source2 and source3 to track activation order
+    const orig2 = source2.messageIterator.bind(source2);
+    source2.messageIterator = jest.fn().mockImplementation((...args: unknown[]) => {
+      activationOrder.push("source2");
+      return orig2(...(args as Parameters<typeof orig2>));
+    });
+
+    const orig3 = source3.messageIterator.bind(source3);
+    source3.messageIterator = jest.fn().mockImplementation((...args: unknown[]) => {
+      activationOrder.push("source3");
+      return orig3(...(args as Parameters<typeof orig3>));
+    });
+
+    const results: IteratorResult[] = [];
+    const timesWhenActivated: Record<string, number[]> = { source2: [], source3: [] };
+
+    for await (const msg of mergeSequentialIterators([source1, source2, source3], defaultArgs)) {
+      results.push(msg);
+      // Record which sources were activated at each message time
+      if (msg.type === "message-event") {
+        const sec = msg.msgEvent.receiveTime.sec;
+        if (activationOrder.includes("source2") && timesWhenActivated.source2?.length === 0) {
+          timesWhenActivated.source2.push(sec);
+        }
+        if (activationOrder.includes("source3") && timesWhenActivated.source3?.length === 0) {
+          timesWhenActivated.source3.push(sec);
+        }
+      }
+    }
+
+    expect(results).toHaveLength(6);
+    // source2 must be activated before source3
+    expect(activationOrder.indexOf("source2")).toBeLessThan(activationOrder.indexOf("source3"));
+    // source3's messageIterator should not have been called before source2's messages appear
+    expect((source3.messageIterator as jest.Mock).mock.invocationCallOrder[0]).toBeGreaterThan(
+      (source2.messageIterator as jest.Mock).mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("cleans up active iterators when consumer breaks early", async () => {
+    const returnFns = [jest.fn(), jest.fn(), jest.fn()];
+
+    // All three sources overlap at time 0, so all will be activated initially
+    const source1 = makeMockSourceWithReturn(
+      { sec: 0, nsec: 0 },
+      { sec: 10, nsec: 0 },
+      [makeMessageEvent("topic", 1), makeMessageEvent("topic", 5), makeMessageEvent("topic", 9)],
+      returnFns[0]!,
+    );
+    const source2 = makeMockSourceWithReturn(
+      { sec: 0, nsec: 0 },
+      { sec: 10, nsec: 0 },
+      [makeMessageEvent("topic", 2), makeMessageEvent("topic", 6)],
+      returnFns[1]!,
+    );
+    const source3 = makeMockSourceWithReturn(
+      { sec: 0, nsec: 0 },
+      { sec: 10, nsec: 0 },
+      [makeMessageEvent("topic", 3), makeMessageEvent("topic", 7)],
+      returnFns[2]!,
+    );
+
+    const results: IteratorResult[] = [];
+    for await (const msg of mergeSequentialIterators([source1, source2, source3], defaultArgs)) {
+      results.push(msg);
+      // Break after consuming only 2 messages
+      if (results.length >= 2) {
+        break;
+      }
+    }
+
+    expect(results).toHaveLength(2);
+    // All active iterators that still had remaining data should have .return() called
+    const totalReturnCalls = returnFns.reduce((sum, fn) => sum + fn.mock.calls.length, 0);
+    expect(totalReturnCalls).toBeGreaterThan(0);
+  });
+
+  it("calls return() on the currently-yielded iterator when cancelled mid-yield (not just heap-resident ones)", async () => {
+    const returnFns = [jest.fn(), jest.fn(), jest.fn()];
+
+    // All three sources overlap at time 0, so all will be activated initially.
+    const source1 = makeMockSourceWithReturn(
+      { sec: 0, nsec: 0 },
+      { sec: 10, nsec: 0 },
+      [makeMessageEvent("topic", 1), makeMessageEvent("topic", 5), makeMessageEvent("topic", 9)],
+      returnFns[0]!,
+    );
+    const source2 = makeMockSourceWithReturn(
+      { sec: 0, nsec: 0 },
+      { sec: 10, nsec: 0 },
+      [makeMessageEvent("topic", 2), makeMessageEvent("topic", 6)],
+      returnFns[1]!,
+    );
+    const source3 = makeMockSourceWithReturn(
+      { sec: 0, nsec: 0 },
+      { sec: 10, nsec: 0 },
+      [makeMessageEvent("topic", 3), makeMessageEvent("topic", 7)],
+      returnFns[2]!,
+    );
+
+    const results: IteratorResult[] = [];
+    for await (const msg of mergeSequentialIterators([source1, source2, source3], defaultArgs)) {
+      results.push(msg);
+      // Break after consuming only 2 messages. The first popped/yielded value is source1's
+      // sec=1 message; resuming after that yield advances source1 (now sec=5, re-pushed into
+      // the heap) and pops source2's sec=2 message for the second yield. Cancellation happens
+      // while suspended at THAT yield, so source2's iterator was popped from the heap and not
+      // yet put back — it must still be cleaned up in `finally`.
+      if (results.length >= 2) {
+        break;
+      }
+    }
+
+    expect(results).toHaveLength(2);
+    // source2's iterator was mid-yield (popped, not yet re-pushed) at cancellation time — it
+    // must still be closed by the finally block, not skipped just because it's absent from heap.
+    expect(returnFns[1]).toHaveBeenCalledTimes(1);
+    // source1's iterator was re-pushed into the heap before the second yield, so it remains
+    // heap-resident at cancellation and should already be cleaned up.
+    expect(returnFns[0]).toHaveBeenCalledTimes(1);
+    // source3 was activated eagerly (all three sources overlap at time 0) and remains
+    // heap-resident, untouched, at cancellation.
+    expect(returnFns[2]).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans up activated iterators when a later source fails during activation", async () => {
+    // Given
+    const source1Return = jest.fn();
+    const source2Return = jest.fn();
+    const activationError = new Error("source activation failed");
+    const source1 = makeMockSourceWithReturn(
+      { sec: 0, nsec: 0 },
+      { sec: 10, nsec: 0 },
+      [makeMessageEvent("topic", 1)],
+      source1Return,
+    );
+    const source2 = makeMockSourceWithReturn(
+      { sec: 0, nsec: 0 },
+      { sec: 10, nsec: 0 },
+      [],
+      source2Return,
+      activationError,
+    );
+
+    // When
+    await expect(
+      (async () => {
+        for await (const message of mergeSequentialIterators([source1, source2], defaultArgs)) {
+          // The second source fails before the first message can be yielded.
+          expect(message).toBeDefined();
+        }
+      })(),
+    ).rejects.toBe(activationError);
+
+    // Then
+    expect(source1Return).toHaveBeenCalledTimes(1);
+    expect(source2Return).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans up previously activated iterators when a later source fails during eager activation of sources without time info", async () => {
+    // Given
+    const activatedReturn = jest.fn();
+    const failingReturn = jest.fn();
+    const activationError = new Error(BasicBuilder.string());
+
+    // Both sources lack time info, so both are activated eagerly, in order, before any seek or
+    // drain-loop logic runs.
+    const activatedSource = makeMockSourceWithReturn(
+      undefined,
+      undefined,
+      [makeMessageEvent(BasicBuilder.string(), 1)],
+      activatedReturn,
+    );
+    const failingSource = makeMockSourceWithReturn(
+      undefined,
+      undefined,
+      [],
+      failingReturn,
+      activationError,
+    );
+
+    // When
+    await expect(
+      (async () => {
+        for await (const message of mergeSequentialIterators(
+          [activatedSource, failingSource],
+          defaultArgs,
+        )) {
+          // Eager activation of the second source fails before any message is yielded.
+          expect(message).toBeDefined();
+        }
+      })(),
+    ).rejects.toBe(activationError);
+
+    // Then
+    // The previously activated iterator must still be closed even though it never got a chance
+    // to be tracked by the drain loop's try/finally.
+    expect(activatedReturn).toHaveBeenCalledTimes(1);
+    // The failing iterator itself was registered in activeIterators before its next() rejected,
+    // so it must also be offered a return() call.
+    expect(failingReturn).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans up a successfully activated source without time info when a subsequent timed source fails during activation", async () => {
+    // Given
+    const activatedReturn = jest.fn();
+    const failingReturn = jest.fn();
+    const activationError = new Error(BasicBuilder.string());
+
+    // The source without time info is activated eagerly and succeeds; with no queryStart, the
+    // timed source is then activated unconditionally right after and fails. This crosses the two
+    // source categories the shared try/finally was introduced to cover together.
+    const activatedSource = makeMockSourceWithReturn(
+      undefined,
+      undefined,
+      [makeMessageEvent(BasicBuilder.string(), 1)],
+      activatedReturn,
+    );
+    const failingSource = makeMockSourceWithReturn(
+      RosTimeBuilder.time({ sec: 0, nsec: 0 }),
+      RosTimeBuilder.time({ sec: 10, nsec: 0 }),
+      [],
+      failingReturn,
+      activationError,
+    );
+
+    // When
+    await expect(
+      (async () => {
+        for await (const message of mergeSequentialIterators(
+          [activatedSource, failingSource],
+          defaultArgs,
+        )) {
+          // The timed source fails right after the source without time info is activated.
+          expect(message).toBeDefined();
+        }
+      })(),
+    ).rejects.toBe(activationError);
+
+    // Then
+    expect(activatedReturn).toHaveBeenCalledTimes(1);
+    expect(failingReturn).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans up previously activated iterators when a later source fails during seek-time activation", async () => {
+    // Given
+    const activatedReturn = jest.fn();
+    const failingReturn = jest.fn();
+    const activationError = new Error(BasicBuilder.string());
+
+    // Both sources' ranges contain the requested queryStart, so both are activated during the
+    // seek-time matching loop, in order.
+    const rangeStart = RosTimeBuilder.time({ sec: 0, nsec: 0 });
+    const rangeEnd = RosTimeBuilder.time({ sec: 10, nsec: 0 });
+
+    const activatedSource = makeMockSourceWithReturn(
+      rangeStart,
+      rangeEnd,
+      [makeMessageEvent(BasicBuilder.string(), 1)],
+      activatedReturn,
+    );
+    const failingSource = makeMockSourceWithReturn(
+      rangeStart,
+      rangeEnd,
+      [],
+      failingReturn,
+      activationError,
+    );
+
+    const seekArgs: MessageIteratorArgs = {
+      ...defaultArgs,
+      start: RosTimeBuilder.time({ sec: 5, nsec: 0 }),
+    };
+
+    // When
+    await expect(
+      (async () => {
+        for await (const message of mergeSequentialIterators(
+          [activatedSource, failingSource],
+          seekArgs,
+        )) {
+          // Seek-time activation of the second matching source fails before any message is
+          // yielded.
+          expect(message).toBeDefined();
+        }
+      })(),
+    ).rejects.toBe(activationError);
+
+    // Then
+    expect(activatedReturn).toHaveBeenCalledTimes(1);
+    expect(failingReturn).toHaveBeenCalledTimes(1);
+  });
+
+  it("cleans up previously activated iterators when a later source fails while advancing through initial empty sources", async () => {
+    // Given
+    const failingReturn = jest.fn();
+    const activationError = new Error(BasicBuilder.string());
+
+    // No queryStart is provided, so only the first timed source is activated up front. It and
+    // the next source are both empty, so the merge keeps advancing — without yielding anything
+    // yet — until it reaches the source that fails.
+    const emptySource1 = makeMockSource(
+      RosTimeBuilder.time({ sec: 0, nsec: 0 }),
+      RosTimeBuilder.time({ sec: 10, nsec: 0 }),
+      [],
+    );
+    const emptySource2 = makeMockSource(
+      RosTimeBuilder.time({ sec: 10, nsec: 0 }),
+      RosTimeBuilder.time({ sec: 20, nsec: 0 }),
+      [],
+    );
+    const failingSource = makeMockSourceWithReturn(
+      RosTimeBuilder.time({ sec: 20, nsec: 0 }),
+      RosTimeBuilder.time({ sec: 30, nsec: 0 }),
+      [],
+      failingReturn,
+      activationError,
+    );
+
+    // When
+    await expect(
+      (async () => {
+        for await (const message of mergeSequentialIterators(
+          [emptySource1, emptySource2, failingSource],
+          defaultArgs,
+        )) {
+          // The merge is still searching for the first source with data when activation fails.
+          expect(message).toBeDefined();
+        }
+      })(),
+    ).rejects.toBe(activationError);
+
+    // Then
+    // The empty sources were exhausted normally and require no cleanup; the failing source's
+    // own iterator was registered in activeIterators before it rejected and must still be
+    // offered a return() call.
+    expect(failingReturn).toHaveBeenCalledTimes(1);
+  });
+
+  it("only activates the source containing queryStart on seek (skips earlier sources)", async () => {
+    // 4 sequential MCAPs: [0-10], [10-20], [20-30], [30-40]
+    const source1 = makeMockSource({ sec: 0, nsec: 0 }, { sec: 10, nsec: 0 }, [
+      makeMessageEvent("topic", 2),
+      makeMessageEvent("topic", 8),
+    ]);
+    const source2 = makeMockSource({ sec: 10, nsec: 0 }, { sec: 20, nsec: 0 }, [
+      makeMessageEvent("topic", 12),
+      makeMessageEvent("topic", 18),
+    ]);
+    const source3 = makeMockSource({ sec: 20, nsec: 0 }, { sec: 30, nsec: 0 }, [
+      makeMessageEvent("topic", 22),
+      makeMessageEvent("topic", 28),
+    ]);
+    const source4 = makeMockSource({ sec: 30, nsec: 0 }, { sec: 40, nsec: 0 }, [
+      makeMessageEvent("topic", 32),
+      makeMessageEvent("topic", 38),
+    ]);
+
+    // Seek to sec 35 — only source4 should be activated initially
+    const argsSeekToEnd: MessageIteratorArgs = {
+      ...defaultArgs,
+      start: { sec: 35, nsec: 0 },
+    };
+
+    const results: IteratorResult[] = [];
+    for await (const msg of mergeSequentialIterators(
+      [source1, source2, source3, source4],
+      argsSeekToEnd,
+    )) {
+      results.push(msg);
+    }
+
+    // source4 has 2 messages
+    expect(results).toHaveLength(2);
+    // source1, source2, source3 should NEVER have had messageIterator called
+    expect(jest.spyOn(source1, "messageIterator")).not.toHaveBeenCalled();
+    expect(jest.spyOn(source2, "messageIterator")).not.toHaveBeenCalled();
+    expect(jest.spyOn(source3, "messageIterator")).not.toHaveBeenCalled();
+    // Only source4 should have been activated
+    expect(jest.spyOn(source4, "messageIterator")).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips sources that end before queryStart but activates the containing one", async () => {
+    // 3 sequential MCAPs: [0-10], [10-20], [20-30]
+    // Seek to sec 15 — should skip source1 (ends at 10), activate source2 (contains 15)
+    const source1 = makeMockSource({ sec: 0, nsec: 0 }, { sec: 10, nsec: 0 }, [
+      makeMessageEvent("topic", 5),
+    ]);
+    const source2 = makeMockSource({ sec: 10, nsec: 0 }, { sec: 20, nsec: 0 }, [
+      makeMessageEvent("topic", 15),
+    ]);
+    const source3 = makeMockSource({ sec: 20, nsec: 0 }, { sec: 30, nsec: 0 }, [
+      makeMessageEvent("topic", 25),
+    ]);
+
+    const argsSeekToMiddle: MessageIteratorArgs = {
+      ...defaultArgs,
+      start: { sec: 15, nsec: 0 },
+    };
+
+    const results: IteratorResult[] = [];
+    for await (const msg of mergeSequentialIterators(
+      [source1, source2, source3],
+      argsSeekToMiddle,
+    )) {
+      results.push(msg);
+    }
+
+    // source2 + source3 messages (source3 activated lazily when source2 exhausts)
+    expect(results).toHaveLength(2);
+    // source1 should be skipped entirely — its endTime (10) < queryStart (15)
+    expect(jest.spyOn(source1, "messageIterator")).not.toHaveBeenCalled();
+    // source2 activated on init, source3 activated lazily
+    expect(jest.spyOn(source2, "messageIterator")).toHaveBeenCalledTimes(1);
+    expect(jest.spyOn(source3, "messageIterator")).toHaveBeenCalledTimes(1);
+  });
+
+  it("orders stamp results by their stamp time", async () => {
+    const stampResult1: IteratorResult<Uint8Array> = {
+      type: "stamp",
+      stamp: { sec: 3, nsec: 0 },
+    };
+    const stampResult2: IteratorResult<Uint8Array> = {
+      type: "stamp",
+      stamp: { sec: 12, nsec: 0 },
+    };
+
+    const source1 = makeMockSource({ sec: 0, nsec: 0 }, { sec: 10, nsec: 0 }, [
+      makeMessageEvent("topic", 1),
+      stampResult1,
+    ]);
+    const source2 = makeMockSource({ sec: 10, nsec: 0 }, { sec: 20, nsec: 0 }, [
+      stampResult2,
+      makeMessageEvent("topic", 15),
+    ]);
+
+    const results: IteratorResult[] = [];
+    for await (const msg of mergeSequentialIterators([source1, source2], defaultArgs)) {
+      results.push(msg);
+    }
+
+    expect(results).toHaveLength(4);
+    expect(results[0]!.type).toBe("message-event");
+    expect(results[1]!.type).toBe("stamp");
+    expect((results[1] as IteratorResult & { type: "stamp" }).stamp.sec).toBe(3);
+    expect(results[2]!.type).toBe("stamp");
+    expect((results[2] as IteratorResult & { type: "stamp" }).stamp.sec).toBe(12);
+    expect(results[3]!.type).toBe("message-event");
+  });
+
+  it("places alert results after timed results due to MAX_SAFE_INTEGER ordering", async () => {
+    const alertResult: IteratorResult<Uint8Array> = {
+      type: "alert",
+      connectionId: 1,
+      alert: { severity: "warn", message: "test alert" },
+    };
+
+    // Both sources overlap so they are both activated initially
+    const source1 = makeMockSource({ sec: 0, nsec: 0 }, { sec: 20, nsec: 0 }, [
+      makeMessageEvent("topic", 2),
+      alertResult,
+    ]);
+    const source2 = makeMockSource({ sec: 0, nsec: 0 }, { sec: 20, nsec: 0 }, [
+      makeMessageEvent("topic", 5),
+      makeMessageEvent("topic", 15),
+    ]);
+
+    const results: IteratorResult[] = [];
+    for await (const msg of mergeSequentialIterators([source1, source2], defaultArgs)) {
+      results.push(msg);
+    }
+
+    expect(results).toHaveLength(4);
+    // message-events (sec 2, 5) come before the alert (MAX_SAFE_INTEGER time)
+    expect(results[0]!.type).toBe("message-event");
+    expect(results[1]!.type).toBe("message-event");
+    // message-event at sec 15 comes before the alert
+    expect(results[2]!.type).toBe("message-event");
+    // alert is yielded last since it has no time and gets MAX_SAFE_INTEGER
+    expect(results[3]!.type).toBe("alert");
+  });
+});

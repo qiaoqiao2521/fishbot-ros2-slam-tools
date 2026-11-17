@@ -1,0 +1,107 @@
+{
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "configById": {
+    "3D!dronelive": {
+      "lichtblickPanelTitle": "PX4 · 本次轨迹回放",
+      "followTf": "world",
+      "followMode": "follow-pose",
+      "cameraState": {
+        "distance": 13,
+        "perspective": true,
+        "phi": 52,
+        "thetaOffset": 45,
+        "target": [0, 0, 0],
+        "targetOffset": [1.5, 1.5, 1],
+        "targetOrientation": [0, 0, 0, 1],
+        "fovy": 45,
+        "near": 0.01,
+        "far": 200
+      },
+      "scene": {
+        "backgroundColor": "#182126",
+        "transforms": {
+          "axisScale": 0.5,
+          "showLabel": false
+        }
+      },
+      "topics": {
+        "/drone/live/scene": {
+          "visible": true
+        }
+      },
+      "layers": {
+        "drone-grid": {
+          "visible": true,
+          "frameLocked": true,
+          "label": "1 m 网格",
+          "instanceId": "drone-grid",
+          "layerId": "foxglove.Grid",
+          "size": 12,
+          "divisions": 12,
+          "lineWidth": 1,
+          "color": "#516371",
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0],
+          "order": 1
+        }
+      }
+    },
+    "Plot!dronealtitude": {
+      "lichtblickPanelTitle": "飞行高度",
+      "paths": [
+        {
+          "value": "/drone/live/telemetry.altitude_m",
+          "label": "飞行高度",
+          "color": "#56b4e9",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "top",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 180,
+      "yAxisLabel": "m"
+    },
+    "Plot!dronespeed": {
+      "lichtblickPanelTitle": "飞行速度",
+      "paths": [
+        {
+          "value": "/drone/live/telemetry.speed_m_s",
+          "label": "飞行速度",
+          "color": "#4ccdc4",
+          "timestampMethod": "receiveTime",
+          "enabled": true
+        }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "top",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp",
+      "sidebarDimension": 180,
+      "yAxisLabel": "m/s"
+    }
+  },
+  "layout": {
+    "direction": "column",
+    "splitPercentage": 76,
+    "first": "3D!dronelive",
+    "second": {
+      "direction": "row",
+      "splitPercentage": 50,
+      "first": "Plot!dronealtitude",
+      "second": "Plot!dronespeed"
+    }
+  }
+}

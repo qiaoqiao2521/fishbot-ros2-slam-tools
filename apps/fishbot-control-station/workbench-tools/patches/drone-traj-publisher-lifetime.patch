@@ -1,0 +1,20 @@
+diff --git a/traj_server.cpp b/traj_server.cpp
+--- a/traj_server.cpp
++++ b/traj_server.cpp
+@@ -238,4 +238,6 @@
+   rclcpp::init(argc, argv);
+   auto node = rclcpp::Node::make_shared("traj_server");
++  const bool release_publisher_on_exit = node->declare_parameter<bool>(
++      "diagnostics/release_publisher_on_exit", false);
+   node_clock = node->get_clock();
+ 
+@@ -273,4 +275,9 @@
+ 
+   rclcpp::spin(node);
++  if (release_publisher_on_exit)
++  {
++    // Release the last publisher-owned node handle before static teardown.
++    pos_cmd_pub.reset();
++  }
+   rclcpp::shutdown();
+ 

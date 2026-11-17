@@ -47,6 +47,20 @@ Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。
 2026-10-20 [真实地图、新底盘与负压实验](plans/scene-hardware-lab-20261020/task_plan.md)三项分别通过：私有实测图known-only往返2.737m；官方J100四轮模型+原生IMU/EKF+Nav2往返3.909m；原生adhesion五例含持压、失压脱落与150.9mm沿墙上行。两条导航碰撞增量均0，旧FishBot默认往返回归通过。工作台/results已接只读报告。仅证明三个独立仿真实验；不把分项相加称为组合爬壁运输，A–D失败保留，见[进度](plans/scene-hardware-lab-20261020/progress.md)。
 2026-10-20 [场景与三维雷达验证](plans/scene-business-validation-20261020/task_plan.md)完成：官方16线PointCloud2进入Nav2；隔离130/9100的D轮畅通往返、绕障往返、堵塞取消三例通过，真实碰撞增量均0。工作台/results展示来源与独立评分。默认仍为合成参考，已有地图导入尚未运动验收；不外推货物签收或sim-to-real。原A/B/C失败保留，见[本轮进度](plans/scene-business-validation-20261020/progress.md)。
 2026-10-18 工作台重构P0–P6完成：四服务身份、分层回执、共享工作面、地图编辑、真实导航/返航/运动取消及原任务恢复已接通。同一MuJoCo实例完成两轮抓放运输，独立物理评分通过。硬件生产浏览器的100ms交互与30分钟长测通过。最终1552项反馈与641项完整前端检查通过；人工控制八项、文字语音预览/确认/原UUID取消四项通过。源码fe06cb4已推既有远端并读回一致。实验ROS实例已清理；本轮只证明仿真闭环。Lichtblick完整源码在独立工作树推进，历史回放不代替当前实时控制验收。范围和证据见[大范围重构](plans/workbench-rebuild-20261018/task_plan.md)、[当前进度](plans/workbench-rebuild-20261018/progress.md)及[运行合同](docs/RUNTIME_CONTEXT.md)。
+
+### 已整合分支的历史记录（不覆盖上述最新状态）
+2026-10-31 CERLAB最小网页接入已实际飞行：固定作者场景/1m航点、原ID刷新、取消返航落地、实时三维及原生MCAP seek/倒退/播放通过。默认工作台选择CERLAB，旧PX4可显式选择；可靠动态/真实深度/全程净空未过。[使用与验收](docs/DRONE_CERLAB.md)，原EGO/MINCO冻结保持。
+
+2026-10-24 已接入N3组件对照/N4历史候选旁路：原N2前缀＋现有MINCO分轴刹停，7条生成、4数学通过、3加速度拒绝；原生三维分色显示并按源曲线替换。常用5186桌面/390px最终19项检查通过，零控制写请求；动态占据和在线采用未核，drone c866441冻结。[方法与边界](docs/DRONE_STOP_CANDIDATES.md)。
+
+2026-10-24 N0/N1已实现：选择现有EGO＋PX4，MINCO S4NU保留离线候选；原深度包抽取四束前视＋一束下视，按源位姿和可用时刻进入原生MCAP。原像素/位姿独立审计通过；页面交付与未验边界见[稀疏观测](docs/DRONE_SPARSE_OBSERVATIONS.md)和[工作台进度](plans/workbench-code-rebuild-20261018/progress.md)。不训练、不写飞控，drone c866441冻结保持。
+
+2026-10-24 无人机历史诊断首版已接入原工作台：名义/实际轨迹、原报告、感知时序与事件共用原生MCAP播放时间。只读、可后退定位；缺备份和缺绝对时刻的见证明示，不改飞行执行器。[使用与边界](docs/DRONE_DIAGNOSTICS.md)，验收见[工作台进度](plans/workbench-code-rebuild-20261018/progress.md)。
+2026-10-20 工作台已接SO101原规划执行器：网页新抓放74.76sim/50.22wall通过，运行中刷新无重发，另轮网页取消及本次录像/报告读取通过。固定模板、方块XY各±10mm和附加障碍；任意程序/实时3D/CY切换仍待后续。见[进度](plans/workbench-code-rebuild-20261018/progress.md)。
+2026-10-20 新底座增加 RobotStation 场景与程序编辑面板：对象树、平移坐标系、目标引用、步骤排序、撤销重做、原生布局保存及 JSON 导入导出。入口 `/so101-station`，P2 部分实施；新仿真执行仍待 P3，当前验证见[进度](plans/workbench-code-rebuild-20261018/progress.md)。
+2026-10-18 Lichtblick 源码重建 P1 已通过：固定完整源码构建、真实 SO101 MCAP、原生回合面板、桌面 11 项与手机浏览器仿真 9 项验收。当前是本机历史回放入口；P2/P3 新任务、取消与查询、CY 切换待接续。实施与边界见[源码重建计划](plans/workbench-code-rebuild-20261018/task_plan.md)，原跨层计划的在途成果仍待串行整合。
+2026-10-18 工作台重构P1完成：四服务运行身份、代次隔离、五资源来源与分层任务回执已接入，通过隔离ROS节点/Java实际服务与浏览器验收。P2共享工作面实施中；P3–P6待实施。范围、商业采纳依据和未覆盖边界见[大范围重构](plans/workbench-rebuild-20261018/task_plan.md)及[运行合同](docs/RUNTIME_CONTEXT.md)。
+
 2026-10-17 协同日志增长已修复：演示默认不写physics，显式诊断2Hz/默认最多32MiB；独立observer实际manifest去重、900秒/1GiB预算，缺失/超限/IO失败生成正式false评分。96定向、22状态/QoS、1223反馈通过；隔离124/125/126实际验证关闭/轮转/超限，6份源起止一致，零动作。旧90GB日志已由用户清理，不计为本轮释放；见[容量修复](plans/cooperation-log-budget-20261017/progress.md)。
 2026-10-17 航点草稿保护已实施：原目标红线、完整圆足迹吸附、航点撤销/重做；按域/地图缓存与Web Locks revision_id比较写入，重连核对、规则变化复核、坏存储内存降级。414前端与1186反馈通过；真实122页面断流/重载/多标签页及手机验收零运动写请求，15秒对比左示意右实际录屏。原ROS owner与物理门槛保持；见[本轮进度](plans/draft-safety-demo-20261016/progress.md)。
 2026-10-16 巡逻/禁区TypeScript库修复并接回`/simulation`：草稿任务转换、路径几何提示、重做、原任务耗时和实际Nav2规则消息导出。原生Goal与Filter消息构造通过；隔离122网页完成两点加返航，同UUID原生4，独立末误差9.25cm并连续停稳，导出与真实ROS发布逐项一致。349前端与1121反馈回归通过。演练状态不代表ROS成功，不支持的逐点等待/HTTP循环/限速规则明确拒绝。见[修复计划](plans/navigation-modules-repair-20261016/task_plan.md)及[验收记录](plans/navigation-modules-repair-20261016/progress.md)。

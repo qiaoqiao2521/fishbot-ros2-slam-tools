@@ -1,0 +1,712 @@
+# 实施进度
+
+## 2026-10-29 首段/FSM四次实际复飞
+
+- FSM相位核对无错，生产SensorData历史5→1后单轮front源年龄.144s（旧例.628s）；四次实际A仍failed，只起飞到点，全部恢复落地/disarm；一次起飞前取消另列。重锚/.3s候选已撤回，仅留有限队列改善，原硬门不变。
+- 工作台控制代码未改；e7939d53原生MCAP原QA三项过、零控制写/WS/页面错误。完整ID/录像/逐轮native表与无损ULog恢复见docs/DRONE_HANDOFF_EVIDENCE.md及研究进度末节。无新离线工具/夹具，MINCO冻结、Station在途保留。Knowledge=already_covered。
+
+## 2026-10-29 refine最小修改实际复飞
+
+- c5012fdd参数对照和46ddc2fc源码候选都planner_emergency/failed，恢复落地/disarm已确认。后者原连续检查保留输入候选一次、无FinalSplineReject，后续rebound首段占据仍拒绝；动态未通过。
+- 工作台执行代码未改；原replay-only QA对46ddc2fc的原生MCAP三项过、零控制写/WS/页面错误。两录像/原包与四步表见docs/DRONE_HANDOFF_EVIDENCE.md末节和研究进度；无新分析器/夹具，MINCO冻结，Station在途改动保留。Knowledge=already_covered。
+
+## 2026-10-28 无人机实际网页飞行交付
+
+- 已跳过专门无飞机暂停；复用5186、原任务入口/预演/录像/MCAP。简化1m宽/4m高墙OFF21ae28f5、ON子集6ca4265e均完成并落地/disarm，原生回放通过；缓存期限误杀项关闭、NATIVE_RECEIPTS=0，不能称全保护通过。
+- 动态A a3d5a7d9/B957c871b仍紧停、恢复阻断且未确认落地，B另超高；已有发送→PX4接收→used，移动柱特定入图因果仍缺。完整新ID/原包/录像及四步表见研究计划factory-air-ground-arm-20261024/progress.md末节和docs/DRONE_HANDOFF_EVIDENCE.md末节。
+- 本轮只修改原QA录屏/回放与两现有补片的缓存拦截策略，没有新增离线工具/合成夹具，也未重跑历史85项。原Station Carry QA119增/3删保留不混交。下一步当前聊天根Codex从本轮EGO直接失败分支最小修改复飞，MINCO冻结。Knowledge=already_covered。
+
+## 2026-10-25 M2六阶段事件与时钟夹具
+
+- Current：外部离线合同34声明case期望全吻合，6一致/28不成立/未评分0。全部actual_execution_admission=not_performed；M2部分完成、M3冻结、动态未过、goal active。
+- Done：新drone-handoff-event-fixtures.py复用原Replay完整硬审计/剩余占据/终端与冻结frames.py。原#4/h=.1 zeroAJ尾、原起点/盒/V1.8/A1/Z2.2不变，不再优化。只隔离一个候选/样本/消费周期，候选版本、实际active body和sample相位均绑定；原生事件不伪造UUID/seq。
+- 时钟/消费：跨域仅显式fixture点对应区间，PX4 boot域/epoch角色不得重标sim，重叠区间标歧义；host只核因果边，不换sim。SDK返回可晚于输入；重发按consumer.used_input_timestamp唯一关联；normal/update成功与old_input/failsafe分开，后两者不晋级新候选。
+- 原门：地图revision变化后原Replay复审可通过；缺revision/终端不足/新占据/未知A/篡改曲线均原门拒。拒绝新提案但继续旧有效候选为正例。selector拒绝时payload关联不评分，避免混因；float32仅为wire关联，不放宽物理状态。
+- 验证：14新＋legacy17＋Replay8共39过，无跳过；根145项原Replay重审/原起点盒限/独立NED PVA/原生身份/拒绝分列及source不变读回过。审查实复现的active替换漏检、原生时钟重标绕锚、NaN fixture阻断JSON三项已修/补负例；坏case局部处理，后项继续。
+- 交接：docs/DRONE_HANDOFF_EVIDENCE.md新节保正负行为表/CLI/范围，原忽略目录handoff-event-fixtures.json及handoff-event-readback.json，不入Git。无Web/服务、训练、ROS节点、仿真、控制、新飞行/落地；drone/PX4/GCOPTER源码保持。
+- Next/owner：根Codex准备默认关闭、可审查的最小旁路观测diff及离线验证，复用现有JSONL/PX4消费点，不应用冻结树，不继续扩同类网格。真实clock/图/终端/消费仍缺，实际闭环需后续新采集。knowledge_status=already_covered，沿用Wiki§20、原生时钟与CapMesh PIT-004，不写memory。
+
+## 2026-10-25 M2接管证据合同与历史关联
+
+- Current：最小字段/补录点已按冻结源码核对，新增离线只读关联器。原8曲线中7条关联38个post-await PVA reference快照，8号task/goal缺失仍未归属；PX4采用证据0，M2部分完成/M3冻结，goal active。
+- Done：复用recorded-tracking.json_rows，不新增控制/消息服务；按task/goal/int trajectory三元组及原receipt/command/reference/recorded sim数值关联，不补ID/最近时间/旧起点。263非空reference中的225条position引用缺对应身份，继续不归曲线；快照不等于调用次数，reference sim在await前采样。
+- 核源：drone c866441的sidecar按active_goal补标task/goal，HTTP202/ROS goal_ack仅接纳/门控；SDK await后更新reference再补身份。PX4 v1.17源码d6f12ad的MAVLink输入和TrajectorySetpoint无候选UUID，MC读取后仍可用旧输入/failsafe，控制输出无分支/原输入身份。只核源码，未验证历史二进制同版。
+- 合同：docs/DRONE_HANDOFF_EVIDENCE.md分已有/可派生/须新采集，列真实AJ、clock/frame/epoch、known-free revision/有效范围、terminal、逐RPC、PX4输入与控制器消费点。clock epoch在新legacy读取器中明确未验证；旁路payload/时序关联仍不称原生UUID ACK，不用空voxels/未来帧补资格。
+- 验证：17新＋原Replay8共25通过、无跳过；根137项实际源行/身份/时序/PVA读回通过，四份源前后逐字节相同。含错task/goal/重复键、坏时序/域外、NaN/超大整数、畸形PVA、伪ACK和坏行/缺文件/坏UTF-8流局部降级；审查复现的math.isfinite超大整数OverflowError已修/补负例，原任务failed/landed/disarmed不改。
+- 产物：原忽略目录handoff-evidence-inventory.json与handoff-evidence-readback.json。仅外部离线工具/测试/文档；无训练、ROS节点、仿真、控制、无人机Web/服务、新飞行/落地，drone/PX4/GCOPTER源码清洁保持。
+- Next/owner：根Codex在离线正反夹具核公共上下文、candidate版本、sample序号、clock epoch/跨域锚、map revision和消费分支关联，复用原Replay审计/拒绝；缺失/歧义局部报告，不新造控制通道或把fixture ACK当真实采用。knowledge_status=already_covered，沿用Wiki§20动作/输入消费分列、原生时钟及CapMesh PIT-004，事实留项目，不更新memory。
+
+## 2026-10-25 M2显式A合同原矩阵覆盖
+
+- Current：原六cut×四有限AJ画像24个独立输入各两后端，共48搜索，Python24/24、Root24/24过原静态盒连续硬门，未执行/未评分0。仅本离线数值片完成；真实接管0，M2部分完成、M3冻结、goal active。
+- Done：直接复用7d94f5a的run_search与原boundary_request/因果PV，不改产品源码/默认；Y内点、Z域[.1,1.2]、inset2mm、二点差分、60iter、实际A=1不等式及原V1.8/A1/Z2.2保持。六组逐项落盘，原报告/负对照均保留。
+- 结果：A范围Py .486875–.968077、Root .485165–.999999999998801；最紧#7外Ay仍仅1.199041e-12余量。优化success6/8，其余18/16迭代上限保留。单次各格Python先，仅记完整wall范围2.663–7.603/.407–1.794s，不称稳定提速/实时；Root与Python最终同系数指标差≤9.992007e-16。
+- 验证：根580项原输入/48唯一格/实际A消费/系数初末PVA与初J/合A读回通过，最紧项重跑原硬审计和knots；全48原审计及knots另独立重算逐字段同，passed=true/errors=[]，ps无metrics残留。首PVA误差≤1.110223e-16、末≤3.858025e-15，会话退出48/48；V峰1.488018、Z最高2.198000000007，YZ余量仍约2mm。PNG目视，原独立审查关于固定顺序与漏格统计的边界已注明。
+- 交接：docs/DRONE_RECORDED_STATE.md末节保六行表和逐cut原CLI。原忽略目录新增native-extrema-original-matrix.json、root-readback、独立readback、PNG/SVG和一次性调用脚本；原始数据/生成报告不入Git。未改无人机执行器、Web/服务或上游；无训练、ROS节点、仿真、控制、新飞行或落地。
+- Next/owner：根Codex按已知缺失设计最小接管证据/事件合同，区分真实AJ、clock/frame、已知自由图revision/有效期、末端区域和实际采用ACK的已有/派生/新采集字段。停止扩同类数值网格，不借未来帧/空占据/wall→sim补资格。c866441/e0444f6保持清洁冻结；knowledge_status=already_covered，沿用Wiki§20和CapMesh PIT-004，数值留项目，不更新memory。
+
+## 2026-10-24 M2原生进程复用与迟交时效
+
+- Current：最紧#7/zeroAJ同输入三组成对的request/pieces/hard_audit/axis_knots完全相同；含完整进程生命周期的wall中位2.891142→1.824805s，少36.88%。仍非实时/实际接管资格，M2部分完成、M3冻结、goal active。
+- 原因：基线search2.998076wall秒中，467次Python极值1.773172s，468次subprocess1.085069s（含native内部.066160s）；最终硬审计.010609s、axis_knots.005399s。cProfile另跑有插桩开销，只定位；不是硬门太慢或MINCO内核算不动。
+- Done：原CLI已支持多JSON行，新增NativeSession薄适配及exchange可选参数，reanchor --reuse-native每search一个Popen，默认旧路径不变。原求解器/门限/迭代数/最终审计均保持；无ID错误按FIFO消费，协议/I/O失败只关当前会话，正常关闭检查非零exit，保body/原I/O异常。未建常驻服务或新调度器。
+- 时效：11显式sim fixture保start33.046/end38.046。晚.2旧首态和CV模型传播均handoff_state_mismatch；理想当前相位条件可用且保start，end及之后trajectory_not_current；wall100秒sim停不推进，未知A/过期图/缺末端覆盖拒绝。不把wall变成sim，不冒称新尾已被飞机执行。
+- 验证：14会话＋8时效＋原64＋11几何＋11S4NU共108项过、无跳过；86项独立归档输入/实际系数/相位/统计读回过，PNG已目视。真实A→B→A含中间数学拒绝仍与oneshot等价；坏回复、分片、读写超时、exit7、原异常与owned PID回收有正反例。原#7仍opt=false/60limit，耗时范围旧2.861–5.536、新1.742–2.271wall秒，保留波动。
+- CLI：原MCAP/clock重新读入，--reuse-native的#7四画像全部原门通过，输入/request/pieces/audit/axis_knots四组逐字相同；原24组报告不覆盖，另存early05-reuse-native两份JSON。
+- 交接：方法/表格/复验在docs/DRONE_RECORDED_STATE.md末节。原忽略目录保留search-timing-probe.json，新增native-transport-and-late-submission.json、native-transport-and-late-readback.json与PNG。无Web/服务、训练、ROS节点、仿真、控制、新飞行/落地；drone c866441冻结。
+- Next/owner：根Codex核官方GCOPTER已有连续极值接口能否复用于每次候选评估，优先减少当前主耗时的重复求根；先核接口与同系数对照，不自写新求根器，不减少或跳过最终硬门。真实A/J、有效地图、终端及按时采用仍未获资格，c866441冻结，M2部分完成、M3不启动。
+- 仓库：期间原SO101八文件已由独立5a30c26提交，根读对应Carry进度并独立核远端同SHA；本轮未修改/重验SO101物理。当前无人机改动独立提交，保留该既有父提交，不再误报八文件dirty。knowledge_status=already_covered；沿用Wiki/ROS2与FishBot§20、原生时钟、CapMesh PIT-004，项目数值不写memory。
+
+## 2026-10-24 M2可用PV重锚独立尾段
+
+- Current：六cut×四显式A/J画像24组均过原连续硬门与axis_knots；新尾由当时可用PV重新求解，不是平移或重标旧尾。实际完整机体接管资格0，M2部分完成、M3冻结、goal active。
+- Done：新增drone-handoff-reanchor.py复用原PV/clock选择、axis_stop_request、qualification画像、S4NU内点、geometry.search及temporal_replay。A/J为零、Ay+.2、Jy±1四点，既不借参考A/J，也不回退事后帧；缺PV/frame/epoch/重复ID只隔离当前源。新尾从cut开始，无原参考前缀，原V1.8/A1/Z2.2/窄盒/Y内点/Z域[.1,1.2]/2mm规划目标不变。
+- 结果：24尾A峰.486875–.968077，#7四画像.953297–.968077；候选V峰1.164216–1.487718，不是飞行实测。YZ部分仍2mm；最小Vy约−7.44e−15仅舍入量级，J峰1.354483–6.932417无原J/推力/角速度资格。
+- 时效：7优化success、17迭代60上限false，搜索/生成/硬审计wall1.505860–3.965739s，tail4.503775–5.000000sim。可行见证不称收敛/实时；wall不加sim、不以cut标签伪造采用。24×12声明静态/理想PVA情景共288，不是飞行成绩；末端.5sim仍非不变集，protect非物理制动。
+- 验证：11新含max_iterations=1真实native四画像边界/axis_knots，加旧53共64检查过、无跳过。1131项独立原MCAP CDR/clock输入与原生系数/连续极值/首尾C3/逐轴停止后区间及fixture读回过，图已目视。内置只读审查建议的temporal异常隔离已修/补负例，保已审math、fixture单列未评分；根独立验收。实际SciPy试探越界clipping警告保留，最终全部原门审计。
+- 交接：方法、六行四画像表和CLI在docs/DRONE_RECORDED_STATE.md末节；原忽略目录新增recorder-PV-reanchored-stopping-tails.json、recorder-PV-reanchored-readback.json、recorder-PV-reanchored-comparison.png。无Web/服务改动、训练、ROS节点、仿真、控制、新飞行/落地；drone c866441清洁冻结。
+- Next/owner：根Codex以最紧的#7为切片，剖析现有生成、连续审计和回放链的耗时，核状态传播与提交截止；不把离线尾段从cut起算当作已按时采用，不盲增画像网格。实际A/J、时间有效地图、终端及跟踪仍未获资格，c866441冻结，M2部分完成、M3不启动。
+- 保留：SO101原八个在途文件继续保留，不混无人机提交；接续owner=根Codex，沿原runtime/execution/station测试与无运动UI QA，物理消费/期限回产品化计划。knowledge_status=already_covered；沿用Wiki/ROS2与FishBot§20、原生时钟、CapMesh PIT-004，项目数值不写memory。
+
+## 2026-10-24 M2参考切点与原记录PV资格
+
+- Current：六个数学/窄盒正例在原1926条PV中均无同cut源stamp；历史可用恒速预测均与参考PV不符。完整状态交接0、执行采用未做、动态闭环未通过，M2部分完成/M3冻结。
+- Done：新增drone-handoff-pv.py，复用原CDR/clock/预测/必要界/系数极值。精确纳秒事后分支与当时可用分支独立；latest source筛选在可用性之后，恒速从source积分，不补A/J，不做最近帧吸附、插值或参考向前/后外推。
+- 结果：六组源龄12–28ms，cut预测P差.156912–.277444m、V差.070584–.214954m/s；较早源同刻实录P差.156498–.276303m。#7源33.028/可用33.032/cut33.046，向上预测差71.003mm对照名义全段Z余量2mm。负Y差向内，不将范数扣每面或将一次偏差当未来碰撞；六PV逐面乐观必要界均not_ruled_out、joint viability未证。
+- 验证：14新＋31原状态/预测＋8Replay共53检查过，无跳过；154项独立原MCAP CDR/clock、原JSONL BSpline和系数实根/逐面差读回过，PNG已目视。首轮独立脚本旧NumPy/list类型错误改数组后重跑；生产结果/硬界未改。
+- Review：内置只读审查所指null/rows:null报告中断和空PV误计compared两项已修/补负例；agent-link沿用此前已知失败的内置备选，不联系其他聊天。原参考数值合同1e−7只用于回归，未改物理容差。
+- 交接：方法/完整六行表/CLI在docs/DRONE_RECORDED_STATE.md末节，docs/DRONE_STOP_CANDIDATES.md已回链。忽略目录drone-committed/748…新增reference-handoff-pv-comparison.json、reference-handoff-pv-readback.json、reference-handoff-pv-comparison.png。不改服务/前端，不重跑构建或浏览器；无训练、ROS节点、仿真、控制、新飞行/落地，drone c866441清洁冻结。
+- Next/owner：根Codex复用既有stop-qualification状态重锚与S4NU入口，从六cut可用PV重解候选，A/J按显式假设分列；先核新首态与完整尾段，不把不同PV接到原参考前缀上继承合同。保持原硬界及c866441冻结，地图/终端/截止/跟踪仍未知，M2部分完成、M3不启动。
+- 保留：SO101原八个在途文件仍未纳入无人机提交；接续owner=根Codex，按原runtime/execution/station测试与无运动UI QA入口审阅，物理消费/期限回产品化计划。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟、CapMesh PIT-004；数字留项目，未写memory。
+
+## 2026-10-24 M2窄盒更早切点与历史时序
+
+- Current：正式十组7生成/5窄盒过/2A拒/3逐面必要界拒；5正例均为#4。另显式#7 h=.05独立报告得到A=.926514窄盒见证。所有结果只属于参考PVA/J＋声明静态盒；M2部分完成、M3冻结、goal active。
+- Done：新增drone-narrow-handoff.py，复用原restrict、necessary、S4NU搜索/完整审计/Replay。原#4/#7接收相位重截h=.1/.2/.4/.6/.8，每cut保自身参考PVA/J、节点左J和原绝对start；源不足h则用实际截断duration。first recorded failure33.452及原完整下一接收分别before/at/after/unknown，不替代在线ready；新candidate_id区分变体，保原trajectory_id。
+- 诊断：#4五档A=.754442/.777721/.783283/.895545/.810276；#7 .1/.2 A=1.050777/1.164543且Y单轴−1.029983/−1.162129，.4起必要界拒。h=.4虽cut33.396早于故障记录也不合必要界；.6/.8已在替换/故障之后，仅反事实。必要界忽略参考A/J连续性、不构成joint viability或实测ICS。
+- 追加：根据本轮Y峰诊断另存#7 h=.05，原十组不覆盖。cut33.046、A=.926514/V1.515465/Z2.198/Y2.028，Y/Z各仅2mm余量；opt=false/60limit，搜索wall3.026s。正式7搜索中5次迭代上限、wall4.743–8.048s；硬审计给有限可行见证，不宣称收敛、实时或物理跟踪。.05sim前缀不是50ms墙钟注入。
+- 验证：10新＋2精确分段＋10原前缀＋8Replay共30相关检查过，无跳过；216项独立原JSONL/BSpline/系数实根/必要界/时序/完整窄盒及选择读回过，PNG已目视。8条各16个理想静态情景共128，6数学正例可接纳、2始终拒；所有snapshot显式窄盒，未知仍未知。
+- Review：内置只读备选指出通过统计漏切点J/尾C3/axis_knots；现合取full_math_gate与narrow_box_gate，补“盒过/合同失败”的计数负例。沿用agent-link已知超时，不联系旧聊天。坏h/源条目/故障元数据分别降级，unknown不计历史前置资格；根独立验收。
+- 产物/入口：原忽略drone-committed/748…目录保留reference-narrow-cut-probe.json、reference-narrow-handoff-comparison.json、reference-narrow-handoff-early05.json、reference-narrow-handoff-readback.json与PNG；方法/命令见docs/DRONE_STOP_CANDIDATES.md末节。只改离线工具/测试/文档，无Web/服务改动、训练、ROS节点、仿真、控制、新飞行或落地证据；drone c866441冻结清洁。
+- Next/owner：根Codex用原实测PV与可用时刻核这些参考切点的交接偏差/毫米级余量，不再盲磨优化。实际A/J、时间有效地图、终端、截止与跟踪采用仍未获资格。SO101原八文件仍在途，入口runtime.test.cjs、execution.test.ts、station.test.ts及无运动UI QA，实际消费/期限回产品化计划，不混本提交。knowledge_status=already_covered；沿用Wiki/ROS2与FishBot§20、原生时钟和CapMesh PIT-004，当前事实留项目，不写memory。
+
+## 2026-10-24 M2垂直时长域与源多项式平移
+
+- Current：固定五维12样本仅#7的Tz=.5/.6/.8过；显式联合域Tz=[.1,1.2]让#4/#7完整A降至.723131/.764559，峰均回原前缀。宽盒原硬界通过，窄盒仍Y拒绝，最高Y2.212936/2.288586；M2部分完成、M3冻结、goal active。
+- Done：geometry.search新增可选z_time_bounds，默认仍(.1,.4)；新增drone-stop-time-study.py复用原N2/原报告/compare/审计/Replay。原参考PVA/J及前缀不动，固定五维对照的总尾长不变；联合重解后完整时长5.800000/5.294058sim，未来覆盖仍按实际末时刻+.5。默认域、原V1.8/A1/Z2.2及2mm规划目标均保持。
+- 数值修复：独立读回曾129中两项失败，#7 Tz=.5/1.0的固定XY PVAJ差3.295e−5/2.834e−4，端点护栏仍过。适配器极短统一段端点重拟合放大舍入误差；现改为官方源系数的long-double binomial时间平移，不重拟合、不合并近节点/缩时。原轴double累计节点保存一次，等节点取右源段，stop后常数，1e−8端点护栏保持。
+- 验证：51项相关检查（8时长＋11几何＋10原前缀＋11S4NU＋3候选＋8Replay）通过，无跳过；129项独立源/系数实根/完整盒/绝对时长/区间XY PVAJ及选择结果读回过，PNG已目视。2条各16个理想静态Replay，不冒称动态物理。联合搜索wall2.386/.197s不是端到端实时证书。旧probe及两份before-translation失败记录保留。
+- Review：沿用agent-link已知超时的内置只读备选，指出坏源索引和NaN/字符串Tz可阻断整报；现逐项跳过+WARNING、声明转有限值/None，严格JSON负例过。数学替换/节点选片已只读核，根独立验收；未联系其他聊天。
+- 产物：原忽略drone-committed/748…目录的reference-z-time-domain-comparison.json、reference-z-time-readback.json、PNG及首轮probe/before-translation；编译/运行/测试命令见docs/DRONE_STOP_CANDIDATES.md末节，DRONE_RECORDED_STATE.md接口段已同步。不修改冻结drone或官方GCOPTER；无Web/服务改动、训练、ROS节点、仿真、控制、新飞行或落地证据。
+- Next/owner：根Codex结合窄盒与原接收/替换时间核更早参考切点及必要刹停范围；不把更长Tz或宽盒正例当通用/动态资格。真实完整状态、当前/未来图、终端区域、截止与跟踪采用仍缺。SO101原八文件继续在途保留，不混提交；最短入口runtime.test.cjs、execution.test.ts、station.test.ts及无运动UI QA，物理消费/期限回其原产品化计划。knowledge_status=already_covered；沿用Wiki/ROS2与FishBot§20、原生时钟、CapMesh PIT-004，项目数值留现有文档，不写memory。
+
+## 2026-10-24 M2原历史前缀接内点尾
+
+- Current：原N2的8窗全部纳入对照；6个+Y生成、#2/#3/#5/#6过原数学界及宽盒，#4/#7仍A拒，另−Y和无身份各1未评分。窄盒Y≤2.03只有#2/#3过，动态资格未闭合。M2部分完成、M3冻结、goal active。
+- Done：新增drone-reference-stops.py，复用geometry.search、原compare和Replay。compare可接尾请求，但初态PVA/J必须与实际原前缀末多项式匹配；最终原生接口身份/段数、C3、内点/逐轴停止和完整宽窄盒均重新审。旧固定参数结果保持，原速度1.8/A1/Z2.2不变，完整前缀仍C2。
+- 验证：10新集成＋3原候选＋8Replay＋10S4NU共31项通过，无跳过；93项独立原JSONL/BSpline导数/系数实根/绝对相位及选择结果读回通过，PNG已目视核对。6条各16个理想静态情景共96；4条正例拒绝替换后继续旧相位，2条数学拒绝始终不给参考。实际地图/物理跟踪未测，不冒称96项飞行通过。
+- 结果：#3完整A从1.674366降至.817598；#4/#7仍1.541738/1.051164，峰在切点后.188203/.163840s，Z约−1.537997/+1.029838、Y约1e−6。Tz均抵.4s旧域上界。6条success仍保2拒，wall .129–2.975s不是实时证书。#1/#5/#6/#7切点晚于后继曲线接收，原替换事实保留。
+- 失败/审查：首轮旧请求缺integral_resolution/走廊导致6条unscored，首报保留；补入口字段和完整pipeline回归。首次独立读回把无candidate的None误当应为False，改为全部事件无参考后93过，首读回保留。qoder-295f60超时60秒无有效结论；内置只读审查指出最终原生回执缺口，已修并补mock负例，根独立验收。
+- 产物/入口：原忽略目录reference-s4-inner-point-comparison.json、reference-s4-inner-readback.json、reference-s4-inner-point-comparison.png；方法与CLI见docs/DRONE_STOP_CANDIDATES.md末节。只改离线工具/测试/文档，无Web/服务改动、训练、ROS节点、仿真、控制、飞行或落地证据；冻结源和官方缓存保持原清洁版本。
+- Next/owner：根Codex保持原PVA/J核#4/#7的垂直时长适用域和连续极值，不预设延时必过；完整状态、时间有效图、终端/截止与跟踪采用继续待办。共享SO101八文件搬运接续仍在途；入口沿前轮runtime.test.cjs、execution.test.ts、station.test.ts及无运动UI QA，物理消费/超时回源SO101计划，未混本提交。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟和CapMesh PIT-004，不写memory。
+
+## 2026-10-24 M2官方S4NU内点薄适配
+
+- Current：同一33.428s的五个有限画像均过原连续硬界＋内点/逐轴停止合同，原三拒绝A峰降至.774606/.754274/.718300。只有静态手工box、A/J假设资格，不是动态成功率或任意初态可行证书。M2部分完成、M3冻结、goal active。
+- Done：复用官方GCOPTER e0444f6/MIT S4NU，新增外部drone-minco-s4-knots.cpp暴露分轴内部位置/时长；不改冻结wrapper/header。geometry.search只增Y比例r/q，初始PVA/J与旧域/硬界保持。raw/full Replay都新鲜核axis_knots，不信缓存passed。49项相关测试（10新＋11几何＋20资格＋8回放）通过；独立系数/同源/连续极值/内点/hold读回81项通过，图已目视核对。
+- Issues：全流程5.209–10.922wall秒，三组60次迭代上限仍保留false，独立审计通过仅是可行见证。native .108–.214ms不可替代总耗时；Z最高2.197736仍毫米余量，J峰7.256–12.636无对应物理界，实际状态/地图/终端/截止/跟踪采用均缺。实际总时长4.050–5.000sim，未来覆盖须按实际段长核。
+- 审查：内置只读核官方接口和CPP/局部合同，两P2（极短hold区间、累计时刻/重构/内点）已修并补负例；Replay由根原生测试覆盖raw和合成前缀＋尾段，不冒称历史实际前缀。首轮测试fixture混比mission target/backup endpoint失败，改正测试来源后重跑，未改实施硬界。沿用已记录agent-link启动故障的内置fallback，不联系旧聊天。
+- 产物/入口：原忽略目录stop-s4-inner-point-qualified.json、stop-s4-inner-readback.json、stop-s4-inner-comparison.png，首轮comparison保留；编译/运行/测试命令在docs/DRONE_RECORDED_STATE.md末节。二进制仅cache，无新依赖安装、Web改动、训练、ROS节点、仿真、控制或飞行。drone c866441与官方缓存保持清洁；SO101八文件在途继续保留，接续入口沿前轮，不混本提交。
+- Next/owner：根Codex复用原N2/N3名义前缀与切点PVA/J，核新S4NU尾段组成完整候选的适用域；实际完整状态、时间有效已知图、终端/截止与物理跟踪/采用继续分列，不晋级实时。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟和CapMesh PIT-004；新事实留项目，未写memory。
+
+## 2026-10-24 M2提前交接对照
+
+- Current：原三个拒绝画像＋两PV零A/J控制，在预定33.248/33.388/33.428s共15组，8过7拒。提前180ms只解除事后Jy画像拒绝，两个外向Ay仍拒；本族结果不能当ICS或飞行成功率。
+- Done：drone-stop-qualification.py新增earlier-handoff模式，复用相同geometry.search/MINCO/硬审计。PV来自同一过去配对的逐时刻积分或精确源时刻事后对照，原A/J画像保持；输出初末合同、峰段号/时刻/向量和recorder/FSM身份。20项资格测试通过（8项新增），122项独立原CDR/录制时钟/多项式读回通过，图已目视核对。原CLI额外回归仍10组/7过/2时效集，regression报告独立保存、不覆盖原基准。
+- 结果：事后Jy峰.934342/.982959/1.027612；两个最早外向Ay范数1.028683/1.024262，Y分量−1.027311/−1.022883单轴已超1，不仅是XY预算挤占。原硬界、2mm内部规划目标和搜索域不变；没有新动态或执行资格。
+- 输入/审查：源V33.208/33.228，recorder upper33.212/33.232；33.388仅原FSM定位，不冒称33.248已消费。oracle改值不影响预测，缺/冲突分支隔离；旧曲线改标签不算新解。agent-link agy因--print启动参数错位失败，未计审查；内置只读审查已核，previous晚到/缺失负例落实。未联系其他已有聊天。
+- 产物与边界：原忽略目录下stop-earlier-handoff-comparison.json、stop-earlier-handoff-readback.json、stop-earlier-handoff-comparison.png及首轮probe保留。方法和CLI在docs/DRONE_RECORDED_STATE.md末节。只改离线工具/测试/文档，无Web改动、训练、ROS节点、仿真、控制或飞行；drone c866441冻结。SO101接续搬运八文件继续原位保留，接续入口沿前节，未混入本提交。
+- Next/owner：根Codex核当前Y单轴C3生成族的几何/末端合同与既有分段自由度，不继续盲扫同类时刻，不预设存在合法备份。完整M2仍缺真实A/J、时间有效自由图、终端/截止及跟踪/采用，M3不解冻、动态闭环未过，goal active。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟与CapMesh PIT-004；新数值留项目，未写memory。
+
+## 2026-10-24 M2非零边界与刹停时效离线资格
+
+- Current：有限A/J敏感性与时效分支可复验；10组中7组过原连续界、3组有界重解仍A拒绝。不是鲁棒通过率；原硬界和drone c866441冻结保持，M2部分完成、M3未启动、goal active。
+- Done：新drone-stop-qualification.py复用原MINCO/连续审计/Replay。原PV保持，过去A按父行的可用FSM证据重算后作为保持假设，缺失只跳该项；Replay接完整C3刹停不编造已执行前缀，并核mode及末端VAJ为0。12新＋8回放＋11几何＋31状态，共62项通过；81项独立源、PVAJ、时长/选择结果读回通过，科学图已目视核对。
+- 时效：两条原零假设候选各12个理想PVA/声明静态图情景。实际5秒＋终端.5秒，使33.428s接纳需覆盖到38.928s；仅新鲜、仅曲线覆盖、未知A、旧头晚交、A漂移、终点占据、时钟不符均不给参考。暂停sim不因wall10秒推进；实际6秒曲线不会被metadata5秒缩短覆盖。有限终端窗口后续仍过期，不冒称不变集或真实保护动作。
+- Issues：3组重解A峰1.035868/1.128389/1.027612m/s²；当前搜索族不能解，不证明全部轨迹无解或ICS。实测A/J、当前已知自由体积、未来动态图、终端安全区域、实时截止和采用/跟踪仍未验证。protect只表示离线参考撤销，无落地或受控制动证明；原748失败保持。
+- 审查：agent-link CBC返回done空正文，未计有效审查；内置只读审查完成，来源可用时刻、局部坏行隔离、完整刹停末端合同已修且补负例。未联系已有聊天。期间SO101已交付92c2962/197e343，保留其变更，本无人机提交只含三个工具/测试、方法文档和本计划。
+- 进行中改动保留：收尾复核又出现SO101“夹起后等待/原任务接续搬运”八文件：so101-runtime.cjs、task-runtime.cjs、runtime.test.cjs及RobotStation的execution.ts/.test.ts、index.tsx、station.ts/.test.ts。差异已定向读回为resume-carry能力/原ID标记及文档意图保留，不是本轮已验收成果；当前仍在改，不混入本提交。接续整合owner=根Codex，最短入口为runtime.test.cjs、execution.test.ts、station.test.ts及原站点无运动QA；物理消费与超时结果须回SO101实施计划，不能凭按钮或HTTP标记宣称搬运完成。其余新增文件以后续实时status为准。
+- 产物：原忽略目录workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/下stop-boundary-temporal-qualification.json、stop-qualification-readback-checks.json、stop-boundary-sensitivity.png。命令及十组表见docs/DRONE_RECORDED_STATE.md末节。无Web改动，不重复构建/浏览器验收；无训练、ROS节点、仿真或控制写。
+- Next：根Codex对三组拒绝输入做有界提前交接对照，保留同类假设、原硬界与原PV来源；先区分时刻/几何与当前生成族的限制，不盲加margin或解冻。knowledge_status=already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟与CapMesh PIT-004；新数值留项目，未写memory。
+
+## 2026-10-24 SO101 原物理抓取证据展示
+
+- Current：RobotStation读取原status／report.skill_evidence，单列“曾确认持续持物”，不由close/hold阶段推断成功、不覆盖task终态。旧记录没有新证据就不补造；无人机显示路径保持。
+- Done：12项相关execution数据测试、最终生产构建通过（原2项包体警告）；10项桌面／390px无运动浏览器通过，写请求0、页面异常0。成功／取消回放显示27.68s，历史失物28.80s，失败／取消与原false结果保持。证据和截图在忽略目录workbench-review-tests/output/grasp-evidence/；scope明确为真实记录回放的HTTP fixture，未启动新物理。
+- 原物理独立验收：SO101固定b21b1d9的3d3cefa8…新原完整抓放pass（77.90sim），49f2d252…运行中取消原fail/exit1保留。两例原monitor重放与skill_evidence完全一致，唯一事件index1383/27.68s；取消观察1511/1512行，taskcancelled／worker清理确认。源码与事实回源SO101 plans/workcell-productization-20261024/m2-grasp-evidence-results.md；本次网页HTTP fixture QA不替代该原物理。
+- Remaining：六技能、同世界恢复与卸货未因增加展示而完成；完整50Hz仍未过（新完整159拍>20ms）。
+- Issues：此前Drone源码／测试／说明已由原owner交付至275f6bf，当前按实时diff只整合本轮4个前端／QA文件及文档，不覆盖其他成果。根继续保留共享树在途内容。
+- 末次交接：Drone原owner又在修改drone-committed-replay.py（7行新增）并新增drone-stop-qualification.py，用于离线停止边界假设与时效核准，尚未执行接纳。保留进行中源码，不混入SO101交付；接续owner=无人机当前根Codex，最短验收入口为该CLI的geometry-report/stopping-report与原native硬审计，完成后再核原记录与测试。共享树不宣称干净。
+- Next：物理证据与技能生命周期继续在SO101主计划推进。Knowledge=already_covered，沿用Wiki《ROS2 与FishBot》§20；未写共享知识或memory。
+
+## 2026-10-24 M2停止位置与时间联合重解
+
+- 当前：新drone-stop-geometry.py复用MINCO stop_positions，SLSQP仅外部有界四维[Tx,Ty,Tz,dy]搜索。初始PVA/J和原target来源保持，不做生成后时间拉伸；终点三联同步，最终原连续审计独立执行。
+- 结果：同一33.428s过去V差分预测PV/事后PV，在原A=J=0假设下均过原连续界，A峰.898199/.990466，XYZ停止约5/.977/.201和5/.930/.176s。Y最高2.028m，规划向内2mm、原硬界2.03m不变。缓存旧合格保持、恒速模型必要拒绝不搜索；事后PV仅明确反事实生成输入，不当在线证据。
+- 验证：11新＋31状态/预测＋8提交回放，共50项通过；独立源报告/多项式读回32项通过，科学对比图已目视核验。独立审查两项来源合同缺口已修并补负例；Qoder超时且句柄缺失后用内置只读审查，无旧聊天协作。首轮测试缺corridor夹具失败，修正后重跑，不计首轮通过。
+- 边界：J峰11.681/9.787m/s³尚无J硬界，约.416/.430wall只是离线观察值；5秒刹停没有时间有效地图、终端区域或实测跟踪证书。next=核非零A/J假设与5秒自由体积/终端/截止条件，owner=根Codex。drone c866441清洁冻结，无训练/ROS节点/飞行/控制；M2部分完成、M3未解冻、goal active。
+- 产物：原忽略的workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/下stop-position-time-comparison.json、stop-geometry-readback-checks.json、stop-geometry-comparison.png。命令和完整边界见docs/DRONE_RECORDED_STATE.md末节。
+- 共享树：本轮期间SO101配方提交7ac8d86/f29a85a已出现，HEAD/origin一致，保留其已提交文档，不混入本无人机提交。当前Station在途改为execution.ts、execution.test.ts、index.tsx三文件，内容是observation_only物理持物证据标签及其负例；已只读理解，继续原位保留，owner=当前SO101根/根Codex，最短接续为execution.test.ts和原站点无运动检查，不能以标签证据宣称回合成功。
+- knowledge_status=already_covered；沿用参考/实际/采用、输入身份和时钟边界经验，新曲线数值留项目，未写memory。
+
+## 2026-10-24 SO101 可编辑配方交换
+
+- 当前：原RobotStation增加“导出工位配方”，原JSON导入可载入station-recipe v1；保留Station、execution、来源及未知可选元数据。导入不执行，旧任务／历史成功不继承；活任务及文件读取竞态保留原ID与取消入口。
+- 已验：74项相关Jest、最终webpack生产构建通过（2项原包体警告）；18项实际浏览器检查通过，含保存刷新／复制撤销／390px、单位／旋转／动态／平台／负时长拒绝、异步文件读取竞态。页面异常0、真实任务写请求0；竞态1次POST为隔离模拟，不到后端。证据在忽略目录workbench-review-tests/output/recipe-workflow/。
+- 实际运行：浏览器new-recipe.json与首轮副本及云输入逐字节相同，交SO101固定fd20512原evaluate_station，10f9c86e…原pass（77.96sim/55.544episode-wall），真实抓放／释放／脱离／回位、244、自由物体与双worker清理通过。另0181e8f1…运输worker运行中真实取消，原fail/exit1保持、taskcancelled、joined/closed及无活线程确认；不是第二次抓放成功。详见SO101 plans/workcell-productization-20261024/m4-recipe-results.md。
+- 发现与修正：配方负时长原被普通草稿容错修成1；仅配方路径改为明确拒绝，自定义执行语义不静默替换，普通Station容错保持。独立审查与最终浏览器负例均覆盖。
+- 边界：米制平移、SO101固定尺寸静态几何、独立episode；不是六技能恢复或FishBot同世界卸货，完整50Hz仍未过。本轮由根Codex串行整合，其他Drone在途成果已由原owner提交7fc5695，无覆盖／混入；Mint未改。
+- 交付末次回读：Drone原owner继续出现drone-recorded-tracking.py（10增3删）及新drone-stop-geometry.py；后者为MINCO离线停止位置／时间比较，源码仍在变化，未按SO101验收或代交。现场保留；接续owner=无人机当前根Codex，最短入口为该CLI与本计划必要刹停节，结束后再独立审查其原始CDR／硬审计结果。本轮仅交付已冻结的RobotStation配方，不宣称共享树干净。
+- Next：SO101主计划继续M2原物理技能证据及安全恢复，连续卸货另接FishBot单一Physics。Knowledge=already_covered，沿用Wiki《ROS2 与FishBot》§20；本轮项目事实不写共享知识或memory。
+
+## 2026-10-24 M2必要刹停条件与旧曲线适用域
+
+- 当前：同一drone-recorded-tracking.py新增可选stopping-fixture/native，复用原CDR、MINCO和连续审计。7 FSM＋1 reanchor、32相关PV比较，未来PV只评分；手工box、假定A≤1、未知实测A/J均明示。
+- 已核：原33.228s缓存的C3刹停早已合格，本轮复验A峰.990634。33.388/33.428s记录PV未被逐面必要界排除，但固定3.5/1/.4s候选Y越界；8个原生审计2过/6走廊拒绝，两个通过是同一缓存重复，不算两次独立成功。恒速预测的Z拒绝不冒充实际ICS。
+- 新限制：33.428s对称终点族y_end=y+vy*T/2、A=J=0下，仅Y轴就要求T≥.832136301s且T≤.805914093s。最低标量A约1.032537225；不能仅调T，也不能推成所有刹停无解。
+- 验证：31状态/预测/刹停＋8提交轨迹，共39项通过；独立原CDR/多项式读回19项通过。Qoder超时且句柄缺失，内置只读审查完成。读回脚本首次NumPy bool_序列化失败，修正后重跑，首次不计。
+- 产物：忽略目录workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/的stopping-viability-evaluation.json和stopping-readback-checks.json；命令、完整表格、条件和后续见docs/DRONE_RECORDED_STATE.md新增节。
+- 接续owner=根Codex：先复用已有stop_positions核停止位置自由度/边界重解，再核时间有效几何。完整A/J、当前已知地图、跟踪包络、终端区域均未获资格。drone c866441清洁冻结，无训练/ROS节点/飞行/控制，M2部分完成、M3未解冻，goal active。
+- 在途保护：Station的index.tsx、station.ts、station.test.ts、stationRecipe.ts、stationRecipe.test.ts及workbench-review-tests/recipe-workflow.cjs共6文件仍保留，不混无人机提交。根先回读最新SO101产品化进度/diff，再运行既有stationRecipe/station定向测试和recipe-workflow隔离检查；未得到交付验收前不声称可合并，不联系旧聊天。
+- knowledge_status=already_covered；沿用既有参考/实际/采用及时间边界经验，数值/曲线族限制留项目，未写memory。
+
+## 2026-10-20 无人机扩展（本轮已交付）
+
+用户批准在同一工作台增加 `/drone-station`，先航点、再 EGO 静态绕障。原 SO101 默认文档与入口保持；RobotStation 按平台选择动作和独立执行 API。
+飞行代码位于独立本地项目 `/home/muqiao/dev/ros2/projects/drone`，没有把 ROS/PX4 依赖加入 Web 构建。
+任务 HTTP 层复用原 SO101 生命周期；共用服务器统一分发 WebSocket，MCAP 继续使用原生播放器。
+
+已通过原 SO101 服务 8 项、无人机服务 5 项、前端 Jest 40 项、无人机无运动浏览器 16 项和 SO101 既有无运动 13 项。最终生产构建通过，保留上游两项包体积警告。
+网页任务 `08793a65-5ed6-4573-b4ed-a98a47d8d3fc` 完成三航点、高度变化、返航、落地/disarm，Gazebo 峰速 0.8156m/s。复制改目标的新任务 `d0d4f904-bce3-4a6a-aa8c-9746342ae279` 空中刷新零重发，取消后实际落地；原任务快照保留。
+MCAP 的 URL 后缀、跨端口资源及 Collada 图片引用已修复。原记录通过原生 seek/播放/暂停/倒退，零控制写请求或 WebSocket，五种官方网格及纹理全 200。浏览器证据在忽略的 `workbench-review-tests/output/drone-replay-final/`、`drone-execution/`、`drone-task-drafts/`。
+EGO 执行器通过 CLI 静态障碍和移动障碍的完整返航回合，以及深度中断、暂停恢复和障碍内目标的真实故障落地。网页先后暴露传感输入间隔与规划速度预算问题；原失败保留，执行源使用同 stamp 配对、匹配的 SensorDataQoS 和保守各轴参数，保持 PVA 与原失效阈值。
+最终同一网页示例 `5c1ac934-4843-477a-ad84-4539eed8e4ed` 完成三航点、规划返航及落地/disarm，Gazebo 峰速 0.6493m/s、MAVSDK 峰速 0.5579m/s，机体保守净空 0.3079m。根独立检查五段最后一秒真值，最大误差均小于 0.5m；本轮无碰撞。实际输入经导入/保存/刷新保持，只有一次起飞 POST。
+常用入口已切至 <http://127.0.0.1:5186/drone-station>，旧 SO101 入口保留。最终 EGO MCAP 从 5187 录制后在 5186 原生 seek/播放/暂停/倒退通过，五种官方网格与纹理全 200，零控制写请求或 WebSocket。SO101 原脚本在 5186 再次 13 项通过，零运动请求。隔离 5187 服务已退出。
+最终证据位于 `drone-ego-execution-sensor-qos/`、`drone-replay-ego-5186/` 和 `station-task-drafts-5186/`；旧失败及 5187 回归均独立保留。传感停滞的底层 Fast DDS 原因未完全证明，不把单个通过回合扩大成可靠性保证。范围限本机单架、静态障碍、Gazebo 理想定位；起飞/降落由 PX4 执行，未验起降段避障。
+完整状态、故障记录和交付由根串行记录于 `/home/muqiao/文档/ChatGPT/ros2/plans/drone-workbench-20261020/`。Knowledge closeout: already_covered。
+
+## Current
+
+2026-10-18，P1 可运行底座、真实记录与原生回合面板已完成独立验收。隔离分支 `codex/workbench-code-rebuild-20261018` 已推送既有远端，适配提交 `fb4a6622d5df024e7851a92f3351b3f223ef584b` 经 GitHub ref 回读一致。新仿真任务、完整能力迁移与 CY 正式切换仍为 P2–P5。
+
+预览：<http://127.0.0.1:5186/so101>。手机浏览器布局：<http://127.0.0.1:5186/so101-mobile>。服务仅监听本机，按 `apps/fishbot-control-station/WORKBENCH.md` 重启。当前读取历史回合，没有发送机器人动作或启动训练。
+
+## Source and build
+
+- 从 FishBot `325fa260096d421d07035c4a64cb765e5006501b` 建立隔离工作树；原 FishBot 工作区、服务及在途运动规划由原根继续维护。
+- 固定 Lichtblick v1.29.1 / `95713edb309d77589b130286642ab149995a5f7b`。导入提交 `0eaa6d9` 的 2,297 个原文件与官方归档逐字节一致；原版权、许可证和测试数据保留。
+- Node 22.23.2、Yarn 4.17.0，immutable 安装通过，`yarn.lock` 未改。Corepack 的父目录 ESM 冲突通过独立缓存作用域修复，没有修改全局 Node 配置。
+- 原版生产构建 147.562 秒通过；最终含移动视口的构建 168.654 秒通过。均只有两项资源体积警告，不宣称加载性能验收。
+- 新面板使用原 Panel、MessagePipeline、seekPlayback。原文件适配仅注册表、默认侧栏、秒显示和 HTML viewport；桌面/手机布局使用原格式。
+
+## Data verification
+
+- 原 SO101 回合：`reviewed-20261014-183003-2405056/full-cycle-20261014-212632-2677556`。转换后 MCAP 为 26,525,186 字节，SHA-256 `73d74dc37a548193ce8fc6109abc421b1a197ce612e164efab83213b4df90d5d`。
+- 共 14,976 条消息：3,328 组关节、接触、阶段、物体姿态，以及 1,664 帧原录像。视频帧 j 对应 trace[2*j+1]，首帧物理 0.04 秒，按原 recorder 源码、帧数与 PTS 核准。
+- 独立全量读回通过：原输入哈希不变、四条来源绑定、七项报告指标、分块与全数据节 CRC、索引读取和全部数值。姿态往返最大误差 2.11e-15。
+- 独立审查曾发现指标、来源绑定和 DataEnd CRC 的检查不足，已补入可重复读回；另有 8 项转换边界、4 项语义/CRC 负例通过。
+- EpisodeReview 的 28 项 Jest、定向 ESLint/Biome 和生产构建通过。独立检查 JPEG 全帧流与原视频重新转码一致。
+- MCAP、视频、报告、日志、依赖、构建和浏览器截图均被 Git 忽略。公开源码不含本地 manifest 或原报告路径数据。
+
+## Browser acceptance
+
+在独立 Chrome 153.0.8010.36 / headless 软件 ANGLE 下运行，未使用日常浏览器资料。以下报告位于 `apps/fishbot-control-station/workbench-review-tests/output/`。
+
+- `baseline-a`：原版 5 项通过，只证明原生读取和播放。
+- `full-c`：最终桌面 11 项通过，203 个请求。首帧即显示 RGB；图像、物体 3D、双指力、关节曲线和回合面板已读取真实数据。前后 seek、播放暂停、分割面板、保存后不带 layoutUrl 重载、移除后保存重载均通过。
+- `mobile-b`：最终手机浏览器仿真 9 项通过，57 个请求；实际 CSS 和 visual viewport 均为 390×844。首帧、报告、播放暂停、滚动及点击阶段到 64.44 秒通过。
+- 两轮 pageErrors、consoleErrors、写请求、外站请求和 WebSocket 均为 0；输入资产起止不变。
+- 根独立查看起点、持物 14.38 秒、落定 64.44 秒和手机截图。三维方块完整可见，桌面三处离画布边界至少 62 像素；录像与物体变化、阶段一致。
+- 最终报告摘要：full-c `7cc0895ca5b1f6adb6ce2297002c190ffefd4f64881e52135a640d72b335fa97`；mobile-b `1a151fd5eee4e07aad783b0d0498bd26bf9cf48ea458da36669eb6138f20618d`。
+
+保留失败证据：full-a 行为通过但坐标轴过大、中心字段错误；full-b 起始物体贴边。调整原相机配置后才通过 full-c。mobile-a 实际 CSS 宽 980 像素，被独立审计否决；补原生 viewport 后才通过 mobile-b。手机底部次要同步/速度选项仍有裁切，已测核心操作可用，不宣称完整手机编辑器。
+
+## Remaining and ownership
+
+- 历史回放通过不等于新的抓放成功。当前 3D 只有记录中的物体姿态，全臂看同步录像；全臂 FK、跨回合换源、实时连接和性能未验收。
+- P2/P3 的入口差异见 findings：FishBot 有 runtime 和协同控制合同；独立 SO101 full_cycle 缺已核实的 HTTP 启动、协作取消及查询适配。根 Codex 与原模块 owner 接续，保留原任务账本与物理评分。
+- 原 FishBot 根仍在运动路径验收。隔离分支不合入其 dirty main；待其可交付基线后串行整合。保留原未提交改动，不替代其测试结论。
+- CY 未部署，旧站点未切换，手机真机与长期性能留后续。
+
+## Knowledge closeout
+
+`already_covered`：CapMesh PIT-004 已覆盖依赖与发布周期隔离；本轮源码、时序、视口和接口边界记录在项目计划，没有新增通用平台或全局规则。
+
+## 2026-10-20 场景与程序编辑接续
+
+用户要求继续修改项目，尽可能复用 CY 成熟产品成果。沿已有 Lichtblick 底座新增 RobotStation 原生面板，采用 RoboDK 对象树、坐标系归属、目标引用和指令列表设计。布局、保存、播放器和历史回放继续使用上游实现。
+
+本轮编辑范围：平移坐标系、对象/目标/障碍、世界位置保持的重挂父节点、指令排序、撤销重做、人可编辑 JSON 导入导出。坏条目警告并局部跳过，无内容哈希锁、前序任务锁或每日限额。
+
+新入口 `/so101-station`；窄屏 `/so101-station-mobile`。俯视虚线仅是程序顺序，右侧录像仍是历史回合。未定义旋转坐标系、工具 TCP、碰撞规划或执行适配，不能将草稿标为可执行任务。P2 部分实施，P3 未完成。
+
+验证：10 项局部单元测试、生产构建和定向 ESLint 通过；桌面/390px 共 11 项浏览器交互检查通过，编辑/撤销重做/步骤排序/导出/刷新后的完整 JSON 一致/手工导入/坏 JSON 保留草稿/手机编辑均覆盖，pageerror 与运动写请求为 0。最终截图与结果位于被忽略的 `workbench-review-tests/output/station-editor/`。构建保留上游两项包体积警告，不宣称加载性能通过。接续 owner：根 Codex。独立 SO101 full_cycle 仍要求已有 motion-plan/preflight，不能直接消费任意新坐标；需在 SO101 侧接入重新规划及原任务生命周期。
+
+Knowledge closeout：already_covered。继续采用 CapMesh PIT-004 的 Web/机器人依赖隔离，不新增通用知识规则。
+
+本轮修复：上游 `isLayoutEqual` 忽略基线配置中不存在的新键。最初布局只有面板标题，导致 `station` 内容无法保存。两个入口布局现包含完整初始 station，面板默认配置也包含 station；保存通过原 `updateLayout` 与 `overwriteLayout`。移除当前地址的 layoutUrl 后刷新，不再重新导入初始模板。相关原生比较回归有 2 个测试。失败试验未误记为通过。
+
+## 2026-10-20 P3 规划执行接入（进行中）
+
+用户授权接已有规划执行器。复用 SO101 `run_visual_grasp.run_physical_episode` 的实际控制器和原评分，新增薄 CLI 适配；预览服务仅提供本机任务提交、原 ID 查询、协作取消和结果读取。UI 明确点击才提交，刷新只恢复原任务。每回合独立产物目录，可并行，不新增每日限额或内容哈希门锁。
+
+首版边界：固定完整抓放程序，方块受支持的小范围 XY 修改、已有/新增障碍；无法映射的程序/坐标必须明确反馈。通用程序执行器和真机不在本轮。根负责 HTTP/整合；内部 worker 分别负责原生执行适配和面板调用。验收至少覆盖新完整回合、协作取消、刷新不重发和输入拒绝。
+
+
+### P3 固定模板验收完成
+
+- SO101 新增 station_executor/test_station_executor，原 run_physical_episode 增加可选场景/进度/取消/视频/控制器参数，默认历史路径保持。复用已核准 floor_yaw 与28mm释放高度。canonical原现场保留，发布同步到既有SO101交付分支。
+- Node薄适配提供runtime、任务提交/原ID查询/列表/协作取消与报告/录像Range读取。每任务独立快照与产物目录，可并行；同ID只启动一次。面板重载/刷新只GET，不POST。
+- UI明确显示本次任务和历史回放；终态、原物理报告和本次录像独立显示。技术报告默认折叠。新建布局初始化executionTaskId，原布局也可从任务目录恢复最近任务。
+- 18项面板/transport、3项Node进程合同、SO101 35项定向测试与生产构建、定向ESLint通过。包体积两警告保留，未宣称页面加载性能或50Hz。
+- 真实浏览器在隔离5187通过新抓放、运行中刷新原ID/零重发、原报告、视频Range读回、再次启动和取消。成功任务 `fd3e7408-b4da-4d44-a186-ce8b90d61447`：74.76sim/50.219wall，grasp_success/place_success/controller_done均true，safety_stop=false，静稳7.52s；release审计通过、脱离后接触峰值0。新录像468帧，640×480/6.25fps；独立浏览器实际播放和seek通过，readyState=4、error=null。
+- 网页取消任务 `a4604f07-7251-489e-9f40-c8e5d745b2e6`：4.16sim，cancelled、passed=false，无safety_stop，26帧部分录像完整。总2次显式启动+1次取消POST；刷新无重复POST。pageErrors=0。
+- CLI另验修改方块X=.245和新增障碍，实际初态及XML确认消费，在25.30sim协作取消。首CLI默认旧释放高度触发再次接触，失败保留；未修改原安全判据。
+- 本机5186已换为新服务，SO101_ROOT指向已同步的独立交付工作树；原任务成功/取消与报告经5186读回。CY未部署，训练/实机/20+20未启动，任意目标或自定义程序仍不支持。
+
+证据：忽略的 `workbench-review-tests/output/station-execution/result.json`、截图与 `workbench-tools/output/station-tasks/<id>/`。浏览器测试是新物理执行，右侧共享时间轴仍属历史回放，未声明新的实时三维联动。根Codex负责后续更多任务/参数和CY部署；本轮固定模板接入完成。
+
+Knowledge closeout：already_covered。沿用既有任务ID恢复与CapMesh PIT-004依赖隔离，接口细节留项目文档。
+
+执行器已提交推送既有 SO101 分支 `codex/colab-twin-20261001`，提交 `c33a4df`。本工作台通过 `SO101_ROOT` 指向该交付工作树。新增执行UI后，原编辑器11项浏览器验收也通过；零运动写请求，旧编辑/保存/导入行为保持。
+
+## 2026-10-20 当前任务实时三维（已验收）
+
+用户授权将新任务和编辑草稿接入成熟3D底座。复用现有 @foxglove/ws-protocol、ws 和 Lichtblick 原生3D/数据源，沿用原MuJoCo模型/FK，不新增渲染器。SO101 worker输出世界空间的完整机械臂、夹爪、物体及场景；Node只转标准SceneUpdate和同源STL。预览与任务画面显式切换，草稿编辑不得覆盖运行状态；取消/终态强制保留最后物理姿态。原控制与评分保持。根负责WS/整合，内部worker分别负责几何和UI/布局。
+
+验收：改物体/障碍的预览确实更新，完整新回合的机械臂/物体同步，取消/终态姿态保持，任务隔离，原编辑和执行接口无回归。后续由根记录实际结果，不能把消息数或页面启动当三维验收。
+
+
+### 实际结果与交付范围
+
+- Web生产构建通过，保留上游两个包体积警告；23项RobotStation Jest、8项Node进程/原生协议测试、SO10119项几何/执行适配测试、定向ESLint及语法检查通过。原编辑器11项浏览器交互也通过，预览POST允许，但运动提交为0。
+- 完整浏览器新任务`e6ddc0ce-682c-4923-aebb-1990b3840784`：74.74sim/106.662wall，真实夹起、放稳、脱离和回位通过，无安全停止；静稳7.52s、scene_seq=838、scene_final=true。最终物块中心约(0.238631,0.139046,0.009961)m，实际到达蓝盘。
+- 另一网页任务`5f390fa1-ad63-433f-ab4d-32cf7d9fe924`：5.12sim取消，scene_seq=36、scene_final=true。Web当前源与原任务末态几何逐值一致；切到草稿再切回可恢复同一末态，未回跳到默认姿态。
+- 独立浏览器覆盖：修改方块与附加障碍确实更新三维且零运动；完整13STL加载、17实例；运行中编辑隔离、刷新同ID零重发、实际模型运动、新录像Range、终态保持、390px完整模型和无横向溢出。pageerror=0、模型请求失败=0。首次手机截图在模型未加载完时拍摄，未作为完整模型验收；等待13个资源后重新目视确认。
+- 复核补齐可选显示模块导入降级：导入移至scene callback内，由原warning catch处理；额外回归证实缺显示模块仍保留原定位拒绝结果，没有把显示异常覆盖为物理失败。正常模块路径不改物理控制。
+- 证据：忽略的`workbench-review-tests/output/station-live/result.json`及initial/running/success/cancelled/mobile截图；真实运行数据在`workbench-tools/output/station-tasks/<id>/`。显示约10Hz，不声称新50Hz、长期性能、CY或实机通过。
+
+Knowledge closeout：already_covered。沿用PIT-004依赖隔离和现有任务身份/分层验收知识；模型变换、UI加载时机和本轮证据留本项目。
+
+## 2026-10-20 可复制、可改目标任务（已验收；开发过程保留）
+
+已定位场景/规划/评分三处目标一致性，复用既有Station JSON、saveConfig和任务生命周期。控制worker已提供place_xy默认兼容接口与83项局部通过结果，根待独立复核和实际物理验收；UI/评分worker并行实施。未将局部绿灯记为新目标抓放成功。
+
+
+新目标CLI首测(.22,.17)在64.40sim失败：真实物体已落新蓝盘，轨迹in_place_tray/place_floor_contact均true，但release后脱离IK残差0.001792被原门拒绝，整轮不得计成功。失败完整保留于SO101 delivery忽略的output/station-task-goals-20261020/goal-a，控制owner继续定位目标变化后的脱离路径；根未放宽阈值或回退旧中心。目标报告字段也发现会被monitor状态覆盖，已移入reset_record随原报告收尾输出。
+
+
+冻结浏览器第一轮默认任务58d6cdbb成功74.80sim；复制保存/刷新与原快照隔离检查均通过。但副本目标(.20,.20)在32.14sim搬运IK拒绝（residual .001608），任务a2601d76保持失败。控制owner使用保存transport snapshot区分任务不可达与固定60mm中转路线不可达，未改IK/碰撞阈值，根暂停新的物理回合但继续UI与文档工作。首次浏览器结果原样保留output/station-task-goals-before-hover-repair，不被后续成功覆盖。
+
+
+### 数据驱动目标最终验收
+
+- 生产构建通过（仍两项上游包体积警告）；26项面板Jest、定向ESLint、91项SO101定向测试及81 subtest通过。新目标/旧目标拒绝、全外廓与原58mm边界、实际/规划XML与预览一致、台面外拒绝、异步目标、候选碰撞/取消/全失败不部分提交、脱离原采样与异常身份均覆盖。
+- 无运动浏览器13项通过：深复制、蓝盘五片随XY整体平移、原尺寸、保存/导出/刷新完整JSON、旧结果不恢复、JSON再导入、13STL加载和真实390×844无横向溢出；motionPosts=0、pageerror=0。手机按钮显示与布局已验，手机触控复制未另行计通过。最初手机截图1600px和后续并行任务状态自然变化造成的测试假设失败均未计通过；脚本修复为真实viewport与本页面零运动写请求后重验。
+- 冻结浏览器12项完整通过：默认任务`0a7fa8c1-ef91-48b4-a60d-bccffe0e6e05`74.80sim/100.940wall；同页复制改为(.20,.20)、保存刷新，新ID`bc8ada28-efd1-4f8a-bdf3-45fe7014da24`77.06sim/110.560wall成功。两轮之间未改Python；原快照未变。B物块最终(0.198959,0.198737,0.009961)m，位于新盘且在旧盘验收区域之外；落稳约7.50s、无安全停止、控制器完成，随后可再次复制且零额外任务POST。
+- 首次A失败原输入(.22,.17)在最终源码CLI重验75.16sim/63.479wall通过抓放、脱离和回位。默认仍60mm中转/37mm脱离；B正式54mm中转/25.615mm脱离。未知RuntimeError降级缺口已独立复现、分类修复并回归；最后源码对B保存快照离线重演150/150采样、separation_end逐字段一致，无物理步；A为最后源码的完整回合。
+- 初次A64.40sim脱离失败、初次B32.14sim搬运失败和原输入/报告均保留；没有改IK精度、限位、1mm/0.2mm或释放评分，也没有退回旧目标。通用技能自由编排、其他物体/台面高度、CY、真机、20+20与完整50Hz继续未验。
+
+证据：忽略的`output/station-task-goals/`、`station-task-goals-before-hover-repair/`、`station-task-drafts/`和真实task目录；SO101的`output/station-task-goals-20261020/`保留A及离线重演。两实现分支由根串行提交推送，研究仓单独记录。Knowledge closeout：already_covered，沿用Wiki按当前任务选择验收依据、ROS2与FishBot第20节的分层物理验收和PIT-004；本次目标/路径参数留项目，不写个人记忆。
+
+
+## 2026-10-24 无人机历史诊断交付
+
+- 入口：常用5186的`/drone-diagnostics?taskId=748f910e-f0f8-4ecf-b2d5-22b7b15d57e6`；手机追加`&mobile=1`。5187完成隔离验收后归还。
+- 复用原播放器、三维、X500网格与任务身份。659个源仿真时刻的派生MCAP包含scene/telemetry/diagnostics三通道；原日志、MCAP和报告未改写。
+- 11项Node局部检查通过，含旧MCAP、双WebSocket共存及缺真值/损坏行/报告ID不符/只读HTTP/反向读取。定向ESLint与生产构建通过，保留两项上游包体积警告；初次lint问题已修复。
+- 实际历史记录桌面1440×1000及手机390×844检查9项通过：原ID与终态、故障跳转、前后seek、播放暂停、无时刻事件禁用、缺失通道说明、无横向溢出。控制写请求0、实时WebSocket0、pageerror0。
+- 截图和result.json保存在忽略的workbench-review-tests/output/drone-diagnostics-release；根已目视核对。曲线和原报告的全频评分分列，回放不构成新飞行验收。
+- 当前环境的SO101模型导出Python路径不存在，服务启动给出WARNING。本片不使用它；仅双WebSocket合同单测通过，没有宣称SO101完整三维/物理回归。
+- 未改drone飞行源码、未启动PX4/Gazebo、未训练；动态闭环仍失败，在线备份、精确拒绝绝对区间和全帧感知延迟链仍待补齐。
+- Knowledge closeout: already_covered，沿用Wiki/ROS2与FishBot§20及源时钟/回执分层经验。事实留本计划；未修改共享知识或memory。owner=本对话Codex。
+
+
+## 2026-10-24 N0/N1选型与只读稀疏观测交付
+
+- N0选择EGO＋PX4现有执行/历史基线，MINCO S4NU仅离线候选；完整GCOPTER、稀疏网络和NavRL未接入。来源、许可、接口及差异见[稀疏观测](../../docs/DRONE_SPARSE_OBSERVATIONS.md)。
+- N1从原748深度包抽取1329帧/3372束（前681×4、下648×1）；965hit、2407no_return。源像素字节、斜距/光学方向、同源理想Gazebo光学位姿、分离时钟和可用包络保留。0未对齐/0重复/单时钟回合；不称四向ToF、真实VIO或稀疏控制。
+- 独立原CDR审计3372像素/1329位姿通过：斜距误差≤1.78e-15m、世界端点≤7.11e-15m。56帧可用时已过期，全部不生成新鲜射线；前/下视最长源间隔1.124/.892s。数据缺口不能直接当注入丢帧率或准确传输延迟。
+- 6项Python及14项Node局部检查、定向ESLint、最终生产构建通过；仍两项上游包体积警告。合成细柱、大小端/行填充、光学旋转、无回波/无效、时钟reset、未来/过期及旧诊断/双WS均覆盖，没有重跑全部机器人实验。
+- 5187隔离、常用5186最终各13项浏览器行为检查通过（桌面1440×1000、手机390×844）；原ID/失败报告、射线与表格、过期清除、故障seek/后退/播放暂停均通过。writes=0、live websockets=0、pageerror=0。根已目视核对两端截图；手机使用原生2px标注线解决世界尺寸线宽的子像素不可见。
+- 常用入口：`http://127.0.0.1:5186/drone-diagnostics?taskId=748f910e-f0f8-4ecf-b2d5-22b7b15d57e6`；手机追加`&mobile=1`。原生MCAP保留原659个位姿时刻，完整源帧在独立JSON；缺导出时只降级本片，不影响原任务回放。
+- 证据：忽略的`workbench-tools/output/drone-diagnostics/<id>/sparse-observations.json`和`sparse-audit.json`；页面QA在`workbench-review-tests/output/drone-sparse-release/`及隔离`drone-sparse-acceptance-v5/`。早期审计/截图检查失败保留：整数ns修复审计浮点假失败；颜色背景误判和手机线宽失败未计通过。
+- 复验：先按文档离线抽取/独立审计，再执行`STATION_TEST_URL=http://127.0.0.1:5186 DRONE_SPARSE_EXPECTED=1 DRONE_DIAGNOSTIC_ID=748f910e-f0f8-4ecf-b2d5-22b7b15d57e6 node apps/fishbot-control-station/workbench-review-tests/drone-diagnostics-browser.cjs`。不启动ROS节点、仿真或飞行。
+- 内置只读复核未发现核心P1/P2问题，.25s标签/射线边界差异已统一并局部复验；agent-link工具未加载，已如实告知，未联系其他已有对话。原SO101模型Python路径WARNING保持，未宣称SO101实际三维/物理回归。
+- drone始终c866441且清洁；未改算法、未启动PX4/Gazebo、未训练。动态闭环仍失败、在线备份未接入。下一切片为N2轨迹接口旁路资格，不能把本片当控制成功。owner=本对话Codex。
+- Knowledge closeout: already_covered。沿用任务身份/回放、原生时钟与PIT-004；数值与兼容性发现留项目，未改共享知识或个人memory。
+
+
+## 2026-10-24 N2精确分段接口交付
+
+- 离线新增drone-trajectory-primitives.py，复用原audit_retiming.curve、SciPy PPoly、audit_minco证书，不新增求解器、传感器或控制owner。8条记录在收到相位起取0.8s，共23段；三次多项式高阶补零复用原3×6容器。原首尾PVA/J、绝对sim时间和空身份保留。
+- 8窗conversion通过、8窗V/A/Z证书clear（原离线候选1.8m/s、1m/s²、2.2m）；PVA拼接误差≤1.48e-15。最大J跳变2.268873m/s³原样保留，只声称C2。occupancy=unverified，execution_admission=not_performed。不是新飞行、动态通过或在线MINCO接管。
+- 两个局部Python检查通过：段内相位、初态PVA/J、A超界拒绝、跨节点PVA/J、常量轴和空身份。独立只读审查核对相位/Taylor/补零/身份/资格，无核心阻断；确认.8s为本次值而非CLI硬上限。没有改UI、服务或运行依赖，不重复Web构建和浏览器检查。
+- 忽略产物：workbench-tools/output/drone-primitives/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/exact-windows.json。初次constant-axis-error报告保留（当时仅7窗），修复后8窗warnings为空。原记录、drone c866441和5186只读页面保持。
+- [方法、结果表与命令](../../docs/DRONE_TRAJECTORY_PRIMITIVES.md)为最短接续入口；N2仅精确分段资格，单段压缩/教师/模型比较未做。后续选定实际候选再接旁路，不自动训练、启动飞行或解冻。owner=本对话Codex。
+- Knowledge closeout: already_covered。采用Wiki/ROS2与FishBot原生源时间、参考/实际分层及既有连续审计；数值、C2合同与代码适配留项目，不写memory。
+
+## 2026-10-24 — SO101 工作区开发样例接入中
+
+根Codex沿SO101 `plans/workcell-productization-20261024/` 接续。RobotStation新增两样例按钮与显式execution往返；原task-runtime/UUID/取消/scene/录像保持。默认±10mm不变，新声明域不代表连续物理已验，原失败和历史结果不继承到草稿。
+
+数据层33项、任务服务3项通过；生产构建通过，仅原两项包体积警告。桌面／390px九项浏览器检查通过，零tasks写请求／pageerror；真实导出fixture经SO101准入检查通过。根查看两屏截图。5186以交付SO101_ROOT及planning-venv显式恢复，已有5187别人的服务未动。新网页完整物理待验，不使用此前开发CLI4/4替代。
+
+本轮只提交RobotStation、so101-runtime、样例浏览器检查和本记录/说明。DroneDiagnostics/drone-diagnostics/drone-candidates仍由原owner在途，保留不纳入本次提交；不停止它们的服务或任务。主FishBot dirty main未改。Knowledge=already_covered，项目状态回源SO101主计划。
+
+
+## 2026-10-24 N3组件对照/N4历史候选交付
+
+- 原生axis_stop/S4NU接N2参考前缀，固定停止时间3.5/1/.4；7条生成、4数学过、3A拒绝、1无任务身份未评分。切点PVAJ最大误差约2.30e-16，尾内J连接约4.77e-13，完整原前缀仍C2。动态占据/终端区域未知、未采用执行，保原V1.8/A1/Z2.2。
+- 新增离线drone-stop-candidates.py、只读drone-candidates.cjs和原生面板子节；/drone/candidates随原MCAP时间，紫候选/红拒绝与原报告分列，父曲线替换后不串用。未写飞控或另建播放器。
+- 3项原生Python检查＋17项Node定向检查、定向ESLint和生产构建通过（仍2项上游包体积警告）。可选null/坏行降级、缺原生程序、真实非零参考J、保原PVA/A拒绝和旧接口/双WS均覆盖。初始lint空值表达式已修复。
+- 隔离5187和常用5186最终各19项浏览器检查通过：#7红线/1.082 A拒绝、#6数学过/占据未知、#8无身份/旧尾清除、原稀疏/后退seek/原报告回归；桌面及390px，writes=0、live WS=0、pageerror=0。根目视核对正负候选、原父替换及手机。
+- QA：忽略的workbench-review-tests/output/drone-candidates-release/（含candidate-panel、math-pass、parent-replaced截图）；首轮toolbar颜色误判在drone-candidates-acceptance/保留，未算通过。JSON在原诊断缓存同ID的stop-candidates.json，首版stop-candidates-first-comparison.json保留。
+- 常用5186兼容后端已存在并复用；旧工具会话已失效，先核实际端口/工作目录/只读能力，不重复启动进程。构建在隔离输出验证后移入默认web/.webpack，上一版在忽略的drone-candidate-previous-build-20261024保留；5187已停。未改其他机器人运行环境；SO101 Python路径WARNING仍未修，未宣称其实际物理/3D回归。
+- agent-link qoder超时无活会话，CBC结束但无正文，均不当通过；内置只读审查提出可选坏JSON阻断原回放，已最小修复并原负例核对。根负责实际结果与串行整合。
+- [使用/参数/数字与边界](../../docs/DRONE_STOP_CANDIDATES.md)。本片完成N3组件基线与N4历史旁路，N3任务级比较、M2滚动提交、M3动态闭环及后续空地臂联动仍未完成；下一项M0源码/许可及CommittedTail差异，不自动训练、解冻或飞行。owner=本对话Codex，整体goal保持active。
+- Knowledge closeout: already_covered。沿用任务身份/源时钟、动作与物理资格分层及PIT-004；数值、可选输入降级和CLI兼容性留项目，未写共享知识或memory。
+
+## 2026-10-24 — SO101 网页开发布局2/2原物理通过
+
+沿原5186样例按钮→task-runtime→Station执行器完整新跑，右task6e86ec73-db38-4d19-b48d-56dec4c1006c、左taskf7c265d5-5668-4643-a2f0-b7db2bc05d83均原passed/grasp/place/done=true。78.02/78.08sim、59.131/58.445episode-wall；planned/measured各244，free/weld0/mocap0，无无效轨迹、障碍接触或安全停机。释放/脱离/回位、双worker清理及两份488帧录像由根与独立reader核实，warnings=0。
+
+浏览器每例一次POST，原harness刷新同ID/无重发、报告与视频Range206断言通过；仅checks标签保存在结果，独立JSON核查不外推完整网络时序重建。前述九项无运动检查、33数据/50Python/3服务及构建通过保持。实际SO101运行采用显式交付ROOT/planning-venv，已独立核ready及完整物理；不据此改写无人机诊断页自身历史WARNING或N3/N4的验收范围。
+
+SO101来源084cc7f，工作台本轮abc0ac7/2b9fd90；并行Drone源码已由原owner提交并推送de94a6d，原成绩保留，本轮未改其模块。主FishBot dirty main及Mint未触碰。5186继续可用；5187原owner自行收尾，本轮未停止他人进程。原件在station-tasks/<ID>、浏览器output/workspace-execution-20261024[-left]-v1/，均不提交。
+
+本轮未采EpisodeTiming或精确process CPU，unknown保留；旧Kaggle计时不填此空缺。SO101连续包络、恢复、20+20、50Hz与同世界卸货仍未完成，继续回源SO101主计划推进M1b。Knowledge=already_covered，领域事实只写原计划。
+
+
+## 2026-10-24 M0 / M2完整轨迹静态回放
+
+官方Gatekeeper源码/许可与本地原型对照已核，见[方法与边界](../../docs/DRONE_COMMITTED_REPLAY.md)。机载包许可TODO，未移植；现有CommittedTail＋MINCO＋连续审计以外只有离线薄适配。
+
+新增workbench-tools/drone-committed-replay.py和8项局部检查。已复现admit后首次tick倒退仍track，外部适配以有限时钟高水位修补；不改冻结drone。重审完整前缀/尾段、上下文和地图有效期，不信任缓存passed。
+
+实际N3#6/#7系数的16个静态反事实情景已运行/回读：#6原V1.680871/A.981600/Z2.133051，#7 A拒绝后旧绝对相位保留；占据/终点侵入、未知/过期图、暂停漂移和时间回退均按具体原因撤销选择。原1.8/1/2.2硬界不变。
+
+输出在忽略的apps/fishbot-control-station/workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/selection-replay.json。地图/未来覆盖和理想PVA是声明的fixture，不是原动态感知；protect输出空参考，不是实现安全恢复。M2未完成，动态闭环未通过。
+
+8新局部检查＋原N3三项/N2两项，共13项通过；实际报告20项读回检查通过，9份变更文档72处本地链接无缺失，diff检查通过；内置只读审查无阻断，根核实际结果。AGY启动参数错误无审查结果，未改其配置、不联系旧聊天。未改网页/服务，无需重构建或浏览器QA；5186旧历史展示保持。无训练、飞行、ROS或控制写，drone c866441冻结。
+
+后续由本对话从有来源的实际状态/预测、时间有效地图和终端区域资格接续M2，M3不自动启动。knowledge_status=already_covered，项目事实不写个人memory。
+
+
+## 2026-10-24 M2原CDR状态与地图资格
+
+实现[原记录资格](../../docs/DRONE_RECORDED_STATE.md)：原depth-input MCAP有1926条/drone/ego/odom，复用CDR与N1 clock_bracket读取PV，不启动ROS节点。位置为理想Gazebo，速度为sidecar因果差分；A未记录，不补参考值。
+
+1899条取得录制可用上界，27条未包围保留未知。首发33.452s前195个源时刻对照：P峰.292422/P95 .276889m、正Z峰.073111m、V差峰.219773m/s。7个FSM/bag PV误差≤6.95e-13，345个truth源时刻P完全一致；是同源存储核对，不是独立定位。
+
+33.388s FSM用了33.228s odom：混时P差.385835m，同刻差.166906m。两条odom早于新曲线起点保留未评分，未反向外推。审查提出FSM曲线接收/frame泛化缺口，已修补并用负例验证。旧#5/#6名义高度余量.071047/.066949m低于历史正Z差，只作诊断，不晋级为反事实控制包络。
+
+原1138次/425cell阈值见证和单格两次膨胀变化均是局部记录；原MCAP无完整地图通道。front源32.968、融合结束33.332，down源33.100、结束33.356；FSM开始33.388。完整地图、未来安全集、终端区域、PVA和飞控采用仍未获资格。
+
+9新局部＋8原静态回放检查通过；实际原CDR输出16项读回检查通过，图已生成并目视核。JSON/PNG在忽略的workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/，命令见方法文档。CBC返回空正文无审查结果，内置只读fallback给出具体问题，根修复并重跑。
+
+没有改服务或UI，不重建/重跑浏览器。drone c866441冻结/清洁，无训练/飞行/控制写。M2未完成、动态闭环未通过。下一步在冻结边界内评测现有PV外推的误差/时钟适用域，不把估计A冒称实测A；由本对话接续。knowledge_status=already_covered，项目数值留本仓，未写memory。
+- 收尾核对：9份变更文档75处本地链接目标无缺失，diff检查通过。代码/文档按既有qiaoqiao2521分支提交；原CDR、JSON/PNG和日志均留忽略目录。
+
+
+## 2026-10-24 M2固定PV预测基线
+
+在已有drone-recorded-tracking.py增加--forecast，不建第二套读包/调度。缓存保持、恒速、过去V差分估计A三种基线固定；原PVA/飞行源码不变。recorder可用与FSM消费证据分路，未来PV只评分，评分时间偏移0–.016s公开。
+
+949组旧记录case（942 recorder＋7 FSM），33个请求因评分样本越首发/缺失而排除。7 FSM位置RMS .164031/.007136/.003245m，峰值.239405/.010564/.006433m；CA首个样本比CV差，未晋级运行默认。33.388s真实跟踪P差仍.185380m，预测误差变小不能替代控制资格。
+
+20项状态/预测检查（原9＋新增11）与原静态回放8项通过。内置只读审查指出整型/字符串同stamp冲突绕过和NaN首发截止两项，已修补/补负例。Qoder首轮建议有效、二次审查超时，get_status确认该句柄缺失，没有重启同任务。
+
+实际JSON/PNG在原workbench-tools/output/drone-committed/748f910e-f0f8-4ecf-b2d5-22b7b15d57e6/的pv-forecast-evaluation.json与pv-forecast-comparison.png；图已目视核对。参数/表格/复验见docs/DRONE_RECORDED_STATE.md新增节。生成数据和原日志不提交。
+
+工作树另出现RobotStation/station.ts、index.ts、station.test.ts与新stationRecipe.ts/test.ts共5个配方在途文件，语义为SO101 independent_episode包。尚无本轮交付/验证回执且文件在工作期间出现，保留现场、不混入无人机提交。接续owner=根Codex，需从原Station importer/recipe定向测试入口复核并查对应产品化进度，当前不宣称其验收或废弃；不联系其他旧聊天。
+
+无人机c866441冻结、无训练/ROS节点/飞行/控制写。M2未完成、动态闭环未通过。下一项预测后参考偏差/必要制动可行域和时间有效几何，由本对话接续。knowledge_status=already_covered，项目数字留SpecMesh，未写memory。
+- 本轮独立CDR读回17项通过，1926源消息逐个核对预测输入/评分PV，949 case保持原首发截止与时间来源。8份变更文档72处本地链接无缺失，diff检查通过。
+
+
+## 2026-10-25 M2默认关闭观测补片（未应用）
+
+Current：两份可审查patch已保存，11局部检查过/无跳过；drone c866441、PX4 d6f12ad、GCOPTER e0444f6冻结保持，M2部分完成、M3不启动、动态闭环未过。
+Done：复用原任务JSONL与uORB/ULog。sender逐SDK调用保host/sim、身份上下文和ENU/NED，失败/取消不改原控制；PX4保真订阅raw、实际used、输出、计算分支/次数/结果及跨周期本地failsafe来源。默认不写sender日志/不发布诊断；消息注册/logger配置仍变化，不能称全构建不变。
+验证：补片只应用临时副本，原树apply --check通过。原/补片真实函数及C++控制块对照覆盖两模式、七分支组合、写入失败/取消、无更新/无raw、前置与保留failsafe、最终计算失败仍输出。独立审查发现raw误用和前置/跨周期来源丢失，已局部修复并补负例。旧数学/事件夹具未修改，不重复全套机器人实验。
+Issues：官方uORB生成器在系统Python缺genmsg，未安装；完整PX4生成/构建、ULog/JSONL延迟丢帧、跨域对应/原生来源、真实AJ/地图/终端仍未知。补片不接MINCO实时执行、不证明采用ACK。
+交接：[观测合同与补片说明](../../docs/DRONE_HANDOFF_EVIDENCE.md)含两个diff与精确测试入口。Next/owner=根Codex，先在临时副本核已有隔离Python与官方生成/构建；不应用冻结树、不自动飞行。
+Knowledge：already_covered，沿用Wiki/ROS2与FishBot§20、原生时钟与CapMesh PIT-004。agent-link dsh45s超时无返回不作证据；本对话内置Agent仅只读审查，未联系其他聊天。新项目事实未写memory。
+
+
+## 2026-10-25 M2官方生成与OFF/ON构建
+
+Current：既有观测补片在临时副本完成官方uORB生成及px4目标OFF/ON编译链接，原冻结树未变。M2部分完成、M3未启动、动态闭环未过。
+Done：直接复用已有venv，未安装依赖。新配置默认OFF，控制器命令无观测宏；完整1075步构建exit0。再启用ON，真实mc_pos_control含宏重编译、11步链接exit0。两产物均离线读为x86-64 ELF，没有执行。前轮同版11局部检查保持，不重复全项目测试。
+Issues：可选GStreamer缺依赖，23个未初始化子模块不属于本次px4目标；不扩大到其他插件/板型。同步记录延迟、ULog完整性、MAVLink ingress、跨域对应、实际采用、AJ/地图/终端仍未获资格。现有check_minco_link只读ocm掩码，不证明新增topic消费。
+清理：五个构建日志成员压缩并完整解压读回，报告/归档留原忽略目录。已移除临时源码/build/ccache及两个辅助文件，目录分配空间1306947584B；空闲8566022144→9872965632B。保留原源码/venv/旧构建/遥测。恢复入口见docs/DRONE_HANDOFF_EVIDENCE.md新节；没有遗留编译会话。
+Next/owner：根Codex等待用户明确解冻隔离仿真启动及无解锁采集；获授权后先核有限记录，不默认解锁或飞行，不将topic缺失/未激活改判成功。Knowledge=already_covered，沿用Wiki§20与CapMesh PIT-004；本轮事实留项目。仅文档和忽略的构建证据变化，不新增补片、框架或同类网格。
+
+
+## 2026-10-25 M3无解锁实际输入读回
+
+Current：3852首轮依赖启动失败保留，b913 Loiter和b34 Offboard未解锁对照完成；外部PVA→PX4 raw有证据，地面保护仍改写used。M3仅无解锁输入片完成，完整M3/动态未过，M2部分完成。用户“解除”仅覆盖独立副本启动/未解锁采集，不含arm/起飞。
+Done：新drone-disarmed-observation.py复用原Flight/SITL/preflight_only及listener/logger，默认不请求Offboard，显式模式选项从未解锁状态start/stop，不使用arm API。已有mesh-libs补入cache并预检必要导入；未安装依赖或改冻结树。
+实测：两轮各18调用/18返回、各36事件，坐标三阶量及应用yaw同frames.py。Loiter raw兼容0/962行；Offboard 6组PVA在raw兼容74/953行，原轨迹日志3行，原生yaw误差4.371139e-8rad为观察值。原生arming全部1，arm/disarm命令0；Offboard nav14确认，SDK模式请求与原生状态分列。ground guard把used改为NaN位置/速度及acc=[0,0,100]，所有控制行PRIMARY/mask1不代表实际执行外部PVA。ULog dropout0不代表uORB无损。
+验证：10局部检查过/无跳过，另官方pyulog＋冻结frames独立读取三轮记录。修了父预检可能land/return_home、armed瞬态/流结束漏检、RPC挂起、清理取消漏SDK及runtime.close异常吞摘要；末次流结束停mode负例覆盖，正常路径未变不重复仿真。Loiter退出有rclpy context invalid，模式轮两条176额外ACK警告保留、未冒称修复。
+清理：12所属PID及其进程组已退出，目标三端口关闭；临时源码/build/ccache1310040064B、两个辅助文件、三个etc生成链接已删。保留三轮全部小体积原始证据及observer归档，清理后独立再读回成功。原三个冻结repo HEAD/clean已核，原cache未删。目录/恢复入口见docs/DRONE_HANDOFF_EVIDENCE.md最新节；最新独立报告在b34.../independent-readback.json。
+Next/owner：根Codex核真实clock来源/对应区间、ingress/输入身份及地面改写诊断，仍不解锁/飞行。Knowledge=already_covered，沿用Wiki§20动作/消费/实际执行分层与原生时钟、CapMesh PIT-004，新的兼容性事实留项目，不写memory。本轮qoder超时发生在后续额度限制更新前，不作证据且未重试；内置Agent仅本对话只读复核。按最新规则优先AGY/ZCode，Qoder/CBC临时额度阻断期间跳过，同批不反复探测，DSH暂停。
+
+
+## 2026-10-26 M3原生接收与时钟观测
+
+- Current：接收/控制原生记录片完成，M2部分完成、完整M3/动态未过；保持未解锁及三处源码冻结。精确入口见docs/DRONE_HANDOFF_EVIDENCE.md同日最新节。
+- Done：新增默认OFF的px4-handoff-ingress.patch，依赖既有consumption；记录wire头/掩码/PVA、接收/发布决定/HRT及ground/rampup原生原因。采集器仅增加一个查询topic；新只读审计不发控制、不强选歧义、不混clock。
+- 实测：724首次listener有、ULog缺；定位optional启动登记后改nonoptional，新adb两轮各18调用/18返回。adb53条ingress中21非Offboard/32发布调用，26次控制新raw按stamp/PVA关联；962行全部地面改写。SDK True0，原生arming全1/400命令0。两轮真值已录窗XYZ跨度0。原生差0–8ms只属sim域，重复stamp4组及记录序号缺6个保留，不称实时/无丢失/唯一采用。
+- 验证：27局部过/0跳过；真ON1076步与修日志增量、末OFF构建通过；独立pyulog重算并在删副本后再过。26相符不替代完整M3/动态；额外176ACK警告保留未修。
+- 收尾：已删1310269440B临时源/build/ccache、三个辅助文件、四生成链接；八所属PID/进程组无残留，完整原记录/模型/失败及精确patch归档保留。cleanup.json记录可用空间5053059072→6363344896B，恢复/复验入口在证据文档。
+- Next/owner：根Codex核已有发送边界样本身份/源有效期/SDK缓存重发；PX4新接收stamp不等于新候选。保持不解锁/飞行。Knowledge=already_covered，沿用Wiki§20/原生时钟及CapMesh PIT-004；兼容性事实留项目。Qoder/AGY --pick均ready选择Qoder，真实短审查60s超时后不重试，改本对话内置审查/局部测试；不联系其他聊天，DSH暂停。
+
+
+## 2026-10-27 候选期限与SDK缓存核查
+
+- Current：完成核查与反例，未改冻结控制源；M2部分完成、完整M3/动态未过。无ROS、PX4/Gazebo、解锁或飞行。证据入口docs/DRONE_HANDOFF_EVIDENCE.md同日新节。
+- Done：15项真实AST局部核查确认现有身份/龄期/stop/newgoal/goal_hold保护，其中4个observed_diagnostic复现普通HTTP返回后取消仍发、source_end过期但sample .25仍发、小回退在容差内、land回退后旧周期节拍。这4项均非修复通过声明，冻结源未改。
+- SDK：新增有限真实SDK＋既有pymavlink synthetic peer诊断，复用官方v4.0.5缓存与50ms周期。e92单PVA RPC后12重复包、position后9禁V/A、stop后0；末6dde为11/9/0，wire时间更新不代表新候选。仅三RPC、无arm；synthetic ACK不当PX4接受。ss实见SDK监听*，结束关闭，不以客户端loopback冒称bind仅本机。
+- 验证/问题：18局部检查过/0跳过（4项未修见证）。d031在cleanup后NaN日志序列化失败保留；诊断已用null＋字段名留未知，并补清理退出竞态/最终超时检查。独立读回末轮11/9/0、SDK版本/0arm与PID/端口关闭。没有重跑旧飞行/全机器人实验。
+- 收尾：保留三个UUID的必要小记录/失败/一份官方源码及来源；SDK PID455546/449011、版本探测434536退出，目标端口关闭；删1242B临时路径文件，无新大构建产物。原drone/PX4/GCOPTER clean保持。Next=根Codex准备默认关闭的发送前再校验与land回退节拍最小补片，不应用冻结树、不解锁飞行。Knowledge=already_covered，沿用Wiki§20/源时钟/CapMesh PIT-004，版本兼容事实留项目。--pick选AGY（Qoder timeout），实际45s任务超时后即内置；内置只编辑指定测试，根独立跑18项与实际SDK读回，未联系其他聊天。
+
+
+## 2026-10-27 默认关闭的发送前复查修复
+
+- Current：三处方法级修复已在独立临时副本验证，默认关闭、未部署到冻结执行源；完整M3/动态未过。补片为workbench-tools/patches/drone-command-revalidation.patch，入口docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- Done：DRONE_REVALIDATE_COMMAND仅1启用；普通/state HTTP后再核cancel/operator及原输入限制，发送时继承sidecar .3 sample和source_end+.15/零VA目标hold；land查询间/查询内回退均恢复复验，正常.2节拍保持。原Flight.run异常/恢复入口未改。
+- 验证：18局部过/0跳过，主与独立内置审查分别实跑最终版；6组deadline与真实Sidecar.state交叉核同，sender补片双应用顺序都可用。原失败ON变为拒绝/复验、OFF保旧行为；无新增时间epsilon/物理门槛。包含1项明确observed_boundary：SDK RPC内取消仍可能已有缓存，不作修复完成声明。
+- 边界/Next：未测完整run→recover链；已有缓存在HTTP等待中续发、RPC等待失效和epoch识别仍未解。根Codex下一项局部集成原错误/恢复入口，保留原数据/阈值，不解锁飞行。原三冻结源clean，临时目录已自动回收，无新服务/构建/大产物。
+- Knowledge=already_covered，沿用Wiki§20因果/源时钟及PIT-004，新事实留项目，未写memory。--pick Qoder timeout/AGY ready，但AGY实派45s超时即改本对话内置审查，不重试、不联系其他聊天；根独立核最终源码、18项及三处原异常调用链。
+
+
+## 2026-10-27 run→recover 缓存替换核对
+
+- Current：恢复前缀定向集成核对完成，正常位置替换→/stop顺序成立；失败边界仍未修复。只新增测试/文档，原补片与drone c866441冻结不变，无ROS/SDK/仿真/飞行。
+- Done：真实run/recover/setpoint/stop等方法，首有效PVA后再触发取消或过期；SDK/cache/观测/清理均显式替身。13检查/0跳过，主与本对话独立审查均运行最终版；接管hold→position→start→模式确认→stop顺序显式断言，完整finally/report路由被执行。synthetic落地返回不升级原任务failed，未作实际落地声称。
+- Remaining：pending位置RPC使stop/pause/finally均未到；定位/hold失效未替换，位置调用超时可能在远端接受前或后，reference不足以判断缓存；Task.cancel绕过业务恢复，实际上层入口未知。原始源码close等待server不代替落地；本轮未启动SDK。
+- Next/owner：根Codex优先在独立副本定义恢复位置调用的有限失败出口，超时后保留缓存未知，验证本仿真pause/cleanup路径。不解锁飞行、不改硬门槛；详见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 收尾：TemporaryDirectory副本/报告已自动回收，无新服务/大产物，历史原件保留。Knowledge=already_covered，Wiki/ROS2 与 FishBot§20；已知外部超时直接本对话内置只读审查，无跨聊天消息，主独立实跑，未写memory。
+
+
+## 2026-10-27 恢复入口等待与取消终态修复
+
+- Current：现有默认OFF补片已增加恢复入口hold/position/start的本地等待出口，未应用冻结树；整体plan、完整M3/动态未完成。
+- Done：可选recovery_rpc_timeout_s默认1s，坏值warning/default；原生wait_for与原RecoveryBlocked路径，无重试。rpc_attempts区分returned/unconfirmed/cancelled，远端效果不明时unknown。取消恢复中Task.cancel误报已落地及旧落地flags两反例已复现修复：核report和当前遥测，recover入口先清旧flags、确认后重建；否则清旧flags+failed，保CancelledError传播。
+- 验证：18+13既有定向、8新出口及1真实SDKPython/gRPC synthetic（两时序分支）共40项2.391s/0skip通过。独立复核指出旧flags缺口，修后独立7项0.597s过，最后入口重建flags另独立3项0.159s过；真实grpc取消前轮独立也过。SDK二进制/MAVLink/PX4未启动，无真实缓存或落地新证据。
+- Next/owner：根Codex先复现Scene请求worker父stdout.readline阻塞，为现有worker加有界父读取与回收；该缺口使本轮不能称整个pause/cleanup有限。后续观测/退回/降落RPC仍有原await，TTL/epoch/备份/动态资格保持未完成。
+- 收尾：synthetic loopback端口关闭并拒绝新连接，TemporaryDirectory副本/报告回收，无新构建/SDK进程/大文件，原失败/ULog保持。Knowledge=already_covered，Wiki§20；直接本对话内置审查，不联系其他聊天，未写memory。
+
+
+## 2026-10-27 Scene worker 父读取/写入期限
+
+- Current：独立Scene补片defaultOFF已验证，原冻结源未改；恢复暂停worker阻塞的失败出口已接通，不代表完整恢复/动态成功。
+- Done：父预算原请求ms/1000+.5，含取锁/启动耗时和非阻塞完整write/read；原协议不改。超时/坏响应清退自有worker，TERM→KILL，下一新调用重建；close EOF→TERM→KILL，锁失败保未确认句柄。
+- 验证：原silent/半行1ms请求在150ms仍阻塞先复现；新12项7.327s/0skip，实际管道/worker、Flight恢复+pause失联集成均过。独立9项及新增3项分别过；NaN max折零经审查复现修复。原Flight补片/40项未机械重跑。
+- Remaining/Next：父期限不能中断同步Popen/序列化，不是全系统实时上界；远端效果仍unknown。根Codex下一项补齐恢复后续观察/回退/降落的控制RPC等待，沿现有helper；epoch/TTL/备份/完整M3和动态仍未过。证据及复验见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 收尾：自有进程/线程/管道及临时副本回收，无ROS/SDK/Gazebo/大构建产物，原失败/遥测保留。Knowledge=already_covered Wiki§20；本对话内置只读审查，无跨聊天联系。
+
+
+## 2026-10-27 恢复尾段与普通降落 RPC
+
+- Current：默认OFF Flight补片已覆盖后续观察/退回/降落控制等待，未部署冻结源；整体plan、完整M3/动态未过。
+- Done：原recovery_command包观察position、退回三段位置、降落保持/stop/land及受阻接管；normal landing单列landing_rpc_attempts，recovering留原recovery。ON未确认不继续下一降落命令，OFF保原等待/警告继续。descent mode快照谓词满足后才offboard=True，仍返回恢复；不称新鲜样本/实际控制确认。
+- 验证：尾段pending反例先复现，新12项＋原40＋Scene恢复集成1共53项5.445s/0skip过，独立尾段11项与最后出口1项过。原18降落夹具只补依赖，不改预期；未改Scene补片。真实方法/fake控制、感知与遥测；无SDKbinary/PX4/飞行新验收。
+- Next/owner：根Codex复用现有SDK cache探针，对真实SDKbinary响应做受控失联，核超时/取消后缓存与所属实例回收；仅synthetic本地协议端，不上飞机，不新造执行代理。epoch/TTL/备份/动态仍未完。详见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 收尾/Knowledge：临时副本/report、gRPC fixture和worker/线程/pipe回收，无新大产物，原失败/遥测保留。already_covered Wiki§20；本对话内置只读审查，无跨聊天联系。
+
+
+## 2026-10-27 真实 SDK 响应丢失与缓存诊断
+
+- Current/Done：现有探针增加隔离诊断relay，非生产组件。真实SDK4.0.5、synthetic本地peer，before未转发与after成功返回后丢响应均客户端超时；旧PVA9包与新position10包分别持续，stop后均0。确认取消不回滚缓存，不扩为PX4/物理接管。
+- 验证：主线程串行两最终UUID337e5be4/8fecabc1，具体PVA字段/掩码、单一payload/新wire时刻与上游事件交叉核；5局部0.307s/0skip过。原Flight/Scene补片无改动、未重跑其53项。完整产物和复验见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 收尾：先行及最终3个自有SDK均wait回收、监听关闭，relay各资源独立清理；约84KiB必要原始小证据保留在忽略output。无PX4/Gazebo/飞行或大构建，三冻结源clean。Knowledge=already_covered Wiki§20，本对话内置审查，不联系其他聊天。
+- Next/owner：根Codex核现有Sidecar在暂停/时钟回退/新goal后的候选身份隔离，并制作默认OFF最小epoch适配；随后处理/state等待期间旧SDK缓存持续重发的TTL缺口。沿既有发送层和恢复出口，不引入生产RPC代理，不自动重试未知效果控制。原冻结源不部署、不解锁；可行备份、原生空中采用、完整M3与动态闭环未完，整体plan active。
+
+
+## 2026-10-28 默认关闭的本地候选 epoch
+
+- Current：新增DRONE_COMMAND_EPOCH=1薄补片，未应用冻结源；默认OFF保原schema/行为，本地切片有进展，完整M3/动态未完。
+- Done：暂停/回退使候选、ACK、已登记曲线和队列失效；goal/stop轮换、原生关联stamp进程内递增，锁内重核/捕获reply，队列token+goal_id过滤。Flight固定goal/observer身份，先核state token再走就绪宽限，样本存在后核sample token。
+- 验证：20项0.842s/0skip；三补片六顺序applycompile与真实组合行为过。独立18项曾发现首PVA后新epoch空样本被宽限吞掉，三反例先红后修，独立新增/组合2项0.164s过。原53资格不扩大，无服务/飞行。
+- Remaining/Next：根Codex沿既有goto /state等待区间补并发失效观察，复用原recover处理过期/取消/回退，不自动重试未知效果RPC；用真实SDK旧缓存重发证据核等待期间的有效期边界。原生ACK→Bspline→PositionCommand顺序与单一生产者资格仍待核，不把receipt token当ROS来源证明。保持冻结、不部署、不解锁；可行备份、原生空中采用、完整M3和动态闭环未完成，整体plan active。
+- 收尾/Knowledge：临时副本自动删除，无新大产物或实例，三冻结源clean，原件/既有pycache保留；already_covered Wiki§20，本对话独立审查无跨聊天。精确入口与限制见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+
+
+## 2026-10-28 /state pending 的旧PVA失效观察
+
+- Current：默认OFF复查补片已接并发state等待观察，未部署冻结源，无飞行；完整SDK TTL/M3/动态仍未完成。
+- Done：等待内复用原输入/任务/已启用epoch检查，以上一成功PVA源stamp和原sample/end期限撤出等待；原零VA例外保留、position hold不误用旧PVA。完成与失效同刻先拒绝失效，cancel+gather本地HTTP task后由原run→recover替换位置再/stop；不在watcher另发控制。
+- 验证：pending首PVA反例先红，最终101项11.261s/0skip（原88＋新13）过，三补片六顺序与组合保持。真实HTTP线程迟到/退出/端口关闭过，SDK/物理仍替身。旧恢复测试只更新更早的expired原因；独立12＋原3项过，修source_end数值字符串保存兼容后最后2项.250s独立过。精确入口见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- Remaining/Next：根Codex复用现有SDK cache探针，把新/state等待保护接真实MAVSDK二进制和synthetic本地peer，核过期→原恢复位置替换→报文切换及迟到HTTP响应不恢复PVA；仍不启动PX4/飞行。随后覆盖普通PVA RPC自身pending/已接受丢响应期间的失败出口，不把本地wait取消当SDK撤回。原生ROS来源/ACK顺序、完整缓存期限、可行备份、原生空中采用、完整M3与动态仍未完成，整体plan active。
+- 收尾/Knowledge：临时副本、fixture HTTP/gRPC/worker与端口回收，无新大产物/ROS/SDKbinary/飞行，原件和并行清理成果保留；already_covered Wiki§20，本对话只读审查无跨聊天。
+
+
+## 2026-10-28 run→recover真实SDK缓存链核对
+
+- Current/Done：沿默认OFF REPAIR临时副本走真实goto/run/recover，真实SDK4.0.5＋HTTP/to_thread＋synthetic本地peer；source过期后位置setter替换PVA，fresh迟到HTTP实际读完仍无PVA恢复。未改生产执行补片、冻结源未部署。
+- 验证：UUID65850c7c-4ac3-457b-b056-62e46a886f06原包四窗2/2/4/0，掩码2048→2552，NED PVA/姿态角及frame/target独立重算一致，只有1次PVA RPC。原默认探针新UUID bef96002-9d76-4f27-9eb4-786544865c41三窗11/9/0亦复核。最终21项2.109s/0skip，独立相关9项.426s通过；未重跑未改101项。精确时序、数值及复验见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 边界：飞行遥测、pose、pause均synthetic，故意观测阻塞终态failed，无landed；SDK清理延后由探针owner负责以观测缓存，不是生产close验收。未启动PX4/ROS/Gazebo或发arm/start/land；真实SDK缓存证据不授予完整TTL、物理接管或动态资格。
+- 收尾/Knowledge：两个SDK回收、端口与HTTP线程关闭，临时源码自动清理，小证据保留忽略output，未产生大副本；三冻结源clean，历史原件保留。already_covered Wiki§20，项目事实不写memory；本对话审查无跨聊天。
+- Next/owner：根Codex接续普通PVA setter RPC自身pending及已接受后丢响应的失败出口，复用既有发送层和run→recover；不把Python取消当SDK撤回，不自动重试效果未知的控制请求。原生ROS来源/ACK顺序、完整SDK缓存期限、可行备份、原生空中采用、完整M3与动态闭环仍未完成。 整体plan active。
+
+
+## 2026-10-28 普通PVA RPC与外部取消终态
+
+- Current/Done：默认OFF REPAIR新增普通PVA等待保护，仍用原setpoint/单一owner；共享原输入和期限判据，同时核旧cached与在途候选，有限墙钟预算，失败unknown且不重试，沿原run→recover。SENDER候选身份读点适配后六顺序/组合过，冻结源未部署。
+- 实证：真实SDK4.0.5三串行UUID19798d4f/31e56157/73b6bb73，before转发源过期3/4/0、after接受丢响应源过期4/4/0、after墙钟超时3/3/0；raw坐标/掩码/frame/target/yaw及上游/取消/恢复时序独立重算一致，只有1次PVA请求，恢复返回后无PVA，arm=0。helper fake wall不可算实耗时，relay取消回执稍晚于恢复开始。精确入口见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- 修复自发现问题：旧落地证据会使Task.cancel后的run误报succeeded/passedTrue；普通PVA和ReturnHome handler两负例先红，统一finally标failed/清落地字段后过，保异常传播及原清理、不自动业务恢复。OFF不变。
+- 验证：124项14.122s、0跳过通过（含原冻结基线已知缺口见证，不是飞行验收）；独立新10项1.370s、最后取消/组合5项.492s过。首轮组合冲突与旧判词/新增返航负例均定位后修，不拿中途119/123绿色替代最终检查。
+- 边界/收尾：planner/位姿/遥测/clock/pause为synthetic，生产SDK清理刻意延后探针owner，仍failed无landed，不构成停稳或飞行验收。三SDK进程/六TCP端口回收、临时源码自动删除，小原始证据约200KiB忽略保留，无PX4/ROS/Gazebo/大构建，三冻结源clean。Knowledge=already_covered Wiki§20，项目事实不写memory；本对话独立审查无跨聊天。
+- Next/owner：根Codex先核原生ACK→Bspline→PositionCommand的来源与跨topic顺序活性，并定点确认固定运行依赖，选现有无解锁入口取证。完整缓存期限、分布式state窗口、可行备份、原生空中采用、完整M3与动态闭环仍未完成；不把本地RPC保护当完整Safety Shield。 整体plan active。
+
+
+## 2026-10-28 原生ACK与首曲线活性
+
+- Current/Done：原生installed EGO＋traj_server处理两synthetic ROS目标，ACK floor0→curve1/PVA1、floor1→curve2/PVA2；新增只读rclcpp MessageInfo收包器补Jazzy rclpy缺GID接口。最终UUID7d33e778中ACK2/2、曲线2/2、PVA16/16按源时间/序号/载荷关联CPP GID，匹配预期graph，独立复核一致；不等原生goal/session或在线准入已闭合。
+- 修复：默认OFF EPOCH补片新增有限待ACK缓存，ACK同锁按epoch/goalstamp/floor重放；原receipt和source时间不刷新，goal/stop/clock失效清。原native记录受控乱序8组合b7dcf580：旧ACK先2/2、曲线先0/2，新两顺序均2/2登记；网络实际乱序未观察，不发控制。
+- 验证：最终31项1.889s/0skip（缓存7/收包退出4/原epoch20），含六顺序及组合。CPP独立cache编译成功；独立26项1.526s与收包3项过。未重跑未改124项。详见docs/DRONE_HANDOFF_EVIDENCE.md最新节。
+- Issues：最终traj_server SIGINT后datawriter/publisher析构，exit-11；另早期两组-6、无GID组SIGTERM后-15。三个最终PID均回收仅说明资源释放，native_shutdown_ok=false。保留原summary/失败日志，新增独立cleanup审计；当前探针不再把回收等同正常退出。原生生命周期验收未过。
+- 边界/收尾：synthetic clock/odom/单点cloud，非Gazebo、深度或飞行；无SDK/PX4/解锁。临时源码回收、六组约0.3MiB原证据及4.7MiB当前收包器构建缓存保留，无重复大副本，三冻结源clean且未部署，原ego_ws dirty不改。Knowledge=already_covered Wiki§20，兼容事实留项目，不写memory；本对话审查无跨聊天。
+- Next/owner：根Codex先定位原生traj_server退出时publisher/datawriter生命周期异常，制作最小独立修补与无解锁复验；保留原退出失败。随后沿当前逐消息GID取证，补多生产者/重启下的候选失效与在线来源绑定。完整缓存期限、可行备份、原生空中采用、完整M3和动态闭环仍未完成，不解冻部署。 整体plan active。
+
+
+## 2026-10-28 恢复setter真SDK与原生退出修补
+
+- Done：现有state-wait探针增加可选恢复position relay。before未接受后缓存PVA、after接受丢响应后缓存position，两组应用均unknown/failed，原run/recover不重试；HTTP迟到实读不复派PVA。最终3ee2ab75/df7aefd7/7fea4075原包3/3/4/0、2/2/4/0、2/2/4/0，保初轮af53网络.8s超时失败。未改飞行行为或执行补片。
+- Native：GDB705594aa确认静态退出经PublisherBase/NodeBase/RMW崩溃；新默认OFF publisher生命周期补片在独立LF副本应用。同新binary OFF51bf为-11、ONf450为0；ON两目标a29a中ACK2/曲线2/PVA15逐条CPP关联，三进程均exit0，native_shutdown_ok=true。原installed未替换，完整goal/session与来源准入false。OpenMP链接缺口已按原静态库补齐，未重建上游。
+- 验证/收尾：26项1.506s/0skip、独立原包/进程/端口/构建读回通过；所有本次SDK/native/GDB回收，无PX4/Gazebo/飞行。8组约408KiB证据及约49.4MiB当前可复用构建保留，无重复大包；三冻结源clean，ego既有dirty/SO101在途修改不动。详见docs/DRONE_HANDOFF_EVIDENCE.md两末节。
+- Next：当前根Codex核多生产者/重启下候选失效和在线来源绑定；可行备份/全链TTL/原生空中采用/M3/动态仍未完成。保持默认OFF，不解冻部署，不跨聊天协作。
+
+Knowledge=updated：已修订并读回Wiki/ROS2 与 FishBot“rclcpp 静态析构：先核真实释放时机”，同步开发知识入口新触发词；具体运行事实留项目，不写memory。
+
+
+## 2026-10-28 SO101 固定红盘X中点网页整链
+
+- Current/Done：既有Station QA新增STATION_DOCUMENT导入/导出核对和可选Chrome路径。原产品UI/API/执行器不改；左X−15.5mm原60mm/.5、右X＋15.5mm显式54mm/.35经真实浏览器各1次POST、刷新不重发，完成原MuJoCo抓放/释放/脱离/回位2/2。任务9e4059a7-3f24-4852-a8d5-c071ab92fd8b、d2e1ca4e-8226-4e01-9d46-7f411a2e842b，原源261e3e6。
+- Evidence：Kaggle so101-x-station-browser-20261028 v3终态。左75.16sim/92.82process-wall/94.48CPU，右78.32/92.91/94.94。原1mm、完整244/246扫掠、自由物体与90sim120wall保持；独立91项无失败，原monitor/skill/release精确重放，实视频470/490帧。根已看原网页截图，UUID/完成状态/蓝盘内物体可见。完整周期无EpisodeTiming，50Hz unknown；不是性能A/B或连续域通过。
+- Issues：v1步骤UI ID重建使fixture严格比较失败，未POST；仅忽略program[].id并另核唯一，导出→POST→原request仍严格。v2私有计时包装缺GNU time使worker exit127，未启动物理；v3补可选依赖/警告降级后通过。原失败和非致命sitecustomize缺wrapt警告保留。普通±10mm帮助仍未按显式开发配置改写。
+- Delivery/cleanup：两可编辑Station文档与详表位于SO101仓库plans/workcell-productization-20261024/m1a-x-web-midpoint-results.md；其忽略output/x-station-browser-20261028保存原TGZ、gzip读回、两截图和当前视频。reader压缩回读后释放30,601,216分配字节；完成上传硬链接已删、未虚报释放，无临时帧。原任务/worker终态后才TERM/wait自有preview，无本地资源抢占或实体动作。
+- Next/owner：SO101根继续第二放置工位同点验证；M2原Carry网页waiting→按钮resume→原物理仍待验，复用同QA/原API，不改控制器。Drone新的source-graph补片/探针/witness在途变动保留，由原Drone根接续；最短入口为workbench-review-tests/test_drone_source_graph_guard.py与workbench-tools/drone-native-source-probe.py，其运行边界按本计划Drone节；本次Station提交不混入。Knowledge=already_covered，Wiki《ROS2 与 FishBot》§20。
+
+
+## 2026-10-28 多来源同ID与观察式隔离
+
+- Done：原生两发布进程＋重启＋实际traj_server及Sidecar真实方法复现当前goal标签污染。最终无guard57f379a4四阶段均ready，389条PVA唯一CPP关联、237个外来位置沿goal-A；观察guard d773五阶段357条全部关联、旧goal外来采用0，新goal-B/ACK可恢复。始终只有一个PVA GID，不能只信输出进程。
+- 修复：默认OFF EPOCH新增DRONE_SOURCE_GRAPH及runtime唯一节点名，观察三类endpoint数量/名字/GID变化即清当前goal/ACK/曲线/队列/setpoint并换epoch。OFF保原行为；完整来源仍false，已消失来源的排队消息本地负例仍会穿过当前图判断，未冒称闭合。
+- 验证：最终56项4.953s/0skip，含known-gap和OFF见证；六应用顺序/组合过。首轮probe曲线已过期，仅当缓存污染证据保留；补片上下文冲突/cwd错误保留，经最终修正后通过。实际原生进程试验单列，无SDK/PX4/Gazebo/飞行。
+- 收尾/Next：自有进程全回收，五组约2.1MiB原证据与当前95.9MiB CMake缓存保留，临时副本回收，冻结未部署。SO101在途17行diff/语法已核、E2E未验，继续保留。当前根Codex下一项接逐消息来源准入/排队旧消息负例，全链TTL/备份/M3/动态未完。详见docs/DRONE_HANDOFF_EVIDENCE.md末节。
+- Knowledge=updated：原Wiki/ROS2与FishBot来源链段落及入口触发词已写并读回；知识库大批既有dirty保留待原任务整合，不写memory、不跨聊天。
+
+收尾更新：共享工作树的SO101既有任务已将Station17行与自身进度提交为8fc0569；已定点读两文件diff和交付说明，本无人机轮只做语法核对，不把其物理/E2E结论计入本轮验收。保留该提交，本轮串行追加，不覆盖、不跨聊天联系。
+
+## 2026-10-28 指定 Flight.run → recover 缓存链复验
+
+- Done：冻结 c866441 与默认 OFF REPAIR 定点核对；现有 recovery_cache_chain 增补返航嵌套取消/故障两个子例。原 PVA → 位置 setter 返回/reference 更新 → planner /stop 顺序成立。六相关模块55项5.331s/0skip通过；替身与历史真实 SDK 报文证据分开，未改飞行行为、未启动飞行。
+- Remaining：定位失效可在位置替换前阻断；setter 报错远端效果 unknown。取消在途 await 不证明远端撤回，迟到远端 PVA 覆盖、生产 SDK 关闭与物理停稳/落地仍待验。动态/M3未通过，冻结未解除。
+- 保留在途：此前 native receipts 的四个已跟踪文件变动及两个新文件（source_graph 测试、native-source-probe、EPOCH、witness、native_receipts 测试、sidecar-native-probe）未混入本次提交。受控原包延迟准入试验 adfb41fb 已有结果；完整 Sidecar 74a7ecec 仍失败（planner exit250、无曲线、超时），不是功能通过。其三自有PID480811/480826/480827本次核对/proc均不存在；原日志保留，不因换到本次核对而重跑或删除。owner=当前根Codex；最短入口为该 UUID 的 sidecar-native-probe.json/runtime/planner.log 与现有 test_drone_native_receipts，先定位原 planner 错误再决定下一次运行。
+- 收尾：本次测试临时副本自动清理，无新增服务或大产物；源仓未改，在途补片保留。Knowledge=already_covered，详见 docs/DRONE_HANDOFF_EVIDENCE.md 指定链路复验段；不写memory、不跨聊天。
+
+## 2026-10-28 C++逐消息准入候选与完整HTTP入口
+
+- Done：六文件native receipts在途候选已串行核对。默认OFF EPOCH新增实际CPP收包入站，关闭Python三直收入口；GID/源时间/序号与可信曲线PVA同一性分别核。原图已正常而旧来源包仍排队的受控原包adfb41fb，225.930112ms接收年龄内被拒、清goal/setpoint并换epoch；独立原包/数学审计通过，七进程均0并回收，不冒称自然网络乱序。
+- 完整入口：74a7原日志std::length_error、ready时FSM仍INIT；探针等待WAIT_TARGET的0e668ad6两目标过。将INIT未就绪检查落入默认OFF候选后，f745e04d-ee15-4541-a179-3a3dc09a54f8不靠额外等待，真实Sidecar构造/原HTTP两次202/原生ACK2、曲线2、准入PVA3通过，两个目标各三段原CPP回执唯一匹配，PVA重算到数值精度。三自有PID499106/499121/499122均exit0且/proc不存在，HTTP关闭；未取得旧崩溃栈，不完全定案异常数学根因。
+- 验证：六模块70项4.477s/0skip通过，含14项native、OFF/graph-only known-gap、ACK顺序与六补片组合。CPP当前目标单独增量构建过；两最终忽略目录各独立审计json通过。完整探针理想ROS pose/clock/单点cloud，相机/depth健康显式替身；trajectory使用独立release候选binary，原installed未换，无SDK/PX4/Gazebo/解锁或飞行。
+- Remaining/Next：来源与曲线数值准入不等原生goal/session/所有上游输入、yaw、SDK TTL或备份资格。当前根Codex下一项核/state快照到Flight使用间的epoch/时间窗口，复用既有迟交与缓存夹具；晚到远端PVA、生产关闭、M3/动态仍未闭合，三冻结源不部署。
+- 收尾/Knowledge：原小失败证据保留，临时源码回收，当前96.6MiB CPP缓存复用；比对确认native_receipts源码已完整嵌入补片后删除冗余scratch，释放12288分配字节，无重复大包。updated：原Wiki/ROS2与FishBot来源链新增数值同一性/三类就绪分层，开发知识入口补排队旧来源与FSM INIT触发；实际读回通过。知识库已有跨任务大dirty保留，不盲提交整页，不写memory、不联系其他聊天。
+
+## 2026-10-28 快照epoch缺口与原SDK关闭
+
+- Done：真实Flight/Sidecar方法、独立epoch与loopback HTTP复现旧快照A已生成、源失效B后仍能派发1条旧PVA，下一state才恢复；快照前失效/样本过期均拒绝。4新增检查明确含known-gap，不称修复；五相关模块63项5.960s/0skip。首轮仅测试预期拦截层文本错误，已按实际goto复查修正，未改飞行行为。
+- 真实SDK：复用transport和原run→recover→finally→close_mavsdk，最终193049a0-eab1-4bcc-a913-c309d65d0298旧PVA稳定窗4包、生产close后0包，原NED PVA/frame/target/yaw独立匹配。1条PVA RPC后SDK持续重发；新epoch响应释放后位置RPC成功，原close按4.0.5析构kill+wait读回PID534708/-9，并先于外层兜底回收。独立原包/时序15项过，HTTP/gRPC/worker关闭，arm0、任务failed无落地；两先行小回合保留。
+- 范围：只证明有限失败恢复路径中的SDK server生产关闭；clock/pose/armed/图/暂停是显式替身，新响应约.3wall扣留仅可视化缓存，不当真实延迟、飞控消费或物理停稳。gap_fixed=false，分布式快照缺口未关闭，源冻结未部署。
+- Next/owner：当前根Codex核已有MAVSDK owner等待/停止能力及源失效传达，定义可观察失效时限；不靠多加一次GET或另造状态存储声称原子撤销。晚到远端PVA、可行备份、实际状态/地图/终端、在线MINCO/M3与动态仍未完。
+- 收尾/Knowledge：三SDK与端口/线程回收，约208KiB小原包保留、临时副本自动清理，无新大产物。station-execution.cjs新119增/3删Carry QA在途，初读/语法过、完整E2E未审，保留由原任务owner/根Codex接续，不混提交。updated：原Wiki/ROS2与FishBot来源链及入口补自洽旧快照与SDK析构kill边界，已读回；知识库大dirty保留，不写memory、不跨聊天。
+
+## 2026-10-28 变更等待到单SDK owner的传播候选
+
+- Done：新增默认OFF source-watch补片，在EPOCH＋REPAIR后复用原HTTP/RLock/Condition等待epoch；监视器只锁存，原Flight等待检查→recover负责控制。目标/stop/源失效/源时钟均通知；通道或观测失效明确拒绝，原tasks收拢，新目标不被旧watch迟交重新绑定。未新增服务/数据库，未部署冻结源。
+- 真实SDK最终ON b9dd64b7：原有效PVA 3包，失效至关闭2包仅position/mask2552，关闭后0；原state仍扣留即完成恢复，随后旧state实际读完不再派发PVA。源标记→接收通知1.405816ms/position返回13.630359ms/close33.305390ms，仅本轮观测非硬界。OFF91705b89保留旧缺口4PVA/0；两个SDK由生产close回收-9、端口/worker关，arm0、failed无落地。
+- Native：945adb19完整实际Sidecar构造/HTTP/native两目标通过；见证自有Condition等待者后stop，新epoch通知与stop回执相同，三进程exit0。独立原CPP回执/原包/RPC/epoch/端口三审计通过。两层试验未拼成完整ROS→SDK/PX4飞行；传感/源状态范围分别明示。
+- 验证：最终六模块75项10.193s/0skip，新增watch12项，含OFF已应用、六既有补片顺序、state/PVA等待、同epoch健康、源时钟、通道断开及旧watch收拢。原launcher空PYTHONPATH --help复现缺command_epoch，EPOCH补片增加一行根目录路径后同条件exit0；1c4d17fb两原记录/最终测试log保留，--help非ROS/飞行。首轮手工换epoch保留旧setpoint夹具改用真实goal Handler后过，未松门槛；首轮SDK82514原件保留。
+- Remaining/Next：当前根Codex用原before/after relay核在途PVA迟交与通知共存，远端接受不能因客户端取消宣称撤回，确认是否覆盖恢复位置。不重复加监视层；原子授权/全链硬TTL、可行备份、真实状态地图终端、MINCO在线/M3和动态仍未过。
+- 收尾/Knowledge：五小证据组约384KiB保留，临时源自动回收，9808字节测试log已copy读回后删临时副本；无新大缓存，所有自有进程/端口/worker结束。相对路径写补片/跨文件系统rename两命令失败已纠正，未动冻结源；Station119增/3删在途保留。updated：原Wiki来源链与入口补Condition通知与单owner/分层边界并读回，大dirty保留不盲整页提交，不写memory、不跨聊天。
+
+## 在途PVA缓存替换核对（2026-10-28）
+
+- Done：原候选受控迟交复现恢复position之后被原PVA覆盖，Python reference仍position；接受在先/仅丢响应的对照没有该覆盖。新增真实SDK迟交探针，原protobuf只投递一次，不称自然直连乱序。
+- 修补：默认OFF source-watch记录本地rpc_started；unknown已启动PVA进入recover时先用原block_recovery暂停，再由原finally关闭SDK，跳过未证实的recovery_hover。未派发、明确返回及OFF保持原路径；原远端效果仍unknown。
+- 验证：六模块77项18.039s/0skip过；原迟交/接受对照、修补迟交/接受对照和成功返回后源失效五SDK组，独立原包/时序/数值/进程端口20/18/19/17/14项全过。修补迟交释放晚于原SDK关闭，UNAVAILABLE、后窗0；正常分支PVA3→仅position2→0。全部arm0、failed未落地；源/pose/clock/armed/暂停为替身，无PX4/Gazebo/飞行。
+- 产物/交接：工作台docs/DRONE_HANDOFF_EVIDENCE.md末节列五UUID与CLI，67fe目录留最终测试log，8476保留原watch补片。自有SDK五个均kill+wait回收，HTTP/gRPC/relay关闭；约267KiB独有证据保留，临时源和/tmp测试log已清理。Station Carry QA在途保留、不混提交；三冻结源未部署。
+- Next/owner：当前根Codex核真实scene.pause失败/超时到finally的关闭链及剩余缓存窗口，不再加监视层。实际状态/地图/终端、可行备份、MINCO在线、M3与动态仍未完成；整体目标继续。
+- Knowledge：updated，原Wiki/ROS2与FishBot及入口补取消与接收顺序边界、已读回；知识库大dirty保留，不写memory、不跨聊天。
+
+## Scene IPC阻塞与关闭链（2026-10-28）
+
+- Done：原Scene.pause的1000ms只到原生请求，父进程持锁readline无界。34325半行原请求实际让run/SDK/worker停留，1.7s窗34旧PVA，外部kill才关闭；不是生产自愈。
+- 修补：默认OFF source-watch的Scene.request沿原timeout+.5s为锁/写入/完整行读取设共同预算，用标准os/select；超时回收自有worker，不自动重发。完整回复仍复用worker，锁超时不杀其他持锁请求，不改原run关闭顺序或硬控制界。
+- 验证：七模块85项17.623s/0skip/六补片顺序过。原反例＋半行候选/受控拒绝/原生缺服务四真实SDK组，独立18/19/19/19项原包与时序/报告/进程端口过。候选半行1.506s结束，worker与SDK回收、后窗0；期间仍30旧PVA。原生缺服务1.067s未确认，非世界暂停成功。全部无arm、failed未落地，无PX4/Gazebo世界/飞行；三个冻结源未部署。
+- 失败保留：95d1旧protobuf优先导致导入失败，未启SDK；a817未传Scene开关导致原OFF阻塞、探针超时才回收；首版Boolean夹具字段及快速拒绝2ms窗口审计要求均按原始证据修正，不计生产通过。原记录/初失败log/最终log在忽略输出，完整UUID/命令见工作台docs/DRONE_HANDOFF_EVIDENCE.md末节。
+- Next/owner：当前根Codex用独立分区无飞机最小Gazebo世界核真实暂停回执与clock/physics停止，再续真实资格。当前只是修清理无限等待，不宣称关闭前缓存安全、原子撤销、可行备份、M3或动态闭环。整体目标继续。
+- 收尾/Knowledge：本轮自有SDK与worker均回收、端口关；独有证据保留，临时源与两个/tmp日志已清理，Station在途119增/3删保留。updated：Wiki/ROS2与FishBot和入口补原生超时不等父进程IPC界，已读回；知识库大dirty保留，不写memory、不跨聊天。
+
+
+## CERLAB R2网页任务与原生回放（2026-10-31）
+
+- 复用createTaskRuntime/原ID查询、drone-live、writeRecording及原播放器，增加backend=cerlab与编辑草稿样例；默认工作台选作者栈，旧PX4通过环境显式选择。固定作者场景/1m/配置1.5m/s；IRIS位姿标记、原世界静态几何和真值动态框，无新控制器/FSM。
+- 新7c32d745实飞往返落地但首次网页QA因提前终态缺report失败；根因已修为host清理/报告完成后唯一发布终态。保留原QA日志和原任务，不覆写飞行结果。
+- 新25a1b511实际网页到8m/返程误差.230141/.095245m，落地/disarm；空中刷新同ID零重发，MCAP seek/倒退/播放零控制写入。c7c88e8f网页空中取消后原生返航落地/disarm，cancelled；实时三维轨迹与其MCAP回放同过。
+- 3任务边界、6服务/双WS/记录、43Station文档检查通过，生产构建通过。真实QA与原始数据位置见docs/DRONE_CERLAB.md；常用5186最终只读验收见后续读回。safety_qualified=false，未将功能成功记可靠动态/全程净空/真实深度通过。
+- 既存station-execution.cjs为SO101持物接续resume/cancel QA扩展，已读diff、保留；本轮不以无人机测试替代其真实持物验收。保留未提交，owner=根Codex后续SO101范围，最短入口STATION_QA_CARRY_ACTION=resume/cancel与原station-carry-m2.json。
+- 知识收尾already_covered：沿用Wiki/ROS2与FishBot§20的动作、交接、物理结果分列；本轮接线发现留项目，不更新memory。
+- 最终读回：5186默认CERLAB、限高/速度配置标签和禁用项、历史选中25a1b511、功能/落地/动态安全分列文案、本次轨迹链接及SO101只读页面均通过，零任务写请求。常用端口原生回放复验通过；隔离5187释放，保留5186服务。最终构建2警告均为webpack资产/入口体积建议。
+
+## 2026-11-06 — Station既有Carry QA遗留收口
+
+根逐段核对station-execution.cjs的既有未提交Carry扩展，保留为显式STATION_QA_CARRY_ACTION=resume/cancel入口。未设置该环境变量的原默认流程，本轮真实新正常＋取消两回合已经通过；语法检查通过。扩展只影响QA，不修改任务运行时。
+
+两个Carry分支本轮没有实际执行，不能记M2持物接续通过。保留最短入口：STATION_DOCUMENT指向原station-carry-m2.json，再显式选择resume/cancel；owner=根Codex后续Carry验收。它不作为A2回放的强前序，不据此新增物理任务。原无响应只查原ID、不重复POST与物理成功判据保持。
+
+## 2026-11-06 — SO101 A2逐任务回放交付
+
+复用无人机onTaskFinished/ensureArtifacts、通用产物URL和原生播放器；SO101任务自动生成自己的episode.mcap，结果页沿用视频、报告和抓取证据，历史选择支持SO101。新增so101-task-review布局，不显示没有逐帧图像映射的Image面板。新轨迹只增加目标旋转记录，不改物理／控制／评分。
+
+原网页新正常b996faa5-fedb-4712-a67e-aca132d743e3通过，76.58sim/47.115wall，抓放、释放、脱离、回位、静稳通过，safety_stop=false、障碍接触0；另一新任务4e11341d-9269-4325-ac27-12bcf52eff12在4.94sim取消，原物理报告保持false。首次c792ef86在0sim因缺cv2失败，保留原失败，恢复专用环境后新UUID重试。
+
+独立Python审计逐行核对正常3829／取消247个关节、命令、接触力和完整目标位姿；原report、skill_evidence、UUID、终态与seek一致。位置误差0、旋转误差至3.50e-15。视频479／31帧全解码、HTTP range通过。原28项Station、8项产物合同与18项前端测试通过，生产构建仅既有两项体积建议。
+
+常用5186的v6真实浏览器同context两任务均通过：历史选择／刷新、3D首中末与倒退、播放、阶段定位、回放刷新、关闭回放后主工位再刷新。0控制POST、0回放写入、0pageError，2次scene-mode查看切换。修复复用原去layoutUrl逻辑与现有layout=名字；不扩展上游布局系统。QA首次contact=0系未订阅该topic的计数误读，已撤回；独立JS审计正常3829／取消247，和Python全等回读一致，证据明确标成浏览器后只读审计，不冒称重跑浏览器。
+
+使用／复跑见[SO101_TASK_REPLAY](../../docs/SO101_TASK_REPLAY.md)。原始任务保留apps/fishbot-control-station/workbench-tools/output/station-tasks/UUID；最终浏览器证据位于workbench-review-tests/output/so101-task-replay-a2-5186-v6-20261106/。原报告通过与独立验收／来源认证分别显示，不伪造后者；视频独立播放，不声明逐帧同步。完整50Hz、20＋20与Carry接续原边界不变。
+
+收尾：临时5187与QA Chrome已释放，常用5186保留且SO101 ready=true。验证重复夹具来源后回收14,263,487字节，旧QA证据9,430,546字节归档7,527,528字节，净释放16,166,505字节。旧失败证据可在workbench-review-tests/output执行tar -xJf a2-intermediate-qa-20261106.tar.xz恢复；新正常／取消任务和最终证据保留。当前无人机6f02430已有成果保留，不重跑飞行或修改其状态；Carry QA验收边界见前节。Knowledge=already_covered，Wiki《ROS2 与 FishBot》§20；后续owner=根Codex。
+
+A2最终Git读回：工作台代码21cfe14已推既有codex/workbench-code-rebuild-20261018，ls-remote与GitHub API曾独立返回同SHA；SO101源码／验收00d17bb已正常快进推master及两个既有codex分支，三ref与API回读一致。首次SO101默认协议push停滞时先读回旧ref，再终止自有连接，命令级HTTP/1.1重试成功，未改全局代理／凭据／历史。
+
+收尾再次发现apps/fishbot-control-station/drone-showcase/index.html有新的4增4删在途改动，内容是无人机R4 depth/oracle对照入口与说明，晚于已发布6f02430；保留不覆盖、不纳入A2提交。其新任务视频／运行来源未由A2核验，owner=原无人机根，最短接续为git diff该文件并对照workbench-review-tests/drone-cerlab-browser.cjs及该轮感知产物。A2没有向其他聊天发送消息，也未用本次机械臂结果替代无人机验收。
+
+## 2026-11-06 — SO101 A3.1两可选工位交付
+
+已复用workspaceStationSample两原样工位；新增用户名称／差异、当前草稿识别、编辑后自定义、执行中禁切。加载／提交／历史选择复用同一原生URL布局固定helper，选择可刷新，不另建状态库／执行器。原样输入、原八步、碰撞扫掠和物理标准未改。70项定点测试（Station52＋execution18）、原构建、语法／diff通过。旧workspace-samples/recipe-workflow QA只同步新选择器，未冒称重跑其全部物理。
+
+新网页A=42460e66-aab5-4c60-bda9-39ddf5d80245，78.02sim/52.8662report-wall；B=4ddaf8b6-3f72-42ec-a943-51419a036cba，77.76sim/45.1246report-wall。每次导出与原workspace-station JSON、POST输入全等；选择刷新0派发，执行中禁切，仅各1个新任务POST。两次原抓放／释放／脱离／回位均pass，安全停机及障碍接触0，free=true/weld0/mocap0。A/B场景不同，不作提速比较。
+
+独立回读3901／3888逐帧关节、命令、力和目标位姿、UUID、原报告、skill_evidence一致，位置误差0、旋转最高4.61e-15，索引seek通过；488／486视频帧全解码。同context两真实任务的历史选择、刷新、native3D首中末／倒退／播放／阶段定位、回放刷新、关闭回放后工位再刷新全过，控制POST0／回放write0／pageError0，16张截图保留。初次QA popup事件早于URL就绪，修只读等待后复用同两任务v2通过，未追加物理。
+
+[使用说明](../../docs/SO101_TASK_REPLAY.md)；详细物理报告见SO101仓plans/workcell-productization-20261024/a3-selectable-scenes-results.md。根证据位于apps/fishbot-control-station/workbench-review-tests/output/a3-{near-run1,far-run1,independent-readback,scenes-replay-v2}-20261106；原任务在station-tasks/UUID。全部运行产物本地忽略，不推公开库。
+
+收尾：本轮不新建服务，常用5186继续可用；等待共享无人机评测释放后逐个启动，未终止他人任务，自有QA Chrome／执行进程已退出。两原任务38,030,279字节、最终回看证据7,000,292字节保留。首轮只读失败证据1,768,826字节归档1,716,000字节并核可读，净回收52,826字节；在workbench-review-tests/output执行tar -xJf a3-popup-race-20261106.tar.xz可恢复。没有重复上传包／临时渲染帧，运行环境和原始数据保持。
+
+保留共享无人机c85d5b6，不将其成绩作为本次机械臂验收。原视频独立播放／无逐帧同步／无新独立来源认证，完整50Hz、20＋20、连续域与实机边界不变。A3.1完成，后续感知场景尚未启动；Knowledge=already_covered，Wiki《ROS2 与 FishBot》§20；owner=根Codex。
