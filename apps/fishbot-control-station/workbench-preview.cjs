@@ -9,6 +9,7 @@ const config = resolveWorkbenchConfig();
 applyWorkbenchConfig(config);
 const { requestAllowed, stationRedirect } = require("./workbench-origin.cjs");
 const { createFishbotGateway } = require("./fishbot-gateway.cjs");
+const { doctor } = require("./workbench-launcher.cjs");
 const { createSo101Runtime } = require("./so101-runtime.cjs");
 const { createSo101Live } = require("./so101-live.cjs");
 const { createDroneRuntime } = require("./drone-runtime.cjs");
@@ -58,12 +59,17 @@ const server = http.createServer(async (request, response) => {
       response.writeHead(405, {Allow:"GET, HEAD"}); response.end(); return;
     }
     const so101 = runtime.runtime(), drone = droneRuntime.runtime();
+    // A responding --describe-json alone does not prove pinned Python packages exist.
+    const so101Check = so101.ready ? doctor(config, {project:"so101"}) : undefined;
+    const so101Ready = so101.ready && so101Check?.ready === true;
+    const so101Missing = so101Check?.checks.find(check => check.status !== "ok" && check.status !== "warning");
     response.writeHead(200, {"Content-Type":"application/json; charset=utf-8", "Cache-Control":"no-store"});
     response.end(JSON.stringify({projects:{
       fishbot:{ready:gateway.ready(),message:gateway.ready()
         ? "完整成果可查看；运行配送任务需另行连接对应仿真服务。"
         : "FishBot 成果页面尚未构建，请运行 workbench doctor --project fishbot 查看缺项。"},
-      so101:{ready:so101.ready,message:so101.ready ? so101.message : so101.message + " 请运行 workbench doctor --project so101 查看缺项。"},
+      so101:{ready:so101Ready,message:so101Ready ? "SO101 环境检查通过；新任务仍需逐回合检查可达性与实际抓放。"
+        : (so101Missing?.message ?? so101.message) + " 请运行 workbench doctor --project so101 查看缺项。"},
       drone:{ready:drone.ready,message:drone.ready ? drone.message : drone.message + " 请运行 workbench doctor --project drone 查看缺项。"},
     }}));
     return;

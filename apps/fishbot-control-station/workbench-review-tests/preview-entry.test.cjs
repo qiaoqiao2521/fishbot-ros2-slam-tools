@@ -34,12 +34,16 @@ test('shared preview routes project entry, existing frontends and remote layouts
   fs.writeFileSync(path.join(native, 'index.html'), '<title>Native routing fixture</title>');
   fs.writeFileSync(path.join(fishbot, 'index.html'), '<title>FishBot routing fixture</title>');
   fs.writeFileSync(path.join(fishbot, 'assets/app.js'), 'routing fixture');
+  const executor = path.join(root, 'experiments/colab-twin');
+  fs.mkdirSync(executor, {recursive:true});
+  fs.writeFileSync(path.join(executor, 'station_executor.py'), 'print(\'{"ready":true,"message":"description fixture"}\')\n');
+  fs.writeFileSync(path.join(executor, 'requirements-station-runtime.txt'), 'workbench-fixture-missing-distribution==0.0.0\n');
   const port = await freePort();
   const child = spawn(process.execPath, [path.join(__dirname, '../workbench-preview.cjs')], {
     env:{...process.env, WORKBENCH_CONFIG:'', WORKBENCH_BUILD_DIR:native,
       WORKBENCH_FRONTEND_DIST:fishbot, WORKBENCH_HOST:'127.0.0.1', WORKBENCH_PORT:String(port),
       WORKBENCH_PUBLIC_URL:'https://workbench.example', DRONE_BACKEND:'cerlab',
-      SO101_ROOT:root, SO101_PYTHON:path.join(root, 'missing-python'),
+      SO101_ROOT:root, SO101_PYTHON:'/usr/bin/python3',
       DRONE_ROOT:root, CERLAB_ROOT:root,
       SO101_TASKS_DIR:path.join(root, 'so101-tasks'), DRONE_TASKS_DIR:path.join(root, 'drone-tasks'),
       DRONE_PLANS_DIR:path.join(root, 'drone-plans'), DRONE_DIAGNOSTICS_DIR:path.join(root, 'diagnostics')},
@@ -73,9 +77,11 @@ test('shared preview routes project entry, existing frontends and remote layouts
   assert.equal(status.status, 200);
   const projects = JSON.parse(status.body).projects;
   assert.equal(projects.fishbot.ready, true);
+  assert.equal(JSON.parse((await request(port, '/api/so101/runtime', remote)).body).ready, true, 'the description fixture itself responds');
   assert.equal(projects.so101.ready, false);
   assert.equal(projects.drone.ready, false);
   assert.match(projects.so101.message, /doctor --project so101/);
+  assert.match(projects.so101.message, /dependencies missing or mismatched/);
   assert.match(projects.drone.message, /doctor --project drone/);
   for (const route of ['/results', '/fishbot', '/cooperation']) {
     assert.match((await request(port, route, remote)).body, /FishBot routing fixture/);
