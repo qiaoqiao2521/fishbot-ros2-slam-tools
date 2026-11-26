@@ -1,0 +1,9 @@
+{
+  "so101Root": "../so101",
+  "so101Python": "../so101/.venv-station/bin/python",
+  "droneRoot": "../drone-px4-ego",
+  "cerlabRoot": "../drone-px4-ego",
+  "droneBackend": "cerlab",
+  "host": "127.0.0.1",
+  "port": 5186
+}

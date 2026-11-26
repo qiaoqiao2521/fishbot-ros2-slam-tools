@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 import "@testing-library/jest-dom";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 
 import {
   useMessagePipeline,
@@ -27,6 +27,7 @@ import useAlertCount from "@lichtblick/suite-base/hooks/useAlertCount";
 import { useHandleFiles } from "@lichtblick/suite-base/hooks/useHandleFiles";
 import { useLayoutTransfer } from "@lichtblick/suite-base/hooks/useLayoutTransfer";
 import { PlayerPresence } from "@lichtblick/suite-base/players/types";
+import WorkspaceContextProvider from "@lichtblick/suite-base/providers/WorkspaceContextProvider";
 import { parseAppURLState } from "@lichtblick/suite-base/util/appURLState";
 
 import Workspace from "./Workspace";
@@ -147,7 +148,7 @@ jest.mock("@lichtblick/suite-base/components/WorkspaceDialogs", () => ({
 // ── providers ─────────────────────────────────────────────────────────────────
 jest.mock("@lichtblick/suite-base/providers/WorkspaceContextProvider", () => ({
   __esModule: true,
-  default: ({ children }: React.PropsWithChildren) => <>{children}</>,
+  default: jest.fn(({ children }: React.PropsWithChildren) => <>{children}</>),
 }));
 jest.mock("@lichtblick/suite-base/providers/PanelStateContextProvider", () => ({
   PanelStateContextProvider: ({ children }: React.PropsWithChildren) => <>{children}</>,
@@ -320,6 +321,30 @@ describe("Workspace - alerts badge in leftSidebarItems", () => {
 
   afterEach(() => {
     MockedSidebars.mockClear();
+  });
+
+  it("opens an archived local recording only after an explicit native file-picker click", async () => {
+    (useAppConfigurationValue as jest.Mock).mockReturnValue([true]);
+    mockWorkspaceActions.dialogActions.openFile.open.mockClear();
+    const view = render(<Workspace deepLinks={["https://workbench.example/?openLocalMcap=1"]} />);
+    expect(jest.mocked(WorkspaceContextProvider).mock.calls.at(-1)?.[0].initialState?.dialogs
+      ?.dataSource.open).toBe(false);
+    expect(mockWorkspaceActions.dialogActions.openFile.open).not.toHaveBeenCalled();
+    fireEvent.click(view.getByRole("button", { name: "选择已下载的 MCAP" }));
+    await waitFor(() => {
+      expect(mockWorkspaceActions.dialogActions.openFile.open).toHaveBeenCalledTimes(1);
+      expect(view.getByRole("button", { name: "选择已下载的 MCAP" })).not.toBeDisabled();
+    });
+    expect((usePlayerSelection as jest.Mock).mock.results.at(-1)?.value.selectSource)
+      .not.toHaveBeenCalled();
+  });
+
+  it("does not show the archive picker for ordinary workbench entry", () => {
+    (useAppConfigurationValue as jest.Mock).mockReturnValue([true]);
+    const view = render(<Workspace deepLinks={["https://workbench.example/"]} />);
+    expect(view.queryByRole("button", { name: "选择已下载的 MCAP" })).not.toBeInTheDocument();
+    expect(jest.mocked(WorkspaceContextProvider).mock.calls.at(-1)?.[0].initialState?.dialogs
+      ?.dataSource.open).toBe(true);
   });
 
   it("should not set badge on alerts sidebar item when alertCount is 0", () => {

@@ -20,6 +20,15 @@ describe('four delivery result groups', () => {
     expect(html).toContain('筛选成果车型'); expect(html).toContain('筛选成果雷达')
     expect(html).not.toContain('/coop-api/start')
   })
+  it('opens the complete warehouse run and retains historical and failed records separately', () => {
+    const html = renderToStaticMarkup(<DeliveryResultsGallery />)
+    expect(html).toContain('data-selected-result="f2-warehouse-local-183948"')
+    expect(html.match(/data-current-result=/g)).toHaveLength(2)
+    expect(html).toContain('历史配置与已验成果')
+    expect(html).toContain('失败与分阶段实验')
+    expect(html).toContain('data-result-experiment="f2-warehouse-v5"')
+    expect(html).not.toContain('不自动算作完整配送')
+  })
   it('keeps wide-scene unknown UUIDs and timeline unknown rather than borrowing the old run', () => {
     const result = parseVisionResult(ideal)
     expect(result.orders.map(o => o.taskId)).toEqual(['', ''])

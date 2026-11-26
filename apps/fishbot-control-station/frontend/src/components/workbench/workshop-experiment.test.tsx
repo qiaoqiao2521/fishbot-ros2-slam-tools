@@ -16,7 +16,8 @@ describe('actual workshop failure record', () => {
     const html = renderToStaticMarkup(<DeliveryResultsGallery />)
     expect(html.match(/data-result-group=/g)).toHaveLength(4)
     expect(html).toContain('data-result-experiment="f2-workshop-v2"')
-    expect(html).toContain('不自动算作完整配送')
+    expect(html).toContain('失败与分阶段实验')
+    expect(html).toContain('B进场失败；A未执行；不计完整配送')
   })
   it('offers a curated media index instead of publishing the raw recording log', () => {
     expect(result.assets.video_index).toBe('/workbench/f2-workshop-v2/video-frame-index.json')

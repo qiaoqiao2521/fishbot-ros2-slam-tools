@@ -41,6 +41,7 @@ MUJOCO_LOG.TXT
 *.mcap
 .env
 .env.*
+/workbench.local.json
 !*.example
 /fishbot/
 /fishbot_tool/

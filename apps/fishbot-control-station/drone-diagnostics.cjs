@@ -3,6 +3,7 @@
 // Read recorded evidence only. This module has no flight-control client or command writer.
 const fs = require('node:fs');
 const path = require('node:path');
+const {requestAllowed,requestOrigin}=require('./workbench-origin.cjs');
 const { sceneFor, schema, telemetrySchema, stamp } = require('./drone-scene.cjs');
 const { writeFrames } = require('./drone-recording.cjs');
 const { readSparse, sparseAt, sparseEntities } = require('./drone-sparse.cjs');
@@ -211,9 +212,8 @@ function createDroneDiagnostics({ runtime, cacheRoot, archiveRoot = path.join(ru
     const url = new URL(req.url, 'http://localhost'), route = url.pathname;
     if (route !== '/drone-diagnostics' && !route.startsWith('/api/drone/diagnostics')) return false;
     const send = (code, value) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
-    const host = new URL(`http://${req.headers.host ?? 'localhost'}`);
-    if (!['127.0.0.1', 'localhost', '[::1]'].includes(host.hostname) || (req.headers.origin && req.headers.origin !== host.origin)) {
-      send(403, { error: '请从本机工作台读取诊断。' }); return true;
+    if (!requestAllowed(req)) {
+      send(403, { error: '请从已配置的工作台地址读取诊断。' }); return true;
     }
     if (!['GET', 'HEAD'].includes(req.method)) { send(405, { error: '诊断只读，不接受控制请求。' }); return true; }
     try {
@@ -228,7 +228,8 @@ function createDroneDiagnostics({ runtime, cacheRoot, archiveRoot = path.join(ru
       if (route === '/drone-diagnostics') {
         await recording(item);
         const layout = url.searchParams.get('mobile') === '1' ? 'drone-diagnostics-mobile' : 'drone-diagnostics';
-        const query = new URLSearchParams({ ds: 'remote-file', 'ds.url': `${host.origin}/api/drone/diagnostics/${item.id}/diagnostics.mcap`, layoutUrl: `${host.origin}/layouts/${layout}.json` });
+        const base = requestOrigin(req);
+        const query = new URLSearchParams({ ds: 'remote-file', 'ds.url': `${base}/api/drone/diagnostics/${item.id}/diagnostics.mcap`, layoutUrl: `${base}/layouts/${layout}.json` });
         res.writeHead(302, { Location: `/?${query}` }); res.end(); return true;
       }
       if (!match[2]) {

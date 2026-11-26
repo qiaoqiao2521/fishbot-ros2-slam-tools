@@ -13,7 +13,7 @@
 //   found at http://www.apache.org/licenses/LICENSE-2.0
 //   You may not use this file except in compliance with the License.
 
-import { Link, Typography } from "@mui/material";
+import { Alert, Button, Link, Typography } from "@mui/material";
 import { t } from "i18next";
 import { useSnackbar } from "notistack";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -104,6 +104,14 @@ const log = Logger.getLogger(__filename);
 
 const selectedLayoutIdSelector = (state: LayoutState) => state.selectedLayout?.id;
 
+function requestsLocalMcap(deepLinks: WorkspaceProps["deepLinks"]): boolean {
+  try {
+    return new URL(deepLinks?.[0] ?? window.location.href).searchParams.get("openLocalMcap") === "1";
+  } catch {
+    return false;
+  }
+}
+
 function isInjectedSidebarItem(
   item: [string, { iconName?: string; title: string }],
 ): item is InjectedSidebarItem {
@@ -168,6 +176,8 @@ function WorkspaceContent(props: WorkspaceProps): React.JSX.Element {
 
   const { enqueueSnackbar } = useSnackbar();
   const { dialogActions, sidebarActions } = useWorkspaceActions();
+  const [localMcapRequested, setLocalMcapRequested] = useState(() => requestsLocalMcap(props.deepLinks));
+  const [openingLocalMcap, setOpeningLocalMcap] = useState(false);
   const { handleFiles } = useHandleFiles({
     availableSources,
     selectSource,
@@ -718,6 +728,25 @@ function WorkspaceContent(props: WorkspaceProps): React.JSX.Element {
       <KeyListener global keyDownHandlers={keyDownHandlers} />
       <div className={classes.container} ref={containerRef} tabIndex={0}>
         {appBar}
+        {localMcapRequested && (
+          <Alert severity="info" onClose={() => { setLocalMcapRequested(false); }}>
+            选择从 Drive 下载并解压的 MCAP，使用当前布局回看。文件由原生播放器在浏览器内读取，不上传记录，也不启动仿真。
+            <Button
+              color="inherit"
+              disabled={openingLocalMcap}
+              onClick={() => {
+                setOpeningLocalMcap(true);
+                void dialogActions.openFile.open()
+                  .catch((error: unknown) => {
+                    enqueueSnackbar(`无法打开本地记录：${String(error)}`, { variant: "error" });
+                  })
+                  .finally(() => { setOpeningLocalMcap(false); });
+              }}
+            >
+              选择已下载的 MCAP
+            </Button>
+          </Alert>
+        )}
         <Sidebars
           selectedKey=""
           onSelectKey={() => {}}
@@ -769,7 +798,9 @@ export default function Workspace(props: WorkspaceProps): React.JSX.Element {
   const isPlayerPresent = useMessagePipeline(selectPlayerIsPresent);
 
   const initialItem: undefined | DataSourceDialogItem =
-    isPlayerPresent || !showOpenDialogOnStartup ? undefined : "start";
+    isPlayerPresent || !showOpenDialogOnStartup || requestsLocalMcap(props.deepLinks)
+      ? undefined
+      : "start";
 
   const initialState: Pick<WorkspaceContextStore, "dialogs"> = {
     dialogs: {

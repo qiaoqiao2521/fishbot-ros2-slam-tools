@@ -3,6 +3,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {isDeepStrictEqual}=require('node:util');
 const {createRequire}=require('node:module');
+const {requestAllowed}=require('./workbench-origin.cjs');
 const upstream=createRequire(path.join(__dirname,'workbench/package.json'));
 const {FoxgloveServer}=upstream('@foxglove/ws-protocol');
 const {WebSocketServer}=upstream('ws');
@@ -13,13 +14,13 @@ function createDroneLive({runtime,planning}){
  const channels={};
  for(const [key,name,definition]of [['scene','foxglove.SceneUpdate',schema],['telemetry','drone.Telemetry',telemetrySchema],['status','drone.Status',statusSchema]])
   channels[key]=foxglove.addChannel({topic:`/drone/live/${key}`,encoding:'json',schemaName:name,schema:JSON.stringify(definition)});
- let mode='draft',taskId,planId,plan,station={nodes:[],program:[]},origin='',sourceEpoch=0,previousIds=new Set(),lastScene;
+ let mode='draft',taskId,planId,plan,station={nodes:[],program:[]},sourceEpoch=0,previousIds=new Set(),lastScene;
  function modelInfo(){
   if(runtime.backend==='cerlab')return {models:[],files:[]};
   try{return JSON.parse(fs.readFileSync(path.join(runtime.paths.sourceRoot,'assets/x500-scene.json'),'utf8'));}
   catch{return {models:[],files:[]};}
  }
- function sceneOptions(){return {models:modelInfo().models,assetBase:origin,...(runtime.backend==='cerlab'?{vehicleName:'IRIS / CERLAB'}:{})};}
+ function sceneOptions(){return {models:modelInfo().models,assetBase:'',...(runtime.backend==='cerlab'?{vehicleName:'IRIS / CERLAB'}:{})};}
  function state(){
   const task=mode==='task'&&taskId?runtime.task(taskId):undefined;
   return {mode,taskId:mode==='task'?taskId:undefined,planId:mode==='draft'?planId:undefined,sourceEpoch,ready:mode==='draft'||!!task?.pose,
@@ -52,11 +53,10 @@ function createDroneLive({runtime,planning}){
  const timer=setInterval(stream,100);timer.unref();
  foxglove.on('error',error=>console.warn(`WARNING: flight scene socket: ${error.message}`));
  function handleUpgrade(request,socket,head){
-  if(new URL(request.url,'http://localhost').pathname!=='/api/drone/scene'||(request.headers.origin&&request.headers.origin!==origin)){socket.destroy();return;}
+  if(new URL(request.url,'http://localhost').pathname!=='/api/drone/scene'||!requestAllowed(request)){socket.destroy();return;}
   sockets.handleUpgrade(request,socket,head,connection=>foxglove.handleConnection(connection,request.socket.remoteAddress));
  }
  function attach(server){
-  server.on('listening',()=>{origin=`http://127.0.0.1:${server.address().port}`;});
   server.on('close',()=>{clearInterval(timer);sockets.close();});
  }
  function send(res,code,value){res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(value));}
@@ -64,8 +64,7 @@ function createDroneLive({runtime,planning}){
   const url=new URL(req.url,'http://localhost');
   if(!['/api/drone/preview','/api/drone/scene-mode','/api/drone/scene-state'].includes(url.pathname)&&!url.pathname.startsWith('/api/drone/meshes/'))return false;
   try{
-   const host=new URL(`http://${req.headers.host??'localhost'}`);
-   if(!['127.0.0.1','localhost','[::1]'].includes(host.hostname)||(req.headers.origin&&req.headers.origin!==host.origin)){send(res,403,{error:'请从本机工作台访问三维场景。'});return true;}
+   if(!requestAllowed(req)){send(res,403,{error:'请从已配置的工作台地址访问三维场景。'});return true;}
    if(req.method==='GET'&&url.pathname==='/api/drone/scene-mode'){send(res,200,state());return true;}
    if(req.method==='GET'&&url.pathname==='/api/drone/scene-state'){stream();send(res,200,{...state(),scene:lastScene});return true;}
    if(req.method==='POST'){

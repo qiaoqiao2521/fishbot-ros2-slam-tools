@@ -47,7 +47,7 @@ function App() {
   }, [])
 
   function navigate(next: AppRoute) {
-    const pathname = next === 'workbench' ? '/workbench' : next === 'results' ? '/results' : next === 'regression' ? '/regression' : next === 'cooperation' ? '/cooperation' : next === 'simulation' ? '/simulation' : next === 'radar' ? '/radar' : '/'
+    const pathname = next === 'workbench' ? '/workbench' : next === 'results' ? '/results' : next === 'regression' ? '/regression' : next === 'cooperation' ? '/cooperation' : next === 'simulation' ? '/simulation' : next === 'radar' ? '/radar' : '/fishbot'
     if (window.location.pathname === pathname) {
       return
     }
@@ -108,7 +108,7 @@ function StationFrame({ route, navigate, children, stop, manualEnabled }: {
             </button>
           ))}
         </nav>
-        <div className="station-sidebar-note"><span>FishBot + SO101</span><small>控制 · 感知 · 协作</small></div>
+        <div className="station-sidebar-note"><a href="/start">项目入口</a><span>FishBot + SO101</span><small>控制 · 感知 · 协作</small></div>
       </aside>
       <div className="station-workspace">
         <div className="station-topbar"><span>FishBot <ChevronRight size={14} /> <strong>{workspaces.find((item) => item.route === (route === 'simulation' ? 'workbench' : route))?.label}</strong></span>{stop}<RuntimeContextStatus route={route === 'regression' ? 'results' : route === 'dashboard' && manualEnabled ? 'workbench' : route} /></div>

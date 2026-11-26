@@ -6,6 +6,7 @@ const path=require('node:path');
 const {randomUUID}=require('node:crypto');
 const {execFile}=require('node:child_process');
 const {createRequire}=require('node:module');
+const {requestAllowed}=require('./workbench-origin.cjs');
 const upstream=createRequire(path.join(__dirname,'workbench/package.json'));
 const {FoxgloveServer}=upstream('@foxglove/ws-protocol');
 const {WebSocketServer}=upstream('ws');
@@ -25,7 +26,7 @@ function createSo101Live({runtime}){
   ['contact','/so101/live/contact',{fixed_finger_n:number,moving_finger_n:number}],
   ['status','/so101/live/status',{mode:{type:'string'},taskId:{type:'string'},phase:{type:'string'},simulation_s:number,status:{type:'string'}}],
  ])channels[key]=foxglove.addChannel({topic,encoding:'json',schemaName:`so101.Live${key}`,schema:JSON.stringify({type:'object',properties})});
- let model,loading,previewScene,previewRevision=0,mode='draft',taskId,lastScene,sourceEpoch=0,previousIds=new Set(),error='',origin='';
+ let model,loading,previewScene,previewRevision=0,mode='draft',taskId,lastScene,sourceEpoch=0,previousIds=new Set(),error='';
  function pythonJSON(args){return new Promise((resolve,reject)=>execFile(python,[script,...args],{cwd:sourceRoot,env:{...process.env,MUJOCO_GL:'egl'},timeout:20000,maxBuffer:8*1024*1024},(failure,stdout,stderr)=>{
   if(failure){reject(new Error(stderr.trim().slice(-1500)||failure.message));return;}
   try{resolve(JSON.parse(stdout.trim().split('\n').at(-1)));}catch{reject(new Error('几何工具返回了无法读取的数据。'));}
@@ -51,7 +52,8 @@ function createSo101Live({runtime}){
    if(mode==='task'&&taskId){task=runtime.task(taskId);lastScene=task?.scene;}
    else lastScene=previewScene;
    const milliseconds=Date.now(),ns=BigInt(milliseconds)*1000000n,stamp={sec:Math.floor(milliseconds/1000),nsec:(milliseconds%1000)*1000000};
-   const entities=(lastScene?.entities??[]).map(entity=>({...entity,timestamp:stamp,metadata:[...(entity.metadata??[]),{key:'view_mode',value:mode},{key:'task_id',value:mode==='task'?taskId:''}],models:(entity.models??[]).map(primitive=>({...primitive,url:primitive.url?.startsWith('/')?origin+primitive.url:primitive.url}))}));
+   // ModelCache resolves /api assets against the viewing page, for local and public URLs.
+   const entities=(lastScene?.entities??[]).map(entity=>({...entity,timestamp:stamp,metadata:[...(entity.metadata??[]),{key:'view_mode',value:mode},{key:'task_id',value:mode==='task'?taskId:''}]}));
    const ids=new Set(entities.map(e=>e.id));const deletions=[...previousIds].filter(id=>!ids.has(id)).map(id=>({timestamp:stamp,type:0,id}));previousIds=ids;
    publish('scene',{deletions,entities},ns);publish('status',status,ns);
    if(Array.isArray(task?.q6)&&task.q6.length===6)publish('joints',{position:Object.fromEntries(['shoulder_pan','shoulder_lift','elbow_flex','wrist_flex','wrist_roll','gripper'].map((name,i)=>[name,task.q6[i]]))},ns);
@@ -61,12 +63,11 @@ function createSo101Live({runtime}){
  const timer=setInterval(stream,100);timer.unref();
  foxglove.on('error',failure=>console.warn('WARNING: Foxglove scene connection:',failure.message));
  function handleUpgrade(request,socket,head){
-  const url=new URL(request.url,'http://localhost');const allowedOrigin=request.headers.origin;
-  if(url.pathname!=='/api/so101/scene'||(allowedOrigin&&allowedOrigin!==origin)){socket.destroy();return;}
+  const url=new URL(request.url,'http://localhost');
+  if(url.pathname!=='/api/so101/scene'||!requestAllowed(request)){socket.destroy();return;}
   sockets.handleUpgrade(request,socket,head,connection=>foxglove.handleConnection(connection,`${request.socket.remoteAddress}:${request.socket.remotePort}`));
  }
  function attach(server,{routeUpgrade=true}={}){
-  server.on('listening',()=>{const address=server.address();origin=`http://127.0.0.1:${address.port}`;});
   if(routeUpgrade)server.on('upgrade',handleUpgrade);
   server.on('close',()=>{clearInterval(timer);sockets.close();});
   void loadModel().catch(failure=>console.warn('WARNING: Initial SO101 geometry unavailable:',failure.message));
@@ -75,8 +76,7 @@ function createSo101Live({runtime}){
   const url=new URL(req.url,'http://localhost');
   if(!['/api/so101/preview','/api/so101/scene-mode','/api/so101/scene-state'].includes(url.pathname)&&!url.pathname.startsWith('/api/so101/meshes/'))return false;
   try{
-   const host=new URL(`http://${req.headers.host??'localhost'}`);
-   if(!['127.0.0.1','localhost','[::1]'].includes(host.hostname)||(req.headers.origin&&req.headers.origin!==host.origin)){send(res,403,{error:'请从本机工作台访问三维场景。'});return true;}
+   if(!requestAllowed(req)){send(res,403,{error:'请从已配置的工作台地址访问三维场景。'});return true;}
    if(req.method==='GET'&&url.pathname==='/api/so101/scene-mode'){send(res,200,state());return true;}
    if(req.method==='GET'&&url.pathname==='/api/so101/scene-state'){send(res,200,{...state(),scene:lastScene});return true;}
    if(req.method==='POST'&&url.pathname==='/api/so101/preview'){const value=await body(req);send(res,200,await preview(value.station));return true;}

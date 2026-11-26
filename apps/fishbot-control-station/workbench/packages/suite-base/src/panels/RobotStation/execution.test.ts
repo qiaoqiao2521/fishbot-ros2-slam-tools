@@ -6,6 +6,7 @@
 
 import {
   carryGateWaiting,
+  draftExecutionIssues,
   graspEvidenceLabel,
   latestSimulationTask,
   requestSimulation,
@@ -15,9 +16,41 @@ import {
   taskIsActive,
   TaskRequestError,
 } from "./execution";
+import type { SimulationRuntime } from "./execution";
 import { defaultDroneStation, defaultStation } from "./station";
 
 describe("SO101 simulation task transport", () => {
+  it("distinguishes preview edits from the executor's fixed base and complete program", () => {
+    const station = defaultStation();
+    const runtime: SimulationRuntime = {
+      ready: true,
+      message: "ready",
+      executor: {
+        execution_boundary: {
+          version: 1, base_position_m: [0, 0, 0], frame_transform: "translation-only",
+          program: { atomic_step_count: 8, segment_sequence: ["pick", "transfer", "place"],
+            seconds_value: 1, seconds_is_duration: false },
+        },
+        segments: { pick: station.program.slice(0, 4), transfer: station.program.slice(4, 6),
+          place: station.program.slice(6) },
+      },
+    };
+    const before = JSON.stringify(station);
+    expect(draftExecutionIssues(station, runtime)).toEqual([]);
+    const movedTray = { ...station, nodes: station.nodes.map((node) =>
+      node.id === "place" ? { ...node, position: [0.20, 0.20, 0.01] as [number, number, number] } : node) };
+    expect(draftExecutionIssues(movedTray, runtime)).toEqual([]);
+    const movedBase = { ...station, nodes: station.nodes.map((node) =>
+      node.id === "base" ? { ...node, position: [0.01, 0, 0] as [number, number, number] } : node) };
+    expect(draftExecutionIssues(movedBase, runtime).join()).toContain("底座");
+    expect(draftExecutionIssues({ ...station, program: [...station.program].reverse() }, runtime).join())
+      .toContain("固定 8 步");
+    expect(draftExecutionIssues({ ...station, program: station.program.map((step, index) =>
+      index === 0 ? { ...step, seconds: 2 } : step) }, runtime).join()).toContain("seconds");
+    expect(JSON.stringify(station)).toBe(before);
+    expect(draftExecutionIssues(defaultDroneStation(), runtime)).toEqual([]);
+    expect(draftExecutionIssues(movedBase, { ready: true, message: "legacy" })).toEqual([]);
+  });
   it("offers carry only for the original opted-in, waiting, nonterminal task", () => {
     const original = { id: "same-task", status: "running", phase: "hold",
       station: { ...defaultStation(), skillControl: { mode: "hold-before-carry" } },

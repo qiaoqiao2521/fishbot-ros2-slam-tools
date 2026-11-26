@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MPL-2.0
 const path=require('node:path');
-const os=require('node:os');
+const {resolveWorkbenchConfig}=require('./workbench-config.cjs');
 const {createTaskRuntime}=require('./task-runtime.cjs');
 const {writeRecording}=require('./drone-recording.cjs');
 function createDroneRuntime(options={}){
  const backend=options.backend??process.env.DRONE_BACKEND??'px4';
  const cerlab=backend==='cerlab';
- const sourceRoot=options.sourceRoot??(cerlab?process.env.CERLAB_ROOT??path.join(os.homedir(),'worktrees/drone-cerlab-20261031'):process.env.DRONE_ROOT??path.join(os.homedir(),'dev/ros2/projects/drone'));
+ const config=resolveWorkbenchConfig();
+ const sourceRoot=options.sourceRoot??(cerlab?config.cerlabRoot:config.droneRoot);
  const pending=new Map();
  function ensureArtifacts(id,dir){
   if(pending.has(id))return pending.get(id);

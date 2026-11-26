@@ -114,7 +114,8 @@ test('standard Foxglove client receives native SceneUpdate and only advertised S
   const update = await wire.read('/so101/live/scene', (value) => value.entities.length === 1);
   assert.equal(update.entities[0].models.length, 17);
   assert.equal(new Set(update.entities[0].models.map((m) => m.url)).size, 13);
-  assert.ok(update.entities[0].models.every((m) => m.url.startsWith(f.origin + '/api/so101/meshes/')));
+  assert.ok(update.entities[0].models.every((m) => m.url.startsWith('/api/so101/meshes/')));
+  assert.equal(new URL(update.entities[0].models[0].url, 'https://workbench.example/').origin, 'https://workbench.example');
   for (let i = 0; i < 13; i++) {
     const url = `${f.origin}/api/so101/meshes/part-${i}.stl`;
     const response = await fetch(url);

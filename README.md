@@ -7,16 +7,37 @@ micro-ROS Agent sources, firmware source and staged runtime tools.
 
 ## Start here
 
-Current planning: [continuous-world operation and visual regression](plans/continuous-twin-regression-20261024/task_plan.md).
+Start the existing workbench from this checkout:
 
-Read-only [delivery timing](docs/DELIVERY_TIMING.md) is available on `/results`: native intervals, original budgets, sampling gaps and a rebuildable SQLite index.
+```bash
+./fishbot.sh workbench doctor
+./fishbot.sh workbench start
+```
 
-The [mecanum ROS base](docs/MECANUM.md) shares the MuJoCo, Nav2 and SO101 workflow. Native contact motion passed. Both 2D and 3D lidar configurations completed B→A delivery under the original scoring limits. Use `./fishbot.sh mecanum info` or `build`; these results cover simulation only.
-The SpecMesh plan is written; implementation has not started. Its first slice imports existing delivery records into a read-only timing report.
-The [workbench rebuild](plans/workbench-rebuild-20261018/task_plan.md) remains the UI, runtime-contract, rendering, and adapter baseline.
+Open the printed `/start` address to choose FishBot, SO101 or Drone and inspect each runtime's readiness. Startup does not dispatch a task. Missing optional simulator environments do not prevent the other existing pages from opening. Use `doctor --project fishbot|so101|drone|all --json` for a focused, machine-readable environment report.
+
+| Route | Purpose |
+| --- | --- |
+| `/start` | Shared project entry and current runtime availability |
+| `/results` | FishBot delivery results; the initial selection is the latest Warehouse D complete-delivery record |
+| `/fishbot` | Original FishBot control homepage |
+| `/workbench` | FishBot map patrol and navigation workspace |
+| `/so101-station` | Existing SO101 workcell editor, explicit task execution and per-task replay |
+| `/drone-station` | Drone workcell, selected backend and original task results |
+| `/` | Native Lichtblick workspace; existing layout and replay links remain valid |
+
+The current change consolidates startup, configuration, entry pages and task-result semantics. It does not add a new physical simulation result. Historical records retain their original success/failure decisions, limitations and archive references; a missing archived artifact is shown as unavailable, not replaced with a new successful run.
+
+Configuration and first-time build commands are in [WORKBENCH_START](docs/WORKBENCH_START.md). Paths come from environment variables, an optional root `workbench.local.json`, or adjacent checkouts. Remote access uses one explicit `WORKBENCH_PUBLIC_URL`; browser resources and fixed backend proxy routes use the same origin. The browser's `127.0.0.1` is not used as the remote robot server.
+
+SO101 can also enter from its own checkout with `./so101.sh workbench doctor` and `./so101.sh workbench start`. Its existing workcell remains separate from the Sawyer pretrained-model learning demo.
+
+Current entry work: [source-workbench plan](plans/workbench-code-rebuild-20261018/task_plan.md). Existing delivery evidence: [continuous-world operation and visual regression](plans/continuous-twin-regression-20261024/task_plan.md) and [archive recovery](docs/VISUAL_DELIVERY_ARCHIVE.md). The [workbench rebuild](plans/workbench-rebuild-20261018/task_plan.md) remains the UI, runtime-contract, rendering and adapter baseline. Native builds and complete browser integration are recorded separately in the current plan; repository edits alone do not establish those results.
+
+Read-only [delivery timing](docs/DELIVERY_TIMING.md) is available on `/results`: native intervals, original budgets, sampling gaps and a rebuildable SQLite index. The [mecanum ROS base](docs/MECANUM.md) shares the MuJoCo, Nav2 and SO101 workflow; its historical 2D/3D B→A results cover the recorded simulation configurations only.
 
 Read [PROJECT](PROJECT.md) for current priorities, then follow the relevant plan.
-Open the [results workbench](docs/WORKBENCH.md) at `/workbench` for six capability entrances and frozen acceptance evidence.
+The [capability overview](docs/WORKBENCH.md) documents the existing modules and frozen acceptance evidence; current page routes are listed above.
 It preserves original failures and keeps tool availability separate from experiment results.
 The [voice task panel](docs/VOICE.md) adds local audio recognition, text preview,
 and explicit confirmation through existing ROS task owners.
@@ -24,6 +45,10 @@ New scene inputs use [SpatialLM import](experiments/spatiallm/README.md).
 Two-job sequencing uses the [bounded workflow](docs/COOPERATION_WORKFLOW.md).
 Both preserve separate inference, editing and physical acceptance boundaries.
 See [architecture](docs/ARCHITECTURE.md) and [decisions](docs/DECISIONS.md) for context.
+
+## Existing modules and verification
+
+The following commands remain available for their documented scope. They are not an instruction to reopen previously closed experiment or physical-work plans.
 
 From this checkout (no personal workspace path required):
 

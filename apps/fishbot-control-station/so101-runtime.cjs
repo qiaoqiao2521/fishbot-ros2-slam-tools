@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: Copyright (C) 2026 SO101/FishBot contributors
 // SPDX-License-Identifier: MPL-2.0
 const path = require('node:path');
-const os = require('node:os');
+const {resolveWorkbenchConfig} = require('./workbench-config.cjs');
 const {createTaskRuntime} = require('./task-runtime.cjs');
 const {writeRecording} = require('./so101-recording.cjs');
 function createSo101Runtime(options = {}) {
-  const sourceRoot=options.sourceRoot ?? process.env.SO101_ROOT ?? path.join(os.homedir(),'dev/ros2/projects/so101');
-  const python=options.python ?? process.env.SO101_PYTHON ?? path.join(os.homedir(),'.cache/so101-graspgenx/upstream/.venv/bin/python');
+  const config=resolveWorkbenchConfig();
+  const sourceRoot=options.sourceRoot ?? config.so101Root;
+  const python=options.python ?? config.so101Python;
   const pending=new Map();
   function ensureArtifacts(id,dir) {
     if(pending.has(id))return pending.get(id);

@@ -30,6 +30,7 @@ import { SaveConfig } from "@lichtblick/suite-base/types/panels";
 import { clearDroneEditor, setDroneEditor } from "./droneEditor";
 import {
   carryGateWaiting,
+  draftExecutionIssues,
   graspEvidenceLabel,
   latestSimulationTask,
   requestSimulation,
@@ -715,6 +716,11 @@ function RobotStation({
     window.history.replaceState(window.history.state, "", url);
   };
   const startSimulation = async () => {
+    const draftIssues = draftExecutionIssues(station, runtime);
+    if (draftIssues.length > 0) {
+      setExecutionError(draftIssues.join(" "));
+      return;
+    }
     if (egoNeedsPreview && !planValid) {
       setPlanError("请先对当前草稿完成有效的 EGO 预演。");
       return;
@@ -933,6 +939,7 @@ function RobotStation({
   const blocked = descendants(selected, station.nodes);
   const targets = station.nodes.filter((item) => item.kind === "target");
   const warnings = programWarnings(station);
+  const executionIssues = draftExecutionIssues(station, runtime);
   const videoUrl = simulationArtifactUrl(task?.artifacts?.video);
   const reportUrl = simulationArtifactUrl(task?.artifacts?.report);
   const replayUrl = simulationTaskReplayUrl(task, window.location.origin, drone ? "px4" : "so101");
@@ -970,7 +977,7 @@ function RobotStation({
     setNotice(
       drone
         ? "已复制为独立草稿。修改航点 XYZ 或速度，再显式运行；原任务记录保持。"
-        : "已复制为独立草稿。修改放料坐标系 X/Y 或底座高度 Z，再显式运行；原任务记录保持。",
+        : "已复制为独立草稿。修改放料坐标系 X/Y 或蓝盘底座高度 Z，再显式运行；机械臂底座保持原位。",
     );
     void changeScene("draft", next);
   };
@@ -1607,6 +1614,11 @@ function RobotStation({
                         .map((x) => x.toFixed(3))
                         .join(", ")} m`}
                 </Typography>
+                {!drone && node.id === "base" && (
+                  <Typography variant="caption" color="text.secondary">
+                    机械臂底座位置当前仅可编辑预览，执行时固定在世界原点。调整蓝盘底座高度请选“放料坐标系”。
+                  </Typography>
+                )}
                 {node.kind !== "robot" && node.kind !== "tool" && (
                   <Button
                     size="small"
@@ -1788,6 +1800,9 @@ function RobotStation({
                 )}
               </>
             )}
+            {!drone && <Alert severity="info">
+              可执行模板：取料 → 搬运 → 放料，共八步原动作。增删、重排与等待可留在草稿中预览；当前执行器尚不支持任意程序。seconds=1 是模板值，实际时长由原规划器决定。
+            </Alert>}
             {station.program.map((step, index) => (
               <div className={classes.step} key={step.id}>
                 <Typography variant="body2">{index + 1}.</Typography>
@@ -1846,7 +1861,7 @@ function RobotStation({
                   <TextField
                     size="small"
                     type="number"
-                    label={`步骤 ${index + 1} 等待秒数`}
+                    label={`步骤 ${index + 1} 等待秒数${drone ? "" : "（仅草稿）"}`}
                     value={step.seconds}
                     style={{ width: 100 }}
                     onChange={(event) => {
@@ -1910,7 +1925,7 @@ function RobotStation({
                 });
               }}
             >
-              添加步骤
+              {drone ? "添加步骤" : "添加步骤（草稿）"}
             </Button>
             {warnings.map((warning) => (
               <Alert severity="warning" key={warning}>
@@ -2012,6 +2027,13 @@ function RobotStation({
                 执行器支持：{runtime.capabilities.join("；")}
               </Typography>
             )}
+            {!drone && <Alert severity={executionIssues.length > 0 ? "warning" : "info"}>
+              {executionIssues.length > 0
+                ? executionIssues.join(" ")
+                : runtime?.executor?.execution_boundary?.version === 1
+                  ? "当前草稿符合已声明的底座与程序模板；可达性、碰撞和实际抓放仍由执行器逐任务检查。三维预览不代表任务已经通过。"
+                  : "当前按固定底座、八步抓放模板使用。服务尚未返回详细执行范围，草稿是否可运行由原执行器检查；三维预览不代表执行验收。"}
+            </Alert>}
             {!drone && (
               <FormControlLabel
                 control={<Checkbox checked={stationRequestsCarryGate(station)} onChange={(_event, checked) => {
@@ -2032,6 +2054,7 @@ function RobotStation({
                   checkingTask ||
                   submitting ||
                   taskIsActive(task) ||
+                  executionIssues.length > 0 ||
                   (egoNeedsPreview && !planValid)
                 }
                 onClick={() => {

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 // Offline planning reuses persisted task identity; this worker cannot control PX4.
 const path = require('node:path');
-const os = require('node:os');
+const {resolveWorkbenchConfig} = require('./workbench-config.cjs');
 const {isDeepStrictEqual} = require('node:util');
 const {createTaskRuntime} = require('./task-runtime.cjs');
 function createDronePlanning(options={}) {
-  const sourceRoot=options.sourceRoot??process.env.DRONE_ROOT??path.join(os.homedir(),'dev/ros2/projects/drone');
+  const sourceRoot=options.sourceRoot??resolveWorkbenchConfig().droneRoot;
   const runtime=createTaskRuntime({
     label:'EGO 离线预演',service:'drone-planning',apiPrefix:'/api/drone',collection:'plans',
     sourceRoot,python:'/bin/bash',script:path.join(sourceRoot,'scripts/run_preview.sh'),

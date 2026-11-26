@@ -4,7 +4,7 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v2.0. https://mozilla.org/MPL/2.0/
 
-import { stationRequestsCarryGate } from "./station";
+import { stationPlatform, stationRequestsCarryGate, worldPosition } from "./station";
 import type { Platform, Station } from "./station";
 
 export type SimulationTask = {
@@ -28,9 +28,49 @@ export type SimulationRuntime = {
   ready: boolean;
   message: string;
   capabilities?: string[];
-  executor?: { planners?: string[] };
+  executor?: {
+    planners?: string[];
+    segments?: Record<string, { action: string; target: string }[]>;
+    execution_boundary?: {
+      version: number;
+      base_position_m: [number, number, number];
+      frame_transform: string;
+      program: {
+        atomic_step_count: number;
+        segment_sequence: string[];
+        seconds_value: number;
+        seconds_is_duration: boolean;
+      };
+    };
+  };
   resume_carry?: boolean;
 };
+
+/** Identify declared template mismatches without attempting IK or physical validation. */
+export function draftExecutionIssues(station: Station, runtime?: SimulationRuntime): string[] {
+  const boundary = runtime?.executor?.execution_boundary;
+  if (stationPlatform(station) !== "so101" || boundary?.version !== 1) {
+    return [];
+  }
+  const issues: string[] = [];
+  const base = station.nodes.find((node) => node.id === "base");
+  if (!base || worldPosition(base, station.nodes).some((value, axis) =>
+    Math.abs(value - boundary.base_position_m[axis]!) > 1e-8)) {
+    issues.push("机械臂底座需要保持执行器声明的世界位置；移动底座的草稿当前仅供预览。");
+  }
+  const expected = boundary.program.segment_sequence.flatMap((segment) =>
+    runtime?.executor?.segments?.[segment] ?? []);
+  if (station.program.length !== boundary.program.atomic_step_count ||
+      expected.length === boundary.program.atomic_step_count && station.program.some((step, index) =>
+        step.action !== expected[index]?.action || step.target !== expected[index]?.target)) {
+    issues.push(`当前执行器支持固定 ${boundary.program.atomic_step_count} 步完整抓放；增删、重排或更换动作的草稿尚不能执行。`);
+  }
+  if (!boundary.program.seconds_is_duration && station.program.some((step) =>
+    step.seconds !== boundary.program.seconds_value)) {
+    issues.push(`步骤 seconds 需保留模板值 ${boundary.program.seconds_value}；实际时长由规划器决定，自定义等待尚未接入。`);
+  }
+  return issues;
+}
 
 export type DronePlanTask = Omit<SimulationTask, "report"> & {
   report?: {

@@ -1,9 +1,14 @@
 #!/usr/bin/env node
-// Local workbench and thin adapter for the existing SO101 simulator CLI.
+// Shared project entry with thin adapters for the existing simulator CLIs.
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
+const { resolveWorkbenchConfig, applyWorkbenchConfig } = require("./workbench-config.cjs");
+const config = resolveWorkbenchConfig();
+applyWorkbenchConfig(config);
+const { requestAllowed, stationRedirect } = require("./workbench-origin.cjs");
+const { createFishbotGateway } = require("./fishbot-gateway.cjs");
 const { createSo101Runtime } = require("./so101-runtime.cjs");
 const { createSo101Live } = require("./so101-live.cjs");
 const { createDroneRuntime } = require("./drone-runtime.cjs");
@@ -13,20 +18,17 @@ const { createDroneDiagnostics } = require("./drone-diagnostics.cjs");
 
 const workbench = path.join(__dirname, "workbench");
 const serveHandler = createRequire(path.join(workbench, "web", "package.json"))("serve-handler");
-const build = process.env.WORKBENCH_BUILD_DIR
-  ? path.resolve(process.env.WORKBENCH_BUILD_DIR)
-  : path.join(workbench, "web", ".webpack");
+const build = config.workbenchBuild;
 const layouts = process.env.WORKBENCH_LAYOUTS_DIR
   ? path.resolve(process.env.WORKBENCH_LAYOUTS_DIR)
   : path.join(workbench, "robot-layouts");
 const recordings = process.env.WORKBENCH_RECORDINGS_DIR;
-const port = Number(process.env.WORKBENCH_PORT ?? 5186);
-if (!Number.isInteger(port) || port < 1024 || port > 65535) {
-  throw new Error("WORKBENCH_PORT must be an integer between 1024 and 65535");
-}
+const port = config.port;
 if (!fs.existsSync(path.join(build, "index.html"))) {
-  throw new Error("Build the workbench first: ./workbench-dev.sh web:build:prod");
+  throw new Error("Build the workbench first in apps/fishbot-control-station: ./workbench-dev.sh web:build:prod");
 }
+const gateway = createFishbotGateway({frontendDist:config.frontendDist, port});
+const home = fs.readFileSync(path.join(__dirname, "workbench-home.html"));
 
 let live;
 const runtime = createSo101Runtime({onTaskCreated: id => live?.selectTask(id)});
@@ -42,31 +44,52 @@ const droneRuntime=createDroneRuntime({
 droneLive=createDroneLive({runtime:droneRuntime,planning:dronePlanning});
 const droneDiagnostics=createDroneDiagnostics({runtime:droneRuntime,sceneOptions:()=>droneLive.sceneOptions()});
 const server = http.createServer(async (request, response) => {
+ try {
+  if (!requestAllowed(request)) {
+    response.writeHead(403, {"Content-Type":"application/json; charset=utf-8"});
+    response.end(JSON.stringify({error:"请从已配置的工作台地址访问。"}));
+    return;
+  }
+  response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  response.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
+  const pathname = new URL(request.url, "http://localhost").pathname;
+  if (pathname === "/api/workbench/status") {
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      response.writeHead(405, {Allow:"GET, HEAD"}); response.end(); return;
+    }
+    const so101 = runtime.runtime(), drone = droneRuntime.runtime();
+    response.writeHead(200, {"Content-Type":"application/json; charset=utf-8", "Cache-Control":"no-store"});
+    response.end(JSON.stringify({projects:{
+      fishbot:{ready:gateway.ready(),message:gateway.ready()
+        ? "完整成果可查看；运行配送任务需另行连接对应仿真服务。"
+        : "FishBot 成果页面尚未构建，请运行 workbench doctor --project fishbot 查看缺项。"},
+      so101:{ready:so101.ready,message:so101.ready ? so101.message : so101.message + " 请运行 workbench doctor --project so101 查看缺项。"},
+      drone:{ready:drone.ready,message:drone.ready ? drone.message : drone.message + " 请运行 workbench doctor --project drone 查看缺项。"},
+    }}));
+    return;
+  }
+  if (pathname === "/start" || pathname === "/start/") {
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      response.writeHead(405, {Allow:"GET, HEAD"}); response.end(); return;
+    }
+    response.writeHead(200, {"Content-Type":"text/html; charset=utf-8", "Cache-Control":"no-store"});
+    response.end(home);
+    return;
+  }
   if (await droneDiagnostics.handle(request, response, serveHandler)) return;
   if (await live.handle(request, response, serveHandler)) return;
   if (await runtime.handle(request, response, serveHandler)) return;
   if (await droneLive.handle(request, response, serveHandler)) return;
   if (await dronePlanning.handle(request, response, serveHandler)) return;
   if (await droneRuntime.handle(request, response, serveHandler)) return;
+  if (await gateway.handle(request, response, serveHandler)) return;
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { Allow: "GET, HEAD" });
     response.end("Read-only preview");
     return;
   }
-  response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-  response.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
-  const pathname = new URL(request.url, "http://localhost").pathname;
   if (["/so101", "/so101-mobile", "/so101-station", "/so101-station-mobile", "/drone-station", "/drone-station-mobile"].includes(pathname)) {
-    const base = `http://127.0.0.1:${port}`;
-    const layout = pathname === "/so101" ? "so101-review" : pathname.slice(1);
-    const station = pathname.includes("-station");
-    const platform=pathname.startsWith("/drone-")?"drone":"so101";
-    const query = new URLSearchParams({
-      ...(station ? {ds:"foxglove-websocket", "ds.url":`ws://127.0.0.1:${port}/api/${platform}/scene`} :
-        recordings ? {ds:"remote-file", "ds.url":`${base}/records/so101.mcap`, time:"0.04"} : {}),
-      layoutUrl: `${base}/layouts/${layout}.json`,
-    });
-    response.writeHead(302, { Location: `/?${query}` });
+    response.writeHead(302, { Location: stationRedirect(request, pathname, recordings) });
     response.end();
     return;
   }
@@ -90,7 +113,6 @@ const server = http.createServer(async (request, response) => {
     response.end("Unknown local artifact");
     return;
   }
-  try {
     // serve-handler owns range requests and path traversal checks.
     await serveHandler(request, response, {
       public: publicPath,
@@ -98,11 +120,11 @@ const server = http.createServer(async (request, response) => {
       cleanUrls: false,
       etag: true,
     });
-  } catch (error) {
-    console.error("Static preview request failed:", error);
-    if (!response.headersSent) response.writeHead(500);
-    response.end("Preview request failed");
-  }
+ } catch (error) {
+   console.error("Workbench request failed:", error);
+   if (!response.headersSent) response.writeHead(500);
+   response.end("Workbench request failed");
+ }
 });
 
 live.attach(server,{routeUpgrade:false});
@@ -113,9 +135,10 @@ server.on("upgrade",(request,socket,head)=>{
   else if(route==="/api/drone/scene")droneLive.handleUpgrade(request,socket,head);
   else socket.destroy();
 });
-server.listen(port, "127.0.0.1", () => {
-  const base = `http://127.0.0.1:${port}`;
-  console.log(`Workbench preview: ${base}`);
+server.listen(port, config.host, () => {
+  const base = config.publicUrl;
+  console.log(`Workbench projects: ${base}/start`);
+  console.log(`Lichtblick workspace: ${base}/`);
   if (recordings) {
     const query = new URLSearchParams({
       ds: "remote-file",

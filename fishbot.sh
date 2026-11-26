@@ -3,6 +3,7 @@ set -euo pipefail
 ROOT="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")"
 case "${1:-help}" in
   help|-h|--help)
+    echo 'Workbench: ./fishbot.sh workbench {doctor|start|help} [options]'
     echo 'FishBot: ./fishbot.sh check | check-feedback | sim-suite [options] | sim-campaign [options] | stack-gate <command> | stack <command> | teleop <command> | save-map <name>'
     echo 'check checks layout; check-feedback runs offline behavioral regressions.'
     echo 'Simulation extensions: localization-recovery [options] | object-inspection <new-output-directory> | arena <command>'
@@ -16,6 +17,7 @@ case "${1:-help}" in
     echo 'stack/teleop/save-map operate on the live ROS graph.'
     ;;
   check) exec /usr/bin/python3 "$ROOT/tools/check_layout.py" ;;
+  workbench) shift; exec node "$ROOT/apps/fishbot-control-station/workbench-launcher.cjs" "$@" ;;
   check-feedback) shift; exec /usr/bin/python3 -B "$ROOT/tools/fishbot_feedback_check.py" "$@" ;;
   sim-suite) shift; exec bash "$ROOT/tools/fishbot_simulation_suite.sh" "$@" ;;
   sim-campaign) shift; exec bash "$ROOT/tools/fishbot_simulation_campaign.sh" "$@" ;;

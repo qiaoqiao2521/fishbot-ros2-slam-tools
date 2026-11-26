@@ -1,16 +1,26 @@
 # 成熟源码工作台实施
 
+## 2026-11-26 当前切片：统一入口与操作语义
+
+用户要求把三个具身项目现有能力做得可直接使用。本轮沿现有工作台实施：`./fishbot.sh workbench doctor`／`start` → `/start` 三项目入口 → FishBot 最新仓库 D 完整交付、SO101 已验抓放工位、Drone 原执行器及其真实结果。`/results`、`/fishbot` 与原生 Lichtblick `/` 各自保留清晰职责，SO101 自身入口委托同一个工作台。
+
+路径和执行环境集中到 `workbench-config.cjs`，环境变量／可选 `workbench.local.json`／相邻仓库按明确顺序解析；远程用户地址由 `WORKBENCH_PUBLIC_URL` 指定。HTTP、WebSocket、模型与回放资源保持同源，FishBot 服务端代理访问固定目标，不让手机或云端页面连接浏览器自己的 `127.0.0.1`。
+
+只读 `doctor` 分项目核查源码、依赖、构建与执行器描述。入口展示已有成果，同时清楚说明环境缺失；运行成功、原任务失败、取消后恢复完成与历史回放分别表达。SO101 描述公开编辑／执行边界，保留草稿预览，原物理准入和裁判保持。
+
+本轮为入口、配置与任务语义修复，未新增物理仿真、实机或训练成绩。49 项工作台回归、31 项成果前端测试及其生产构建、39 项原生定向测试通过；原生整体构建受本轮环境资源限制未完成，真实浏览器与新物理回合未验收。具体结果和配套交付见[当前进度](progress.md#2026-11-26--统一入口配置与任务语义修复)。2026-11-07 等已永久封存的性能、全域证明、机械复跑和状态机重写专项不恢复，旧历史接续不作为当前待办。
+
 ## Goal
 
-实施用户批准的[源码重建总计划](/home/muqiao/文档/ChatGPT/ros2/plans/cy-workbench-review-20261018/task_plan.md)。以 Lichtblick 完整源码替换自制工作台底座，迁入有效业务与安全行为。
+沿用户批准的源码工作台方向，复用 Lichtblick 完整源码和已有业务与安全行为；底座与运行合同见[工作台重构基线](../workbench-rebuild-20261018/task_plan.md)。当前目标是把已经实现的能力接成可查环境、可明确操作、可回看原任务的使用路线。
 
 ## Scope
 
-P1 已完成。当前接 P2：借用 RoboDK 的场景树、平移坐标系、目标引用和指令组织，接入 Lichtblick 原生配置与布局保存。P2 编辑器已交付，P3 固定抓放模板的新仿真、查询、取消与结果已验收；当前任务完整三维与编辑预览已交付；任意程序与全能力迁移继续待办。
+P1 底座、P2 编辑器、P3 固定抓放模板的新仿真／查询／取消／结果，以及后续任务三维与预览均已有各自验收。当前范围以上方 2026-11-26 切片为准；有限场景能力不扩大为任意程序或通用机器人执行。
 
-实现位于独立工作树 `/home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018`，分支 `codex/workbench-code-rebuild-20261018`，基线 `325fa260096d421d07035c4a64cb765e5006501b`。FishBot 原工作区的在途改动原位保留，合并前由根串行对齐。
+当前唯一开发入口为本仓 `qiaoqiao2521/fishbot-ros2-slam-tools` 的 `main`，工作台源码在 `apps/fishbot-control-station/`。历史独立工作树 `/home/muqiao/worktrees/fishbot-workbench-code-rebuild-20261018`、分支 `codex/workbench-code-rebuild-20261018` 和基线 `325fa260096d421d07035c4a64cb765e5006501b` 只保留为原成果来源，不作为新机器的必需路径。
 
-## Phases
+## 历史 P1 阶段与原验收
 
 1. 导入固定官方源码、安装锁定依赖：complete。
 2. 构建原版 Web，核对真实页面和原生面板：complete。
@@ -27,6 +37,10 @@ P1 已完成。当前接 P2：借用 RoboDK 的场景树、平移坐标系、目
 根 Codex 维护入口、构建、注册、布局、验收与整合。数据 worker 仅写 `workbench-tools/`，面板 worker 完成隔离草稿，根已迁入 `workbench/packages/suite-base/src/panels/EpisodeReview/`。共享注册表与计划由根串行维护。
 
 ## Next Step
+
+根代理完成当前 native 构建、同源入口与前端整合检查，核对新入口确实回到各项目原执行器／原任务 ID；结果与缺项写入 progress 后统一提交并读回远端。此处描述交付流程，不代表已经推送。新的场景或模型体验按明确用户需求单独推进，保留原成果和永久封存决策。
+
+## 历史接续（截至 2026-10-29，不自动恢复）
 
 2026-10-29当前无人机覆盖：四次A复飞仍失败但恢复落地/disarm，FSM相位无错；仅SensorData history1有单轮时龄改善，重锚/周期试验撤回。下一项只核新鲜地图下测量PV重锚后的第一条rebound拒绝，不新增离线工具/夹具，不扫周期，MINCO冻结。原始ID/录像/四步表和归档恢复入口以docs/DRONE_HANDOFF_EVIDENCE.md末节及研究进度为准。
 

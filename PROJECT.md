@@ -1,5 +1,13 @@
 # FishBot
 
+## 当前入口：2026-11-26
+
+从本仓执行 `./fishbot.sh workbench doctor`／`start`，打开 `/start` 选择 FishBot、SO101 或 Drone；`/results` 初始展示最新仓库 D 完整交付记录，`/fishbot` 保留原控制主页，原生 `/` 仍为 Lichtblick。SO101 可从自身仓库的 `./so101.sh workbench doctor`／`start` 进入同一工作台。详细配置见[启动指南](docs/WORKBENCH_START.md)，当前实施见[源码工作台计划](plans/workbench-code-rebuild-20261018/task_plan.md)。
+
+本轮处理启动路径、配置、同源访问、默认结果入口和任务语义；缺失的运行环境、历史产物与未验范围直接呈现。`WORKBENCH_PUBLIC_URL` 统一用户访问地址，浏览器同源请求由服务端固定目标代理转发。49 项工作台回归、31 项成果前端测试与生产构建、39 项原生定向测试通过；native 整体构建受本轮环境资源限制未完成，完整浏览器／物理验收与持久部署没有执行，详见[交付记录](plans/workbench-code-rebuild-20261018/progress.md)。旧永久封存专项继续封存。
+
+## 已有闭环与历史证据
+
 2026-11-06 F1–F3本轮闭环已完成，工作台、独立原评分重算与Drive原件归档均已验收。新仓库D用J100＋MID式扫描＋混合RGB-D抓取完成B→A；新车间F用麦轮＋原16线＋ideal工位观测完成B→A，两轮均同世界零reset/取消、原命名货物完整评分通过。完整视觉证据链、实际模型调用/候选和分段耗时、同源真值/观测比对已接/results。四个实际所选抓取均为OBB，传感器仅有限启动画面，不外推真机或sim-to-real。原件存指定Drive并实际读回后清理，见[当前计划](plans/continuous-twin-regression-20261024/task_plan.md)和[恢复入口](docs/VISUAL_DELIVERY_ARCHIVE.md)。
 
 2026-10-31 预训练视觉配送已完成本轮仿真闭环：官方GraspGen-X实际推理＋工位RGB-D＋原mink/OMPL，J100/3D雷达在同一世界无reset完成B→A，两单命名原物理/业务评分及独立原记录重算均通过。路线49.90/20.97秒，末XY31.07/21.22mm；原时限、碰撞和接触门槛保持。保留停车保护辅助、采样缺口及全部早期失败，不称任意物体或sim-to-real。配置与边界见[预训练感知接入](docs/PRETRAINED_PERCEPTION.md)，详见[本轮进度](plans/continuous-twin-regression-20261024/progress.md)。
@@ -37,6 +45,8 @@ FishBot作为统一多底盘工作台，以本机代码和实测证据为准。�
 ## Constraints
 Ubuntu24.04/Jazzy、系统Python3.12；保留所有dirty修改和嵌套仓库。历史无线延迟与专项验收边界继续保留，不再作为已售实车的当前阻塞项。
 ## Current State
+2026-11-26 当前主线为上述入口与使用语义修复。已有 2026-11-06 配送闭环、SO101 A0–A3.1 以及 Drone 各自的原任务成绩分别保留；相邻仓库和只读 `doctor` 解决环境定位，不把三项目接入同一入口解释为完成了新的同世界协同任务。后续只按实际使用缺口继续，不因下方历史“下一步”恢复已封存的优化、训练或重复评测。
+
 2026-11-05 核心闭环已完成，具体组合以当前计划F0表为准；J100视觉与麦轮ideal交接分别记账，不合并成未经验证的新组合。当前缺口是成果入口和新场景体验，不再将旧双单未验记录当作当前状态。以下按日期保留历史成果。
 
 2026-10-24 J100复用完整K通过：源码b710d8d、141/9111、同轮原B→A，run04e217b2-6d37-4991-b3f2-b5ce036b1a2e。两单原K/交接/同货物运输/目的地/停稳均通过；整轮488.455秒，2start/1reset/0cancel。用户确认的5mm只改全局附加余量；默认25mm及所有历史失败保留。时间余量、采样缺口和理想守卫辅助不隐去，详见[完整验收](plans/factory-line-delivery-20261021/progress.md)。

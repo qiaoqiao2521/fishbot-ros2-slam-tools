@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { spawn, spawnSync } = require('node:child_process');
+const { requestAllowed } = require('./workbench-origin.cjs');
 const TERMINAL = new Set(['succeeded', 'failed', 'cancelled']);
 const VALID_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,79}$/;
 function readJSON(file) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return undefined; } }
@@ -151,10 +152,8 @@ function createTaskRuntime(options) {
     if (!pathname.startsWith(`${apiPrefix}/`)) return false;
     const route=pathname.slice(apiPrefix.length);
     try {
-      const host=new URL(`http://${request.headers.host ?? 'localhost'}`);
-      if (!['127.0.0.1','localhost','[::1]'].includes(host.hostname) ||
-          (request.headers.origin && request.headers.origin !== host.origin)) {
-        send(response,403,{error:'请从本机工作台页面访问执行器。'}); return true;
+      if (!requestAllowed(request)) {
+        send(response,403,{error:'请从已配置的工作台地址访问执行器。'}); return true;
       }
       if (route==='/runtime' && request.method==='GET') {send(response,200,runtime());return true;}
       if (route===collectionRoute && request.method==='GET') {
